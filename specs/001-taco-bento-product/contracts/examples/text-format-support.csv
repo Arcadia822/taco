@@ -1,0 +1,5 @@
+extension,media_type,v0.2_view,editable
+.md,text/markdown,WYSIWYG,true
+.yaml,application/yaml,source,false
+.json,application/json,source,false
+.csv,text/plain,source,false

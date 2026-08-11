@@ -1,0 +1,26 @@
+# taco-sync relay — Cloudflare Worker + one Durable Object room per docId.
+# Deploy:  npx wrangler deploy          (needs `npx wrangler login` once)
+# Dev:     npx wrangler dev --port 8787 (fully local, no account needed)
+# Add a custom domain after deployment, then store its wss:// URL in Taco's
+# Share panel. No production domain is assumed by the source tree.
+name = "taco-sync"
+main = "src/worker.js"
+compatibility_date = "2026-07-01"
+
+# workers.dev is sufficient for development. Configure routes explicitly in
+# your deployment rather than accidentally claiming somebody else's domain.
+
+# Encrypted asset blobs are optional. Taco's current text-file collaboration
+# does not require them; without this binding /b/ answers 501. To enable them,
+# create `taco-blobs` and uncomment the binding below.
+# [[r2_buckets]]
+# binding = "BLOBS"
+# bucket_name = "taco-blobs"
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]

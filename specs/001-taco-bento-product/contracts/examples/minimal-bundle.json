@@ -1,0 +1,14 @@
+{
+  "format": "taco/files",
+  "version": 1,
+  "docId": "example-feature",
+  "title": "Example feature",
+  "root": "specs/001-example-feature",
+  "files": [
+    {
+      "path": "specs/001-example-feature/spec.md",
+      "mediaType": "text/markdown",
+      "content": "# Example feature\n\nThis Markdown remains the canonical source.\n"
+    }
+  ]
+}

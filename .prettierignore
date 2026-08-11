@@ -1,0 +1,6 @@
+node_modules/
+dist/
+dist-single/
+artifacts/
+extensions/taco/assets/taco-shell.html
+package-lock.json

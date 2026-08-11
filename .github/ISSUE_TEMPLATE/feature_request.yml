@@ -1,0 +1,27 @@
+name: Feature request
+description: Propose a focused improvement to Taco.
+title: '[Feature]: '
+labels: [enhancement]
+body:
+  - type: textarea
+    attributes:
+      label: Problem
+      description: What user problem cannot be solved cleanly today?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest useful outcome, not only an implementation.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Scope boundaries
+      description: What should explicitly remain out of scope?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: File-format impact
+      description: Note any change to canonical Markdown, the Taco container, CLI behavior, or compatibility.

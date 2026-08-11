@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="title desc">
+  <title id="title">Taco logo</title>
+  <desc id="desc">Three differently colored bubbles based on mdi:chart-bubble.</desc>
+  <circle cx="15.2" cy="8.8" r="4.8" fill="#3ecf8e"/>
+  <circle cx="7.2" cy="14.4" r="3.2" fill="#3b82f6"/>
+  <circle cx="14.8" cy="18" r="2" fill="#f97316"/>
+</svg>

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+artifacts/
+*.tsbuildinfo
+.DS_Store
+.wrangler/
+
+# Built Taco single-file artifacts (English and Chinese) are not tracked
+dist-single/*.taco.html

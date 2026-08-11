@@ -1,0 +1,44 @@
+name: Bug report
+description: Report a reproducible problem in Taco.
+title: '[Bug]: '
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping make the experiment less surprising.
+  - type: checkboxes
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: This report does not contain a security vulnerability.
+          required: true
+  - type: textarea
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Reproduction
+      description: Provide the smallest reliable sequence of steps or a minimal repository.
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Taco version or commit
+      placeholder: v0.2.0 or commit SHA
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Environment
+      description: Browser, operating system, Node.js version, and relay mode if relevant.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Additional evidence
+      description: Add logs, screenshots, or a sanitized Taco file. Remove secrets and collaboration capabilities first.
