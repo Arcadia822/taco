@@ -29,6 +29,7 @@ Usage:
             [--ignore <relative-path-or-glob>]... [--json]
   taco sync <file.taco.html> [--project-root <dir>] [--dry-run] [--force] [--json]
   taco comments <file.taco.html> [--status open|resolved|all] [--json]
+  taco validate <file.taco.html> [--json]
 
 The sync command is conflict-safe. It refuses to overwrite a source file that changed
 independently after the Taco was packed unless --force is explicitly supplied.`
@@ -205,6 +206,17 @@ export const parseTacoHtml = (html) => {
   }
   validateBundle(bundle)
   return bundle
+}
+
+export const validateTacoHtml = (html) => {
+  const bundle = parseTacoHtml(html)
+  const securityMeta = html.match(/<meta\b(?=[^>]*\bname=["']taco-security-version["'])[^>]*>/i)?.[0]
+  const securityVersion = securityMeta?.match(/\bcontent=["']([^"']+)["']/i)?.[1] ?? null
+  const collab = bundle.collab && typeof bundle.collab === 'object' ? bundle.collab : null
+  const issues = []
+  if (collab && (collab.key || collab.ownerPriv || collab.invite?.priv)) issues.push('collab-secrets-present')
+  if (securityVersion !== '1') issues.push('runtime-security-outdated')
+  return { command: 'validate', format: bundle.format, version: bundle.version, securityVersion, issues, files: bundle.files.length }
 }
 
 export const validateBundle = (bundle) => {
@@ -635,6 +647,10 @@ const printResult = (result, json) => {
         'No files were written. Review conflicts; use --force only with explicit authorization.\n',
       )
     process.stdout.write(`${humanComments(result.comments)}\n`)
+    return
+  }
+  if (result.command === 'validate') {
+    process.stdout.write(`Validated Taco runtime security ${result.securityVersion ?? 'unknown'}: ${result.issues.length ? result.issues.join(', ') : 'no issues'}.\n`)
   }
 }
 
@@ -688,6 +704,13 @@ const main = async () => {
     if (parsed.flag('json'))
       process.stdout.write(`${JSON.stringify({ command: 'comments', comments }, null, 2)}\n`)
     else process.stdout.write(`${humanComments(comments)}\n`)
+    return
+  }
+
+  if (command === 'validate') {
+    if (!parsed.positional[0]) throw new Error('validate requires a .taco.html file')
+    const result = validateTacoHtml(await readFile(resolve(parsed.positional[0]), 'utf8'))
+    printResult(result, parsed.flag('json'))
     return
   }
 
