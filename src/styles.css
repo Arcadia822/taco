@@ -218,6 +218,20 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
   transition: background-color 140ms ease, color 140ms ease, transform 140ms var(--ease-out);
 }
 .html-preview-action .ui-icon { width: 14px; height: 14px; }
+.html-preview-source-fallback {
+  grid-column: 1 / -1;
+  max-width: min(72ch, calc(100vw - 96px));
+  max-height: 420px;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--doc-line);
+  border-radius: 8px;
+  background: var(--doc-soft);
+  color: var(--doc-ink);
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .tiptap-editor-host { position: relative; min-width: 0; }
 .remote-cursor-layer { position: absolute; inset: 0; z-index: 20; overflow: visible; pointer-events: none; }
 .remote-selection { position: absolute; border-radius: 2px; }

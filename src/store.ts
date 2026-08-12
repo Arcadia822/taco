@@ -1,4 +1,5 @@
 import { bundleCanWrite, ensureFileIds, type TacoBlock, type TacoBundle, type TacoCommentMessage, type TacoCommentThread, type TacoFile, type TacoTextAnchor } from './model.ts'
+import { rebuildSyncDoc } from './sync/validation.ts'
 
 export type SyncNode =
   | (TacoBlock & { kind: 'block' })
@@ -102,6 +103,7 @@ const isThreadNode = (node: SyncNode): node is Extract<SyncNode, { kind: 'commen
 const isMessageNode = (node: SyncNode): node is TacoCommentMessage & { kind: 'comment-message'; threadId: string } => node.kind === 'comment-message'
 
 export const applySyncDoc = (bundle: TacoBundle, sync: TacoSyncDoc): void => {
+  sync = rebuildSyncDoc(sync, bundle)
   const previousFiles = new Map(bundle.files.map((file) => [file.id, file]))
   const files: TacoFile[] = sync.files.map((file) => {
     const previous = previousFiles.get(file.id)
@@ -135,10 +137,10 @@ export const applySyncDoc = (bundle: TacoBundle, sync: TacoSyncDoc): void => {
     }
   }
 
-  const { files: _files, ...doc } = sync
-  const collab = bundle.collab
-  for (const key of Object.keys(bundle)) delete bundle[key]
-  Object.assign(bundle, clone(doc), { files }, comments.length ? { comments } : {}, collab ? { collab } : {})
+  bundle.title = sync.title
+  bundle.files = files
+  if (comments.length) bundle.comments = comments
+  else delete bundle.comments
 }
 
 export type StoreChangeSource = 'local' | 'remote'

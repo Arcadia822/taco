@@ -42,6 +42,7 @@ import { OutlineController } from './outline-controller.ts'
 import { PresenceController } from './presence-controller.ts'
 import { ShareController } from './share-controller.ts'
 import { resolveEmbeddedMarkdownAssets } from './markdown-assets.ts'
+import { hasCollabSecrets, isolatedPrototypeUrl } from './security.ts'
 
 type AuxiliaryTab = 'outline' | 'comments'
 
@@ -409,7 +410,7 @@ export class FileBrowser {
 
   private revokeHtmlPreviewUrl(): void {
     if (!this.htmlPreviewUrl) return
-    URL.revokeObjectURL(this.htmlPreviewUrl)
+    if (this.htmlPreviewUrl.startsWith('blob:')) URL.revokeObjectURL(this.htmlPreviewUrl)
     this.htmlPreviewUrl = null
   }
 
@@ -422,12 +423,29 @@ export class FileBrowser {
 
     const title = el('h1', 'html-preview-title', file.title?.trim() || fallbackFileTitle(file))
 
-    this.htmlPreviewUrl = URL.createObjectURL(new Blob([file.content], { type: 'text/html' }))
+    try {
+      this.htmlPreviewUrl = isolatedPrototypeUrl(file.content)
+    } catch {
+      this.htmlPreviewUrl = null
+    }
     const preview = el('a', 'html-preview-action')
-    preview.href = this.htmlPreviewUrl
-    preview.target = '_blank'
-    preview.rel = 'noopener noreferrer'
-    preview.append(el('span', '', this.t.openHtmlPrototype), svgIcon('external-link'))
+    if (this.htmlPreviewUrl) {
+      preview.href = this.htmlPreviewUrl
+      preview.target = '_blank'
+      preview.rel = 'noopener noreferrer'
+      preview.referrerPolicy = 'no-referrer'
+      preview.append(el('span', '', this.t.openHtmlPrototype), svgIcon('external-link'))
+    } else {
+      preview.removeAttribute('href')
+      preview.setAttribute('aria-disabled', 'true')
+      preview.append(el('span', '', this.t.openHtmlPrototype))
+      const source = el('pre', 'html-preview-source-fallback')
+      source.textContent = file.content
+      card.append(icon, title, preview, source)
+      shell.append(card)
+      this.viewer.append(shell)
+      return
+    }
 
     card.append(icon, title, preview)
     shell.append(card)
@@ -870,6 +888,7 @@ export class FileBrowser {
       this.toast(this.t.unpackUnsupported)
       return
     }
+    if (hasCollabSecrets(this.bundle) && !window.confirm(this.t.credentialSaveConfirm)) return
     try {
       this.sync.stampInto(this.bundle)
       const result = mode === 'copy'

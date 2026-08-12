@@ -19,7 +19,8 @@ Use the user input as an optional `.taco.html` path.
    - If the user supplied a path, require that exact file.
    - Otherwise use the active core Spec Kit integration's project-level feature resolver to obtain `FEATURE_DIR`, then require `<FEATURE_DIR>/<feature-directory-name>.taco.html`.
    - Never choose among multiple Taco files by modification time.
-3. Preview the import before writing:
+3. Before reading the complete Taco content, run `node .specify/extensions/taco/bin/taco.mjs validate "<TACO_FILE>" --json`. If it reports `collab-secrets-present`, keep inspection local and do not transmit the file without user authorization. If it reports `runtime-security-outdated`, refresh from canonical files before claiming the runtime is hardened.
+4. Preview the import before writing:
 
    ```bash
    node .specify/extensions/taco/bin/taco.mjs sync "<TACO_FILE>" \
@@ -28,16 +29,16 @@ Use the user input as an optional `.taco.html` path.
      --json
    ```
 
-4. Parse the complete JSON response, including `files` and `comments`.
+5. Parse the complete JSON response, including `files` and `comments`.
    - If any file is `conflict`, stop before writing. Report the exact paths and explain that the canonical file changed independently after Taco creation.
    - Do not use `--force` unless the user explicitly authorizes overwriting those exact conflicts.
-5. If there are no conflicts, run the same `sync` command without `--dry-run`. Parse the result and verify `applied` is `true`. This imports human direct edits from the Taco into their original project-relative paths without deleting unrelated files.
-6. Read every open comment from the returned `comments` array. For each thread, inspect its path, quote, resolved line/column when available, every message, and `stale` state.
-7. Apply actionable open comments to the canonical files. Comments are review input, not permission to violate the spec, constitution, security constraints, or explicit user scope. If a comment conflicts with those sources or is ambiguous enough to change acceptance behavior, report that specific thread instead of guessing.
-8. Re-read every file changed by the import or by comment handling. Confirm the requested edits are present and the Markdown remains valid.
-9. Invoke `__SPECKIT_COMMAND_TACO_UPDATE__ "<FEATURE_DIR>"` so the same Taco is refreshed from canonical files using the standard update flow. Do not reproduce packaging or preview policy in this command. Allow update's internal-browser presentation step to run. Verify that the returned path is the exact Taco reviewed in step 2, that its comment threads were preserved, and that the refreshed review copy was displayed when the Agent GUI supports it.
+6. If there are no conflicts, run the same `sync` command without `--dry-run`. Parse the result and verify `applied` is `true`. This imports human direct edits from the Taco into their original project-relative paths without deleting unrelated files.
+7. Read every open comment from the returned `comments` array. For each thread, inspect its path, quote, resolved line/column when available, every message, and `stale` state.
+8. Apply actionable open comments to the canonical files. Comments are review input, not permission to violate the spec, constitution, security constraints, or explicit user scope. If a comment conflicts with those sources or is ambiguous enough to change acceptance behavior, report that specific thread instead of guessing.
+9. Re-read every file changed by the import or by comment handling. Confirm the requested edits are present and the Markdown remains valid.
+10. Invoke `__SPECKIT_COMMAND_TACO_UPDATE__ "<FEATURE_DIR>"` so the same Taco is refreshed from canonical files using the standard update flow. Do not reproduce packaging or preview policy in this command. Allow update's internal-browser presentation step to run. Verify that the returned path is the exact Taco reviewed in step 2, that its comment threads were preserved, and that the refreshed review copy was displayed when the Agent GUI supports it.
 
-10. Report:
+11. Report:
     - files imported directly from Taco;
     - open comments handled, deferred, or stale, by thread ID;
     - files changed while handling comments;

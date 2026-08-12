@@ -122,7 +122,8 @@ describe('Tiptap Markdown integration', () => {
     expect(() => migrateTacoBundleBlocks(bundle, labels)).not.toThrow()
     expect(bundle.files[0].blocks).toHaveLength(1)
     expect(bundle.files[0].blocks?.[0].type).toBe('image')
-    expect(bundle.files[0].blocks?.[0].html).toContain('src="docs/assets/taco-overview.png"')
+    expect(bundle.files[0].blocks?.[0].html).toContain('data-taco-source="docs/assets/taco-overview.png"')
+    expect(bundle.files[0].blocks?.[0].html).not.toContain('src="docs/assets/taco-overview.png"')
   })
 
   it('preserves a centered HTML README header as one editable block', () => {
@@ -142,7 +143,8 @@ describe('Tiptap Markdown integration', () => {
 
     expect(editor.state.doc.firstChild?.type.name).toBe('centeredBlock')
     expect(editor.view.dom.querySelector('.taco-centered-block')?.getAttribute('align')).toBe('center')
-    expect(editor.view.dom.querySelector('.taco-centered-block img')?.getAttribute('src')).toBe('src/assets/taco-logo.svg')
+    expect(editor.view.dom.querySelector('.taco-centered-block img')?.getAttribute('src')).toMatch(/^data:image\/gif;base64,/)
+    expect(editor.view.dom.querySelector('.taco-centered-block img')?.getAttribute('data-taco-source')).toBe('src/assets/taco-logo.svg')
     expect(editor.getMarkdown()).toContain('<div align="center">')
     expect(editor.getMarkdown()).toContain('</div>')
   })

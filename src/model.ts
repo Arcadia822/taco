@@ -1,3 +1,5 @@
+import { MAX_BLOCK_HTML, SUPPORTED_BLOCK_TYPES } from './security.ts'
+
 export const FORMAT = 'taco/files'
 export const FORMAT_VERSION = 1
 
@@ -197,8 +199,9 @@ const isBlock = (value: unknown): value is TacoBlock => isRecord(value)
   && typeof value.id === 'string'
   && value.id.length > 0
   && typeof value.type === 'string'
-  && value.type.length > 0
+  && SUPPORTED_BLOCK_TYPES.has(value.type)
   && typeof value.html === 'string'
+  && value.html.length <= MAX_BLOCK_HTML
 
 const stablePathId = (path: string): string => {
   let hash = 0x811c9dc5

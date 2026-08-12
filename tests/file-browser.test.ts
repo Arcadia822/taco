@@ -233,12 +233,25 @@ describe('FileBrowser', () => {
     expect(document.querySelector<HTMLTextAreaElement>('.source-editor-input')?.value).toBe('plain text')
   })
 
-  it('shows HTML prototypes as cards that open standalone in a new page', () => {
-    const createObjectURL = vi.fn().mockReturnValue('blob:https://taco.test/prototype')
-    const revokeObjectURL = vi.fn()
-    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL })
-    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL })
+  it('opens hostile initial Markdown without active HTML or passive remote images', async () => {
+    const hostile = structuredClone(testBundle)
+    hostile.files[0].content = '# Hostile\n\n<script>window.pwned=true</script>\n\n<img src="https://attacker.test/pixel" onerror="window.pwned=true">'
+    delete hostile.files[0].blocks
 
+    const browser = new FileBrowser(document.getElementById('app')!, hostile)
+    await waitForEditor()
+
+    expect(document.querySelector('.tiptap script')).toBeNull()
+    expect(document.querySelector('.tiptap [onerror]')).toBeNull()
+    const image = document.querySelector<HTMLImageElement>('.tiptap img')
+    if (image) {
+      expect(image.src).toMatch(/^data:image\/gif;base64,/)
+      expect(image.dataset.tacoSource).toBe('https://attacker.test/pixel')
+    }
+    browser.destroy()
+  })
+
+  it('shows HTML prototypes as cards that open standalone in a new page', () => {
     const prototypeBundle = structuredClone(testBundle)
     const content = '<!doctype html><html><head><title>Checkout</title></head><body>Prototype</body></html>'
     prototypeBundle.files.push({
@@ -260,17 +273,40 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.html-preview-kind')).toBeNull()
     expect(document.querySelector('.html-preview-hint')).toBeNull()
     expect(preview.textContent).toContain('打开预览')
-    expect(preview.href).toBe('blob:https://taco.test/prototype')
+    expect(preview.href).toMatch(/^data:text\/html;base64,/)
     expect(preview.target).toBe('_blank')
     expect(preview.rel).toBe('noopener noreferrer')
+    expect(preview.referrerPolicy).toBe('no-referrer')
     expect(document.querySelector('.html-preview-card iframe')).toBeNull()
     expect(document.querySelector('.source-editor-input')).toBeNull()
     expect(document.querySelector<HTMLButtonElement>('.right-panel-tabs [role="tab"]')?.hidden).toBe(true)
-    expect(createObjectURL).toHaveBeenCalledOnce()
-    expect(createObjectURL.mock.calls[0][0]).toMatchObject({ type: 'text/html', size: content.length })
+    const decoded = atob(preview.href.split(',', 2)[1])
+    expect(decoded).toContain('Content-Security-Policy')
+    expect(decoded).toContain('<title>Checkout</title>')
 
     browser.destroy()
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:https://taco.test/prototype')
+  })
+
+  it('refuses oversized prototype execution and exposes inert source', () => {
+    const prototypeBundle = structuredClone(testBundle)
+    const content = `<script>${'x'.repeat(2 * 1024 * 1024)}</script>`
+    prototypeBundle.files.push({
+      title: 'Oversized prototype',
+      path: 'specs/001-browser/prototypes/oversized.html',
+      mediaType: 'text/html',
+      content,
+    })
+    const browser = new FileBrowser(document.getElementById('app')!, prototypeBundle)
+
+    document.querySelector<HTMLButtonElement>('[data-path$="prototypes/oversized.html"]')!.click()
+
+    const preview = document.querySelector<HTMLAnchorElement>('.html-preview-action')!
+    const source = document.querySelector<HTMLElement>('.html-preview-source-fallback')!
+    expect(preview.hasAttribute('href')).toBe(false)
+    expect(preview.getAttribute('aria-disabled')).toBe('true')
+    expect(source.textContent).toBe(content)
+    expect(source.querySelector('script')).toBeNull()
+    browser.destroy()
   })
 
   it('derives an H1–H3 outline from the Markdown document', async () => {
@@ -329,7 +365,8 @@ describe('FileBrowser', () => {
     const diagram = document.querySelector<HTMLElement>('.tiptap-code-block .taco-mermaid-render')
     expect(diagram).not.toBeNull()
     expect(diagram?.querySelector('.surface')).not.toBeNull()
-    await vi.waitFor(() => expect(diagram?.querySelector('svg[data-test-mermaid="true"]')).not.toBeNull())
+    await vi.waitFor(() => expect(diagram?.querySelector('svg')).not.toBeNull())
+    expect(diagram?.querySelector('svg')?.hasAttribute('data-test-mermaid')).toBe(false)
     expect(mermaidLoader).toHaveBeenCalledTimes(1)
     expect(mermaidInitialize).toHaveBeenCalledWith(expect.objectContaining({
       theme: 'base',

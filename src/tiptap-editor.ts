@@ -11,6 +11,7 @@ import { DocumentProperties, DocumentProperty } from './tiptap-document-properti
 import { CenteredBlock } from './tiptap-centered-block.ts'
 import type { MermaidPluginLabels, MermaidRuntime } from './mermaid.ts'
 import { fileKind, type TacoBlock, type TacoBundle } from './model.ts'
+import { inertImageAttributes, sanitizeEditorHtml } from './security.ts'
 
 const BLOCK_TYPES = [
   'paragraph', 'heading', 'blockquote', 'codeBlock', 'bulletList', 'orderedList',
@@ -56,6 +57,19 @@ export interface TacoEditorExtensionOptions {
   onCodeBlockComment?: (target: TacoCodeBlockCommentTarget) => void
 }
 
+const SafeImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      src: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-taco-source') ?? element.getAttribute('src'),
+        renderHTML: (attributes) => inertImageAttributes(attributes.src),
+      },
+    }
+  },
+})
+
 export const createTacoEditorExtensions = (labels: MermaidPluginLabels, options: TacoEditorExtensionOptions = {}) => [
   StarterKit.configure({ codeBlock: false }),
   TacoBlockIdentity,
@@ -67,7 +81,7 @@ export const createTacoEditorExtensions = (labels: MermaidPluginLabels, options:
     mermaidRuntime: options.mermaidRuntime,
     onComment: options.onCodeBlockComment,
   }),
-  Image,
+  SafeImage,
   Table.configure({ resizable: false }),
   TableRow,
   TableHeader,
@@ -107,7 +121,7 @@ export const blocksFromEditor = (editor: Editor, extensions: ReturnType<typeof c
 }
 
 export const blockHtml = (blocks: TacoBlock[] | undefined): string =>
-  (blocks ?? []).map((block) => block.html).join('')
+  (blocks ?? []).map((block) => sanitizeEditorHtml(block.html)).join('')
 
 /**
  * Upgrade legacy Markdown before a collaboration session adopts the bundle.

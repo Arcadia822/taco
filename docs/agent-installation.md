@@ -102,7 +102,15 @@ After update succeeds, use the active Agent GUI's internal browser or equivalent
 
 ## Import a reviewed Taco
 
-Use the exact saved Taco path. Preview before writing:
+Use the exact saved Taco path. Before reading the complete embedded content, run the inert local credential/runtime preflight:
+
+```bash
+node .specify/extensions/taco/bin/taco.mjs validate "<TACO_FILE>" --json
+```
+
+If it reports `collab-secrets-present`, local inspection remains allowed, but do not upload, paste, attach, log, or ticket the complete Taco without the user's authorization. Removing credential fields later is not revocation; if the file may already have left the authorized boundary, direct the owner to Reset Access. If it reports `runtime-security-outdated`, refresh the Taco from canonical files before treating its runtime as hardened.
+
+Then preview before writing:
 
 ```bash
 node .specify/extensions/taco/bin/taco.mjs sync "<TACO_FILE>" \
@@ -130,6 +138,7 @@ A collaboration-enabled Taco may contain relay configuration or access credentia
 - Do not upload, paste, attach, log, or ticket the Taco content to an external model or service without explicit user authorization.
 - Prefer structured CLI output when an external system only needs paths, counts, conflicts, or comment metadata.
 - Revocation or key reset is an explicit user action; do not perform it as part of normal review.
+- Previously generated Taco files carry their previous runtime until they are refreshed; updating this source checkout or the installed extension does not rewrite copies already distributed.
 
 ## Completion evidence
 

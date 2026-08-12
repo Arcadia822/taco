@@ -128,4 +128,47 @@ describe.runIf(enabled)('blind relay integration', () => {
     )
     expect(finalReplay.some((frame) => frame.t === 'ops' && frame.a === 'revoked-retry')).toBe(false)
   })
+
+  it('rejects an old invitation in a replacement room and accepts a newly shared editor', async () => {
+    const previous = await mintCollab()
+    const oldInvite = await mintInvite(previous.ownerPriv)
+    const replacement = await mintCollab()
+
+    const rejectedFrames: Frame[] = []
+    const rejected = new OnlineTransport(
+      replacement.room,
+      replacement.key,
+      'replacement-member',
+      (frame) => rejectedFrames.push(frame),
+      {
+        onSnap: () => undefined,
+        getSnapshot: () => ({ doc: {} as never, state: {} as never }),
+        onOpen: () => undefined,
+        onReady: () => false,
+      },
+      { kind: 'chain', owner: previous.owner, invite: oldInvite, docId: 'replacement-member' },
+    )
+    transports.push(rejected)
+    rejected.send({ t: 'ops', a: 'old-editor', ops: [] })
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    expect(rejected.status).not.toBe('open')
+    rejected.close()
+
+    const newInvite = await mintInvite(replacement.ownerPriv)
+    const editorFrames: Frame[] = []
+    const editor = await openTransport(
+      replacement.room,
+      replacement.key,
+      'replacement-member',
+      editorFrames,
+      { kind: 'chain', owner: replacement.owner, invite: newInvite, docId: 'replacement-member' },
+    )
+    editor.send({ t: 'ops', a: 'new-editor', ops: [] })
+    await new Promise((resolve) => setTimeout(resolve, 150))
+
+    const replay: Frame[] = []
+    await openTransport(replacement.room, replacement.key, 'replacement-reader', replay)
+    await waitFor(() => replay.some((frame) => frame.t === 'ops'), 'replacement editor replay')
+    expect(replay.filter((frame) => frame.t === 'ops').map((frame) => frame.a)).toEqual(['new-editor'])
+  })
 })

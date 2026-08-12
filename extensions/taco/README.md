@@ -51,11 +51,17 @@ node .specify/extensions/taco/bin/taco.mjs comments \
   specs/001-example/001-example.taco.html \
   --status open \
   --json
+
+node .specify/extensions/taco/bin/taco.mjs validate \
+  specs/001-example/001-example.taco.html \
+  --json
 ```
 
 `pack` embeds every visible UTF-8 regular file below the feature root. Its only default exclusions are all `*.taco.html` files and paths containing a hidden segment beginning `.`. Repeatable `--ignore` values accept safe feature-relative paths or `*`, `?`, and `**` globs. The explicit ignore set is stored in the Taco and reused on refresh unless new `--ignore` values replace it. An unignored symlink, unsupported entry, or non-UTF-8 file is an error rather than a silent omission.
 
 `sync` records a SHA-256 baseline for every packed file. If both the canonical file and Taco copy changed since packaging, the import refuses every write. `--force` exists only for deliberate recovery and may be used by an Agent only after explicit authorization for the exact conflict paths.
+
+`validate` reads the inert Taco JSON block without executing the self-contained runtime. It reports `collab-secrets-present` before complete-file inspection when the Taco carries collaboration capabilities, and `runtime-security-outdated` when the shell predates the hardened runtime. It never prints credential values.
 
 ## Distribution contents
 

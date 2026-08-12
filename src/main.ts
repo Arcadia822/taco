@@ -3,11 +3,13 @@ import { capturePristine, openedFileName, readEmbeddedDoc, titleForFileName } fr
 import { configureApp } from './kernel/app.ts'
 import { FileBrowser } from './file-browser.ts'
 import { fileByPath, parseBundle, relativePath, type TacoBundle, type TacoFile } from './model.ts'
+import { credentialFreeFile, TACO_SECURITY_VERSION, validateTacoSecurity, type SecurityValidation } from './security.ts'
 
 export interface TacoFileApi {
   readonly format: 'taco/files'
   readonly version: string
-  readonly bundle: TacoBundle
+  readonly securityVersion: string
+  validate(): SecurityValidation
   listFiles(): Array<{ path: string; mediaType: string; bytes: number }>
   readFile(path: string): TacoFile | null
   search(query: string): TacoFile[]
@@ -44,7 +46,8 @@ function boot(bundle: TacoBundle): void {
   window.taco = {
     format: 'taco/files',
     version: __APP_VERSION__,
-    get bundle() { return structuredClone(bundle) },
+    securityVersion: TACO_SECURITY_VERSION,
+    validate: () => validateTacoSecurity(bundle),
     listFiles: () => bundle.files.map((file) => ({
       path: relativePath(bundle, file),
       mediaType: file.mediaType,
@@ -53,14 +56,14 @@ function boot(bundle: TacoBundle): void {
     readFile: (path) => {
       const fullPath = path.startsWith(`${bundle.root}/`) ? path : `${bundle.root}/${path}`
       const file = fileByPath(bundle, fullPath)
-      return file ? structuredClone(file) : null
+      return file ? credentialFreeFile(file) : null
     },
     search: (query) => {
       const needle = query.trim().toLocaleLowerCase()
       if (!needle) return []
       return bundle.files
         .filter((file) => file.path.toLocaleLowerCase().includes(needle) || file.content.toLocaleLowerCase().includes(needle))
-        .map((file) => structuredClone(file))
+        .map(credentialFreeFile)
     },
   }
 }

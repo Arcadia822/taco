@@ -4,7 +4,7 @@ import { applySyncDoc, projectSyncChanges, TacoStore, toSyncDoc, type TacoSyncDo
 import { SyncState } from '../src/sync/crdt.ts'
 import { TacoSyncSession, type Frame } from '../src/sync/session.ts'
 import { SYNC_V } from '../src/sync/crdt.ts'
-import { joinFromDoc, onlineTransport, stopSharing } from '../src/sync/online.ts'
+import { joinFromDoc, mintCollab, onlineTransport, rotateKeys, stopSharing } from '../src/sync/online.ts'
 
 const bundle = (): TacoBundle => ({
   format: 'taco/files',
@@ -66,6 +66,48 @@ describe('local collaboration', () => {
     expect(session.collaborators().map((peer) => peer.actor)).toEqual(['actual-guest'])
   })
 
+  it('rejects a malformed operation unit atomically and accepts the next valid unit', () => {
+    const document = bundle()
+    const session = new TacoSyncSession(new TacoStore(document))
+    const receive = (session as unknown as { onFrame(frame: Frame): void }).onFrame.bind(session)
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    receive({
+      t: 'ops', a: 'peer', pv: SYNC_V, ops: [
+        { a: 'peer', s: 1, l: 1, op: 'set', k: 'title', v: 'Must not apply' },
+        { a: 'peer', s: 2, l: 2, op: 'set', k: 'collab.key', v: 'remote-secret' },
+      ],
+    })
+    expect(document.title).toBe('Collaboration test')
+    expect(document.collab).toBeUndefined()
+
+    receive({
+      t: 'ops', a: 'peer', pv: SYNC_V,
+      ops: [{ a: 'peer', s: 1, l: 1, op: 'set', k: 'title', v: 'Accepted later' }],
+    })
+    expect(document.title).toBe('Accepted later')
+    expect(warning).toHaveBeenCalledWith('[taco-security] security:invalid-set-op')
+    session.close()
+    warning.mockRestore()
+  })
+
+  it('rejects presence values that can trigger CSS network requests', () => {
+    const session = new TacoSyncSession(new TacoStore(bundle()))
+    const receive = (session as unknown as { onFrame(frame: Frame): void }).onFrame.bind(session)
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const presence = {
+      name: 'Guest', color: 'url(https://attacker.test/pixel)', fileId: 'file-spec', from: 0, to: 0,
+      focused: false, hasCursor: false,
+    }
+
+    receive({ t: 'p', a: 'malicious-peer', p: presence, pv: SYNC_V })
+
+    expect(session.peers()).toEqual([])
+    expect(warning).toHaveBeenCalledWith('[taco-security] security:invalid-presence')
+    session.close()
+    warning.mockRestore()
+  })
+
   it('keeps online transports scoped to their own Taco session', () => {
     class FakeWebSocket {
       static readonly OPEN = 1
@@ -107,6 +149,23 @@ describe('local collaboration', () => {
     vi.unstubAllGlobals()
   })
 
+  it('rotates room and key material while preserving local sync state', async () => {
+    const document = bundle()
+    document.collab = await mintCollab('ws://localhost:8787')
+    document.collab.sync = { checkpoint: 'preserve' }
+    const previous = structuredClone(document.collab)
+    const store = new TacoStore(document)
+    const session = new TacoSyncSession(store)
+
+    await rotateKeys(session, store)
+
+    expect(document.collab?.room).not.toBe(previous.room)
+    expect(document.collab?.key).not.toBe(previous.key)
+    expect(document.collab?.ownerPriv).not.toBe(previous.ownerPriv)
+    expect(document.collab?.sync).toEqual({ checkpoint: 'preserve' })
+    session.close()
+  })
+
   it('syncs file title metadata without changing the file path', () => {
     const source = bundle()
     source.files[0].title = 'Collaborative specification'
@@ -117,6 +176,23 @@ describe('local collaboration', () => {
 
     expect(target.files[0].title).toBe('Collaborative specification')
     expect(target.files[0].path).toBe(originalPath)
+  })
+
+  it('preserves receiver-local access, collaboration and compatibility metadata', () => {
+    const source = bundle()
+    const target = bundle()
+    target.access = 'reader'
+    target.collab = { role: 'reader' }
+    ;(target as unknown as Record<string, unknown>).packOptions = { ignore: ['private/**'] }
+    const remote = toSyncDoc(source)
+    ;(remote as unknown as Record<string, unknown>).access = undefined
+    ;(remote as unknown as Record<string, unknown>).collab = { key: 'remote-secret' }
+
+    applySyncDoc(target, remote)
+
+    expect(target.access).toBe('reader')
+    expect(target.collab).toEqual({ role: 'reader' })
+    expect((target as unknown as Record<string, unknown>).packOptions).toEqual({ ignore: ['private/**'] })
   })
 
   it('projects only the changed file into the collaboration document', () => {

@@ -34,6 +34,8 @@ describe('Bento-style Taco sharing copies', () => {
   it('mints an owner room and a delegated editor invitation without leaking the owner key', async () => {
     const source = bundle()
     source.collab = await mintCollab()
+    ;(source.collab as unknown as Record<string, unknown>).writerPriv = 'legacy-writer-secret'
+    ;(source.collab as unknown as Record<string, unknown>).futurePrivate = 'future-secret'
 
     const invited = await editorInviteBundle(source)
 
@@ -48,6 +50,12 @@ describe('Bento-style Taco sharing copies', () => {
     expect(invited.collab?.ownerPriv).toBeUndefined()
     expect(invited.collab?.invite?.priv).toBeTruthy()
     expect(invited.collab?.invite?.sig).toBeTruthy()
+    expect(Object.keys(invited.collab ?? {}).sort()).toEqual(['invite', 'key', 'on', 'owner', 'role', 'room', 'v'])
+    expect(Object.keys(invited.collab?.invite ?? {}).sort()).toEqual(['priv', 'pub', 'role', 'sig'])
+    expect(invited.collab).not.toHaveProperty('writerPriv')
+    expect(invited.collab).not.toHaveProperty('futurePrivate')
+    expect(JSON.stringify(invited)).not.toContain('legacy-writer-secret')
+    expect(JSON.stringify(invited)).not.toContain('future-secret')
     expect(parseBundle(JSON.stringify(invited))).toMatchObject({ ok: true })
   })
 

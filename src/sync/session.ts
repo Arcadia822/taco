@@ -6,6 +6,14 @@ import type { TacoBundle } from '../model.ts'
 import { projectSyncChanges, TacoStore, toSyncDoc, type StoreChange, type TacoSyncDoc } from '../store.ts'
 import { SyncState, SYNC_V, type Op, type SyncStateJSON } from './crdt.ts'
 import { storageJson } from '../kernel/storage.ts'
+import {
+  rebuildSyncDoc,
+  validateOps,
+  validatePresence,
+  validateSyncState,
+  validateVersionVector,
+} from './validation.ts'
+import { assertBoundedJson } from '../security.ts'
 
 export interface TacoPresence {
   name: string
@@ -100,12 +108,13 @@ export class TacoSyncSession {
   private readonly beforeUnload = (): void => this.send({ t: 'bye', a: this.actor })
 
   constructor(private store: TacoStore) {
-    this.syncDoc = toSyncDoc(store.bundle)
+    this.syncDoc = rebuildSyncDoc(toSyncDoc(store.bundle), store.bundle)
     const saved = store.bundle.collab?.sync as SyncStateJSON | undefined
-    if (saved?.v === SYNC_V) {
-      this.state = SyncState.fromJSON(this.actor, structuredClone(saved))
+    try {
+      if (saved?.v !== SYNC_V) throw new Error('security:sync-state-version')
+      this.state = SyncState.fromJSON(this.actor, validateSyncState(saved))
       this.forkPending = true
-    } else {
+    } catch {
       this.state = new SyncState(this.actor)
     }
     this.state.adopt(this.syncDoc)
@@ -276,30 +285,50 @@ export class TacoSyncSession {
     this.send({ t: 'p', a: this.actor, p: this.presence() })
   }
 
-  private onFrame(frame: Frame): void {
-    if (frame.pv !== SYNC_V || frame.a === this.actor) return
+  private onFrame(input: unknown): void {
+    try { assertBoundedJson(input, 'frame') }
+    catch (error) { console.warn(`[taco-security] ${(error as Error).message}`); return }
+    if (!input || typeof input !== 'object' || Array.isArray(input)) { console.warn('[taco-security] invalid-frame'); return }
+    const frame = input as Partial<Frame>
+    if (frame.pv !== SYNC_V) return
+    if (typeof frame.a !== 'string' || !frame.a || frame.a.length > 256) { console.warn('[taco-security] invalid-actor'); return }
+    if (frame.a === this.actor) return
+    if (!['hello', 'ops', 'need', 'p', 'snap', 'bye'].includes(String(frame.t))) {
+      console.warn('[taco-security] unknown-frame')
+      return
+    }
     switch (frame.t) {
       case 'hello': {
-        this.touchPeer(frame.a, frame.p)
+        let presence: TacoPresence
+        let vv: Record<string, number>
+        try { presence = validatePresence(frame.p); vv = validateVersionVector(frame.vv) }
+        catch (error) { console.warn(`[taco-security] ${(error as Error).message}`); return }
+        this.touchPeer(frame.a, presence)
         this.send({ t: 'p', a: this.actor, p: this.presence() })
         this.send({ t: 'need', a: this.actor, vv: this.state.vv })
-        const missing = this.state.missingFor(this.log, frame.vv)
+        const missing = this.state.missingFor(this.log, vv)
         if (missing.length) this.send({ t: 'ops', a: this.actor, ops: missing })
         break
       }
       case 'need': {
-        const missing = this.state.missingFor(this.log, frame.vv)
+        let vv: Record<string, number>
+        try { vv = validateVersionVector(frame.vv) }
+        catch (error) { console.warn(`[taco-security] ${(error as Error).message}`); return }
+        const missing = this.state.missingFor(this.log, vv)
         if (missing.length) this.send({ t: 'ops', a: this.actor, ops: missing })
         break
       }
       case 'ops':
+        if (!frame.ops) { console.warn('[taco-security] invalid-ops-frame'); return }
         this.applyOps(frame.ops)
         break
       case 'snap':
+        if (!frame.doc || !frame.state) { console.warn('[taco-security] invalid-snapshot-frame'); return }
         this.applySnapshot(frame.doc, frame.state)
         break
       case 'p':
-        this.touchPeer(frame.a, frame.p)
+        try { this.touchPeer(frame.a, validatePresence(frame.p)) }
+        catch (error) { console.warn(`[taco-security] ${(error as Error).message}`) }
         break
       case 'bye':
         this.peersMap.delete(frame.a)
@@ -308,12 +337,31 @@ export class TacoSyncSession {
     }
   }
 
-  private applyOps(ops: Op[]): void {
+  private applyOps(input: unknown): void {
     this.flush()
+    let ops: Op[]
+    try { ops = validateOps(input, this.store.bundle) }
+    catch (error) {
+      console.warn(`[taco-security] ${(error as Error).message}`)
+      return
+    }
+    const beforeDoc = structuredClone(this.syncDoc)
+    const beforeState = this.state.toJSON()
+    const beforeLogLength = this.log.length
     for (const op of ops) {
       if (!this.log.some((known) => known.a === op.a && known.s === op.s)) this.log.push(op)
     }
-    const result = this.state.apply(this.syncDoc, ops)
+    let result
+    try {
+      result = this.state.apply(this.syncDoc, ops)
+      this.syncDoc = rebuildSyncDoc(this.syncDoc, this.store.bundle)
+    } catch (error) {
+      this.syncDoc = beforeDoc
+      this.state = SyncState.fromJSON(this.actor, beforeState)
+      this.log.length = beforeLogLength
+      console.warn(`[taco-security] ${(error as Error).message}`)
+      return
+    }
     if (!result.changed) return
     this.store.applyRemote(structuredClone(this.syncDoc))
     for (const listener of this.remoteListeners) listener()
@@ -321,9 +369,28 @@ export class TacoSyncSession {
   }
 
   applySnapshot(doc: TacoSyncDoc, state: SyncStateJSON): void {
-    if (state.v !== SYNC_V) return
+    let safeDoc: TacoSyncDoc
+    let safeState: SyncStateJSON
+    try {
+      safeDoc = rebuildSyncDoc(doc, this.store.bundle)
+      safeState = validateSyncState(state)
+    } catch (error) {
+      console.warn(`[taco-security] ${(error as Error).message}`)
+      return
+    }
     this.flush()
-    const result = this.state.mergeSnapshot(this.syncDoc, doc, state)
+    const beforeDoc = structuredClone(this.syncDoc)
+    const beforeState = this.state.toJSON()
+    let result
+    try {
+      result = this.state.mergeSnapshot(this.syncDoc, safeDoc, safeState)
+      this.syncDoc = rebuildSyncDoc(this.syncDoc, this.store.bundle)
+    } catch (error) {
+      this.syncDoc = beforeDoc
+      this.state = SyncState.fromJSON(this.actor, beforeState)
+      console.warn(`[taco-security] ${(error as Error).message}`)
+      return
+    }
     if (!result.changed) return
     this.store.applyRemote(structuredClone(this.syncDoc))
     for (const listener of this.remoteListeners) listener()

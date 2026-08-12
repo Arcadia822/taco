@@ -1,3 +1,5 @@
+import { sanitizeMermaidSvg } from './security.ts'
+
 const MERMAID_CDN_URL = 'https://cdn.jsdelivr.net/npm/mermaid@11.16.1/dist/mermaid.esm.min.mjs'
 
 export interface MermaidApi {
@@ -143,7 +145,7 @@ const renderDiagram = (
     try {
       const { svg } = await mermaid.render(id, source)
       surface.className = 'surface'
-      surface.innerHTML = svg
+      surface.innerHTML = sanitizeMermaidSvg(svg)
     } catch {
       surface.className = 'surface is-error'
       surface.textContent = labels.error

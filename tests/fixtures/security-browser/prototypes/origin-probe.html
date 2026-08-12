@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Taco origin isolation probe</title>
+  </head>
+  <body>
+    <output id="result">running</output>
+    <script>
+      const probe = { origin: location.origin, opener: Boolean(window.opener) }
+      for (const name of ['localStorage', 'sessionStorage', 'indexedDB']) {
+        try {
+          probe[name] = Boolean(window[name])
+        } catch (error) {
+          probe[name] = error.name
+        }
+      }
+      try {
+        probe.cookie = document.cookie
+      } catch (error) {
+        probe.cookie = error.name
+      }
+      try {
+        probe.serviceWorker = Boolean(navigator.serviceWorker)
+      } catch (error) {
+        probe.serviceWorker = error.name
+      }
+      probe.taco = typeof window.taco
+      document.getElementById('result').textContent = JSON.stringify(probe)
+    </script>
+  </body>
+</html>

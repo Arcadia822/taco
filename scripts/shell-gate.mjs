@@ -14,6 +14,8 @@ if (!path) {
 const fail = (message) => { throw new Error(`Taco shell gate: ${message}`) }
 const html = readFileSync(path, 'utf8')
 const close = '</scr' + 'ipt>'
+const securityMeta = html.match(/<meta\b(?=[^>]*\bname=["']taco-security-version["'])[^>]*>/i)?.[0]
+if (securityMeta?.match(/\bcontent=["']([^"']+)["']/i)?.[1] !== '1') fail('runtime security marker is missing or outdated')
 
 const opens = (html.match(/<script[\s>]/g) ?? []).length
 const closes = html.split(close).length - 1
@@ -39,6 +41,10 @@ if (!javascript.trim()) fail('inflated JavaScript is empty')
 if (css.includes('@font-face') || /data:font\//.test(css)) fail('runtime contains a bundled font')
 if (javascript.includes('mermaidAPI') || javascript.includes('mermaid.parseError')) fail('runtime contains bundled Mermaid code')
 if (!javascript.includes('mermaid@11.16.1/dist/mermaid.esm.min.mjs')) fail('runtime is missing the pinned Mermaid CDN loader')
+if (!javascript.includes('collab-secrets-present')) fail('runtime is missing collaboration-secret detection')
+for (const member of ['securityVersion', 'validate', 'listFiles', 'readFile', 'search']) {
+  if (!javascript.includes(member)) fail(`runtime is missing bounded Agent API member: ${member}`)
+}
 if (!html.includes("style.setAttribute('data-taco-transient', '')")) fail('runtime style is not marked transient')
 
 const replacement = JSON.stringify({ format: 'taco/files', version: 1, docId: 'gate', title: 'Gate', root: 'specs/gate', files: [] })

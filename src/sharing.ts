@@ -19,23 +19,25 @@ export const collabRole = (bundle: TacoBundle): 'owner' | 'editor' | 'viewer' | 
   return 'editor'
 }
 
-export const stripOwnerSecrets = (collab: TacoCollab): TacoCollab => {
-  const next = clone(collab)
-  delete next.ownerPriv
-  return next
-}
+export const editorCapability = (collab: TacoCollab, invite: NonNullable<TacoCollab['invite']>): TacoCollab => ({
+  room: collab.room,
+  key: collab.key,
+  on: true,
+  v: collab.v,
+  owner: collab.owner,
+  invite,
+  role: 'writer',
+  ...(collab.sync !== undefined ? { sync: clone(collab.sync) } : {}),
+})
 
 export async function editorInviteBundle(bundle: TacoBundle): Promise<TacoBundle> {
   const collab = bundle.collab
   if (!collab?.room || !collab.key || !collab.owner) throw new Error('A live collaboration session is required')
-  if (!collab.ownerPriv && !collab.invite) throw new Error('This copy cannot create an editor invitation')
+  if (!collab.ownerPriv) throw new Error('Only the owner copy can create an editor invitation')
 
   const next = clone(bundle)
-  const invited = stripOwnerSecrets(next.collab!)
-  if (collab.ownerPriv) invited.invite = await mintInvite(collab.ownerPriv, 'writer')
-  invited.role = 'writer'
-  invited.on = true
-  next.collab = invited
+  const invite = await mintInvite(collab.ownerPriv, 'writer')
+  next.collab = editorCapability(collab, invite)
   delete next.access
   return next
 }

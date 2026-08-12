@@ -439,4 +439,32 @@ describe('Taco extension CLI', () => {
       'Refusing to write Taco through a symbolic link',
     )
   })
+
+  it('validates runtime and collaboration credentials without returning secret values', () => {
+    const project = mkdtempSync(join(tmpdir(), 'taco-validate-'))
+    const taco = join(project, 'security.taco.html')
+    const bundle = {
+      format: 'taco/files', version: 1, docId: 'security', title: 'Security', root: 'specs/security',
+      files: [{ path: 'specs/security/spec.md', mediaType: 'text/markdown', content: '# Security' }],
+      collab: { room: 'wss://relay.test/d/room', key: 'room-secret', ownerPriv: 'owner-secret' },
+    }
+    writeFileSync(taco, `<!doctype html><meta name="taco-security-version" content="1"><script id="taco-document" type="application/taco+json">${JSON.stringify(bundle)}</script>`)
+
+    const output = execFileSync(process.execPath, [cli, 'validate', taco, '--json'], { cwd: project, encoding: 'utf8' })
+    const result = JSON.parse(output) as { securityVersion: string; issues: string[]; files: number }
+
+    expect(result).toEqual(expect.objectContaining({
+      securityVersion: '1',
+      issues: ['collab-secrets-present'],
+      files: 1,
+    }))
+    expect(output).not.toContain('room-secret')
+    expect(output).not.toContain('owner-secret')
+
+    writeFileSync(taco, readFileSync(taco, 'utf8').replace('<meta name="taco-security-version" content="1">', ''))
+    expect(runJson<{ issues: string[] }>(['validate', taco], project).issues).toEqual([
+      'collab-secrets-present',
+      'runtime-security-outdated',
+    ])
+  })
 })
