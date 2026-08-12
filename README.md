@@ -18,7 +18,7 @@ specify extension list
 
 The supported Taco source checkout already contains the production shell at `extensions/taco/assets/taco-shell.html`. Spec Kit copies that shell and the CLI into `.specify/extensions/taco/`, and registers both commands with the project's active Agent integration. No target-project npm installation is involved.
 
-The installing Agent must then merge the durable Taco review policy from [`../../docs/agents.md`](../../docs/agents.md) into the target project's existing `AGENTS.md` without replacing unrelated instructions. Plugin installation is not complete until that policy is present. The policy requires Taco update after every canonical feature-artifact change and the review-comment round trip; it does not restate packer's built-in Taco-output exclusion.
+The installing Agent must then merge the durable Taco review policy from [`../../docs/agent-installation.md`](../../docs/agent-installation.md) into the target project's existing `AGENTS.md` without replacing unrelated instructions. Plugin installation is not complete until that policy is present. The policy requires Taco update after every canonical feature-artifact change and the review-comment round trip; it does not restate packer's built-in Taco-output exclusion.
 
 ## Agent commands
 
@@ -67,4 +67,4 @@ bin/taco.mjs
 assets/taco-shell.html
 ```
 
-The shell and CLI are local. Creating, updating, opening, and reviewing a Taco requires no network connection. A collaboration-enabled Taco can contain access credentials; follow [`../../docs/agents.md`](../../docs/agents.md) before sending its content to any external model, service, log, or ticket.
+The shell and CLI are local. Creating, updating, opening, and reviewing a Taco requires no network connection. A collaboration-enabled Taco can contain access credentials; follow [`../../docs/agent-installation.md`](../../docs/agent-installation.md) before sending its content to any external model, service, log, or ticket.
