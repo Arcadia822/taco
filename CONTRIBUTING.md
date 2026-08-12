@@ -44,9 +44,9 @@ npm run test:relay
 
 ## Generated artifacts
 
-`dist-single/Taco_Spec.taco.html` and `extensions/taco/assets/taco-shell.html` are intentional generated artifacts. The extension shell is consumed directly by the Spec Kit integration, so source changes that affect the build must update both files.
+`dist-single/Taco_Spec.taco.html` is ignored local build output. `extensions/taco/assets/taco-shell.html` is the tracked generated shell consumed directly by the Spec Kit integration, so source changes that affect the build must update it.
 
-After `npm run build`, inspect and commit the generated changes. CI rebuilds them and fails if the committed output drifts from source. Do not hand-edit either generated HTML file; fix the source or build script and rebuild.
+After `npm run build`, inspect and commit the generated extension shell when it changes. CI rebuilds it and fails if the committed output drifts from source. Do not hand-edit generated HTML; fix the source or build script and rebuild.
 
 ## Formatting
 

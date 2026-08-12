@@ -24,7 +24,7 @@
 ## Phase 4 - Documentation and Distribution
 
 - [x] T013 Align English and Chinese README Quickstarts with the installed extension behavior.
-- [x] T014 Align `docs/agents.md` and `extensions/taco/README.md` with the same contract.
+- [x] T014 Align `docs/agent-installation.md` and `extensions/taco/README.md` with the same contract.
 - [x] T015 Build the production single-file shell and synchronize the extension asset.
 
 ## Phase 5 - Verification

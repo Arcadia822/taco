@@ -1,6 +1,6 @@
-# Taco — for AI agents
+# Taco — Agent installation
 
-This is the machine-facing contract for installing and using Taco from source. Read [`README.md`](../README.md) for the product boundary and [`extensions/taco/README.md`](../extensions/taco/README.md) for the extension manifest contract.
+This is the machine-facing installation and review guide for an Agent adding Taco to a target Spec Kit project. Read [`README.md`](../README.md) for the product boundary and [`extensions/taco/README.md`](../extensions/taco/README.md) for the extension manifest contract. Instructions for contributors working in the Taco source repository live in [`AGENTS.md`](../AGENTS.md) and [`CONTRIBUTING.md`](../CONTRIBUTING.md).
 
 ## Installation boundary
 

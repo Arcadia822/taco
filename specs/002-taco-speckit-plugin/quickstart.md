@@ -13,7 +13,7 @@ specify extension list
 
 Installation passes only if `.specify/extensions/taco/` contains `extension.yml`, `commands/update.md`, `commands/review.md`, `bin/taco.mjs`, and `assets/taco-shell.html`, and if the selected integration exposes both Taco commands.
 
-The installing Agent must also merge the Taco Spec Kit review policy from `docs/agents.md` into the target project's `AGENTS.md`, preserving all existing instructions. Installation is incomplete until that durable policy is present.
+The installing Agent must also merge the Taco Spec Kit review policy from `docs/agent-installation.md` into the target project's `AGENTS.md`, preserving all existing instructions. Installation is incomplete until that durable policy is present.
 
 ## Package
 

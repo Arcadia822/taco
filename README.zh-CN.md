@@ -16,6 +16,8 @@ Taco 把规格目录变成一个可携带的评审工作区。人可以在浏览
 
 这个文件本身就是交接物。它同时携带 spec、真实目录结构、阅读器、编辑器、评论和可选的协作状态。接收者只需要浏览器，不需要 Taco 账号、服务端 workspace 或专有需求数据库。
 
+Taco 在此向 [Bento](https://github.com/nyblnet/bento)——“装进一个文件的办公套件”——致敬。Bento 证明了完整的创作工作区可以随一个可携带文件同行；Taco 将这一理念带入规格评审。
+
 ![Taco 的规格浏览与评审界面](docs/assets/taco-overview.zh-CN.png)
 
 Taco 对 Spec Kit 的目录约定做了轻量集成，适用于规格驱动开发（SDD）流程，但不要求用户采用某一种方法。它的底层模型仍是 Markdown 文件浏览与评审界面，支持 design 文档和其他目录结构。Agent 可以按照团队的流程组织 Markdown 与目录，再把这种结构打包成 Taco。
@@ -73,25 +75,15 @@ flowchart LR
 
 ## 当前能力
 
-- 将完整 feature directory 嵌入单个自包含的 `.taco.html` 文件。
-- 按需求定义、技术规划和任务拆解三个阶段浏览文件，同时保留真实目录层级。
-- 使用 Tiptap 直接编辑 canonical Markdown，不提供平行的 raw/WYSIWYG 状态。
-- 支持标题、任务列表、紧凑表格、语法高亮代码块、行号和复制。
-- 仅在当前文档包含 Mermaid 时从固定版本 CDN 按需渲染；离线时直接显示可编辑源码。
-- 在右侧切换文件内目录和评论；目录跟随正文滚动，评论锚定选中文本。
-- 在同源浏览器标签页之间同步 Markdown block、评论、成员和光标；配置可选 relay 后，同一 Taco 的不同设备副本也可端到端加密协作。
-- 提供 Bento 风格分享面板：编辑邀请、只读副本、成员角色、单设备撤销和访问密钥重置。
-- 直接编辑 YAML、JSON 和未知文本的原始内容，并为 JSON 提供实时语法高亮。
-- 将 HTML/HTM 视为需求原型，以单行文件卡片展示，并通过“打开预览”独立打开；Taco 页面内不嵌入执行。
-- 搜索文件路径和全文，并在 Taco 内打开相对 Markdown 链接。
-- 保存单文件副本，或把所选目录作为 Taco 文件树根目录，直接写入 Taco 文件自身与侧栏可见的全部相对路径。
-- 通过 Spec Kit 扩展在每个会修改 feature 的 SDD 阶段后更新同一个目录内 Taco，并由 Agent 安全导入人类修改、逐条读取评论。
-- Agent GUI 提供 internal browser 时，自动打开并验证刚更新的 Taco；否则提供可点击的本地绝对路径，不上传产物。
-- 核心阅读、编辑和同机协作不依赖远程字体、账号或后端 API；Mermaid 与在线加密协作是显式触发的可选网络增强。
+- 将完整规格目录打包成一个可携带的 `.taco.html` 文件，在浏览器中打开并离线使用。
+- 在保留真实目录结构的同时，浏览、搜索和编辑 canonical Markdown 与其他文本文件。
+- 通过锚定评论评审规格，随后保存更新后的 Taco，或把修改写回原始目录。
+- 支持同机或跨设备实时协作，并提供加密分享、编辑与只读副本及访问控制。
+- 集成 Spec Kit，持续更新每个 feature 的 Taco，并通过冲突检测安全导入人类修改与评论。
 
-## Agent 工作契约
+## Agent 安装说明
 
-上面的 Quickstart 是面向用户的入口；[`docs/agents.md`](docs/agents.md) 是面向机器的工作契约，包含由 Agent 代替用户执行的安装、验证、打包、评审、冲突处理与凭据安全流程。
+上面的 Quickstart 是面向用户的入口；[`docs/agent-installation.md`](docs/agent-installation.md) 是供 Agent 代替用户执行安装和评审的操作说明。Agent 在本仓库内参与开发时，仍遵循 [`AGENTS.md`](AGENTS.md) 中的 contributor 工作规则。
 
 Agent 需要遵守：
 
@@ -125,8 +117,9 @@ tests/                                数据模型、渲染、交互、协作和
 specs/001-taco-bento-product/         默认 Taco 与产品规格
 specs/002-taco-speckit-plugin/        可安装 Spec Kit plugin 规格与验收流程
 server/sync-worker/                    可选的端到端加密协作 relay
-dist-single/                          生成的单文件 Taco
-docs/agents.md                        面向 AI Agent 的安装与评审流程
+docs/agent-installation.md            面向 Agent 的安装与评审流程
+AGENTS.md                             Agent 在本仓库参与贡献时的工作规则
+CONTRIBUTING.md                       Contributor 开发与验证指南
 vite.config.ts                        默认 bundle 注入与构建配置
 ```
 
@@ -169,8 +162,8 @@ Taco 当前处于 v0.2 原型阶段。文件浏览、Markdown 编辑、通用源
 
 Taco v0.2 是可运行、可测试的原型，不构成生产稳定性承诺。
 
-## 来源与许可
+## 许可与来源
 
-单文件构建方式参考并改编自 [Bento](https://github.com/nyblnet/bento)，规格目录与产物习惯参考 [GitHub Spec Kit](https://github.com/github/spec-kit)。
+规格目录与产物习惯参考 [GitHub Spec Kit](https://github.com/github/spec-kit)。
 
 Taco 使用 MIT License，完整许可文本位于仓库根目录的 [`LICENSE`](LICENSE) 文件。第三方归属见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。

@@ -16,6 +16,8 @@ Taco turns a specification directory into a portable review workspace. A human c
 
 The file is the handoff. It carries the spec, its directory structure, the reader, the editor, comments, and optional collaboration state. The recipient needs a browser—not a Taco account, hosted workspace, or proprietary requirements database.
 
+Taco is built with gratitude to [Bento](https://github.com/nyblnet/bento), the office suite that fits in a file. Bento showed that a complete creative workspace could travel as one portable document; Taco carries that idea into specification review.
+
 ![Taco specification browsing and review interface](docs/assets/taco-overview.png)
 
 Taco includes lightweight support for Spec Kit's directory conventions and is designed for specification-driven development (SDD). It does not require one methodology: its underlying model remains a Markdown file browser and review surface that supports design documents and other directory structures. An Agent can organize Markdown and directories around a team's process, then package that structure as a Taco.
@@ -73,25 +75,15 @@ The project is licensed under the MIT License. You can study the implementation,
 
 ## Current capabilities
 
-- Embed a complete feature directory in one self-contained `.taco.html` file.
-- Browse files across specification, planning, and task stages without flattening the actual directory hierarchy.
-- Edit canonical Markdown directly with Tiptap instead of maintaining parallel raw and WYSIWYG states.
-- Render headings, task lists, compact tables, syntax-highlighted code blocks, line numbers, and copy controls.
-- Load a pinned Mermaid build from a CDN only when the current document contains Mermaid; show editable source when offline.
-- Switch the right rail between the document outline and comments; the outline follows the document, while comments stay anchored to selected text.
-- Synchronize Markdown blocks, comments, members, and cursors across same-origin browser tabs; with an optional relay configured, copies on different devices can collaborate with end-to-end encryption.
-- Use a Bento-style sharing panel for editor invitations, read-only copies, member roles, per-device revocation, and access-key reset.
-- Edit YAML, JSON, and unknown text formats as source, with live syntax highlighting for JSON.
-- Treat HTML and HTM files as specification prototypes, display them as a compact file card, and open them in a separate preview page without executing them inside Taco.
-- Search file paths and full text, and open relative Markdown links inside Taco.
-- Save a single-file copy, or choose a directory as the Taco file-tree root and write changes back to the Taco file and every sidebar-visible relative path.
-- Use the Spec Kit extension to update the same in-directory Taco after every feature-changing SDD stage, safely import human edits, and read comments one at a time.
-- When the Agent GUI has an internal browser, automatically open the exact updated Taco for review; otherwise report a clickable local path without uploading the artifact.
-- Keep core reading, editing, and same-machine collaboration independent of remote fonts, accounts, and backend APIs. Mermaid rendering and encrypted online collaboration are optional network enhancements triggered explicitly.
+- Package a complete specification directory into one portable `.taco.html` file that opens in a browser and works offline.
+- Browse, search, and edit the canonical Markdown and text files while preserving their real directory structure.
+- Review specs with anchored comments, then save an updated Taco or write the changes back to the original directory.
+- Collaborate in real time on the same machine or across devices with encrypted sharing, editor and reader copies, and access controls.
+- Integrate with Spec Kit to keep each feature's Taco current and safely import human edits and comments with conflict detection.
 
-## Agent contract
+## Agent installation
 
-The Quickstart above is the user-facing entry point. [`docs/agents.md`](docs/agents.md) is the machine-facing contract: it contains the installation, verification, packaging, review, conflict, and credential-safety procedures the Agent performs on the user's behalf.
+The Quickstart above is the user-facing entry point. [`docs/agent-installation.md`](docs/agent-installation.md) is the machine-facing installation and review guide for the Agent acting on the user's behalf. Contributor instructions for Agents working in this repository remain in [`AGENTS.md`](AGENTS.md).
 
 Agent requirements:
 
@@ -125,8 +117,9 @@ tests/                                Data model, rendering, interaction, collab
 specs/001-taco-bento-product/         Default Taco content and product specification
 specs/002-taco-speckit-plugin/        Installable Spec Kit plugin specification and acceptance flow
 server/sync-worker/                    Optional end-to-end encrypted collaboration relay
-dist-single/                          Generated single-file Taco
-docs/agents.md                        Installation and review workflow for AI agents
+docs/agent-installation.md            Agent installation and review workflow
+AGENTS.md                             Instructions for Agents contributing in this repository
+CONTRIBUTING.md                       Contributor development and validation guide
 vite.config.ts                        Default bundle injection and build configuration
 ```
 
@@ -169,8 +162,8 @@ Taco is currently a v0.2 prototype. File browsing, Markdown editing, generic sou
 
 Taco v0.2 is a testable prototype, not a production-stability commitment.
 
-## Attribution and license
+## License and attribution
 
-The single-file build approach was adapted from [Bento](https://github.com/nyblnet/bento). The specification-directory and artifact conventions were inspired by [GitHub Spec Kit](https://github.com/github/spec-kit).
+The specification-directory and artifact conventions were inspired by [GitHub Spec Kit](https://github.com/github/spec-kit).
 
 Taco is licensed under the MIT License. See [`LICENSE`](LICENSE) for the complete text and [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for third-party attribution.
