@@ -1,16 +1,22 @@
-[English](README.md) | **简体中文**
-
-[![CI](https://github.com/Arcadia822/taco/actions/workflows/ci.yml/badge.svg)](https://github.com/Arcadia822/taco/actions/workflows/ci.yml)
-
-[在线演示（简体中文）](https://taco-spec-zh-cn.arcadia822.chatgpt.site) · [Live demo (English)](https://taco-spec-en.arcadia822.chatgpt.site)
-
-> **让人与 Agent 在一个文件里共同审阅、传递和管理 spec。**
+<div align="center">
+  <img src="src/assets/taco-logo.svg" alt="Taco Logo" width="96">
+  <h1>Taco</h1>
+  <p><a href="README.md">English</a> · <strong>简体中文</strong></p>
+  <p>
+    <a href="https://github.com/Arcadia822/taco/actions/workflows/ci.yml"><img src="https://github.com/Arcadia822/taco/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  </p>
+  <p>
+    <a href="https://taco-spec-zh-cn.arcadia822.chatgpt.site">在线演示（简体中文）</a> ·
+    <a href="https://taco-spec-en.arcadia822.chatgpt.site">Live demo (English)</a>
+  </p>
+  <p><strong>让人与 Agent 在一个文件里共同审阅、传递和管理 spec。</strong></p>
+</div>
 
 Taco 把规格目录变成一个可携带的评审工作区。人可以在浏览器中打开一个 `.taco.html` 文件，阅读完整 spec、直接编辑原始 Markdown，并留下锚定到具体文本的评论；Agent 随后可以把修改与评论安全导回 canonical files，处理反馈，再生成下一轮评审文件。
 
 这个文件本身就是交接物。它同时携带 spec、真实目录结构、阅读器、编辑器、评论和可选的协作状态。接收者只需要浏览器，不需要 Taco 账号、服务端 workspace 或专有需求数据库。
 
-![Taco 的规格浏览与评审界面](docs/assets/taco-overview.png)
+![Taco 的规格浏览与评审界面](docs/assets/taco-overview.zh-CN.png)
 
 Taco 对 Spec Kit 的目录约定做了轻量集成，适用于规格驱动开发（SDD）流程，但不要求用户采用某一种方法。它的底层模型仍是 Markdown 文件浏览与评审界面，支持 design 文档和其他目录结构。Agent 可以按照团队的流程组织 Markdown 与目录，再把这种结构打包成 Taco。
 

@@ -1,10 +1,16 @@
-**English** | [简体中文](README.zh-CN.md)
-
-[![CI](https://github.com/Arcadia822/taco/actions/workflows/ci.yml/badge.svg)](https://github.com/Arcadia822/taco/actions/workflows/ci.yml)
-
-[Live demo (English)](https://taco-spec-en.arcadia822.chatgpt.site) · [在线演示（简体中文）](https://taco-spec-zh-cn.arcadia822.chatgpt.site)
-
-> **Review, hand off, and manage specs with humans and agents — in one file.**
+<div align="center">
+  <img src="src/assets/taco-logo.svg" alt="Taco logo" width="96">
+  <h1>Taco</h1>
+  <p><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
+  <p>
+    <a href="https://github.com/Arcadia822/taco/actions/workflows/ci.yml"><img src="https://github.com/Arcadia822/taco/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  </p>
+  <p>
+    <a href="https://taco-spec-en.arcadia822.chatgpt.site">Live demo (English)</a> ·
+    <a href="https://taco-spec-zh-cn.arcadia822.chatgpt.site">在线演示（简体中文）</a>
+  </p>
+  <p><strong>Review, hand off, and manage specs with humans and agents — in one file.</strong></p>
+</div>
 
 Taco turns a specification directory into a portable review workspace. A human can open one `.taco.html` file in a browser, read the complete spec, edit the original Markdown, and leave anchored comments. An agent can then import those edits and comments back into the canonical files, handle the feedback, and produce the next review copy.
 
