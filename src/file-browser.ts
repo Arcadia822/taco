@@ -41,6 +41,7 @@ import { LOCALE_CHOICES, copy, resolveLocale, type Locale } from './i18n.ts'
 import { OutlineController } from './outline-controller.ts'
 import { PresenceController } from './presence-controller.ts'
 import { ShareController } from './share-controller.ts'
+import { resolveEmbeddedMarkdownAssets } from './markdown-assets.ts'
 
 type AuxiliaryTab = 'outline' | 'comments'
 
@@ -114,7 +115,10 @@ export class FileBrowser {
 
   constructor(private root: HTMLElement, private bundle: TacoBundle, private readonly options: FileBrowserOptions = {}) {
     this.store = new TacoStore(bundle)
-    this.locale = resolveLocale(storageGet('taco-locale'))
+    this.locale = resolveLocale(
+      storageGet('taco-locale'),
+      __DEFAULT_LOCALE__ ? [__DEFAULT_LOCALE__] : undefined,
+    )
     document.documentElement.lang = this.locale
     migrateTacoBundleBlocks(bundle, this.mermaidLabels())
     this.dirtyTracker = new BundleDirtyTracker(bundle)
@@ -495,6 +499,7 @@ export class FileBrowser {
           if (ensureTacoBlockIds(activeEditor, file.id ?? file.path, false)) return
           this.updateFileContent(file.path, activeEditor.getMarkdown(), blocksFromEditor(activeEditor, extensions))
           requestAnimationFrame(() => {
+            resolveEmbeddedMarkdownAssets(editorHost, this.bundle, file)
             this.comments.refreshHighlights(editorHost)
             this.presence.publish(activeEditor)
             this.outline.paint()
@@ -517,6 +522,7 @@ export class FileBrowser {
     }
     requestAnimationFrame(() => {
       if (this.markdownEditor !== editor || mountSerial !== this.editorMountSerial) return
+      resolveEmbeddedMarkdownAssets(editorHost, this.bundle, file)
       this.comments.refreshHighlights(editorHost)
       const headingHash = decodeURIComponent(location.hash.split('::')[1] ?? '')
       if (headingHash) this.outline.scrollToHeading(headingHash, 'auto')
@@ -725,6 +731,7 @@ export class FileBrowser {
       }
       const host = this.viewer.querySelector<HTMLElement>('.tiptap-editor-host')
       if (host) {
+        resolveEmbeddedMarkdownAssets(host, this.bundle, this.selected)
         this.comments.refreshHighlights(host)
       }
       this.outline.paint()

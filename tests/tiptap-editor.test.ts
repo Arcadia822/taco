@@ -125,6 +125,28 @@ describe('Tiptap Markdown integration', () => {
     expect(bundle.files[0].blocks?.[0].html).toContain('src="docs/assets/taco-overview.png"')
   })
 
+  it('preserves a centered HTML README header as one editable block', () => {
+    const markdown = [
+      '<div align="center">',
+      '  <img src="src/assets/taco-logo.svg" alt="Taco logo" width="96">',
+      '  <h1>Taco</h1>',
+      '  <p><strong>Review specs in one file.</strong></p>',
+      '</div>',
+    ].join('\n')
+
+    editor = new Editor({
+      extensions: createTacoEditorExtensions(labels),
+      content: markdown,
+      contentType: 'markdown',
+    })
+
+    expect(editor.state.doc.firstChild?.type.name).toBe('centeredBlock')
+    expect(editor.view.dom.querySelector('.taco-centered-block')?.getAttribute('align')).toBe('center')
+    expect(editor.view.dom.querySelector('.taco-centered-block img')?.getAttribute('src')).toBe('src/assets/taco-logo.svg')
+    expect(editor.getMarkdown()).toContain('<div align="center">')
+    expect(editor.getMarkdown()).toContain('</div>')
+  })
+
   it('migrates legacy Markdown to identical unique blocks before peers connect', () => {
     const original: TacoBundle = {
       format: 'taco/files',

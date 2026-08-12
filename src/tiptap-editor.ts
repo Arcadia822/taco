@@ -8,12 +8,14 @@ import TaskItem from '@tiptap/extension-task-item'
 import { createTacoCodeBlock } from './tiptap-code-block.ts'
 import type { TacoCodeBlockCommentTarget } from './tiptap-code-block.ts'
 import { DocumentProperties, DocumentProperty } from './tiptap-document-properties.ts'
+import { CenteredBlock } from './tiptap-centered-block.ts'
 import type { MermaidPluginLabels, MermaidRuntime } from './mermaid.ts'
 import { fileKind, type TacoBlock, type TacoBundle } from './model.ts'
 
 const BLOCK_TYPES = [
   'paragraph', 'heading', 'blockquote', 'codeBlock', 'bulletList', 'orderedList',
   'taskList', 'horizontalRule', 'image', 'table', 'documentProperties',
+  'centeredBlock',
 ]
 
 const hashId = (value: string): string => {
@@ -59,6 +61,7 @@ export const createTacoEditorExtensions = (labels: MermaidPluginLabels, options:
   TacoBlockIdentity,
   DocumentProperties,
   DocumentProperty,
+  CenteredBlock,
   createTacoCodeBlock(labels, {
     renderMermaid: options.renderMermaid,
     mermaidRuntime: options.mermaidRuntime,

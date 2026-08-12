@@ -32,7 +32,7 @@
 
 ## Browser Evidence
 
-- [x] The local HTTP preview opens `spec.md` with 15 files, including the self-contained HTML preview demo, and no leftover entity cards.
+- [x] The local HTTP preview opens `README.md` under Specify with 15 files, including the self-contained HTML preview demo, and no leftover entity cards.
 - [x] `tasks.md` navigation, the exact-source toggle, and full-text search work.
 - [x] The browser console reports no errors.
 - [ ] In-app browser automation cannot occupy a `file://` tab because of the local-file security policy; direct file reload is still a manual check.

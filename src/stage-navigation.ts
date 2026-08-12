@@ -30,6 +30,7 @@ export const STAGES: readonly StageDefinition[] = [
 ]
 
 const conventionStage = (path: string): StageId | null => {
+  if (path.toLowerCase() === 'readme.md') return 'spec'
   if (path.startsWith('checklists/')) return 'plan'
   if (path === 'research.md' || path === 'data-model.md' || path === 'quickstart.md' || path.startsWith('contracts/')) return 'plan'
   if (/\.html?$/i.test(path)) return 'spec'

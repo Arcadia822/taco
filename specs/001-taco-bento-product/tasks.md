@@ -9,7 +9,7 @@
 ## Phase 2 — File Browsing
 
 - [x] T006 Build a hierarchical folder/file navigation interface in `src/file-browser.ts`
-- [x] T007 Open `spec.md` by default; preserve the selected path with the URL hash when served online and with session state when used offline via `file://`
+- [x] T007 Open a feature-root `README.md` by default, falling back to `spec.md`; preserve the selected path with the URL hash when served online and with session state when used offline via `file://`
 - [x] T008 Integrate TOAST UI Editor's WYSIWYG and Markdown editing modes
 - [x] T009 Generate H1–H3 navigation inside the Markdown document shell and wire up bundle-relative links
 - [x] T010 Keep both editing modes in sync with the canonical Markdown

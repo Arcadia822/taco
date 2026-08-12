@@ -123,11 +123,11 @@ CONTRIBUTING.md                       Contributor 开发与验证指南
 vite.config.ts                        默认 bundle 注入与构建配置
 ```
 
-默认规格目录同时是项目的可执行示例。产品行为写在 `spec.md`，技术方案写在 `plan.md`，任务状态写在 `tasks.md`，容器协议位于 `contracts/taco-document.md`。
+默认规格目录同时是项目的可执行示例。其中的 `README.md` 与项目 README 内容一致，并作为概览首先打开。产品行为写在 `spec.md`，技术方案写在 `plan.md`，任务状态写在 `tasks.md`，容器协议位于 `contracts/taco-document.md`。
 
 ## 文档路由
 
-`spec.md`、`plan.md` 和 `tasks.md` 按文件名进入对应阶段。已知 Spec Kit 文件和目录按内置约定路由；其他 Markdown 使用以下内部枚举声明：
+功能目录根部的 `README.md` 会进入 Specify 并默认打开；没有 README 时回退到 `spec.md`。`spec.md`、`plan.md` 和 `tasks.md` 仍是三个阶段的核心文件。已知 Spec Kit 文件和目录按内置约定路由；其他 Markdown 使用以下内部枚举声明：
 
 ```md
 **Taco scope**: spec

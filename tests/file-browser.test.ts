@@ -16,7 +16,6 @@ const testBundle: TacoBundle = {
   files: [
     { title: 'Product specification', path: 'specs/001-browser/spec.md', mediaType: 'text/markdown', content: '# Product\n\n## Outcome\n\nReadable Markdown.' },
     { path: 'specs/001-browser/checklists/requirements.md', mediaType: 'text/markdown', content: '# Requirements checklist' },
-    { path: 'specs/001-browser/README.md', mediaType: 'text/markdown', content: '**Taco scope**: spec\n\n# Guide' },
     { path: 'specs/001-browser/plan.md', mediaType: 'text/markdown', content: '# Plan' },
     { path: 'specs/001-browser/interaction-design.md', mediaType: 'text/markdown', content: '**Taco scope**: plan\n\n# Interaction' },
     { path: 'specs/001-browser/tasks.md', mediaType: 'text/markdown', content: '# Tasks\n\n- [ ] T001 Browse files' },
@@ -93,7 +92,9 @@ describe('FileBrowser', () => {
   })
 
   it('places files directly in the three default stages', async () => {
-    new FileBrowser(document.getElementById('app')!, structuredClone(testBundle))
+    const readmeBundle = structuredClone(testBundle)
+    readmeBundle.files.push({ title: 'Project overview', path: 'specs/001-browser/README.md', mediaType: 'text/markdown', content: '# Guide' })
+    new FileBrowser(document.getElementById('app')!, readmeBundle)
     const editor = await waitForEditor()
     await new Promise((resolve) => requestAnimationFrame(resolve))
     expect(document.querySelectorAll('.file-row')).toHaveLength(7)
@@ -111,13 +112,13 @@ describe('FileBrowser', () => {
     expect(document.querySelectorAll('.stage-summary .stage-caret [data-icon="chevron-right"]')).toHaveLength(3)
     expect(document.querySelector('.tree-folder[open] > .folder-row [data-icon="folder-open"]')).not.toBeNull()
     expect(document.querySelectorAll('.sidebar-row')).toHaveLength(13)
-    expect(editor.querySelector('h1')?.textContent).toBe('Product')
+    expect(editor.querySelector('h1')?.textContent).toBe('Guide')
     await new Promise((resolve) => requestAnimationFrame(resolve))
-    expect(Array.from(document.querySelectorAll('.outline-link')).map((node) => node.textContent)).toEqual(['Product', 'Outcome'])
+    expect(Array.from(document.querySelectorAll('.outline-link')).map((node) => node.textContent)).toEqual(['Guide'])
     expect(document.querySelector('.right-panel-tabs')).not.toBeNull()
     expect(document.querySelector<HTMLButtonElement>('.right-panel-tabs [aria-selected="true"]')?.textContent).toBe('大纲')
     expect(document.querySelector('.tiptap-editor-host')).not.toBeNull()
-    expect(document.querySelector('.document-inline-title-text')?.textContent).toBe('Product specification')
+    expect(document.querySelector('.document-inline-title-text')?.textContent).toBe('Project overview')
     expect(document.querySelector('.document-inline-title [data-icon="file-text"]')).not.toBeNull()
   })
 

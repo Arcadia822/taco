@@ -123,11 +123,11 @@ CONTRIBUTING.md                       Contributor development and validation gui
 vite.config.ts                        Default bundle injection and build configuration
 ```
 
-The default specification directory is also the project's executable example. Product behavior is in `spec.md`, technical design is in `plan.md`, task state is in `tasks.md`, and the container protocol is in `contracts/taco-document.md`.
+The default specification directory is also the project's executable example. Its `README.md` mirrors this project README and opens first as the overview. Product behavior is in `spec.md`, technical design is in `plan.md`, task state is in `tasks.md`, and the container protocol is in `contracts/taco-document.md`.
 
 ## Document routing
 
-`spec.md`, `plan.md`, and `tasks.md` route by filename. Known Spec Kit files and directories follow Taco's built-in conventions. Every other Markdown document uses one of these internal enum declarations:
+A feature-root `README.md` routes to Specify and opens by default; `spec.md` is the fallback when no README exists. `spec.md`, `plan.md`, and `tasks.md` remain the three core stage files. Known Spec Kit files and directories follow Taco's built-in conventions. Every other Markdown document uses one of these internal enum declarations:
 
 ```md
 **Taco scope**: spec

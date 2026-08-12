@@ -278,7 +278,8 @@ export function fileKind(file: TacoFile): FileKind {
 }
 
 export function defaultFile(bundle: TacoBundle): TacoFile | null {
-  return fileByPath(bundle, `${bundle.root}/spec.md`)
+  return fileByPath(bundle, `${bundle.root}/README.md`)
+    ?? fileByPath(bundle, `${bundle.root}/spec.md`)
     ?? bundle.files.find((file) => fileKind(file) === 'markdown')
     ?? bundle.files[0]
     ?? null

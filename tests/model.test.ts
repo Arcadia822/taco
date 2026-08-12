@@ -8,6 +8,7 @@ const bundle = (): TacoBundle => ({
   title: 'Test spec',
   root: 'specs/001-test',
   files: [
+    { title: 'Project overview', path: 'specs/001-test/README.md', mediaType: 'text/markdown', content: '# Guide' },
     { title: 'Product specification', path: 'specs/001-test/spec.md', mediaType: 'text/markdown', content: '# Spec' },
     { path: 'specs/001-test/prototype.html', mediaType: 'text/html', content: '<!doctype html><title>Prototype</title>' },
     { path: 'specs/001-test/contracts/openapi.yaml', mediaType: 'application/yaml', content: 'openapi: 3.1.0' },
@@ -23,13 +24,19 @@ describe('file-first Taco bundle', () => {
     if (result.ok) expect(result.bundle).toEqual(input)
   })
 
-  it('uses spec.md as the default file', () => {
-    expect(defaultFile(bundle())?.path).toBe('specs/001-test/spec.md')
+  it('prefers README.md as the default file', () => {
+    expect(defaultFile(bundle())?.path).toBe('specs/001-test/README.md')
+  })
+
+  it('falls back to spec.md when README.md is absent', () => {
+    const withoutReadme = bundle()
+    withoutReadme.files = withoutReadme.files.filter(({ path }) => !path.endsWith('/README.md'))
+    expect(defaultFile(withoutReadme)?.path).toBe('specs/001-test/spec.md')
   })
 
   it('classifies formats without parsing their contents', () => {
     const files = bundle().files
-    expect(files.map(fileKind)).toEqual(['markdown', 'html', 'yaml', 'json'])
+    expect(files.map(fileKind)).toEqual(['markdown', 'markdown', 'html', 'yaml', 'json'])
   })
 
   it('rejects path traversal and files outside the declared root', () => {

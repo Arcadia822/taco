@@ -10,8 +10,14 @@ const projectRoot = resolve(new URL('.', import.meta.url).pathname)
 const specRoot = resolve(projectRoot, 'specs/001-taco-bento-product')
 const bundleRoot = 'specs/001-taco-bento-product'
 
+const embeddedAssets = {
+  'src/assets/taco-logo.svg': `data:image/svg+xml;base64,${readFileSync(resolve(projectRoot, 'src/assets/taco-logo.svg')).toString('base64')}`,
+  'docs/assets/taco-overview.png': `data:image/jpeg;base64,${readFileSync(resolve(projectRoot, 'docs/assets/taco-overview.png')).toString('base64')}`,
+  'docs/assets/taco-overview.zh-CN.png': `data:image/jpeg;base64,${readFileSync(resolve(projectRoot, 'docs/assets/taco-overview.zh-CN.png')).toString('base64')}`,
+}
+
 const fileTitles: Record<string, string> = {
-  'README.md': 'Taco File Browser Specification',
+  'README.md': 'Taco',
   'checklists/implementation.md': 'Taco v0.2 Implementation Audit',
   'checklists/requirements.md': 'Specification Quality Checklist: Taco File Browser',
   'contracts/taco-document.md': 'Contract: Taco File Bundle v1',
@@ -72,7 +78,11 @@ const bundle = JSON.stringify({
 
 export default defineConfig({
   base: './',
-  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __DEFAULT_LOCALE__: JSON.stringify(process.env.TACO_DEFAULT_LOCALE ?? ''),
+    __EMBEDDED_ASSETS__: JSON.stringify(embeddedAssets),
+  },
   plugins: [
     {
       name: 'taco-spec-files',

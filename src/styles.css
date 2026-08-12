@@ -47,6 +47,8 @@
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
+.taco-centered-block { text-align: center; }
+.taco-centered-block > img { display: inline-block; }
 body { margin: 0; min-width: 320px; min-height: 100dvh; background: var(--paper); font-weight: 500; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 button, input { font: inherit; color: inherit; }
 button { cursor: pointer; -webkit-tap-highlight-color: transparent; }

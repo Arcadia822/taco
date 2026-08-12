@@ -14,8 +14,8 @@ As a collaborator who receives a Taco, I want to open the file and see the compl
 
 **Acceptance Scenarios**:
 
-1. **Given** the Taco contains a feature directory, **When** the user opens the file, **Then** the left side shows only the Specify, Plan, and Tasks groups and selects `spec.md` by default.
-2. **Given** the bundle contains core, convention, and other Markdown files, **When** navigation is derived, **Then** core and convention paths are classified by built-in rules and other Markdown enters one of the three default stages by its `Taco scope` enum, without producing extension or custom groups.
+1. **Given** the Taco contains a feature-root `README.md`, **When** the user opens the file, **Then** the left side shows only the Specify, Plan, and Tasks groups, places `README.md` in Specify, and selects it by default.
+2. **Given** the bundle contains core, convention, and other Markdown files, **When** navigation is derived, **Then** `README.md`, core, and convention paths are classified by built-in rules and other Markdown enters one of the three default stages by its `Taco scope` enum, without producing extension or custom groups.
 3. **Given** `contracts/`, `checklists/`, or another subdirectory contains multiple files, **When** they appear in navigation, **Then** the real directory hierarchy is preserved and the same physical directory is never split across multiple standard stages by a file declaration.
 4. **Given** `checklists/` contains requirements and implementation checks, **When** navigation is derived, **Then** the whole directory is grouped under Plan as a quality gate after Plan and before Tasks.
 5. **Given** the user hovers or keyboard-focuses one of the three group headings, **When** the group is collapsible, **Then** a centered disclosure icon appears on the right of the secondary heading; the left side of the heading must not occupy an icon slot.
@@ -113,7 +113,7 @@ As a team using Spec Kit, I want the agent to automatically generate a reviewabl
 - **FR-001**: The canonical bundle must preserve the relative path, media type, and raw text content of each Spec Kit file.
 - **FR-002**: The runtime must not persist Markdown content such as Story, Requirement, Task, or Evidence as a second domain model.
 - **FR-003**: The layout must first split the left file sidebar from the workspace; below the workspace header, the central document area and the in-document outline/comments local aux area follow. The outline and comments must toggle through the shared 24px segmented control, defaulting to the outline; the local aux area must not offer a collapsed state or a close control. The left side must organize files strictly by the three default stages — Specify, Plan, Tasks — and must not create extension or custom groups; the real directory hierarchy must be preserved. The collapse control must live in the left-rail header.
-- **FR-004**: The default file must prefer `spec.md` at the feature root.
+- **FR-004**: The default file must prefer `README.md` at the feature root, then fall back to `spec.md` when no root README exists. A root `README.md` must route to Specify without requiring `Taco scope` metadata.
 - **FR-005**: Markdown must always use WYSIWYG editing and must not offer a raw-Markdown mode or a mode switch control.
 - **FR-005a**: WYSIWYG editing must update the Markdown text in the canonical bundle; nothing may be written to disk before the user saves.
 - **FR-005b**: The workspace header must show the current file's path relative to root after the bundle title; the Markdown viewer must show a separate file metadata title above the body along with the file-type icon consistent with the sidebar. That title is not part of the Markdown content and must not enter the in-document outline.

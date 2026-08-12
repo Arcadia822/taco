@@ -20,7 +20,7 @@ Expected: the file count and relative paths match exactly; real directories stay
 
 ## Scenario B — Markdown Reading
 
-1. Open `spec.md`.
+1. Open `README.md` and confirm it appears under Specify; if the feature has no README, confirm Taco opens `spec.md` instead.
 2. Use `On this page` to jump to Requirements.
 3. Switch between WYSIWYG and Markdown, and edit in both modes.
 

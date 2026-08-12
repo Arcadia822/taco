@@ -16,7 +16,7 @@ Taco v0.2 is a small local knowledge base containing one Spec Kit feature direct
 └──────────────────┴───────────────────────────────────┴───────────────────┘
 ```
 
-There is no Overview page and no dashboard. Opening a Taco opens `spec.md`.
+There is no generated Overview page and no dashboard. Opening a Taco prefers the feature-root `README.md` as its authored overview, then falls back to `spec.md` when no README exists.
 
 ## 2. Workspace Shell
 
@@ -32,6 +32,7 @@ This follows Castrel's AppShell composition: the outer split first, then the wor
 
 - Route files into exactly three top-level groups: Requirements, Technical Plan, and Task Breakdown.
 - The sidebar contains only Specify, Plan, and Tasks; scoped documents appear directly in their selected stage.
+- A feature-root `README.md` enters Specify by convention and is the preferred opening document, so it needs no internal `Taco scope` metadata.
 - All `checklists/` files sit under Technical Plan, matching the official Plan → Checklist → Tasks quality-gate order.
 - Group titles use secondary text and have no leading icon slot. A centered right chevron appears only on hover or keyboard focus and rotates when expanded.
 - Physical folders such as `contracts/` and `checklists/` and custom subdirectories remain navigable. Their leading icon toggles between closed-folder and open-folder states.

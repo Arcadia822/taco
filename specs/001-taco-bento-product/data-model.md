@@ -111,7 +111,7 @@ Future task counts, requirement coverage, or readiness may likewise only be pars
 
 ## Stage Projection
 
-Taco recognizes three core files: `spec.md`, `plan.md`, and `tasks.md`. Known Speckit artifacts enter their corresponding stage by path; other Markdown must declare its own membership with a ``**Taco scope**: spec|plan|tasks`` enum and enters the selected stage directly. That internal property is preserved in the canonical Markdown but not shown in the rendered document. Files that are undeclared or invalidly declared still remain in the bundle and in search, but they create no custom or extension group.
+Taco recognizes three core files: `spec.md`, `plan.md`, and `tasks.md`. A feature-root `README.md` enters Specify by convention and is preferred as the opening document, with `spec.md` as the fallback. Known Speckit artifacts enter their corresponding stage by path; other Markdown must declare its own membership with a ``**Taco scope**: spec|plan|tasks`` enum and enters the selected stage directly. That internal property is preserved in the canonical Markdown but not shown in the rendered document. Files that are undeclared or invalidly declared still remain in the bundle and in search, but they create no custom or extension group.
 
 Both stages and directories are derived from `files[]` and are not written to a second navigation schema.
 

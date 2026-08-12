@@ -26,7 +26,7 @@
 
 **Reason**: Persisting them creates drift. They are cheap to recompute and carry no authorial intent.
 
-The stage projection uses `spec.md`, `plan.md`, and `tasks.md` as core anchors. Known Spec Kit paths route by convention, and the entire `checklists/` directory sits under Plan because the official workflow runs Checklist after Plan and before Tasks. Other Markdown selects one of these stages via an exact `Taco scope` enum. That internal property is preserved in the Markdown but hidden from the rendered document; there is no Custom or Extensions group.
+The stage projection uses `spec.md`, `plan.md`, and `tasks.md` as core anchors. A feature-root `README.md` routes to Specify by convention and becomes the preferred opening document, with `spec.md` as the fallback. Known Spec Kit paths route by convention, and the entire `checklists/` directory sits under Plan because the official workflow runs Checklist after Plan and before Tasks. Other Markdown selects one of these stages via an exact `Taco scope` enum. That internal property is preserved in the Markdown but hidden from the rendered document; there is no Custom or Extensions group.
 
 ## Decision 5 — Keep Bento at the Container Layer
 

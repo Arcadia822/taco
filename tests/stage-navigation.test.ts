@@ -15,7 +15,7 @@ const bundle = (): TacoBundle => ({
   title: 'Stage test',
   root: 'specs/001-stage',
   files: [
-    file('README.md', '**Taco scope**: spec\n\n# Guide'),
+    file('README.md', '# Guide'),
     file('spec.md'),
     { path: 'specs/001-stage/prototypes/checkout.html', mediaType: 'text/html', content: '<!doctype html><title>Checkout</title>' },
     file('checklists/requirements.md'),
@@ -42,8 +42,8 @@ describe('stage navigation', () => {
     const navigation = buildStageNavigation(bundle())
     expect(navigation.stages.map((stage) => stage.core?.path.split('/').at(-1))).toEqual(['spec.md', 'plan.md', 'tasks.md'])
     expect(navigation.stages[0].files.map((item) => item.path)).toEqual([
-      'specs/001-stage/prototypes/checkout.html',
       'specs/001-stage/README.md',
+      'specs/001-stage/prototypes/checkout.html',
     ])
     expect(navigation.stages[1].files.map((item) => item.path)).toEqual(expect.arrayContaining([
       'specs/001-stage/checklists/requirements.md',
@@ -58,7 +58,7 @@ describe('stage navigation', () => {
   it('keeps all default stages and routes enum values without requiring a core file', () => {
     const navigation = buildStageNavigation({
       ...bundle(),
-      files: [file('README.md', '**Taco scope**: spec\n\n# Guide')],
+      files: [file('README.md', '# Guide')],
     })
 
     expect(navigation.stages.map(({ definition }) => definition.id)).toEqual(['spec', 'plan', 'tasks'])
