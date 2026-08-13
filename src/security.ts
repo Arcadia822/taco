@@ -119,6 +119,16 @@ export const sanitizeMermaidSvg = (svg: string): string => {
   for (const relation of Array.from(root.querySelectorAll('path.relation'))) {
     relation.setAttribute('fill', 'none')
   }
+  for (const text of Array.from(root.querySelectorAll('text'))) {
+    text.setAttribute('fill', 'currentColor')
+    text.setAttribute('stroke', 'none')
+  }
+  for (const marker of Array.from(root.querySelectorAll('marker.composition, marker.aggregation, marker.dependency, marker.lollipop'))) {
+    const width = Number(marker.getAttribute('markerWidth'))
+    const height = Number(marker.getAttribute('markerHeight'))
+    if (Number.isFinite(width) && width > 20) marker.setAttribute('markerWidth', '20')
+    if (Number.isFinite(height) && height > 28) marker.setAttribute('markerHeight', '28')
+  }
   for (const background of Array.from(root.querySelectorAll('.edgeLabel rect.background'))) {
     background.setAttribute('fill', 'none')
     background.setAttribute('stroke', 'none')

@@ -395,6 +395,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .taco-mermaid-render .surface.is-loading, .taco-mermaid-render .surface.is-error { padding: 48px 24px; font: 500 13px/1.5 var(--sans); }
 .taco-mermaid-render .surface.is-error { color: #b42318; }
 .taco-mermaid-render svg { display: block; width: auto; max-width: 100%; height: auto; margin: auto; }
+.taco-mermaid-render svg text { fill: var(--doc-ink); stroke: none; }
 .taco-mermaid-render svg .relation { fill: none; stroke: var(--doc-subtle); stroke-width: 1.25px; }
 .taco-mermaid-render svg .edge-pattern-dashed { stroke-dasharray: 3; }
 .taco-mermaid-render svg .edgeLabel .background { fill: var(--surface); stroke: none; opacity: .92; }

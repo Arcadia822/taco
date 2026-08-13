@@ -61,6 +61,12 @@ describe('embedded technical diagrams', () => {
       expect(sanitized).toContain('files')
       const parsed = new DOMParser().parseFromString(sanitized, 'image/svg+xml')
       expect(parsed.querySelectorAll('text').length).toBeGreaterThan(0)
+      expect(Array.from(parsed.querySelectorAll('text')).every((text) =>
+        text.getAttribute('fill') === 'currentColor' && text.getAttribute('stroke') === 'none'))
+        .toBe(true)
+      expect(Array.from(parsed.querySelectorAll('marker.composition, marker.aggregation, marker.dependency, marker.lollipop')).every((marker) =>
+        Number(marker.getAttribute('markerWidth')) <= 20 && Number(marker.getAttribute('markerHeight')) <= 28))
+        .toBe(true)
       expect(Array.from(parsed.querySelectorAll('path.relation')).every((path) => path.getAttribute('fill') === 'none'))
         .toBe(true)
       expect(Array.from(parsed.querySelectorAll('.edgeLabel rect.background')).every((rect) => rect.getAttribute('fill') === 'none'))

@@ -7,6 +7,7 @@ export const resolveEmbeddedMarkdownAssets = (
   root: ParentNode,
   bundle: TacoBundle,
   file: TacoFile,
+  protocol = globalThis.location?.protocol,
 ): void => {
   if (!marketingDocument(bundle, file)) return
   for (const image of root.querySelectorAll<HTMLImageElement>('img')) {
@@ -14,6 +15,7 @@ export const resolveEmbeddedMarkdownAssets = (
     const embedded = __EMBEDDED_ASSETS__[source]
     if (!embedded) continue
     image.dataset.tacoSource = source
-    if (image.getAttribute('src') !== embedded) image.setAttribute('src', embedded)
+    const resolved = protocol === 'file:' ? embedded : source
+    if (image.getAttribute('src') !== resolved) image.setAttribute('src', resolved)
   }
 }

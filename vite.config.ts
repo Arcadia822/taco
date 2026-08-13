@@ -11,9 +11,9 @@ const specRoot = resolve(projectRoot, 'specs/001-taco-bento-product')
 const bundleRoot = 'specs/001-taco-bento-product'
 
 const embeddedAssets = {
-  'src/assets/taco-logo.svg': `data:image/svg+xml;base64,${readFileSync(resolve(projectRoot, 'src/assets/taco-logo.svg')).toString('base64')}`,
-  'docs/assets/taco-overview.png': `data:image/jpeg;base64,${readFileSync(resolve(projectRoot, 'docs/assets/taco-overview.png')).toString('base64')}`,
-  'docs/assets/taco-overview.zh-CN.png': `data:image/jpeg;base64,${readFileSync(resolve(projectRoot, 'docs/assets/taco-overview.zh-CN.png')).toString('base64')}`,
+  'https://raw.githubusercontent.com/Arcadia822/taco/main/src/assets/taco-logo.svg': `data:image/svg+xml;base64,${readFileSync(resolve(projectRoot, 'src/assets/taco-logo.svg')).toString('base64')}`,
+  'https://raw.githubusercontent.com/Arcadia822/taco/main/docs/assets/taco-overview.png': `data:image/jpeg;base64,${readFileSync(resolve(projectRoot, 'docs/assets/taco-overview.png')).toString('base64')}`,
+  'https://raw.githubusercontent.com/Arcadia822/taco/main/docs/assets/taco-overview.zh-CN.png': `data:image/jpeg;base64,${readFileSync(resolve(projectRoot, 'docs/assets/taco-overview.zh-CN.png')).toString('base64')}`,
 }
 
 const fileTitles: Record<string, string> = {

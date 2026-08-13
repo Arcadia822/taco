@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="src/assets/taco-logo.svg" alt="Taco logo" width="96">
+  <img src="https://raw.githubusercontent.com/Arcadia822/taco/main/src/assets/taco-logo.svg" alt="Taco logo" width="96">
   <h1>Taco</h1>
   <p><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
   <p>
@@ -18,7 +18,7 @@ The file is the handoff. It carries the spec, its directory structure, the reade
 
 Taco is built with gratitude to [Bento](https://github.com/nyblnet/bento), the office suite that fits in a file. Bento showed that a complete creative workspace could travel as one portable document; Taco carries that idea into specification review.
 
-![Taco specification browsing and review interface](docs/assets/taco-overview.png)
+![Taco specification browsing and review interface](https://raw.githubusercontent.com/Arcadia822/taco/main/docs/assets/taco-overview.png)
 
 Taco includes lightweight support for Spec Kit's directory conventions and is designed for specification-driven development (SDD). It does not require one methodology: its underlying model remains a Markdown file browser and review surface that supports design documents and other directory structures. An Agent can organize Markdown and directories around a team's process, then package that structure as a Taco.
 
