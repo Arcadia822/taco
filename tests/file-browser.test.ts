@@ -91,6 +91,30 @@ describe('FileBrowser', () => {
     }
   })
 
+  it('restores trusted marketing README images after block sanitization', async () => {
+    const logo = 'https://raw.githubusercontent.com/Arcadia822/taco/main/src/assets/taco-logo.svg'
+    const screenshot = 'https://raw.githubusercontent.com/Arcadia822/taco/main/docs/assets/taco-overview.png'
+    const marketingBundle: TacoBundle = {
+      format: 'taco/files',
+      version: 1,
+      docId: 'taco-product-spec',
+      title: 'Taco',
+      root: 'specs/001-taco-bento-product',
+      files: [{
+        path: 'specs/001-taco-bento-product/README.md',
+        mediaType: 'text/markdown',
+        content: `<div align="center"><img src="${logo}" alt="Taco logo"></div>\n\n![Taco overview](${screenshot})`,
+      }],
+    }
+
+    new FileBrowser(document.getElementById('app')!, marketingBundle)
+    await waitForEditor()
+    await new Promise((resolve) => requestAnimationFrame(resolve))
+
+    expect(Array.from(document.querySelectorAll<HTMLImageElement>('.tiptap img')).map((image) => image.getAttribute('src')))
+      .toEqual([logo, screenshot])
+  })
+
   it('places files directly in the three default stages', async () => {
     const readmeBundle = structuredClone(testBundle)
     readmeBundle.files.push({ title: 'Project overview', path: 'specs/001-browser/README.md', mediaType: 'text/markdown', content: '# Guide' })

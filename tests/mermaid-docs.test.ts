@@ -62,14 +62,37 @@ describe('embedded technical diagrams', () => {
       const parsed = new DOMParser().parseFromString(sanitized, 'image/svg+xml')
       expect(parsed.querySelectorAll('text').length).toBeGreaterThan(0)
       expect(Array.from(parsed.querySelectorAll('text')).every((text) =>
-        text.getAttribute('fill') === 'currentColor' && text.getAttribute('stroke') === 'none'))
+        text.getAttribute('fill') === 'var(--doc-ink)' && text.getAttribute('stroke') === 'none'
+        && text.getAttribute('style')?.includes('fill:var(--doc-ink);stroke:none')))
         .toBe(true)
       expect(Array.from(parsed.querySelectorAll('marker.composition, marker.aggregation, marker.dependency, marker.lollipop')).every((marker) =>
-        Number(marker.getAttribute('markerWidth')) <= 20 && Number(marker.getAttribute('markerHeight')) <= 28))
+        Number(marker.getAttribute('markerWidth')) <= 20 && Number(marker.getAttribute('markerHeight')) <= 28
+        && marker.getAttribute('markerUnits') === 'userSpaceOnUse'))
         .toBe(true)
       expect(Array.from(parsed.querySelectorAll('path.relation')).every((path) => path.getAttribute('fill') === 'none'))
         .toBe(true)
+      expect(Array.from(parsed.querySelectorAll('path.relation')).every((path) =>
+        path.getAttribute('style')?.includes('fill:none;stroke:var(--doc-subtle);stroke-width:1.25px')))
+        .toBe(true)
       expect(Array.from(parsed.querySelectorAll('.edgeLabel rect.background')).every((rect) => rect.getAttribute('fill') === 'none'))
+        .toBe(true)
+
+      const readme = await readFile('README.md', 'utf8')
+      const flowSource = readme.match(/```mermaid\n([\s\S]*?)\n```/)?.[1]
+      expect(flowSource).toBeTruthy()
+      const { svg: flowSvg } = await mermaid.render('taco-flow-regression', flowSource!)
+      const flow = new DOMParser().parseFromString(sanitizeMermaidSvg(flowSvg), 'image/svg+xml')
+
+      expect(flow.querySelectorAll('.node rect, .node circle, .node ellipse, .node polygon, .node > path').length)
+        .toBeGreaterThan(0)
+      expect(Array.from(flow.querySelectorAll('.node rect, .node circle, .node ellipse, .node polygon, .node > path')).every((shape) =>
+        shape.getAttribute('style')?.includes('fill:var(--doc-soft);stroke:var(--accent);stroke-width:1px')))
+        .toBe(true)
+      expect(Array.from(flow.querySelectorAll('path.flowchart-link, .edgePath path')).every((path) =>
+        path.getAttribute('style')?.includes('fill:none;stroke:var(--doc-subtle);stroke-width:1.25px')))
+        .toBe(true)
+      expect(Array.from(flow.querySelectorAll('marker path, marker polygon, marker circle')).every((shape) =>
+        shape.getAttribute('style')?.includes('fill:var(--doc-subtle);stroke:var(--doc-subtle);stroke-width:1px')))
         .toBe(true)
     } finally {
       if (originalBox) Object.defineProperty(svgPrototype, 'getBBox', { configurable: true, value: originalBox })

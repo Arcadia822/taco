@@ -1,7 +1,7 @@
 import StarterKit from '@tiptap/starter-kit'
 import { Markdown } from '@tiptap/markdown'
 import { Editor, Extension, generateHTML } from '@tiptap/core'
-import Image from '@tiptap/extension-image'
+import Image, { type ImageOptions } from '@tiptap/extension-image'
 import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
@@ -60,6 +60,12 @@ export interface TacoEditorExtensionOptions {
 }
 
 const SafeImage = Image.extend({
+  addOptions(): ImageOptions {
+    return {
+      ...this.parent?.(),
+      allowBase64: true,
+    } as ImageOptions
+  },
   addAttributes() {
     return {
       ...this.parent?.(),

@@ -202,6 +202,7 @@ describe('Tiptap Markdown integration', () => {
     expect(bundle.files[0].blocks?.[0].type).toBe('image')
     expect(bundle.files[0].blocks?.[0].html).toContain('data-taco-source="docs/assets/taco-overview.png"')
     expect(bundle.files[0].blocks?.[0].html).not.toContain('src="docs/assets/taco-overview.png"')
+    expect(blockHtml(bundle.files[0].blocks)).toContain('data-taco-source="docs/assets/taco-overview.png"')
   })
 
   it('keeps frontmatter source in the collaboration block HTML', () => {

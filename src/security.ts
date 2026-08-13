@@ -21,7 +21,7 @@ const EDITOR_TAGS = [
 
 const EDITOR_ATTRS = [
   'align', 'alt', 'checked', 'class', 'colspan', 'data-key', 'data-taco-align',
-  'data-bom', 'data-closed', 'data-eol', 'data-taco-block-id', 'data-type', 'data-yaml', 'disabled', 'height', 'href', 'rel', 'rowspan',
+  'data-bom', 'data-closed', 'data-eol', 'data-taco-block-id', 'data-taco-source', 'data-type', 'data-yaml', 'disabled', 'height', 'href', 'rel', 'rowspan',
   'src', 'target', 'title', 'type', 'width',
 ]
 
@@ -95,6 +95,11 @@ export const sanitizeEditorHtml = (html: string): string => {
 
 export const sanitizeRenderedHtml = (html: string): string => sanitizeEditorHtml(html)
 
+const overrideSvgStyle = (element: Element, declarations: string): void => {
+  const current = element.getAttribute('style')?.trim().replace(/;+$/, '')
+  element.setAttribute('style', `${current ? `${current};` : ''}${declarations}`)
+}
+
 export const sanitizeMermaidSvg = (svg: string): string => {
   if (svg.length > MAX_BLOCK_HTML) throw new Error('security:mermaid-too-large')
   const sanitized = String(DOMPurify.sanitize(svg, {
@@ -107,6 +112,7 @@ export const sanitizeMermaidSvg = (svg: string): string => {
   const parsed = new DOMParser().parseFromString(sanitized, 'image/svg+xml')
   const root = parsed.documentElement
   if (root.localName !== 'svg' || parsed.querySelector('parsererror')) throw new Error('security:mermaid-invalid-svg')
+  overrideSvgStyle(root, 'color:var(--doc-ink)')
   for (const element of Array.from(root.querySelectorAll('*'))) {
     for (const attribute of Array.from(element.attributes)) {
       const name = attribute.name.toLowerCase()
@@ -118,20 +124,39 @@ export const sanitizeMermaidSvg = (svg: string): string => {
   }
   for (const relation of Array.from(root.querySelectorAll('path.relation'))) {
     relation.setAttribute('fill', 'none')
+    overrideSvgStyle(relation, 'fill:none;stroke:var(--doc-subtle);stroke-width:1.25px')
+  }
+  for (const relation of Array.from(root.querySelectorAll('path.flowchart-link, .edgePath path'))) {
+    overrideSvgStyle(relation, 'fill:none;stroke:var(--doc-subtle);stroke-width:1.25px')
   }
   for (const text of Array.from(root.querySelectorAll('text'))) {
-    text.setAttribute('fill', 'currentColor')
+    text.setAttribute('fill', 'var(--doc-ink)')
     text.setAttribute('stroke', 'none')
+    overrideSvgStyle(text, 'fill:var(--doc-ink);stroke:none')
+  }
+  for (const shape of Array.from(root.querySelectorAll('.node rect, .node circle, .node ellipse, .node polygon, .node > path, g.classGroup rect'))) {
+    overrideSvgStyle(shape, 'fill:var(--doc-soft);stroke:var(--accent);stroke-width:1px')
+  }
+  for (const divider of Array.from(root.querySelectorAll('g.classGroup line'))) {
+    overrideSvgStyle(divider, 'stroke:var(--accent);stroke-width:1px')
   }
   for (const marker of Array.from(root.querySelectorAll('marker.composition, marker.aggregation, marker.dependency, marker.lollipop'))) {
     const width = Number(marker.getAttribute('markerWidth'))
     const height = Number(marker.getAttribute('markerHeight'))
     if (Number.isFinite(width) && width > 20) marker.setAttribute('markerWidth', '20')
     if (Number.isFinite(height) && height > 28) marker.setAttribute('markerHeight', '28')
+    marker.setAttribute('markerUnits', 'userSpaceOnUse')
+  }
+  for (const shape of Array.from(root.querySelectorAll('marker path, marker polygon, marker circle'))) {
+    overrideSvgStyle(shape, 'fill:var(--doc-subtle);stroke:var(--doc-subtle);stroke-width:1px')
+  }
+  for (const shape of Array.from(root.querySelectorAll('marker.aggregation path, marker.aggregation polygon, marker.aggregation circle'))) {
+    overrideSvgStyle(shape, 'fill:var(--surface);stroke:var(--doc-subtle);stroke-width:1px')
   }
   for (const background of Array.from(root.querySelectorAll('.edgeLabel rect.background'))) {
     background.setAttribute('fill', 'none')
     background.setAttribute('stroke', 'none')
+    overrideSvgStyle(background, 'fill:var(--surface);stroke:none')
   }
   return new XMLSerializer().serializeToString(root)
 }

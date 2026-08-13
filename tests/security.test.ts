@@ -43,6 +43,14 @@ describe('untrusted Taco input policy', () => {
     expect(inertImageAttributes('data:image/png;base64,AAAA').src).toBe('data:image/png;base64,AAAA')
   })
 
+  it('preserves inert image source metadata without loading the remote source', () => {
+    const sanitized = sanitizeEditorHtml('<img src="https://raw.githubusercontent.com/example/image.png">')
+    const image = new DOMParser().parseFromString(sanitized, 'text/html').querySelector('img')
+
+    expect(image?.getAttribute('src')).toMatch(/^data:image\/gif;base64,/)
+    expect(image?.getAttribute('data-taco-source')).toBe('https://raw.githubusercontent.com/example/image.png')
+  })
+
   it('sanitizes Mermaid output after rendering', () => {
     const svg = sanitizeMermaidSvg('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><style>@import url(https://attacker.test/x)</style><foreignObject><img src=x onerror=alert(2) /></foreignObject><a href="https://attacker.test/"><rect width="10" height="10" /></a><path style="fill:url(https://attacker.test/p)" d="M0 0" /><path class="relation" d="M0 0 C10 0 10 10 20 10"/><g class="edgeLabel"><rect class="background" width="20" height="10"/></g></svg>')
     expect(svg).not.toMatch(/onload|onerror|foreignObject|<style|<a\b|https:\/\/attacker/i)
