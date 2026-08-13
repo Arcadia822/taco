@@ -38,7 +38,7 @@ export interface StoreChangeEvent {
 const clone = <T>(value: T): T => structuredClone(value)
 
 const toSyncFile = (bundle: TacoBundle, file: TacoFile): SyncFile => {
-  const { blocks = [], content: _content, ...rest } = file
+  const { blocks = [], content: _content, sourceUrl: _sourceUrl, ...rest } = file
   const nodes: SyncNode[] = blocks.map((block) => ({ ...clone(block), kind: 'block' }))
   for (const thread of (bundle.comments ?? []).filter((candidate) => candidate.anchor.path === file.path)) {
     nodes.push({

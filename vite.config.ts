@@ -4,6 +4,7 @@ import { defineConfig } from 'vitest/config'
 import { viteSingleFile } from 'vite-plugin-singlefile'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join, relative, resolve, sep } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
 const projectRoot = resolve(new URL('.', import.meta.url).pathname)
@@ -45,6 +46,7 @@ interface EmbeddedFile {
   mediaType: string
   content: string
   title?: string
+  sourceUrl?: string
 }
 
 const readFiles = (directory: string): EmbeddedFile[] => {
@@ -56,11 +58,13 @@ const readFiles = (directory: string): EmbeddedFile[] => {
     else if (entry.isFile()) {
       const relativePath = relative(specRoot, absolute).split(sep).join('/')
       const path = `${bundleRoot}/${relativePath}`
+      const type = mediaType(path)
       files.push({
         path,
-        mediaType: mediaType(path),
+        mediaType: type,
         content: readFileSync(absolute, 'utf8'),
         ...(fileTitles[relativePath] ? { title: fileTitles[relativePath] } : {}),
+        ...(type === 'text/html' ? { sourceUrl: pathToFileURL(absolute).href } : {}),
       })
     }
   }

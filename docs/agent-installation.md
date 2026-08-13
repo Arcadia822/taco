@@ -41,17 +41,28 @@ Verify all of these installed files:
 .specify/extensions/taco/commands/review.md
 .specify/extensions/taco/bin/taco.mjs
 .specify/extensions/taco/assets/taco-shell.html
+.specify/extensions/taco/policies/taco-agent-policy.md
 ```
 
 Also verify that the active Agent integration exposes `speckit.taco.update` and `speckit.taco.review`, and that `.specify/extensions.yml` registers Taco's mandatory post-lifecycle hooks. No target-project npm install is required.
 
 ## Install the project policy
 
-Plugin installation is incomplete until the installing Agent updates the target project's existing `AGENTS.md`. Preserve every unrelated instruction and merge a compact policy equivalent to:
+Plugin installation is incomplete until the installing Agent updates the target project's existing `AGENTS.md`. Read the installed `.specify/extensions/taco/policies/taco-agent-policy.md`, preserve every unrelated project instruction, and merge that policy. The resulting prompt governs later core Spec Kit commands such as `speckit.specify`; a post-generation Taco hook cannot prevent malformed Markdown that was already written.
+
+The merged policy must be equivalent to:
 
 ```md
-## Taco Spec Kit review
+## Taco Spec Kit authoring and review
 
+- Write new Spec Kit Markdown metadata as leading YAML frontmatter. Put document
+  titles in `title`; never imitate metadata with `## title: "..."` or bold prose.
+- When `speckit.specify` creates `spec.md`, do not add an ATX or Setext H1 that
+  repeats the YAML title. Begin the body at H2 or lower. Preserve existing
+  authored H1 content during unrelated edits.
+- For an otherwise-unassigned Markdown file, write `taco_scope` in YAML. Offer
+  `spec`, `plan`, and `tasks`; preserve other text values but do not route them.
+  Do not generate the legacy `**Taco scope**: ...` form.
 - Keep each Spec Kit feature directory canonical. Store its review file at
   `<feature-directory>/<feature-name>.taco.html` and update it only through the
   installed Taco commands.
@@ -59,9 +70,11 @@ Plugin installation is incomplete until the installing Agent updates the target 
   contracts, checklists, or recorded implementation progress—invoke
   `speckit.taco.update` before reporting the operation complete. In Codex this
   command is `$speckit-taco-update`.
-- After a successful update, open the exact generated Taco in the Agent GUI's
-  internal browser when available and verify it is displayed. Otherwise provide
-  a clickable absolute path and state why automatic preview was unavailable.
+- After a successful update, present the exact generated Taco through the Agent
+  GUI's native clickable file or artifact surface. In Codex, return a clickable
+  absolute file link and let the user's click open it in Browser; do not attempt
+  autonomous `file://` navigation. Other GUIs may open and verify it directly
+  only when they explicitly support local HTML navigation.
 - Import a saved human review through `speckit.taco.review` (in Codex,
   `$speckit-taco-review`). Preview before writing, stop on conflicts, and never
   use `--force` without explicit authorization for the exact paths.
@@ -71,7 +84,7 @@ Plugin installation is incomplete until the installing Agent updates the target 
   do not send their contents to external services without user authorization.
 ```
 
-Do not add packer's built-in Taco-output exclusion to `AGENTS.md`; the CLI owns that invariant. If the target has no `AGENTS.md`, create one containing this policy. Re-read the resulting file and verify that both the prior project instructions and Taco policy remain present.
+Do not add packer's built-in Taco-output exclusion to `AGENTS.md`; the CLI owns that invariant. If the target has no `AGENTS.md`, create one containing this policy. Re-read the resulting file and verify that prior project instructions remain present and that all of these literal contracts survived the merge: YAML `title`, `speckit.specify`, no repeated H1, body begins at H2, YAML `taco_scope`, and the three routing values.
 
 ## Update a feature Taco
 
@@ -89,7 +102,7 @@ For `specs/014-search/`, the fixed output is `specs/014-search/014-search.taco.h
 
 Run `speckit.taco.update` after any canonical feature artifact change. Mandatory hooks cover the normal `specify`, `clarify`, `plan`, `checklist`, `tasks`, `analyze`, `implement`, and `converge` stages. If an Agent changes feature content outside those commands, it must update Taco before declaring that operation complete.
 
-After update succeeds, use the active Agent GUI's internal browser or equivalent artifact preview to open the exact generated Taco. Reuse its existing preview surface when possible and verify the Taco is visible. If no such capability exists or local-file navigation is blocked, provide a clickable absolute path and report that it was not opened. Never upload a collaboration-enabled Taco, weaken browser security, or substitute a development URL merely to produce a preview.
+After update succeeds, always expose the exact generated Taco through the active Agent GUI's native clickable file or artifact presentation, similar to a local note attachment. In Codex, emit a clickable absolute file link and stop: the user's click is what hands the local HTML file to Browser. Do not first ask Browser to navigate to a `file://` URL, because Codex cannot autonomously complete that transition. Another Agent GUI may additionally open and verify the file only when it explicitly supports local HTML navigation. Never replace the local file with a `data:` URL, upload a collaboration-enabled Taco, weaken browser security, or substitute a development URL merely to produce a preview.
 
 ### Packaging rules
 
@@ -99,6 +112,8 @@ After update succeeds, use the active Agent GUI's internal browser or equivalent
 - Additional exclusions require repeatable `--ignore "<feature-relative-path-or-glob>"` parameters. Supported wildcards are `*`, `?`, and `**`.
 - An existing Taco retains its explicit ignore set on refresh. Supplying new `--ignore` values replaces that set.
 - Never silently omit a visible symlink, unsupported filesystem entry, or non-UTF-8 file. Let packaging fail with the exact path unless the user explicitly ignores it.
+- Every packaged `.html` or `.htm` file must receive its canonical absolute `file:` URL from the CLI. A missing or mismatched URL is a packaging error; do not hand-edit the Taco or replace it with a `data:` URL.
+- Refreshing a legacy Taco is the migration path: `pack --from` may read the old bundle long enough to preserve its state, then rewrites every HTML entry with the canonical local URL. Standalone validation remains fail-closed for the legacy bundle before refresh.
 
 ## Import a reviewed Taco
 
@@ -145,11 +160,11 @@ A collaboration-enabled Taco may contain relay configuration or access credentia
 An installation or review is complete only when the requested outcome is observed:
 
 - The exact target project lists Taco as installed.
-- The installed directory contains both Agent commands, the CLI, and the production shell.
+- The installed directory contains both Agent commands, the CLI, the production shell, and `policies/taco-agent-policy.md`.
 - Mandatory lifecycle hooks appear in `.specify/extensions.yml`.
-- The target project's `AGENTS.md` retains its previous instructions and contains the Taco review policy.
+- The target project's `AGENTS.md` retains its previous instructions and contains Taco's authoring and review policy, including YAML `title`, no repeated H1, an H2-or-lower body start, and YAML `taco_scope`.
 - A generated Taco exists inside the expected feature directory with a nonzero embedded file count.
-- The generated Taco was displayed in the available internal browser, or the completion report explicitly records the unavailable/blocked capability and clickable path fallback.
+- The generated Taco was presented as a native clickable local file. Direct browser verification is additionally required only when the Agent GUI explicitly supports autonomous local HTML navigation; Codex records that opening occurs after the user's click.
 - Its reported default and explicit exclusions match the requested policy.
 - A review import was previewed; any applied import reports `applied: true`.
 - Every open comment was classified and the same Taco was refreshed.

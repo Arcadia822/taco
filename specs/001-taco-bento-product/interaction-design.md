@@ -1,4 +1,7 @@
-**Taco scope**: plan
+---
+title: "Interaction Design: Taco File Browser"
+taco_scope: plan
+---
 
 ## 1. Mental Model
 
@@ -32,11 +35,11 @@ This follows Castrel's AppShell composition: the outer split first, then the wor
 
 - Route files into exactly three top-level groups: Requirements, Technical Plan, and Task Breakdown.
 - The sidebar contains only Specify, Plan, and Tasks; scoped documents appear directly in their selected stage.
-- A feature-root `README.md` enters Specify by convention and is the preferred opening document, so it needs no internal `Taco scope` metadata.
+- A feature-root `README.md` enters Specify by convention and is the preferred opening document, so it needs no internal `taco_scope` metadata.
 - All `checklists/` files sit under Technical Plan, matching the official Plan → Checklist → Tasks quality-gate order.
 - Group titles use secondary text and have no leading icon slot. A centered right chevron appears only on hover or keyboard focus and rotates when expanded.
 - Physical folders such as `contracts/` and `checklists/` and custom subdirectories remain navigable. Their leading icon toggles between closed-folder and open-folder states.
-- HTML and HTM files are treated as spec prototypes and automatically routed to Specify; they do not need the Markdown-only `Taco scope` metadata.
+- HTML and HTM files are treated as spec prototypes and automatically routed to Specify; they do not need the Markdown-only `taco_scope` metadata.
 - The selected file is indicated by text/background, not by color alone.
 - The file icon conveys file identity without implying that a format renderer exists.
 - Mobile and narrow-screen layouts start with the drawer closed.
@@ -83,7 +86,7 @@ YAML, JSON, and unknown files open directly in the generic source editor. It has
 
 JSON uses live syntax highlighting behind the native editing surface. YAML and unknown text keep plain source coloring. Long source lines scroll horizontally instead of wrapping.
 
-HTML and HTM files use a different boundary: near the top of the viewer, a centered single-line card shows only the file icon, the title, and an `Open Preview` action. That action creates a `text/html` Blob from the canonical file content and opens its object URL with `_blank` plus `noopener noreferrer`. Taco never embeds a prototype in an iframe and never injects the current document. v0.2 supports self-contained HTML prototypes; resolving sibling assets from the virtual bundle is deferred.
+HTML and HTM files use a different boundary: near the top of the viewer, a centered single-line card shows only the file icon, the title, and an `Open Preview` action. Packaging records the canonical absolute `file:` URL, and the action opens it with `_blank` plus `noopener noreferrer` regardless of the Taco container's location; relative CSS, JavaScript, and image references therefore retain their normal filesystem base. Missing or mismatched URLs are rejected before the file enters a valid Taco. Taco never substitutes a `data:` or Blob URL, embeds a prototype in an iframe, or injects it into the current document.
 
 ## 6. Search
 

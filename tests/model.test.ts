@@ -10,7 +10,12 @@ const bundle = (): TacoBundle => ({
   files: [
     { title: 'Project overview', path: 'specs/001-test/README.md', mediaType: 'text/markdown', content: '# Guide' },
     { title: 'Product specification', path: 'specs/001-test/spec.md', mediaType: 'text/markdown', content: '# Spec' },
-    { path: 'specs/001-test/prototype.html', mediaType: 'text/html', content: '<!doctype html><title>Prototype</title>' },
+    {
+      path: 'specs/001-test/prototype.html',
+      mediaType: 'text/html',
+      content: '<!doctype html><title>Prototype</title>',
+      sourceUrl: 'file:///Users/example/project/specs/001-test/prototype.html',
+    },
     { path: 'specs/001-test/contracts/openapi.yaml', mediaType: 'application/yaml', content: 'openapi: 3.1.0' },
     { path: 'specs/001-test/config.json', mediaType: 'application/json', content: '{"a":1}' },
   ],
@@ -59,6 +64,20 @@ describe('file-first Taco bundle', () => {
     const invalid = bundle()
     invalid.files[0].title = '   '
     expect(parseBundle(JSON.stringify(invalid))).toMatchObject({ ok: false, err: 'shape' })
+  })
+
+  it('requires canonical file URLs for HTML and rejects them on other files', () => {
+    const missing = bundle()
+    delete missing.files[2].sourceUrl
+    expect(parseBundle(JSON.stringify(missing))).toMatchObject({ ok: false, err: 'shape' })
+
+    const wrong = bundle()
+    wrong.files[2].sourceUrl = 'data:text/html;base64,PGgxPkJhZDwvaDE+'
+    expect(parseBundle(JSON.stringify(wrong))).toMatchObject({ ok: false, err: 'shape' })
+
+    const nonHtml = bundle()
+    nonHtml.files[0].sourceUrl = 'file:///Users/example/project/specs/001-test/README.md'
+    expect(parseBundle(JSON.stringify(nonHtml))).toMatchObject({ ok: false, err: 'shape' })
   })
 
   it('accepts only lowercase SHA-256 source baselines', () => {

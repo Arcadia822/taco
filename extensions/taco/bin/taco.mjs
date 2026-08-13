@@ -12,7 +12,7 @@ import {
   writeFile,
 } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const FORMAT = 'taco/files'
 const FORMAT_VERSION = 1
@@ -77,6 +77,7 @@ const assertNoSymlinkPath = async (root, target) => {
 const mediaType = (path) => {
   const lower = path.toLowerCase()
   if (lower.endsWith('.md')) return 'text/markdown'
+  if (/\.html?$/.test(lower)) return 'text/html'
   if (/\.ya?ml$/.test(lower)) return 'application/yaml'
   if (lower.endsWith('.json')) return 'application/json'
   if (lower.endsWith('.csv')) return 'text/csv'
@@ -86,7 +87,43 @@ const mediaType = (path) => {
   return 'text/plain'
 }
 
+const canonicalFileUrl = (value, expectedPath) => {
+  if (typeof value !== 'string' || !value) return null
+  let url
+  try { url = new URL(value) }
+  catch { return null }
+  if (url.protocol !== 'file:' || url.host || url.username || url.password || url.search || url.hash) return null
+  let pathname
+  try { pathname = decodeURIComponent(url.pathname) }
+  catch { return null }
+  return pathname.endsWith(`/${expectedPath}`) ? url.href : null
+}
+
+const yamlTitleFrom = (content) => {
+  const normalized = content.startsWith('\uFEFF') ? content.slice(1) : content
+  const match = normalized.match(/^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/)
+  if (!match) return null
+  const line = match[1].split(/\r?\n/).find((candidate) => /^title[ \t]*:/.test(candidate))
+  if (!line) return null
+  const raw = line.slice(line.indexOf(':') + 1).trim()
+  if (!raw) return null
+  if (raw.startsWith('"') && raw.endsWith('"')) {
+    try {
+      const parsed = JSON.parse(raw)
+      return typeof parsed === 'string' && parsed.trim() ? parsed.trim() : null
+    } catch { return null }
+  }
+  if (raw.startsWith("'") && raw.endsWith("'")) {
+    const parsed = raw.slice(1, -1).replace(/''/g, "'").trim()
+    return parsed || null
+  }
+  const plain = raw.replace(/[ \t]+#.*$/, '').trim()
+  return plain && !/^[|>]/.test(plain) ? plain : null
+}
+
 const titleFrom = (content, fallback) => {
+  const yamlTitle = yamlTitleFrom(content)
+  if (yamlTitle) return yamlTitle
   const heading = content.match(/^#\s+(.+?)\s*$/m)?.[1]?.trim()
   return heading || fallback
 }
@@ -195,7 +232,7 @@ const ignoreMatcher = (patterns) => {
     )?.pattern ?? null
 }
 
-export const parseTacoHtml = (html) => {
+export const parseTacoHtml = (html, options = {}) => {
   const match = html.match(DATA_CONTENT)
   if (!match) throw new Error('Taco data block #taco-document was not found')
   let bundle
@@ -204,7 +241,7 @@ export const parseTacoHtml = (html) => {
   } catch (error) {
     throw new Error(`Taco data block is not valid JSON: ${error.message}`)
   }
-  validateBundle(bundle)
+  validateBundle(bundle, options)
   return bundle
 }
 
@@ -219,7 +256,7 @@ export const validateTacoHtml = (html) => {
   return { command: 'validate', format: bundle.format, version: bundle.version, securityVersion, issues, files: bundle.files.length }
 }
 
-export const validateBundle = (bundle) => {
+export const validateBundle = (bundle, { allowLegacyHtmlSourceUrl = false } = {}) => {
   if (!bundle || typeof bundle !== 'object' || Array.isArray(bundle))
     throw new Error('Taco bundle must be an object')
   if (bundle.format !== FORMAT) throw new Error(`Expected Taco format ${FORMAT}`)
@@ -243,6 +280,13 @@ export const validateBundle = (bundle) => {
       throw new Error(`File escapes Taco root: ${file.path}`)
     }
     if (paths.has(file.path)) throw new Error(`Duplicate Taco path: ${file.path}`)
+    const html = file.mediaType === 'text/html' || /\.html?$/i.test(file.path)
+    if (html && !allowLegacyHtmlSourceUrl && !canonicalFileUrl(file.sourceUrl, file.path)) {
+      throw new Error(`HTML file requires its canonical file URL: ${file.path}`)
+    }
+    if (!html && file.sourceUrl !== undefined) {
+      throw new Error(`sourceUrl is only valid for HTML files: ${file.path}`)
+    }
     paths.add(file.path)
   }
   if (bundle.comments !== undefined && !Array.isArray(bundle.comments))
@@ -328,12 +372,16 @@ const collectFiles = async (featureDir, rootPath, existingByPath, ignorePatterns
       }
       const path = `${rootPath}/${relativePath}`
       const previous = existingByPath.get(path)
+      const type = mediaType(relativePath)
       files.push({
         ...(previous?.id ? { id: previous.id } : {}),
-        title: previous?.title || titleFrom(content, entry.name),
+        title: type === 'text/markdown'
+          ? titleFrom(content, entry.name)
+          : previous?.title || titleFrom(content, entry.name),
         path,
-        mediaType: mediaType(relativePath),
+        mediaType: type,
         content,
+        ...(type === 'text/html' ? { sourceUrl: pathToFileURL(absolute).href } : {}),
         sourceHash: sha256(content),
       })
     }
@@ -389,7 +437,9 @@ export const pack = async ({
       )
     }
   }
-  const priorBundle = fromPath ? parseTacoHtml(await readFile(fromPath, 'utf8')) : null
+  const priorBundle = fromPath
+    ? parseTacoHtml(await readFile(fromPath, 'utf8'), { allowLegacyHtmlSourceUrl: true })
+    : null
   if (priorBundle && priorBundle.root !== rootPath) {
     throw new Error(
       `Existing Taco root ${priorBundle.root} does not match feature root ${rootPath}`,

@@ -1,4 +1,5 @@
 import { MAX_BLOCK_HTML, SUPPORTED_BLOCK_TYPES } from './security.ts'
+import { localFileUrl } from './local-file-url.ts'
 
 export const FORMAT = 'taco/files'
 export const FORMAT_VERSION = 1
@@ -9,6 +10,7 @@ export interface TacoFile {
   path: string
   mediaType: string
   content: string
+  sourceUrl?: string
   sourceHash?: string
   blocks?: TacoBlock[]
   [extra: string]: unknown
@@ -142,6 +144,13 @@ export function parseBundle(json: string): ParseResult {
     }
     if (value.sourceHash !== undefined && (typeof value.sourceHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.sourceHash))) {
       return { ok: false, err: 'shape', detail: `file sourceHash is invalid: ${value.path}` }
+    }
+    const html = value.mediaType === 'text/html' || /\.html?$/i.test(value.path)
+    if (html && !localFileUrl(value.sourceUrl, value.path)) {
+      return { ok: false, err: 'shape', detail: `HTML file requires its canonical file URL: ${value.path}` }
+    }
+    if (!html && value.sourceUrl !== undefined) {
+      return { ok: false, err: 'shape', detail: `sourceUrl is only valid for HTML files: ${value.path}` }
     }
     if (value.blocks !== undefined && (!Array.isArray(value.blocks) || !value.blocks.every(isBlock))) {
       return { ok: false, err: 'shape', detail: `file blocks are invalid: ${value.path}` }

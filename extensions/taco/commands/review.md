@@ -36,13 +36,13 @@ Use the user input as an optional `.taco.html` path.
 7. Read every open comment from the returned `comments` array. For each thread, inspect its path, quote, resolved line/column when available, every message, and `stale` state.
 8. Apply actionable open comments to the canonical files. Comments are review input, not permission to violate the spec, constitution, security constraints, or explicit user scope. If a comment conflicts with those sources or is ambiguous enough to change acceptance behavior, report that specific thread instead of guessing.
 9. Re-read every file changed by the import or by comment handling. Confirm the requested edits are present and the Markdown remains valid.
-10. Invoke `__SPECKIT_COMMAND_TACO_UPDATE__ "<FEATURE_DIR>"` so the same Taco is refreshed from canonical files using the standard update flow. Do not reproduce packaging or preview policy in this command. Allow update's internal-browser presentation step to run. Verify that the returned path is the exact Taco reviewed in step 2, that its comment threads were preserved, and that the refreshed review copy was displayed when the Agent GUI supports it.
+10. Invoke `__SPECKIT_COMMAND_TACO_UPDATE__ "<FEATURE_DIR>"` so the same Taco is refreshed from canonical files using the standard update flow. Do not reproduce packaging or presentation policy in this command. Allow update's native clickable-file presentation step to run. Verify that the returned path is the exact Taco reviewed in step 2 and that its comment threads were preserved; treat direct browser verification as a separate capability, not a prerequisite in Codex.
 
 11. Report:
     - files imported directly from Taco;
     - open comments handled, deferred, or stale, by thread ID;
     - files changed while handling comments;
-    - the refreshed Taco path and internal-preview status.
+    - the refreshed Taco path, clickable-file presentation status, and any separate direct-open verification status.
 
 ## Constraints
 
@@ -56,4 +56,4 @@ Use the user input as an optional `.taco.html` path.
 - Direct Taco edits are present in canonical source files.
 - Every open comment was read and classified as handled, deferred, or stale.
 - The refreshed Taco contains the resulting canonical file contents and retains the review threads.
-- The refreshed Taco is presented in the Agent GUI's internal browser when available, with an explicit path fallback otherwise.
+- The refreshed Taco is exposed through the Agent GUI's native clickable local-file surface; any direct-open verification is reported separately.

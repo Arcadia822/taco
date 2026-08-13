@@ -33,4 +33,4 @@
 - [x] T017 Install the extension and Taco project policy in a clean temporary Spec Kit project with a declared Agent integration.
 - [x] T018 Run update and review smoke tests using only files installed into that project.
 - [x] T019 Audit every functional requirement and Quickstart claim against observed evidence.
-- [x] T020 Add capability-aware internal-browser presentation to generated update/review skills and all plugin-facing documentation.
+- [x] T020 Add native clickable-file presentation to generated update/review skills and all plugin-facing documentation, with user-click Browser handoff in Codex.

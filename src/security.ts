@@ -6,7 +6,6 @@ export const MAX_BLOCK_HTML = 512 * 1024
 export const MAX_SYNC_FILES = 2_000
 export const MAX_SYNC_NODES = 50_000
 export const MAX_FRAME_BYTES = 2 * 1024 * 1024
-export const MAX_PROTOTYPE_BYTES = 2 * 1024 * 1024
 
 export const SUPPORTED_BLOCK_TYPES = new Set([
   'paragraph', 'heading', 'blockquote', 'codeBlock', 'bulletList', 'orderedList',
@@ -22,7 +21,7 @@ const EDITOR_TAGS = [
 
 const EDITOR_ATTRS = [
   'align', 'alt', 'checked', 'class', 'colspan', 'data-key', 'data-taco-align',
-  'data-taco-block-id', 'data-type', 'disabled', 'height', 'href', 'rel', 'rowspan',
+  'data-bom', 'data-closed', 'data-eol', 'data-taco-block-id', 'data-type', 'data-yaml', 'disabled', 'height', 'href', 'rel', 'rowspan',
   'src', 'target', 'title', 'type', 'width',
 ]
 
@@ -117,6 +116,13 @@ export const sanitizeMermaidSvg = (svg: string): string => {
       }
     }
   }
+  for (const relation of Array.from(root.querySelectorAll('path.relation'))) {
+    relation.setAttribute('fill', 'none')
+  }
+  for (const background of Array.from(root.querySelectorAll('.edgeLabel rect.background'))) {
+    background.setAttribute('fill', 'none')
+    background.setAttribute('stroke', 'none')
+  }
   return new XMLSerializer().serializeToString(root)
 }
 
@@ -161,37 +167,4 @@ export const assertBoundedJson = (value: unknown, label: string): void => {
 
 export const assertOptionalBoundedJson = (value: unknown, label: string): void => {
   if (value !== undefined) assertBoundedJson(value, label)
-}
-
-const base64Utf8 = (value: string): string => {
-  const bytes = new TextEncoder().encode(value)
-  let binary = ''
-  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
-  }
-  return btoa(binary)
-}
-
-const PROTOTYPE_CSP = [
-  "default-src 'none'",
-  "base-uri 'none'",
-  "object-src 'none'",
-  "form-action https: http:",
-  "script-src 'unsafe-inline' https: http:",
-  "style-src 'unsafe-inline' https: http:",
-  'img-src data: blob: https: http:',
-  'font-src data: https: http:',
-  'media-src data: blob: https: http:',
-  'connect-src https: http: wss: ws:',
-  'frame-src https: http:',
-].join('; ')
-
-export const isolatedPrototypeUrl = (content: string): string => {
-  const bytes = new TextEncoder().encode(content).length
-  if (bytes > MAX_PROTOTYPE_BYTES) throw new Error('security:prototype-too-large')
-  const policy = `<meta http-equiv="Content-Security-Policy" content="${PROTOTYPE_CSP}">`
-  const isolated = /^\s*<!doctype[^>]*>/i.test(content)
-    ? content.replace(/^(\s*<!doctype[^>]*>)/i, `$1${policy}`)
-    : `<!doctype html>${policy}${content}`
-  return `data:text/html;base64,${base64Utf8(isolated)}`
 }

@@ -1,3 +1,7 @@
+---
+title: "Feature Specification: Taco File Browser"
+---
+
 ## Product Thesis
 
 Taco is a local browser that travels alongside a Spec Kit file tree. When a user opens a `.taco.html`, they see the original Markdown, YAML, JSON, and directory relationships — not a projection converted into another domain database.
@@ -15,7 +19,7 @@ As a collaborator who receives a Taco, I want to open the file and see the compl
 **Acceptance Scenarios**:
 
 1. **Given** the Taco contains a feature-root `README.md`, **When** the user opens the file, **Then** the left side shows only the Specify, Plan, and Tasks groups, places `README.md` in Specify, and selects it by default.
-2. **Given** the bundle contains core, convention, and other Markdown files, **When** navigation is derived, **Then** `README.md`, core, and convention paths are classified by built-in rules and other Markdown enters one of the three default stages by its `Taco scope` enum, without producing extension or custom groups.
+2. **Given** the bundle contains core, convention, and other Markdown files, **When** navigation is derived, **Then** `README.md`, core, and convention paths are classified by built-in rules and other Markdown enters one of the three default stages through a valid YAML `taco_scope`, without producing extension or custom groups.
 3. **Given** `contracts/`, `checklists/`, or another subdirectory contains multiple files, **When** they appear in navigation, **Then** the real directory hierarchy is preserved and the same physical directory is never split across multiple standard stages by a file declaration.
 4. **Given** `checklists/` contains requirements and implementation checks, **When** navigation is derived, **Then** the whole directory is grouped under Plan as a quality gate after Plan and before Tasks.
 5. **Given** the user hovers or keyboard-focuses one of the three group headings, **When** the group is collapsible, **Then** a centered disclosure icon appears on the right of the secondary heading; the left side of the heading must not occupy an icon slot.
@@ -43,13 +47,13 @@ As a spec reviewer, I want Markdown to be edited directly in a WYSIWYG surface l
 
 As an engineering collaborator, I want YAML, JSON, and other text files to be directly editable, and to open standalone HTML prototypes from the spec, even when Taco does not yet understand their specialized semantics.
 
-**Independent Test**: Open `.yaml`, `.json`, plain text, and a self-contained `.html` fixture, confirm the text source is editable, edits enter the canonical bundle, JSON is highlighted live, and the HTML only shows an open card and runs on a new page.
+**Independent Test**: Open `.yaml`, `.json`, plain text, and an `.html` fixture; confirm the text source is editable, edits enter the canonical bundle, JSON is highlighted live, and the HTML card opens the canonical file URL in a new page regardless of the Taco file's own location.
 
 **Acceptance Scenarios**:
 
 1. **Given** the current file is JSON, **When** the user opens and edits it, **Then** Taco shows it in a source editor with no header, no large spacing, no border, and no background color, provides live syntax highlighting, and writes edits back to the canonical bundle.
 2. **Given** the current file is YAML or unknown text, **When** the user opens and edits it, **Then** Taco shows the same undecorated generic source editor and saves the exact text without guessing field meaning.
-3. **Given** the current file is an HTML prototype, **When** the user selects it, **Then** Taco shows a single-line card above the file viewer containing only the file icon, title, and an "Open Preview" action; clicking it runs the prototype in a separate browser page and never embeds an iframe or executes HTML inside the Taco UI.
+3. **Given** the current file is an HTML prototype with its canonical `file:` URL, **When** the user selects it, **Then** Taco shows a single-line card above the file viewer containing only the file icon, title, and an "Open Preview" action; clicking it opens that real local HTML file in a separate browser page regardless of the Taco file's location and never embeds an iframe or executes HTML inside the Taco UI.
 
 ### User Story 4 — Use the single-file shell (Priority: P1)
 
@@ -99,7 +103,7 @@ As a team using Spec Kit, I want the agent to automatically generate a reviewabl
 - The bundle is empty, the JSON is corrupt, or the version is newer than the current runtime.
 - Duplicate file paths, absolute paths, paths containing `..`, or files outside the declared root.
 - Markdown containing raw HTML, scripts, an over-long code block, or a wide table.
-- An HTML prototype references other relative CSS, JavaScript, or image files in the bundle; v0.2 only guarantees that a self-contained HTML prototype runs.
+- An HTML prototype lacks a valid canonical `file:` URL or its URL does not end in the validated project-relative file path; packaging rejects it instead of creating an embedded preview URL.
 - A relative link points to a nonexistent file.
 - File names and body text contain Chinese, spaces, or Unicode.
 - A Taco edit and a canonical file both change after packaging.
@@ -113,17 +117,17 @@ As a team using Spec Kit, I want the agent to automatically generate a reviewabl
 - **FR-001**: The canonical bundle must preserve the relative path, media type, and raw text content of each Spec Kit file.
 - **FR-002**: The runtime must not persist Markdown content such as Story, Requirement, Task, or Evidence as a second domain model.
 - **FR-003**: The layout must first split the left file sidebar from the workspace; below the workspace header, the central document area and the in-document outline/comments local aux area follow. The outline and comments must toggle through the shared 24px segmented control, defaulting to the outline; the local aux area must not offer a collapsed state or a close control. The left side must organize files strictly by the three default stages — Specify, Plan, Tasks — and must not create extension or custom groups; the real directory hierarchy must be preserved. The collapse control must live in the left-rail header.
-- **FR-004**: The default file must prefer `README.md` at the feature root, then fall back to `spec.md` when no root README exists. A root `README.md` must route to Specify without requiring `Taco scope` metadata.
+- **FR-004**: The default file must prefer `README.md` at the feature root, then fall back to `spec.md` when no root README exists. A root `README.md` must route to Specify without requiring `taco_scope` metadata.
 - **FR-005**: Markdown must always use WYSIWYG editing and must not offer a raw-Markdown mode or a mode switch control.
 - **FR-005a**: WYSIWYG editing must update the Markdown text in the canonical bundle; nothing may be written to disk before the user saves.
 - **FR-005b**: The workspace header must show the current file's path relative to root after the bundle title; the Markdown viewer must show a separate file metadata title above the body along with the file-type icon consistent with the sidebar. That title is not part of the Markdown content and must not enter the in-document outline.
 - **FR-005c**: The bundle title in the workspace header must be editable and write back to the document title in real time; the persisted `.taco.html` filename stem must always equal the bundle title normalized into a filename, with spaces and other non-filename characters converted to underscores. After a title change, saving must request the matching new filename and must not overwrite an old handle whose name no longer matches; a saved copy's `-copy` filename and the copy's bundle title must also match.
 - **FR-005d**: WYSIWYG mode must edit the document content directly and must not show a separate formatting toolbar.
 - **FR-005e**: The file metadata title must be editable and write back to `files[].title`; editing the title must not modify `files[].path`, the sidebar filename, the comment anchor path, or the on-disk filename. v0.2 provides no file rename capability.
-- **FR-005f**: A run of leading ``**Key**: value`` properties at the start of a Markdown file must render as an editable two-column property component; the keys and values must still serialize back to the original Markdown syntax and must not enter the in-document outline or be stored as a parallel metadata schema. A single-line `Input` also applies; ordinary body text and bold key-values inside a Requirement list must not be misdetected. The internal `Taco scope` property must remain in the canonical Markdown but must not be shown in the rendered document.
-- **FR-005g**: `Taco scope` must use the exact ``**Taco scope**: spec|plan|tasks`` enum syntax; only the three complete values `spec`, `plan`, `tasks` are allowed, and `extends <file>` prose, appended notes, or other free text must not be parsed.
+- **FR-005f**: Leading YAML frontmatter must render as an Obsidian-style editable property component without entering the in-document outline or becoming a parallel metadata schema. Scalar, list, and nested values remain canonical YAML; legacy ``**Key**: value`` prose remains readable but is not generated for new metadata.
+- **FR-005g**: `taco_scope` is stored in leading YAML frontmatter. Only the exact strings `spec`, `plan`, and `tasks` route a file; other text values remain editable and visibly invalid without creating a stage.
 - **FR-006**: YAML, JSON, and unknown text formats must use an editable generic source view in v0.2; the view must not show a separate header, large spacing, border, or background color, editing must update `files[].content`, and JSON must provide live syntax highlighting while editing.
-- **FR-006a**: `.html` and `.htm` files must be grouped under the Specify stage and shown as a non-embedded prototype card in the viewer. The preview action must open a `text/html` Blob created from the canonical `files[].content` in a new browser page with `noopener noreferrer`; the current Taco page must not use an iframe or `innerHTML` to execute the prototype.
+- **FR-006a**: `.html` and `.htm` files must be grouped under the Specify stage and shown as a non-embedded prototype card in the viewer. Every packaged HTML file must carry a canonical absolute `file:` URL whose decoded pathname ends in the validated project-relative file path. The preview action must open that URL in a new browser page with `noopener noreferrer` regardless of the Taco file's own location. Packaging and bundle validation must reject HTML without that URL; the runtime must never substitute a `data:` URL, Blob URL, iframe, or `innerHTML` execution.
 - **FR-007**: Markdown H1–H3 must generate the in-document outline, toggling with comments as two tabs in the local aux area below the workspace header; the tabs must reuse the shared 24px segmented control component. An outline click must scroll to the corresponding visible heading, and body scrolling must sync the active outline item; the solid divider between the main content scrollbar and the body/local aux area must not be shown.
 - **FR-007a**: Mermaid must not be bundled into the single-file runtime. Only when the currently rendered Markdown contains a `mermaid` fenced code block may it be loaded once on demand from a pinned remote ESM address; a document with no Mermaid must not issue a Mermaid request. When loading fails or the page is offline, the editable canonical Mermaid code block must be shown and must not block reading or editing the document.
 - **FR-008**: Relative file links inside the bundle must navigate within Taco.
@@ -138,7 +142,7 @@ As a team using Spec Kit, I want the agent to automatically generate a reviewabl
 - **FR-016a**: Save & unpack must treat the directory the user confirms as the Taco sidebar file-tree root, write the Taco file itself directly into that directory, and write every bundle file by its sidebar-visible root-relative path, without creating an extra project-level `root` prefix directory for the bundle. That Taco file must become the subsequent save target; existing files not in the bundle must not be deleted. When the browser denies directory permission, the result must not be described as an already-completed "save cancelled".
 - **FR-017**: Internationalization applies only to the product shell and must not modify file content in the bundle.
 - **FR-018**: The three navigation groups must use secondary text with no left icon slot, and show a centered 24px disclosure control on the right only on hover or keyboard focus; the outline must express its collapsed state with closed/open folder icons, and the Taco header mark must be exactly 24×24px.
-- **FR-019**: `checklists/` must be grouped entirely under Plan and must not duplicate the physical directory into Specify or Tasks because of one file's `Taco scope` declaration.
+- **FR-019**: `checklists/` must be grouped entirely under Plan and must not duplicate the physical directory into Specify or Tasks because of one file's `taco_scope` property.
 - **FR-020**: Each Markdown file must map its top-level Tiptap nodes to blocks with stable IDs. `files[].content` continues to hold canonical Markdown; block HTML is only a collaboration transport and editor-restoration structure and must not be promoted into a Story, Requirement, or Task business model.
 - **FR-021**: Pages with the same origin and `docId` must sync the document title, Markdown blocks, and comments through `BroadcastChannel`; the sync protocol must support hello, missing-operation resend, snapshot merge, presence, heartbeat, and leave notification.
 - **FR-022**: Concurrent merge must use the Bento-derived CRDT: file and block/comment nodes merge by stable ID, block `html` uses a token RGA, and sync operations use actor sequence, Lamport register, tombstones, and a version vector.
@@ -165,7 +169,7 @@ As a team using Spec Kit, I want the agent to automatically generate a reviewabl
 - **SC-006**: The automated WCAG 2 A/AA audit has no violation.
 - **SC-007**: Concurrent edits to the same block from two tabs produce completely identical JSON after operations are exchanged.
 - **SC-008**: Comment threads created concurrently in two tabs are all preserved, and remote cursors/selections in the same file are visible.
-- **SC-009**: When any self-contained HTML prototype is selected, there is no iframe in the current Taco page; the preview link has `_blank` and `noopener noreferrer`, and the new page receives Blob content identical to `files[].content`.
+- **SC-009**: When any packaged HTML prototype is selected, there is no iframe in the current Taco page; the preview link has `_blank` and `noopener noreferrer`, its URL is the canonical `file:` URL, and it never begins with `data:` or `blob:`.
 - **SC-010**: CLI automation proves that a direct Taco edit can be written back to the original file, open comments return stable positions, preflight does not touch disk, and any two-sided conflict blocks partial writes of the other conflict-free files.
 - **SC-011**: Automation proves that an editor invitation retains only the delegated write credential, a read-only copy retains no collaboration credential, and the Owner private key never enters a share copy.
 - **SC-012**: Local relay verification proves that an editor's signed ciphertext operations can persist and replay, and that a revoked target device cannot resume writing.
@@ -181,4 +185,4 @@ As a team using Spec Kit, I want the agent to automatically generate a reviewabl
 - A Story, Requirement, or Task database.
 - Project-management boards, accounts, cloud workspaces, enterprise SSO, and organization directories.
 - Agent auto-execution or a code-repository replacement.
-- Parsing or rewriting the relative CSS, JavaScript, images, and other multi-file dependencies of an HTML prototype.
+- Parsing or rewriting relative CSS, JavaScript, images, and other dependencies of an HTML prototype; opening the canonical file leaves those references to the browser and filesystem.

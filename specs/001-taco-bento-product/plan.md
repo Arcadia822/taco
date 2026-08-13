@@ -1,3 +1,7 @@
+---
+title: "Implementation Plan: Taco File Browser"
+---
+
 ## Overview
 
 Build a self-contained browser for a single Spec Kit feature directory. At build time Vite reads the real directory and injects a generic file bundle. The runtime derives stage projections, edits Markdown as stable Tiptap blocks, and syncs replicas through a Bento-derived CRDT using a local `BroadcastChannel` plus an optional encrypted WebSocket relay.
@@ -105,8 +109,8 @@ extensions/taco/
 3. The bundle is injected into `#taco-document`.
 4. `vite-plugin-singlefile` inlines the runtime and CSS.
 5. The browser parser validates path boundaries before rendering.
-6. Stage navigation recognizes core and conventional Spec Kit paths, routes HTML/HTM prototype paths to Specify, then reads the hidden `Taco scope` enum from other Markdown documents; physical subdirectories stay nested inside one of the three default stages.
-7. Selecting an HTML file creates a transient `text/html` Blob URL for a semantic new-page preview link; file changes and browser teardown revoke that URL.
+6. Stage navigation recognizes core and conventional Spec Kit paths, routes HTML/HTM prototype paths to Specify, then reads the YAML `taco_scope` open enum from other Markdown documents; physical subdirectories stay nested inside one of the three default stages.
+7. Packaging records each HTML file's canonical absolute `file:` URL after verifying that it matches the validated project-relative path. Selecting the file opens that URL directly regardless of the Taco container's location; missing or mismatched URLs fail validation and never fall back to embedded HTML execution.
 
 ## Spec Kit Review Round-Trip
 

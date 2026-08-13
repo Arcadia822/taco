@@ -1,3 +1,7 @@
+---
+title: "Tasks: Taco File Browser"
+---
+
 ## Phase 1 — File-First Foundation
 
 - [x] T001 Replace the Taco business schema with generic `TacoBundle` and `TacoFile` transport models in `src/model.ts`
@@ -42,7 +46,16 @@
 - [x] T031 Replace the undifferentiated physical file tree with Specify, Plan, and Tasks stage groups
 - [x] T032 Put each stage's core file first, immediately followed by all other routed documents
 - [x] T033 Preserve physical subdirectories such as `contracts/` within their stage
-- [x] T034 Require other Markdown documents to declare a `Taco scope` enum of `spec | plan | tasks`
+- [x] T034 Route other Markdown documents through the YAML `taco_scope` open enum; only `spec | plan | tasks` are valid routes
+
+## Phase 10 — YAML Document Properties
+
+- [x] T058 Parse leading YAML frontmatter safely while preserving comments, order, body content, BOM, and line endings
+- [x] T059 Render an Obsidian-style property editor with scalar, list, nested, add, rename, remove, read-only, and invalid-YAML states
+- [x] T060 Synchronize YAML `title` with the file-title UI and YAML `taco_scope` with stage navigation
+- [x] T061 Preserve invalid `taco_scope` text while exposing icon, text, color-independent, and ARIA validation feedback
+- [x] T062 Carry encoded frontmatter through collaboration block HTML and the security sanitizer
+- [x] T063 Install a durable Spec Kit Agent policy requiring YAML titles and H2-first spec bodies without duplicate H1 headings
 - [x] T035 Test enum parsing, three-stage routing, and directory preservation
 - [x] T036 Remove the Custom and Extensions groups, keep `checklists/` under Plan, and align the 24px group/folder/Header icon construction with Codex
 
@@ -67,8 +80,8 @@
 
 - [x] T045 Classify `.html` / `.htm` files and route them to the Specify stage
 - [x] T046 Render an HTML prototype card instead of an inline preview or source editor
-- [x] T047 Open canonical HTML in a new page as a `text/html` Blob, with `noopener noreferrer`
-- [x] T048 Revoke the transient Blob URL, and test classification, routing, and card behavior
+- [x] T047 Record and open each HTML prototype's canonical absolute `file:` URL with `noopener noreferrer`, independently of the Taco container's location
+- [x] T048 Reject HTML without a matching canonical file URL and test classification, routing, validation, and the absence of `data:` or Blob preview fallbacks
 
 ## Phase 8 — Spec Kit Review Extension
 

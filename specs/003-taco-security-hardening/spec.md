@@ -91,21 +91,21 @@ As a user asking an Agent to inspect a Taco, I receive a mechanical warning befo
 
 ---
 
-### User Story 5 - Open an HTML prototype without granting Taco-origin authority (Priority: P1)
+### User Story 5 - Open the canonical local HTML prototype outside Taco (Priority: P1)
 
-As a reviewer, I can deliberately run a self-contained HTML prototype in a separate page without allowing that prototype to access the Taco page, Taco-origin storage, collaboration channels, or retained application permissions.
+As a reviewer, I can deliberately open the real local HTML prototype in a separate page without executing its content inside the Taco document or granting it an opener relationship.
 
-**Why this priority**: `noopener` removes the direct opener reference but a same-origin Blob still inherits the creating HTTP or HTTPS origin. A hostile prototype must not become same-origin application code merely because the user clicked Preview.
+**Why this priority**: Constructing a `data:` or Blob document loses the prototype's real file identity and can break relative assets. A packaged URL must identify the canonical source file; otherwise packaging must fail instead of inventing a second executable copy.
 
-**Independent Test**: Open an adversarial prototype from a hosted production Taco and verify in a real browser that it executes as prototype content but has an opaque or otherwise isolated origin and cannot access the opener, Taco storage, Taco BroadcastChannels, the Agent API, or the Taco DOM.
+**Independent Test**: Package an HTML fixture with relative assets, move or open the Taco from another location, and verify that Preview still targets the fixture's exact canonical `file:` URL in a separate page with no opener. Remove or alter that URL and verify bundle validation fails.
 
 **Acceptance Scenarios**:
 
-1. **Given** a prototype that probes `window.opener`, localStorage, IndexedDB, BroadcastChannel, cookies, service workers, and the Taco Agent API, **When** it opens, **Then** it cannot read or mutate Taco-origin state.
-2. **Given** a prototype contains JavaScript, **When** the user explicitly opens it, **Then** its code may execute only inside the isolated prototype context and cannot execute in the Taco application page.
+1. **Given** a packaged HTML prototype, **When** the user opens it, **Then** the target is the exact validated `file:` URL and the new page has no opener relationship to Taco.
+2. **Given** a prototype contains JavaScript, **When** the user explicitly opens it, **Then** its code may execute only in the browser page for that local file and cannot execute in the Taco application page.
 3. **Given** the prototype is never opened, **When** its card is displayed, **Then** no prototype code runs and no prototype-requested network access occurs.
-4. **Given** the browser cannot provide the required isolated execution context, **When** the user requests preview, **Then** Taco refuses execution and offers the canonical source or a download instead of silently weakening isolation.
-5. **Given** the prior product specification required a same-origin `text/html` Blob, **When** this feature is implemented, **Then** this feature's origin-isolation requirement supersedes that mechanism while retaining a separate-page, explicit-action experience.
+4. **Given** an HTML file lacks a canonical URL or the URL does not match its validated project-relative path, **When** an Agent packages or Taco parses it, **Then** the file is rejected instead of receiving a `data:`, Blob, or source-download fallback.
+5. **Given** the Taco container is copied or opened from another location, **When** Preview is clicked, **Then** the packaged canonical source URL remains the target; Taco does not derive a replacement URL from the container location.
 
 ---
 
@@ -173,11 +173,11 @@ As a maintainer or user, I can identify and replace old Taco runtimes and reset 
 - **FR-030**: Agent installation and review instructions MUST perform credential detection before reading or transmitting the complete Taco and MUST state that local inspection is allowed while external transmission requires user authorization.
 - **FR-031**: Credential removal MUST NOT be described as revocation. When exposure may already have occurred, the product and Agent instructions MUST direct the owner to reset access.
 
-### Prototype Isolation Requirements
+### Prototype Execution Requirements
 
-- **FR-032**: HTML prototype execution MUST occur only after explicit user action and in a separate, origin-isolated browsing context.
-- **FR-033**: Prototype code MUST NOT access the Taco opener, DOM, `window.taco`, localStorage, sessionStorage, IndexedDB, cookies, service workers, BroadcastChannels, or retained file handles belonging to the Taco origin.
-- **FR-034**: If an isolated execution context cannot be created, Taco MUST refuse execution and offer source viewing or download; it MUST NOT fall back to a same-origin Blob page.
+- **FR-032**: HTML prototype execution MUST occur only after explicit user action and in a separate page targeting the validated canonical `file:` URL.
+- **FR-033**: The preview link MUST use `_blank` and `noopener noreferrer`; prototype code MUST NOT execute in the Taco DOM or receive an opener relationship.
+- **FR-034**: Packaging and runtime validation MUST reject HTML without a matching canonical `file:` URL. Taco MUST NOT construct a `data:`, Blob, iframe, inline execution, or source-download fallback.
 - **FR-035**: Selecting or displaying a prototype card MUST NOT parse the prototype as live DOM, run code, or initiate author-controlled network requests.
 
 ### Release and Recovery Requirements
@@ -239,7 +239,7 @@ As a maintainer or user, I can identify and replace old Taco runtimes and reset 
 - Bento's dark interface, hidden slides, toolbar changes, and other non-security 1.0.17 features.
 - Porting Bento's slide SVG, shape, table, thumbnail, PDF, password-envelope, iOS host, or blob-store implementation into Taco.
 - Claiming that Bento 1.0.17 fixes or validates Taco's relay; relay authorization and deployment remain a separate audit boundary except for Reset Access verification required here.
-- Preventing a deliberately opened isolated prototype from contacting networks on its own behalf; the boundary is that it cannot inherit Taco-origin authority or Taco data.
+- Restricting a deliberately opened local prototype beyond the browser's own `file:` security model; Taco's boundary is explicit user action, an exact validated target, no opener, and no execution inside Taco.
 - Retracting plaintext content or credentials already received by an external party.
 - Git history rewriting when no committed secret is found.
 - A general cryptographic redesign, accounts, SSO, or organization policy.
@@ -253,7 +253,7 @@ As a maintainer or user, I can identify and replace old Taco runtimes and reset 
 - Bounded, type-specific collaboration frame validation; atomic operation/snapshot rejection; receiver-local access, capability, and compatibility metadata preservation; CSS-safe presence values.
 - Explicit invitation capability allowlist, complete sealed-reader removal, credential-bearing working-copy confirmation, credential-free Agent file projection, and removal of raw `window.taco.bundle` access.
 - Inert local `taco validate` preflight with `collab-secrets-present` and `runtime-security-outdated`, plus Agent review instructions that run it before complete content inspection or transmission.
-- Bounded opaque-origin `data:text/html;base64` prototype documents with CSP, `noopener noreferrer`, no referrer, and inert source fallback instead of same-origin Blob execution.
+- Canonical local `file:` prototype targets with strict path matching, explicit user activation, `noopener noreferrer`, no referrer, and fail-closed validation instead of generated executable documents.
 - Security runtime marker `1`, shell-gate checks, production single-file rebuild, and synchronized extension shell.
 
 ### Pre-hardening baseline evidence
@@ -266,7 +266,9 @@ Baseline commit: `26bec76` in an isolated detached worktree.
 
 The temporary worktree was removed after the evidence run.
 
-### Hardened evidence
+### Historical hardened evidence
+
+The following evidence records the original security-hardening release. Its `data:` prototype mechanism was subsequently superseded by the canonical local-file contract above and is not the current preview behavior.
 
 - `npm run check`: format check passed; 20 test files passed and one relay file was intentionally skipped in the standard gate; 126 tests passed and two relay tests skipped there; TypeScript, Vite single-file build, compression, shell gate, and extension-shell synchronization passed. The two relay tests also passed separately with `TACO_RELAY_TEST=1`. The shell gate reported a 690 KB artifact and 1064 KB inflated runtime.
 - Hosted browser corpus: `security-browser.taco.html` loaded through HTTP in the Codex Chromium browser with no error overlay or console warning/error. The attack marker remained absent; live authored `script`, `meta`, `base`, `form`, `input`, event attributes, executable links, and external images were all absent. The HTTP server received only the Taco request and no `attack-style` or `attack-pixel` request.
@@ -274,9 +276,9 @@ The temporary worktree was removed after the evidence run.
 - Local relay integration: two tests passed. Existing per-device revocation returned 403 on retry, an old delegated invitation returned 403 against the replacement room, and a newly issued editor wrote successfully to that room.
 - Runtime replacement preflight: the pre-refresh feature Taco reported `runtime-security-outdated`; the final packaging step replaces that shell and revalidates the marker.
 
-### Verification limitation
+### Historical verification limitation
 
-The Codex browser security policy refused automation of the final `data:` navigation. Unit tests verify the URL construction, CSP placement, size bound, inert fallback, and link isolation attributes; hosted Chromium verified the production link. Direct observation inside the opened opaque-origin page, including `location.origin`, storage exceptions, and `window.opener`, remains a manual browser check. No claim is made that this blocked action was executed.
+At the time of that release, Codex browser security policy refused automation of the final `data:` navigation. That limitation and the associated opaque-origin checks describe the superseded mechanism only. Current regressions instead verify exact canonical `file:` targeting, path validation, no generated preview URL, and user-click handoff in Codex.
 
 ### Bento 1.0.17 scope record
 

@@ -1,7 +1,7 @@
 {
   "name": "taco",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A single-file workspace for humans and agents to review, hand off, and manage software specs.",
   "license": "MIT",
   "author": "Arcadia",
@@ -64,6 +64,7 @@
     "@tiptap/starter-kit": "^3.29.2",
     "dompurify": "^3.4.13",
     "lowlight": "^3.3.0",
-    "marked": "^18.0.9"
+    "marked": "^18.0.9",
+    "yaml": "^2.9.0"
   }
 }

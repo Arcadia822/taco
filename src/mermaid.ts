@@ -135,12 +135,13 @@ const renderDiagram = (
       securityLevel: 'strict',
       theme,
       themeVariables,
+      htmlLabels: false,
       fontFamily: cssToken(
         typeof getComputedStyle === 'function' ? getComputedStyle(document.documentElement) : {} as CSSStyleDeclaration,
         '--sans',
         'ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif',
       ),
-      flowchart: { htmlLabels: false, curve: 'basis' },
+      flowchart: { curve: 'basis' },
     })
     try {
       const { svg } = await mermaid.render(id, source)

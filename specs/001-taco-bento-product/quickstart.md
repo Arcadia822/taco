@@ -1,3 +1,7 @@
+---
+title: "Quickstart: Taco File Browser"
+---
+
 ## Build
 
 ```bash
@@ -14,7 +18,7 @@ Open `dist-single/Taco_Spec.taco.html` directly from the file system.
 2. Compare it with `window.taco.listFiles()`.
 3. Confirm the sidebar exposes only Specify, Plan, and Tasks, with each stage's core file first.
 4. Open `contracts/` and other physical subdirectories in the left navigation.
-5. In a temporary copy, change a document's `Taco scope` between the `spec`, `plan`, and `tasks` enum values and rebuild.
+5. In a temporary copy, change a document's YAML `taco_scope` between `spec`, `plan`, `tasks`, and an invalid text value; verify routing and validation update without losing the invalid text.
 
 Expected: the file count and relative paths match exactly; real directories stay nested; the modified document moves directly to the selected stage without creating an extension group. A missing or invalid scope value does not create a fourth group.
 

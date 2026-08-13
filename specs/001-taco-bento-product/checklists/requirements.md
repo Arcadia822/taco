@@ -1,10 +1,14 @@
+---
+title: "Specification Quality Checklist: Taco File Browser"
+---
+
 ## Product Boundary
 
 - [x] The `specs/` files are the canonical source.
 - [x] No parallel Story, Requirement, Task, or Evidence schema is kept anymore.
 - [x] JSON is described only as the single-file transport envelope.
 - [x] v0.2 is explicitly read-only file browsing.
-- [x] Structured YAML/JSON rendering is deferred; generic source editing and JSON highlighting are supported.
+- [x] Leading Markdown YAML frontmatter has structured property display and editing; standalone YAML/JSON files retain source editing and JSON highlighting.
 
 ## File Behavior
 

@@ -1,7 +1,8 @@
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const cli = resolve('extensions/taco/bin/taco.mjs')
@@ -14,7 +15,7 @@ interface CliBundle {
   docId: string
   title: string
   root: string
-  files: Array<{ path: string; content: string; sourceHash?: string }>
+  files: Array<{ path: string; title?: string; content: string; sourceUrl?: string; sourceHash?: string }>
   packOptions?: { ignore: string[] }
   comments?: Array<Record<string, unknown>>
 }
@@ -43,8 +44,9 @@ describe('Taco extension CLI', () => {
     const feature = join(project, 'specs/001-demo')
     const output = join(feature, '001-demo.taco.html')
     mkdirSync(join(feature, 'contracts'), { recursive: true })
-    writeFileSync(join(feature, 'spec.md'), '# Demo\n\nOriginal text.\n')
+    writeFileSync(join(feature, 'spec.md'), '---\ntitle: "Demo from YAML"\n---\n\n## Outcome\n\nOriginal text.\n')
     writeFileSync(join(feature, 'contracts/api.json'), '{"ok":true}\n')
+    writeFileSync(join(feature, 'prototype.html'), '<!doctype html><title>Prototype</title>\n')
 
     const result = runJson<{ files: number; root: string; output: string }>(
       ['pack', feature, '--project-root', project, '--output', output, '--shell', shell],
@@ -52,13 +54,27 @@ describe('Taco extension CLI', () => {
     )
     const bundle = readBundle(output)
 
-    expect(result).toMatchObject({ files: 2, root: 'specs/001-demo', output })
+    expect(result).toMatchObject({ files: 3, root: 'specs/001-demo', output })
     expect(bundle.title).toBe('001-demo')
     expect(bundle.files.map((file) => file.path)).toEqual([
       'specs/001-demo/contracts/api.json',
+      'specs/001-demo/prototype.html',
       'specs/001-demo/spec.md',
     ])
     expect(bundle.files.every((file) => /^[a-f0-9]{64}$/.test(file.sourceHash ?? ''))).toBe(true)
+    expect(bundle.files.find((file) => file.path.endsWith('/spec.md'))?.title).toBe('Demo from YAML')
+    expect(bundle.files.find((file) => file.path.endsWith('/prototype.html'))?.sourceUrl)
+      .toBe(pathToFileURL(realpathSync(join(feature, 'prototype.html'))).href)
+
+    const legacy = structuredClone(bundle)
+    delete legacy.files.find((file) => file.path.endsWith('/prototype.html'))?.sourceUrl
+    writeBundle(output, legacy)
+    runJson(
+      ['pack', feature, '--project-root', project, '--output', output, '--from', output, '--shell', shell],
+      project,
+    )
+    expect(readBundle(output).files.find((file) => file.path.endsWith('/prototype.html'))?.sourceUrl)
+      .toBe(pathToFileURL(realpathSync(join(feature, 'prototype.html'))).href)
   })
 
   it('refreshes an existing Taco with the latest shell while preserving its bundle state', () => {

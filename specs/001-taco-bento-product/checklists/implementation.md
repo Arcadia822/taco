@@ -1,4 +1,6 @@
-**Taco scope**: plan
+---
+title: "Implementation Audit: Taco File Browser"
+---
 
 ## Implemented
 
@@ -40,7 +42,7 @@
 ## Intentionally Deferred
 
 - [x] Markdown WYSIWYG/source editing with no exposed formatting toolbar
-- [ ] Structured YAML/JSON editing
+- [x] Structured YAML frontmatter property editing for Markdown; standalone YAML/JSON remain source editors
 - [x] Save and Save a copy UI
 - [ ] Recovery and local version history UI
 - [ ] YAML/JSON/OpenAPI renderers

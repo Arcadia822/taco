@@ -7,11 +7,12 @@ import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import { createTacoCodeBlock } from './tiptap-code-block.ts'
 import type { TacoCodeBlockCommentTarget } from './tiptap-code-block.ts'
-import { DocumentProperties, DocumentProperty } from './tiptap-document-properties.ts'
+import { createDocumentProperties, type DocumentPropertiesLabels } from './tiptap-document-properties.ts'
 import { CenteredBlock } from './tiptap-centered-block.ts'
 import type { MermaidPluginLabels, MermaidRuntime } from './mermaid.ts'
 import { fileKind, type TacoBlock, type TacoBundle } from './model.ts'
 import { inertImageAttributes, sanitizeEditorHtml } from './security.ts'
+import { splitFrontmatter } from './frontmatter.ts'
 
 const BLOCK_TYPES = [
   'paragraph', 'heading', 'blockquote', 'codeBlock', 'bulletList', 'orderedList',
@@ -55,6 +56,7 @@ export interface TacoEditorExtensionOptions {
   renderMermaid?: boolean
   mermaidRuntime?: MermaidRuntime
   onCodeBlockComment?: (target: TacoCodeBlockCommentTarget) => void
+  propertyLabels?: DocumentPropertiesLabels
 }
 
 const SafeImage = Image.extend({
@@ -73,8 +75,7 @@ const SafeImage = Image.extend({
 export const createTacoEditorExtensions = (labels: MermaidPluginLabels, options: TacoEditorExtensionOptions = {}) => [
   StarterKit.configure({ codeBlock: false }),
   TacoBlockIdentity,
-  DocumentProperties,
-  DocumentProperty,
+  createDocumentProperties(options.propertyLabels),
   CenteredBlock,
   createTacoCodeBlock(labels, {
     renderMermaid: options.renderMermaid,
@@ -130,7 +131,11 @@ export const blockHtml = (blocks: TacoBlock[] | undefined): string =>
  */
 export const migrateTacoBundleBlocks = (bundle: TacoBundle, labels: MermaidPluginLabels): void => {
   for (const file of bundle.files) {
-    if (fileKind(file) !== 'markdown' || file.blocks?.length) continue
+    if (fileKind(file) !== 'markdown') continue
+    const hasFrontmatter = Boolean(splitFrontmatter(file.content))
+    const blockHasFrontmatter = file.blocks?.some((block) => block.type === 'documentProperties' && block.html.includes('data-yaml=')) ?? false
+    const legacyPropertiesBlock = file.blocks?.some((block) => block.type === 'documentProperties' && !block.html.includes('data-yaml=')) ?? false
+    if (file.blocks?.length && hasFrontmatter === blockHasFrontmatter && !legacyPropertiesBlock) continue
     const extensions = createTacoEditorExtensions(labels, { renderMermaid: false })
     const editor = new Editor({
       extensions,

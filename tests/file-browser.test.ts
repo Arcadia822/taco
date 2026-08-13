@@ -259,6 +259,7 @@ describe('FileBrowser', () => {
       path: 'specs/001-browser/prototypes/checkout.html',
       mediaType: 'text/html',
       content,
+      sourceUrl: 'file:///Users/example/project/specs/001-browser/prototypes/checkout.html',
     })
     const browser = new FileBrowser(document.getElementById('app')!, prototypeBundle)
 
@@ -273,23 +274,19 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.html-preview-kind')).toBeNull()
     expect(document.querySelector('.html-preview-hint')).toBeNull()
     expect(preview.textContent).toContain('打开预览')
-    expect(preview.href).toMatch(/^data:text\/html;base64,/)
+    expect(preview.href).toBe('file:///Users/example/project/specs/001-browser/prototypes/checkout.html')
     expect(preview.target).toBe('_blank')
     expect(preview.rel).toBe('noopener noreferrer')
     expect(preview.referrerPolicy).toBe('no-referrer')
     expect(document.querySelector('.html-preview-card iframe')).toBeNull()
     expect(document.querySelector('.source-editor-input')).toBeNull()
     expect(document.querySelector<HTMLButtonElement>('.right-panel-tabs [role="tab"]')?.hidden).toBe(true)
-    const decoded = atob(preview.href.split(',', 2)[1])
-    expect(decoded).toContain('Content-Security-Policy')
-    expect(decoded).toContain('<title>Checkout</title>')
-
     browser.destroy()
   })
 
-  it('refuses oversized prototype execution and exposes inert source', () => {
+  it('refuses HTML without a canonical file URL and exposes inert source', () => {
     const prototypeBundle = structuredClone(testBundle)
-    const content = `<script>${'x'.repeat(2 * 1024 * 1024)}</script>`
+    const content = '<script>window.pwned = true</script>'
     prototypeBundle.files.push({
       title: 'Oversized prototype',
       path: 'specs/001-browser/prototypes/oversized.html',
@@ -337,9 +334,9 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(false)
   })
 
-  it('renders leading Markdown properties without changing their canonical source', async () => {
+  it('renders leading YAML properties without changing their canonical source', async () => {
     const propertiesBundle = structuredClone(testBundle)
-    propertiesBundle.files[0].content = '**Created**: 2026-08-10\n\n**Status**: Draft\n\n## Outcome\n\nReadable Markdown.'
+    propertiesBundle.files[0].content = '---\ncreated: 2026-08-10\nstatus: Draft\n---\n\n## Outcome\n\nReadable Markdown.'
     const original = propertiesBundle.files[0].content
 
     new FileBrowser(document.getElementById('app')!, propertiesBundle)
@@ -347,7 +344,7 @@ describe('FileBrowser', () => {
     await new Promise((resolve) => requestAnimationFrame(resolve))
 
     expect(document.querySelectorAll('.document-properties')).toHaveLength(1)
-    expect(Array.from(document.querySelectorAll('.document-property-key')).map((node) => node.textContent)).toEqual(['Created', 'Status'])
+    expect(Array.from(document.querySelectorAll<HTMLInputElement>('.document-property-key')).map((node) => node.value)).toEqual(['created', 'status'])
     expect(propertiesBundle.files[0].content).toBe(original)
     expect(document.querySelector('.tiptap h2')?.textContent).toBe('Outcome')
     expect(Array.from(document.querySelectorAll('.outline-link')).map((node) => node.textContent)).toEqual(['Outcome'])
@@ -370,6 +367,8 @@ describe('FileBrowser', () => {
     expect(mermaidLoader).toHaveBeenCalledTimes(1)
     expect(mermaidInitialize).toHaveBeenCalledWith(expect.objectContaining({
       theme: 'base',
+      htmlLabels: false,
+      flowchart: { curve: 'basis' },
       themeVariables: expect.objectContaining({
         primaryBorderColor: '#00875a',
         primaryColor: '#f1f5f3',
@@ -556,11 +555,21 @@ describe('FileBrowser', () => {
     title.dispatchEvent(new Event('input', { bubbles: true }))
 
     expect(editableBundle.files[0].title).toBe('Renamed document title')
+    expect(editableBundle.files[0].content).toMatch(/^---\ntitle: Renamed document title\n---/)
     expect(editableBundle.files[0].path).toBe(originalPath)
     expect(document.querySelector(`[data-path="${originalPath}"]`)).not.toBeNull()
     expect(Array.from(document.querySelectorAll('.tiptap h1, .tiptap h2')).map((node) => node.textContent)).toEqual(['Product', 'Outcome'])
     expect(Array.from(document.querySelectorAll('.outline-link')).map((node) => node.textContent)).toEqual(['Product', 'Outcome'])
     expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(true)
+
+    const propertyTitle = document.querySelector<HTMLInputElement>('.document-properties [name="title"]')!
+    expect(propertyTitle.value).toBe('Renamed document title')
+    propertyTitle.value = 'Title from properties'
+    propertyTitle.dispatchEvent(new Event('input', { bubbles: true }))
+
+    expect(editableBundle.files[0].title).toBe('Title from properties')
+    expect(title.textContent).toBe('Title from properties')
+    expect(editableBundle.files[0].content).toContain('title: Title from properties')
   })
 
   it('clears the modified marker after an editor change is undone', async () => {

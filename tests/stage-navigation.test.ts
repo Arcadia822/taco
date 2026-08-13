@@ -19,7 +19,7 @@ const bundle = (): TacoBundle => ({
     file('spec.md'),
     { path: 'specs/001-stage/prototypes/checkout.html', mediaType: 'text/html', content: '<!doctype html><title>Checkout</title>' },
     file('checklists/requirements.md'),
-    file('interaction-design.md', '**Taco scope**: plan\n\n# Interaction'),
+    file('interaction-design.md', '---\ntaco_scope: plan\n---\n## Interaction'),
     file('plan.md'),
     file('contracts/api.md'),
     file('tasks.md'),
@@ -31,6 +31,10 @@ const bundle = (): TacoBundle => ({
 describe('stage navigation', () => {
   it('recognizes only the three exact Taco scope enum values', () => {
     expect(TACO_SCOPES).toEqual(['spec', 'plan', 'tasks'])
+    expect(tacoScope(file('visual-system.md', '---\ntaco_scope: plan\n---\n'))).toBe('plan')
+    expect(tacoScope(file('visual-system.md', '---\ntaco_scope: design\n---\n'))).toBeNull()
+    expect(tacoScope(file('visual-system.md', '---\ntaco_scope: [plan]\n---\n'))).toBeNull()
+    expect(tacoScope(file('visual-system.md', '---\ntitle: Plan\n---\n\n**Taco scope**: tasks'))).toBe('tasks')
     expect(tacoScope(file('visual-system.md', '**Taco scope**: plan\n'))).toBe('plan')
     expect(tacoScope(file('visual-system.md', '**Taco scope**: extends `plan.md`\n'))).toBeNull()
     expect(tacoScope(file('visual-system.md', '**Taco scope**: design\n'))).toBeNull()

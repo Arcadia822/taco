@@ -34,9 +34,9 @@ Replace clone-and-delete invitation export with explicit construction of the app
 
 Expose stable validation issue codes through `window.taco.validate()` and a local CLI command that reads the inert JSON block without executing the Taco runtime. Add a machine-readable runtime security marker to the shell. Update Agent instructions so credential detection precedes complete-file inspection or transmission.
 
-### 5. Prototype isolation
+### 5. Canonical local prototype execution
 
-Replace same-origin Blob navigation with an opaque-origin `data:text/html;base64` document opened using `noopener,noreferrer`. Add a restrictive prototype-owned CSP that blocks access to Taco-origin capabilities by origin separation while leaving prototype-authored network behavior outside Taco's authority boundary. If the browser cannot construct the isolated document, provide source download instead of same-origin execution.
+Package each HTML file's canonical absolute `file:` URL and validate that its decoded pathname ends in the already validated project-relative file path. Open that exact URL in a separate page using `noopener,noreferrer`, independent of the Taco container's own location. Reject HTML with a missing or mismatched URL; never construct `data:`, Blob, iframe, inline-execution, or source-download fallbacks.
 
 ### 6. Release and recovery
 

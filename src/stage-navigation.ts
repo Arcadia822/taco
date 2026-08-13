@@ -1,4 +1,5 @@
 import { relativePath, type TacoBundle, type TacoFile } from './model.ts'
+import { parseFrontmatter } from './frontmatter.ts'
 
 export type StageId = 'spec' | 'plan' | 'tasks'
 
@@ -39,7 +40,17 @@ const conventionStage = (path: string): StageId | null => {
 
 export const tacoScope = (file: TacoFile): StageId | null => {
   if (!file.path.toLowerCase().endsWith('.md')) return null
-  for (const line of file.content.split('\n')) {
+  const frontmatter = parseFrontmatter(file.content)
+  if (frontmatter.kind === 'invalid') return null
+  let legacySource = file.content
+  if (frontmatter.kind === 'valid') {
+    const scope = frontmatter.entries.find((entry) => entry.key === 'taco_scope')
+    if (scope) return scope.kind === 'string' && tacoScopeValues.has(String(scope.value))
+      ? scope.value as StageId
+      : null
+    legacySource = frontmatter.block.body
+  }
+  for (const line of legacySource.split('\n')) {
     const declaration = line.trim()
     if (!declaration) continue
     if (declaration.startsWith(tacoScopePrefix)) {

@@ -48,7 +48,7 @@ After installation, the SDD flow is:
 flowchart LR
     A["speckit.specify"] --> B["Spec Kit feature directory<br/>canonical source"]
     B --> C["Taco plugin updates<br/>&lt;feature&gt;/&lt;feature&gt;.taco.html"]
-    C --> D["Agent GUI opens Taco<br/>when internal browser is available"]
+    C --> D["Agent presents Taco<br/>as a clickable local file"]
     D --> E["Human reviews<br/>edits, and comments"]
     E --> F["Save .taco.html"]
     F --> G["Agent runs<br/>speckit.taco.review"]
@@ -106,7 +106,7 @@ speckit.taco.review specs/001-example/001-example.taco.html
 
 The packer includes every visible UTF-8 regular file. Its only default exclusions are `*.taco.html` and hidden paths; repeatable `--ignore` parameters add explicit feature-relative path or glob exclusions. Visible unsupported content fails packaging instead of disappearing silently.
 
-After each successful update, an Agent GUI with an internal browser opens and verifies the exact generated Taco automatically. Environments without that capability fall back to a clickable absolute path and must say that the file was not opened.
+After each successful update, the Agent presents the exact generated Taco as a native clickable local file. In Codex, the user click opens it in Browser; the Agent does not attempt autonomous `file://` navigation. Other Agent GUIs may additionally open and verify the file only when they explicitly support local HTML navigation.
 
 ## Project structure
 
@@ -127,15 +127,16 @@ The default specification directory is also the project's executable example. It
 
 ## Document routing
 
-A feature-root `README.md` routes to Specify and opens by default; `spec.md` is the fallback when no README exists. `spec.md`, `plan.md`, and `tasks.md` remain the three core stage files. Known Spec Kit files and directories follow Taco's built-in conventions. Every other Markdown document uses one of these internal enum declarations:
+A feature-root `README.md` routes to Specify and opens by default; `spec.md` is the fallback when no README exists. `spec.md`, `plan.md`, and `tasks.md` remain the three core stage files. Known Spec Kit files and directories follow Taco's built-in conventions. Every other Markdown document may use the YAML `taco_scope` property for explicit routing:
 
 ```md
-**Taco scope**: spec
-**Taco scope**: plan
-**Taco scope**: tasks
+---
+title: 'Interaction design'
+taco_scope: plan
+---
 ```
 
-The declaration must appear at the beginning of the file and use the complete enum value. Taco preserves it in canonical Markdown but hides it from rendered content. See `AGENTS.md` for the complete convention.
+The property accepts text, but only `spec`, `plan`, and `tasks` route a file. Taco presents all leading YAML frontmatter as an Obsidian-style property editor while preserving it in canonical Markdown. New specs store their title in YAML and begin the body at H2 instead of repeating the title as H1. See `AGENTS.md` for the complete convention.
 
 ## Design principles
 
@@ -158,7 +159,7 @@ Useful contribution areas include accessibility, editing, more offline text rend
 
 ## Project status
 
-Taco is currently a v0.2 prototype. File browsing, Markdown editing, generic source editing, JSON syntax highlighting, Mermaid, comments, single-file saving, same-origin collaboration, and optional cross-device encrypted relay collaboration are implemented. Structured YAML/JSON editing, version history, accounts, and SSO are not.
+Taco is currently a v0.2 prototype. File browsing, Markdown editing, YAML frontmatter properties, generic source editing, JSON syntax highlighting, Mermaid, comments, single-file saving, same-origin collaboration, and optional cross-device encrypted relay collaboration are implemented. Standalone structured YAML/JSON editing, version history, accounts, and SSO are not.
 
 Taco v0.2 is a testable prototype, not a production-stability commitment.
 

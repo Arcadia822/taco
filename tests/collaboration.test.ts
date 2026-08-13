@@ -178,6 +178,27 @@ describe('local collaboration', () => {
     expect(target.files[0].path).toBe(originalPath)
   })
 
+  it('keeps canonical HTML file URLs local while preserving the receiver copy', () => {
+    const source = bundle()
+    source.files.push({
+      id: 'file-prototype',
+      path: 'specs/collaboration/prototype.html',
+      mediaType: 'text/html',
+      content: '<!doctype html><title>Prototype</title>',
+      sourceUrl: 'file:///Users/source/project/specs/collaboration/prototype.html',
+    })
+    const target = structuredClone(source)
+    target.files[1].sourceUrl = 'file:///Users/target/project/specs/collaboration/prototype.html'
+
+    const sync = toSyncDoc(source)
+    expect(sync.files[1]).not.toHaveProperty('sourceUrl')
+
+    applySyncDoc(target, sync)
+    expect(target.files[1].sourceUrl).toBe(
+      'file:///Users/target/project/specs/collaboration/prototype.html',
+    )
+  })
+
   it('preserves receiver-local access, collaboration and compatibility metadata', () => {
     const source = bundle()
     const target = bundle()

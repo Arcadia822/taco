@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { parseFrontmatter } from '../src/frontmatter.ts'
 
 const featureRoot = join(process.cwd(), 'specs/001-taco-bento-product')
 const projectReadme = join(process.cwd(), 'README.md')
@@ -22,16 +23,14 @@ describe('bundled Markdown documents', () => {
     }
   })
 
-  it('keeps only Taco scope in each leading property block', () => {
+  it('uses YAML title metadata and no legacy bold property block', () => {
     for (const file of markdownFiles(featureRoot)) {
-      const properties: string[] = []
-      for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
-        if (!line.trim()) continue
-        const match = line.match(/^\*\*([^*]+)\*\*:/)
-        if (match) properties.push(match[1])
-        break
-      }
-      expect(properties.every((key) => key === 'Taco scope'), file).toBe(true)
+      const content = readFileSync(file, 'utf8')
+      expect(content, file).not.toMatch(/^\*\*[^*]+\*\*:/)
+      if (basename(file) === 'README.md') continue
+      const parsed = parseFrontmatter(content)
+      expect(parsed.kind, file).toBe('valid')
+      expect(parsed.kind === 'valid' && parsed.entries.some((entry) => entry.key === 'title' && entry.kind === 'string'), file).toBe(true)
     }
   })
 

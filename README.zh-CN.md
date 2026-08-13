@@ -48,7 +48,7 @@ Agent 会读取 Taco repo 中的说明，把 Spec Kit extension 安装到当前 
 flowchart LR
     A["speckit.specify"] --> B["Spec Kit feature directory<br/>canonical source"]
     B --> C["Taco plugin 更新<br/>&lt;feature&gt;/&lt;feature&gt;.taco.html"]
-    C --> D["Agent GUI 有 internal browser 时<br/>自动打开 Taco"]
+    C --> D["Agent 将 Taco 展示为<br/>可点击的本地文件"]
     D --> E["人类评审<br/>编辑和评论"]
     E --> F["保存 .taco.html"]
     F --> G["Agent 执行<br/>speckit.taco.review"]
@@ -106,7 +106,7 @@ speckit.taco.review specs/001-example/001-example.taco.html
 
 打包器包含所有可见 UTF-8 普通文件。唯一默认排除项是 `*.taco.html` 和隐藏路径；可重复的 `--ignore` 参数用于增加 feature-relative 路径或 glob 排除。其他可见但不受支持的内容会让打包明确失败，不会被静默丢弃。
 
-每次 update 成功后，具备 internal browser 的 Agent GUI 都会自动打开并验证对应 Taco。缺少该能力的环境必须退化为可点击的绝对路径，并明确说明文件没有自动打开。
+每次 update 成功后，Agent 都会把对应 Taco 作为原生、可点击的本地文件展示。在 Codex 中，由用户点击后交给 Browser 打开；Agent 不会尝试自主导航到 `file://`。其他 Agent GUI 只有在明确支持本地 HTML 导航时，才额外自动打开并验证文件。
 
 ## 项目结构
 
@@ -127,15 +127,16 @@ vite.config.ts                        默认 bundle 注入与构建配置
 
 ## 文档路由
 
-功能目录根部的 `README.md` 会进入 Specify 并默认打开；没有 README 时回退到 `spec.md`。`spec.md`、`plan.md` 和 `tasks.md` 仍是三个阶段的核心文件。已知 Spec Kit 文件和目录按内置约定路由；其他 Markdown 使用以下内部枚举声明：
+功能目录根部的 `README.md` 会进入 Specify 并默认打开；没有 README 时回退到 `spec.md`。`spec.md`、`plan.md` 和 `tasks.md` 仍是三个阶段的核心文件。已知 Spec Kit 文件和目录按内置约定路由；其他 Markdown 可以用 YAML `taco_scope` 属性显式路由：
 
 ```md
-**Taco scope**: spec
-**Taco scope**: plan
-**Taco scope**: tasks
+---
+title: '交互设计'
+taco_scope: plan
+---
 ```
 
-声明必须位于文件开头并使用完整枚举值。Taco 会在 canonical Markdown 中保留它，但不会在正文中显示。详细约定见 `AGENTS.md`。
+该属性允许输入文本，但只有 `spec`、`plan` 和 `tasks` 会参与路由。Taco 会用类似 Obsidian 的属性编辑器展示开头的 YAML frontmatter，同时保留 canonical Markdown。新 spec 把标题写入 YAML，正文从 H2 开始，不再用 H1 重复标题。详细约定见 `AGENTS.md`。
 
 ## 设计原则
 

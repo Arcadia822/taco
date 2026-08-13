@@ -1,3 +1,7 @@
+---
+title: "Data Model: File-first Taco Bundle"
+---
+
 ## Principle
 
 Taco v0.2 has only a transport model, no spec domain model. The user stories, requirement numbers, task checkboxes, and success criteria that appear in Markdown remain file content.
@@ -19,6 +23,7 @@ classDiagram
     +string path
     +string mediaType
     +string content
+    +string sourceUrl
   }
 
   class TacoCommentThread {
@@ -93,6 +98,7 @@ The display name is stored locally by the browser and sent through encrypted pre
 | `path` | string | must sit under `root/`; no absolute paths, backslashes, empty segments, `.`, or `..` |
 | `mediaType` | string | a content format hint that grants no semantic interpretation |
 | `content` | string | the file's raw UTF-8 text |
+| `sourceUrl` | string? | required only for HTML/HTM; the canonical absolute `file:` URL whose decoded pathname ends in `path` |
 
 ## Derived State
 
@@ -111,7 +117,7 @@ Future task counts, requirement coverage, or readiness may likewise only be pars
 
 ## Stage Projection
 
-Taco recognizes three core files: `spec.md`, `plan.md`, and `tasks.md`. A feature-root `README.md` enters Specify by convention and is preferred as the opening document, with `spec.md` as the fallback. Known Speckit artifacts enter their corresponding stage by path; other Markdown must declare its own membership with a ``**Taco scope**: spec|plan|tasks`` enum and enters the selected stage directly. That internal property is preserved in the canonical Markdown but not shown in the rendered document. Files that are undeclared or invalidly declared still remain in the bundle and in search, but they create no custom or extension group.
+Taco recognizes three core files: `spec.md`, `plan.md`, and `tasks.md`. A feature-root `README.md` enters Specify by convention and is preferred as the opening document, with `spec.md` as the fallback. Known Spec Kit artifacts enter their corresponding stage by path; other Markdown may declare `taco_scope: spec|plan|tasks` in YAML frontmatter and enter the selected stage directly. Other text values remain canonical and visibly invalid but create no custom or extension group.
 
 Both stages and directories are derived from `files[]` and are not written to a second navigation schema.
 
@@ -131,5 +137,5 @@ Storing both the position and the quote avoids binding comments to the volatile 
 - Known version: normal browsing.
 - Newer version: read-only browsing when the current runtime can parse the transport fields; must not overwrite.
 - Corrupt JSON or an illegal path: Recovery mode.
-- HTML/HTM: preserve the original text and derive a new-page prototype preview card.
+- HTML/HTM: preserve the original text and require a matching canonical `file:` URL for the new-page prototype preview card.
 - Unknown media type: plain-text source.

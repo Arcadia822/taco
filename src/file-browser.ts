@@ -42,7 +42,11 @@ import { OutlineController } from './outline-controller.ts'
 import { PresenceController } from './presence-controller.ts'
 import { ShareController } from './share-controller.ts'
 import { resolveEmbeddedMarkdownAssets } from './markdown-assets.ts'
-import { hasCollabSecrets, isolatedPrototypeUrl } from './security.ts'
+import { hasCollabSecrets } from './security.ts'
+import { localFileUrl } from './local-file-url.ts'
+import { frontmatterTitle, parseFrontmatter } from './frontmatter.ts'
+import { setEditorFrontmatterProperty } from './tiptap-document-properties.ts'
+import { tacoScope } from './stage-navigation.ts'
 
 type AuxiliaryTab = 'outline' | 'comments'
 
@@ -201,7 +205,7 @@ export class FileBrowser {
     this.markdownEditor?.destroy()
     this.markdownEditor = null
     this.outline.destroy()
-    this.revokeHtmlPreviewUrl()
+    this.resetHtmlPreviewUrl()
     this.fileNavigation?.destroy()
     this.fileNavigation = null
     this.comments.destroy()
@@ -359,7 +363,7 @@ export class FileBrowser {
     this.markdownEditor?.destroy()
     this.markdownEditor = null
     this.sourceEditor = null
-    this.revokeHtmlPreviewUrl()
+    this.resetHtmlPreviewUrl()
     this.viewer.innerHTML = ''
     const file = this.selected
     if (!file) {
@@ -408,9 +412,7 @@ export class FileBrowser {
     })
   }
 
-  private revokeHtmlPreviewUrl(): void {
-    if (!this.htmlPreviewUrl) return
-    if (this.htmlPreviewUrl.startsWith('blob:')) URL.revokeObjectURL(this.htmlPreviewUrl)
+  private resetHtmlPreviewUrl(): void {
     this.htmlPreviewUrl = null
   }
 
@@ -423,11 +425,7 @@ export class FileBrowser {
 
     const title = el('h1', 'html-preview-title', file.title?.trim() || fallbackFileTitle(file))
 
-    try {
-      this.htmlPreviewUrl = isolatedPrototypeUrl(file.content)
-    } catch {
-      this.htmlPreviewUrl = null
-    }
+    this.htmlPreviewUrl = localFileUrl(file.sourceUrl, file.path)
     const preview = el('a', 'html-preview-action')
     if (this.htmlPreviewUrl) {
       preview.href = this.htmlPreviewUrl
@@ -453,6 +451,10 @@ export class FileBrowser {
   }
 
   private mountMarkdownEditor(file: TacoFile, mountSerial: number): void {
+    const parsedFrontmatter = parseFrontmatter(file.content)
+    const canonicalTitle = frontmatterTitle(file.content)
+    if (canonicalTitle) file.title = canonicalTitle
+    else if (parsedFrontmatter.kind === 'valid') delete file.title
     const shell = el('section', 'markdown-document-shell')
     const titleRow = el('header', 'document-inline-title')
     const titleIcon = fileTypeIcon(file)
@@ -466,10 +468,9 @@ export class FileBrowser {
     title.title = this.t.fileTitle
     title.addEventListener('input', () => {
       const nextTitle = title.textContent?.replace(/\s+/g, ' ').trim() ?? ''
-      this.store.commit({ kind: 'file', fileId: file.id! }, () => {
-        if (nextTitle) file.title = nextTitle
-        else delete file.title
-      })
+      if (!this.markdownEditor || !setEditorFrontmatterProperty(this.markdownEditor, 'title', nextTitle || undefined)) {
+        title.setAttribute('aria-invalid', 'true')
+      } else title.removeAttribute('aria-invalid')
     })
     title.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
@@ -739,6 +740,9 @@ export class FileBrowser {
       try {
         this.markdownEditor.commands.setContent(blockHtml(this.selected.blocks) || '<p></p>', { emitUpdate: false })
         this.selected.content = this.markdownEditor.getMarkdown()
+        const title = frontmatterTitle(this.selected.content)
+        if (title) this.selected.title = title
+        else if (parseFrontmatter(this.selected.content).kind === 'valid') delete this.selected.title
         const maximum = this.markdownEditor.state.doc.content.size
         this.markdownEditor.commands.setTextSelection({
           from: Math.max(1, Math.min(selection.from, maximum)),
@@ -794,6 +798,10 @@ export class FileBrowser {
   private updateFileContent(path: string, content: string, blocks: TacoFile['blocks']): void {
     const canonical = fileByPath(this.bundle, path)
     if (!canonical) return
+    const previousScope = tacoScope(canonical)
+    const previousTitle = canonical.title
+    const parsedFrontmatter = parseFrontmatter(content)
+    const nextTitle = frontmatterTitle(content)
     const sameBlocks = canonical.blocks === blocks
       || (canonical.blocks?.length === blocks?.length
         && canonical.blocks?.every((block, index) => {
@@ -804,11 +812,21 @@ export class FileBrowser {
     this.store.commit({ kind: 'file', fileId: canonical.id! }, () => {
       canonical.content = content
       canonical.blocks = blocks
+      if (nextTitle) canonical.title = nextTitle
+      else if (parsedFrontmatter.kind === 'valid') delete canonical.title
       if (this.selected?.path === path) {
         this.selected.content = content
         this.selected.blocks = blocks
+        if (nextTitle) this.selected.title = nextTitle
+        else if (parsedFrontmatter.kind === 'valid') delete this.selected.title
       }
     })
+    const nextScope = tacoScope(canonical)
+    if (previousScope !== nextScope) this.fileNavigation?.refresh(this.selected)
+    if (previousTitle !== canonical.title && this.selected?.path === path) {
+      const title = this.viewer.querySelector<HTMLElement>('.document-inline-title-text')
+      if (title && document.activeElement !== title) title.textContent = canonical.title?.trim() || fallbackFileTitle(canonical)
+    }
   }
 
   private syncDirtyState(): void {

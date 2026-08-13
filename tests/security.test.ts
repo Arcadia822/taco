@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { TacoBundle } from '../src/model.ts'
 import {
   inertImageAttributes,
-  isolatedPrototypeUrl,
   credentialFreeFile,
   sanitizeEditorHtml,
   sanitizeMermaidSvg,
@@ -45,18 +44,13 @@ describe('untrusted Taco input policy', () => {
   })
 
   it('sanitizes Mermaid output after rendering', () => {
-    const svg = sanitizeMermaidSvg('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><style>@import url(https://attacker.test/x)</style><foreignObject><img src=x onerror=alert(2) /></foreignObject><a href="https://attacker.test/"><rect width="10" height="10" /></a><path style="fill:url(https://attacker.test/p)" d="M0 0" /></svg>')
+    const svg = sanitizeMermaidSvg('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><style>@import url(https://attacker.test/x)</style><foreignObject><img src=x onerror=alert(2) /></foreignObject><a href="https://attacker.test/"><rect width="10" height="10" /></a><path style="fill:url(https://attacker.test/p)" d="M0 0" /><path class="relation" d="M0 0 C10 0 10 10 20 10"/><g class="edgeLabel"><rect class="background" width="20" height="10"/></g></svg>')
     expect(svg).not.toMatch(/onload|onerror|foreignObject|<style|<a\b|https:\/\/attacker/i)
     expect(svg).toContain('<svg')
-  })
-
-  it('constructs a bounded opaque-origin prototype document', () => {
-    const url = isolatedPrototypeUrl('<!doctype html><html><head><title>Probe</title></head><body><script>document.body.dataset.ran="yes"</script></body></html>')
-    expect(url).toMatch(/^data:text\/html;base64,/)
-    const decoded = atob(url.split(',', 2)[1])
-    expect(decoded).toContain('Content-Security-Policy')
-    expect(decoded).toContain("base-uri 'none'")
-    expect(decoded).toContain('<title>Probe</title>')
+    const parsed = new DOMParser().parseFromString(svg, 'image/svg+xml')
+    expect(parsed.querySelector('path.relation')?.getAttribute('fill')).toBe('none')
+    expect(parsed.querySelector('.edgeLabel rect.background')?.getAttribute('fill')).toBe('none')
+    expect(parsed.querySelector('.edgeLabel rect.background')?.getAttribute('stroke')).toBe('none')
   })
 
   it('reports credential-bearing and outdated files without returning values', () => {

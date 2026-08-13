@@ -1,4 +1,7 @@
-**Taco scope**: plan
+---
+title: "Visual System: Taco File Browser"
+taco_scope: plan
+---
 
 ## Intent
 
@@ -9,7 +12,7 @@ Taco should feel like a calm local reference manual, not a project-management da
 - **Paper**: a white document background.
 - **File sidebar**: a light-neutral app surface with compact tree rows.
 - **Document**: a reading column up to 900px wide.
-- **Document properties**: a compact two-column key/value surface at the top of the Markdown, using the same quiet border, corner radius, and code treatment as tables, but without the extra height of table rows.
+- **Document properties**: a compact Obsidian-like key/value surface above the Markdown body, with quiet row focus, editable chips, semantic controls, and no generic data-grid chrome.
 - **Document outline**: an untitled, quiet column on the right inside the Markdown editing surface, for H1–H3 navigation.
 - **Source**: a dark monospace surface, distinct from the rendered body.
 

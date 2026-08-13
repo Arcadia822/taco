@@ -37,7 +37,7 @@ As a user, I receive one Taco file inside the feature directory after specificat
 2. **Given** a standard Spec Kit lifecycle command changes the active feature, **When** that command finishes, **Then** a mandatory Taco hook invokes `speckit.taco.update` exactly once.
 3. **Given** an Agent changes a feature artifact outside a lifecycle command, **When** it finishes the change, **Then** it invokes `speckit.taco.update` before reporting completion.
 4. **Given** an existing Taco with comments, **When** update refreshes it, **Then** current canonical files replace embedded copies while comment threads and stable document identity remain present.
-5. **Given** the active Agent GUI has an internal browser, **When** update succeeds, **Then** the Agent opens and verifies the exact generated Taco for immediate review; if the capability is unavailable or blocks local files, it reports a clickable absolute path and the failed presentation state without uploading the Taco.
+5. **Given** update succeeds, **When** the Agent presents the result, **Then** it always exposes the exact generated Taco through the GUI's native clickable local-file surface; in Codex it waits for the user's click to hand the file to Browser, while another GUI may additionally open and verify it only when autonomous local HTML navigation is explicitly supported.
 
 ---
 
@@ -96,7 +96,7 @@ As a user, I expect Taco to contain every eligible file under the feature direct
 - **FR-016**: The root README Quickstart, Chinese README, Agent guide, and extension README MUST describe the same installation—including the required project `AGENTS.md` merge—output location, commands, ignore behavior, hooks, and review loop.
 - **FR-017**: Installation and round-trip verification MUST run against the currently supported Spec Kit CLI in a clean temporary project using a declared Agent integration.
 - **FR-018**: Collaboration-enabled Taco files MUST continue to be treated as potentially credential-bearing and MUST NOT be sent to an external model, service, log, or ticket without user authorization.
-- **FR-019**: After every successful update, the Agent MUST open and verify the exact generated Taco in the Agent GUI's internal browser or equivalent preview when available, reusing the current preview surface when practical. If unavailable or blocked, it MUST provide a clickable absolute path and explicitly state that automatic display did not occur; it MUST NOT upload the Taco, weaken browser security, or substitute another application URL.
+- **FR-019**: After every successful update, the Agent MUST expose the exact generated Taco through the Agent GUI's native clickable local-file or artifact surface. In Codex it MUST return a clickable absolute file link and MUST NOT attempt autonomous `file://` navigation; the user's click hands the file to Browser. Another GUI MAY additionally open and verify it only when autonomous local HTML navigation is explicitly supported. The Agent MUST NOT substitute a `data:` URL, upload the Taco, weaken browser security, or substitute another application URL.
 
 ### Key Entities
 
@@ -124,7 +124,7 @@ As a user, I expect Taco to contain every eligible file under the feature direct
 - **SC-003**: Standard SDD stages from specify through implementation have mandatory update hooks registered in the installed project.
 - **SC-004**: A review round trip imports direct edits, exposes comments, preserves threads, and refreshes the same in-directory Taco with zero unintended file writes.
 - **SC-005**: Every Quickstart command can be copied into a clean test project and produces the documented files and registered Agent commands.
-- **SC-006**: Installed Agent command content contains a capability-aware presentation step for both initial update and post-review refresh, with verified internal-browser display and an honest local-path fallback.
+- **SC-006**: Installed Agent command content always produces a native clickable local-file presentation for initial update and post-review refresh, explicitly uses user-click Browser handoff in Codex, and distinguishes that state from direct verification in GUIs that support autonomous local HTML navigation.
 
 ## Verification Record
 

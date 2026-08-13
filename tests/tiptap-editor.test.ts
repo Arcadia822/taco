@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { Editor } from '@tiptap/core'
-import { createTacoEditorExtensions, migrateTacoBundleBlocks } from '../src/tiptap-editor.ts'
+import { blockHtml, createTacoEditorExtensions, migrateTacoBundleBlocks } from '../src/tiptap-editor.ts'
+import { setEditorFrontmatterProperty } from '../src/tiptap-document-properties.ts'
 import type { TacoBundle } from '../src/model.ts'
 
 const labels = {
@@ -31,14 +32,14 @@ afterEach(() => {
 })
 
 describe('Tiptap Markdown integration', () => {
-  it('renders leading Markdown properties as an editable two-column component', () => {
+  it('renders YAML frontmatter as an editable property component', () => {
     const markdown = [
-      '**Feature Directory**: `specs/001-product`',
-      '',
-      '**Created**: 2026-08-10',
-      '',
-      '**Status**: Draft',
-      '',
+      '---',
+      'title: Property editor',
+      'created: 2026-08-10',
+      'status: Draft',
+      'tags: [taco, editor]',
+      '---',
       '## Outcome',
       '',
       'Readable Markdown.',
@@ -53,27 +54,104 @@ describe('Tiptap Markdown integration', () => {
     })
 
     expect(editor.view.dom.querySelectorAll('.document-properties')).toHaveLength(1)
-    expect(Array.from(editor.view.dom.querySelectorAll('.document-property-key')).map((node) => node.textContent)).toEqual([
-      'Feature Directory', 'Created', 'Status',
+    expect(Array.from(editor.view.dom.querySelectorAll<HTMLInputElement>('.document-property-key')).map((node) => node.value)).toEqual([
+      'title', 'created', 'status', 'tags',
     ])
-    expect(editor.getMarkdown()).toContain('**Feature Directory**: `specs/001-product`')
-    expect(editor.getMarkdown()).toContain('**Created**: 2026-08-10')
+    expect(editor.getMarkdown()).toContain('title: Property editor')
+    expect(editor.getMarkdown()).toContain('created: 2026-08-10')
     expect(editor.getMarkdown()).toContain('## Outcome')
-    expect(editor.view.dom.querySelectorAll('.document-properties .document-property-key')).toHaveLength(3)
+    expect(editor.view.dom.querySelectorAll('.document-properties .document-property-key')).toHaveLength(4)
+    expect(editor.view.dom.querySelectorAll('.document-property-chip')).toHaveLength(2)
     expect(editor.view.dom.querySelector('li')?.textContent).toContain('FR-001')
   })
 
-  it('keeps the scope enum in Markdown while hiding it from the document view', () => {
+  it('keeps an invalid open-enum scope and exposes accessible validation', () => {
     editor = new Editor({
       extensions: createTacoEditorExtensions(labels),
-      content: '**Taco scope**: plan\n\n## Design\n\n**Decision**: Keep Markdown canonical.',
+      content: '---\ntaco_scope: design\n---\n## Design\n\n**Decision**: Keep Markdown canonical.',
       contentType: 'markdown',
     })
 
     expect(editor.view.dom.querySelectorAll('.document-properties')).toHaveLength(1)
-    expect(editor.view.dom.querySelector('.document-property[data-internal="true"]')?.hasAttribute('hidden')).toBe(true)
-    expect(editor.getMarkdown()).toContain('**Taco scope**: plan')
+    expect(editor.view.dom.querySelector('.document-property.is-invalid')).not.toBeNull()
+    expect(editor.view.dom.querySelector('[name="taco_scope"]')?.getAttribute('aria-invalid')).toBe('true')
+    expect(editor.getMarkdown()).toContain('taco_scope: design')
     expect(Array.from(editor.view.dom.querySelectorAll('p strong')).map((node) => node.textContent)).toContain('Decision')
+  })
+
+  it('preserves a non-text title while refusing to use it as a display title', () => {
+    editor = new Editor({
+      extensions: createTacoEditorExtensions(labels),
+      content: '---\ntitle: 42\n---\n## Body',
+      contentType: 'markdown',
+    })
+
+    expect(editor.view.dom.querySelector('.document-property.is-invalid')).not.toBeNull()
+    expect(editor.view.dom.querySelector('[name="title"]')?.getAttribute('aria-invalid')).toBe('true')
+    expect(editor.getMarkdown()).toContain('title: 42')
+  })
+
+  it('synchronizes title through the editor frontmatter transaction', () => {
+    editor = new Editor({
+      extensions: createTacoEditorExtensions(labels),
+      content: '## Body',
+      contentType: 'markdown',
+    })
+
+    expect(setEditorFrontmatterProperty(editor, 'title', 'Created title')).toBe(true)
+    expect(editor.getMarkdown()).toMatch(/^---\ntitle: Created title\n---\n\n## Body/)
+    expect((editor.view.dom.querySelector('[name="title"]') as HTMLInputElement).value).toBe('Created title')
+
+    expect(setEditorFrontmatterProperty(editor, 'title', 'Updated title')).toBe(true)
+    expect(editor.getMarkdown()).toContain('title: Updated title')
+    expect(setEditorFrontmatterProperty(editor, 'title', undefined)).toBe(true)
+    expect(editor.getMarkdown().trimEnd()).toBe('## Body')
+  })
+
+  it('adds properties and removes empty frontmatter through undoable editor transactions', () => {
+    editor = new Editor({
+      extensions: createTacoEditorExtensions(labels),
+      content: '---\ntitle: Only property\n---\n## Body',
+      contentType: 'markdown',
+    })
+
+    const add = editor.view.dom.querySelector<HTMLButtonElement>('.document-properties-add')!
+    add.click()
+    expect(editor.getMarkdown()).toContain('property: ""')
+    expect(editor.view.dom.querySelectorAll('.document-property')).toHaveLength(2)
+
+    editor.view.dom.querySelector<HTMLButtonElement>('[aria-label="Remove property"]')!.click()
+    editor.view.dom.querySelector<HTMLButtonElement>('[aria-label="Remove title"]')!.click()
+    expect(editor.getMarkdown().trimEnd()).toBe('## Body')
+    expect(editor.view.dom.querySelector('.document-properties')).toBeNull()
+
+    expect(editor.commands.undo()).toBe(true)
+    expect(editor.getMarkdown()).toContain('title: Only property')
+  })
+
+  it('preserves legacy bold metadata as ordinary editable Markdown', () => {
+    editor = new Editor({
+      extensions: createTacoEditorExtensions(labels),
+      content: '**Status**: Draft\n\n## Body',
+      contentType: 'markdown',
+    })
+
+    expect(editor.view.dom.querySelector('.document-properties')).toBeNull()
+    expect(editor.getMarkdown()).toContain('**Status**: Draft')
+  })
+
+  it('warns when YAML and leading legacy metadata both define a reserved property', () => {
+    editor = new Editor({
+      extensions: createTacoEditorExtensions(labels),
+      content: '---\ntitle: YAML title\n---\n\n**Title**: Legacy title\n\n## Body',
+      contentType: 'markdown',
+    })
+
+    const warning = editor.view.dom.querySelector('.document-properties-duplicate-warning')
+    expect(warning?.textContent).toContain('title')
+    expect(warning?.textContent).toContain('YAML')
+    expect(editor.getMarkdown()).toContain('**Title**: Legacy title')
+
   })
 
   it('round-trips headings, task lists, tables and Mermaid fences as Markdown', () => {
@@ -124,6 +202,28 @@ describe('Tiptap Markdown integration', () => {
     expect(bundle.files[0].blocks?.[0].type).toBe('image')
     expect(bundle.files[0].blocks?.[0].html).toContain('data-taco-source="docs/assets/taco-overview.png"')
     expect(bundle.files[0].blocks?.[0].html).not.toContain('src="docs/assets/taco-overview.png"')
+  })
+
+  it('keeps frontmatter source in the collaboration block HTML', () => {
+    const bundle: TacoBundle = {
+      format: 'taco/files',
+      version: 1,
+      docId: 'frontmatter-migration',
+      title: 'Frontmatter migration',
+      root: 'specs/frontmatter-migration',
+      files: [{
+        id: 'file-spec',
+        path: 'specs/frontmatter-migration/spec.md',
+        mediaType: 'text/markdown',
+        content: '---\ntitle: Preserved\nstatus: Draft\n---\n## Body',
+      }],
+    }
+
+    migrateTacoBundleBlocks(bundle, labels)
+
+    expect(bundle.files[0].blocks?.[0].type).toBe('documentProperties')
+    expect(bundle.files[0].blocks?.[0].html).toContain('data-yaml="title%3A%20Preserved%0Astatus%3A%20Draft"')
+    expect(blockHtml(bundle.files[0].blocks)).toContain('data-yaml="title%3A%20Preserved%0Astatus%3A%20Draft"')
   })
 
   it('preserves a centered HTML README header as one editable block', () => {

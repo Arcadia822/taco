@@ -87,6 +87,13 @@ export class FileNavigation {
     return this.scroll?.scrollTop ?? this.scrollTop
   }
 
+  refresh(selected: TacoFile | null): void {
+    if (this.scroll) this.scrollTop = this.scroll.scrollTop
+    this.scroll?.remove()
+    this.scroll = null
+    this.paint(selected)
+  }
+
   paint(selected: TacoFile | null): void {
     this.selected = selected
     if (this.scroll) {
