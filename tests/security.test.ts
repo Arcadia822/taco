@@ -52,10 +52,14 @@ describe('untrusted Taco input policy', () => {
   })
 
   it('sanitizes Mermaid output after rendering', () => {
-    const svg = sanitizeMermaidSvg('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><style>@import url(https://attacker.test/x)</style><foreignObject><img src=x onerror=alert(2) /></foreignObject><a href="https://attacker.test/"><rect width="10" height="10" /></a><path style="fill:url(https://attacker.test/p)" d="M0 0" /><path class="relation" d="M0 0 C10 0 10 10 20 10"/><g class="edgeLabel"><rect class="background" width="20" height="10"/></g></svg>')
+    const svg = sanitizeMermaidSvg('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><style>@import url(https://attacker.test/x)</style><foreignObject><img src=x onerror=alert(2) /></foreignObject><a href="https://attacker.test/"><rect width="10" height="10" /></a><path style="fill:url(https://attacker.test/p)" d="M0 0" /><path class="relation" d="M0 0 C10 0 10 10 20 10"/><g class="node"><g class="label"><text>Centered node</text></g></g><g class="edgeLabel"><rect class="background" width="20" height="10"/><text>Centered edge</text></g></svg>')
     expect(svg).not.toMatch(/onload|onerror|foreignObject|<style|<a\b|https:\/\/attacker/i)
-    expect(svg).toContain('<svg')
     const parsed = new DOMParser().parseFromString(svg, 'image/svg+xml')
+    expect(Array.from(parsed.querySelectorAll('.node .label text, .edgeLabel text')).every((label) =>
+      label.getAttribute('text-anchor') === 'middle'
+      && label.getAttribute('style')?.includes('text-anchor:middle')))
+      .toBe(true)
+    expect(svg).toContain('<svg')
     expect(parsed.querySelector('path.relation')?.getAttribute('fill')).toBe('none')
     expect(parsed.querySelector('.edgeLabel rect.background')?.getAttribute('fill')).toBe('none')
     expect(parsed.querySelector('.edgeLabel rect.background')?.getAttribute('stroke')).toBe('none')

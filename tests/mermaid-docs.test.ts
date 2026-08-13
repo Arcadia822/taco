@@ -88,6 +88,14 @@ describe('embedded technical diagrams', () => {
       expect(Array.from(flow.querySelectorAll('.node rect, .node circle, .node ellipse, .node polygon, .node > path')).every((shape) =>
         shape.getAttribute('style')?.includes('fill:var(--doc-soft);stroke:var(--accent);stroke-width:1px')))
         .toBe(true)
+      const flowLabels = Array.from(flow.querySelectorAll(
+        '.rough-node .label text, .node .label text, .image-shape .label text, .icon-shape .label text, .edgeLabel text, .flowchartTitleText',
+      ))
+      expect(flowLabels.length).toBeGreaterThan(0)
+      expect(flowLabels.every((label) =>
+        label.getAttribute('text-anchor') === 'middle'
+        && label.getAttribute('style')?.includes('text-anchor:middle')))
+        .toBe(true)
       expect(Array.from(flow.querySelectorAll('path.flowchart-link, .edgePath path')).every((path) =>
         path.getAttribute('style')?.includes('fill:none;stroke:var(--doc-subtle);stroke-width:1.25px')))
         .toBe(true)

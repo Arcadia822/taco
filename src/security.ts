@@ -134,6 +134,12 @@ export const sanitizeMermaidSvg = (svg: string): string => {
     text.setAttribute('stroke', 'none')
     overrideSvgStyle(text, 'fill:var(--doc-ink);stroke:none')
   }
+  for (const label of Array.from(root.querySelectorAll(
+    '.rough-node .label text, .node .label text, .image-shape .label text, .icon-shape .label text, .edgeLabel text, .flowchartTitleText',
+  ))) {
+    label.setAttribute('text-anchor', 'middle')
+    overrideSvgStyle(label, 'text-anchor:middle')
+  }
   for (const shape of Array.from(root.querySelectorAll('.node rect, .node circle, .node ellipse, .node polygon, .node > path, g.classGroup rect'))) {
     overrideSvgStyle(shape, 'fill:var(--doc-soft);stroke:var(--accent);stroke-width:1px')
   }
