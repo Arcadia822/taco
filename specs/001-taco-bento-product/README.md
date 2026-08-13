@@ -159,9 +159,9 @@ Useful contribution areas include accessibility, editing, more offline text rend
 
 ## Project status
 
-Taco is currently a v0.2 prototype. File browsing, Markdown editing, YAML frontmatter properties, generic source editing, JSON syntax highlighting, Mermaid, comments, single-file saving, same-origin collaboration, and optional cross-device encrypted relay collaboration are implemented. Standalone structured YAML/JSON editing, version history, accounts, and SSO are not.
+Taco is currently a v0.3 prototype. File browsing, Markdown editing, YAML frontmatter properties, generic source editing, JSON syntax highlighting, Mermaid, comments, single-file saving, same-origin collaboration, and optional cross-device encrypted relay collaboration are implemented. Standalone structured YAML/JSON editing, version history, accounts, and SSO are not.
 
-Taco v0.2 is a testable prototype, not a production-stability commitment.
+Taco v0.3 is a testable prototype, not a production-stability commitment.
 
 ## License and attribution
 

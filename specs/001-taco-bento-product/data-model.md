@@ -4,7 +4,7 @@ title: "Data Model: File-first Taco Bundle"
 
 ## Principle
 
-Taco v0.2 has only a transport model, no spec domain model. The user stories, requirement numbers, task checkboxes, and success criteria that appear in Markdown remain file content.
+Taco v0.3 has only a transport model, no spec domain model. The user stories, requirement numbers, task checkboxes, and success criteria that appear in Markdown remain file content.
 
 ```mermaid
 classDiagram
@@ -98,7 +98,7 @@ The display name is stored locally by the browser and sent through encrypted pre
 | `path` | string | must sit under `root/`; no absolute paths, backslashes, empty segments, `.`, or `..` |
 | `mediaType` | string | a content format hint that grants no semantic interpretation |
 | `content` | string | the file's raw UTF-8 text |
-| `sourceUrl` | string? | required only for HTML/HTM; the canonical absolute `file:` URL whose decoded pathname ends in `path` |
+| `sourceUrl` | string? | required only for HTML/HTM; CLI packages use the canonical absolute `file:` URL whose decoded pathname ends in `path`; the committed showcase shell alone uses the exact portable `../<path>` reference so builds are reproducible across checkout locations |
 
 ## Derived State
 
@@ -125,7 +125,7 @@ Both stages and directories are derived from `files[]` and are not written to a 
 
 Comments use a thread model. A `TacoCommentThread` contains a stable `id`, an `open/resolved` status, timestamps, a message array, and a text anchor:
 
-- `anchor.path`: the file path the comment belongs to; v0.2 does not allow renaming files, so this path does not change when a title is edited.
+- `anchor.path`: the file path the comment belongs to; v0.3 does not allow renaming files, so this path does not change when a title is edited.
 - `anchor.position.start/end`: a fast lookup range based on the currently rendered text.
 - `anchor.quote.exact/prefix/suffix`: a Web Annotation-style quote with context; used to re-anchor after positions become invalid.
 - `messages[]`: each message contains a stable ID, a local author name, a body, and a creation time.

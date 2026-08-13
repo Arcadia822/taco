@@ -1,4 +1,4 @@
-extension,media_type,v0.2_view,editable
+extension,media_type,v0.3_view,editable
 .md,text/markdown,WYSIWYG,true
 .yaml,application/yaml,source,false
 .json,application/json,source,false

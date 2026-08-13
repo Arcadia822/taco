@@ -80,6 +80,15 @@ describe('file-first Taco bundle', () => {
     expect(parseBundle(JSON.stringify(nonHtml))).toMatchObject({ ok: false, err: 'shape' })
   })
 
+  it('accepts the exact portable HTML reference used by the reproducible showcase shell', () => {
+    const portable = bundle()
+    portable.files[2].sourceUrl = '../specs/001-test/prototype.html'
+    expect(parseBundle(JSON.stringify(portable))).toMatchObject({ ok: true })
+
+    portable.files[2].sourceUrl = '../specs/001-test/other.html'
+    expect(parseBundle(JSON.stringify(portable))).toMatchObject({ ok: false, err: 'shape' })
+  })
+
   it('accepts only lowercase SHA-256 source baselines', () => {
     const based = bundle()
     based.files[0].sourceHash = 'a'.repeat(64)

@@ -7,7 +7,7 @@ title: "Specification Quality Checklist: Taco File Browser"
 - [x] The `specs/` files are the canonical source.
 - [x] No parallel Story, Requirement, Task, or Evidence schema is kept anymore.
 - [x] JSON is described only as the single-file transport envelope.
-- [x] v0.2 is explicitly read-only file browsing.
+- [x] v0.3 is explicitly read-only file browsing.
 - [x] Leading Markdown YAML frontmatter has structured property display and editing; standalone YAML/JSON files retain source editing and JSON highlighting.
 
 ## File Behavior
@@ -27,4 +27,4 @@ title: "Specification Quality Checklist: Taco File Browser"
 - [x] Claims support for Markdown and generic source editing; does not claim structured YAML/JSON editing, Readiness, or a ChangeSet UI.
 - [x] Future persistence must operate on the file map.
 - [x] Future semantic views must stay derived.
-- [x] v0.2 no longer keeps any unresolved `NEEDS CLARIFICATION`.
+- [x] v0.3 no longer keeps any unresolved `NEEDS CLARIFICATION`.

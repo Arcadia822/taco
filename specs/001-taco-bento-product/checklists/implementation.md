@@ -30,7 +30,7 @@ title: "Implementation Audit: Taco File Browser"
 - [x] The source directory and the embedded bundle match exactly in file count and content.
 - [ ] A direct `file://` offline browser run issues zero resource requests.
 - [x] The 720px responsive-drawer and horizontal-overflow browser checks pass.
-- [ ] The automated WCAG audit passes on the v0.2 artifact.
+- [ ] The automated WCAG audit passes on the v0.3 artifact.
 
 ## Browser Evidence
 

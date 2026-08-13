@@ -159,9 +159,9 @@ npm run check
 
 ## 项目状态
 
-Taco 当前处于 v0.2 原型阶段。文件浏览、Markdown 编辑、通用源码编辑、JSON 语法高亮、Mermaid、评论、单文件保存、同源协作和可选的跨设备加密 relay 已经实现；YAML/JSON 结构化编辑、版本历史、账号与 SSO 仍未实现。
+Taco 当前处于 v0.3 原型阶段。文件浏览、Markdown 编辑、YAML frontmatter 属性、通用源码编辑、JSON 语法高亮、Mermaid、评论、单文件保存、同源协作和可选的跨设备加密 relay 已经实现；独立 YAML/JSON 文件的结构化编辑、版本历史、账号与 SSO 仍未实现。
 
-Taco v0.2 是可运行、可测试的原型，不构成生产稳定性承诺。
+Taco v0.3 是可运行、可测试的原型，不构成生产稳定性承诺。
 
 ## 许可与来源
 

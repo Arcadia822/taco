@@ -1,5 +1,5 @@
 import { MAX_BLOCK_HTML, SUPPORTED_BLOCK_TYPES } from './security.ts'
-import { localFileUrl } from './local-file-url.ts'
+import { localFileReference } from './local-file-url.ts'
 
 export const FORMAT = 'taco/files'
 export const FORMAT_VERSION = 1
@@ -146,8 +146,8 @@ export function parseBundle(json: string): ParseResult {
       return { ok: false, err: 'shape', detail: `file sourceHash is invalid: ${value.path}` }
     }
     const html = value.mediaType === 'text/html' || /\.html?$/i.test(value.path)
-    if (html && !localFileUrl(value.sourceUrl, value.path)) {
-      return { ok: false, err: 'shape', detail: `HTML file requires its canonical file URL: ${value.path}` }
+    if (html && !localFileReference(value.sourceUrl, value.path)) {
+      return { ok: false, err: 'shape', detail: `HTML file requires a valid local file reference: ${value.path}` }
     }
     if (!html && value.sourceUrl !== undefined) {
       return { ok: false, err: 'shape', detail: `sourceUrl is only valid for HTML files: ${value.path}` }

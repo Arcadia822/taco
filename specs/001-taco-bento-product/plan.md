@@ -110,7 +110,7 @@ extensions/taco/
 4. `vite-plugin-singlefile` inlines the runtime and CSS.
 5. The browser parser validates path boundaries before rendering.
 6. Stage navigation recognizes core and conventional Spec Kit paths, routes HTML/HTM prototype paths to Specify, then reads the YAML `taco_scope` open enum from other Markdown documents; physical subdirectories stay nested inside one of the three default stages.
-7. Packaging records each HTML file's canonical absolute `file:` URL after verifying that it matches the validated project-relative path. Selecting the file opens that URL directly regardless of the Taco container's location; missing or mismatched URLs fail validation and never fall back to embedded HTML execution.
+7. CLI packaging records each HTML file's canonical absolute `file:` URL after verifying that it matches the validated project-relative path. The committed showcase build instead records the exact `../<project-relative-path>` reference so CI and local checkout builds are identical, then resolves it only from a local `file:` Taco. Selecting a valid file opens its resolved URL directly; missing or mismatched references fail validation and never fall back to embedded HTML execution.
 
 ## Spec Kit Review Round-Trip
 

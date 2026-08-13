@@ -104,7 +104,7 @@ As a reviewer, I can deliberately open the real local HTML prototype in a separa
 1. **Given** a packaged HTML prototype, **When** the user opens it, **Then** the target is the exact validated `file:` URL and the new page has no opener relationship to Taco.
 2. **Given** a prototype contains JavaScript, **When** the user explicitly opens it, **Then** its code may execute only in the browser page for that local file and cannot execute in the Taco application page.
 3. **Given** the prototype is never opened, **When** its card is displayed, **Then** no prototype code runs and no prototype-requested network access occurs.
-4. **Given** an HTML file lacks a canonical URL or the URL does not match its validated project-relative path, **When** an Agent packages or Taco parses it, **Then** the file is rejected instead of receiving a `data:`, Blob, or source-download fallback.
+4. **Given** an HTML file lacks a canonical URL or the exact portable showcase reference, or that reference does not match its validated project-relative path, **When** an Agent packages or Taco parses it, **Then** the file is rejected instead of receiving a `data:`, Blob, or source-download fallback.
 5. **Given** the Taco container is copied or opened from another location, **When** Preview is clicked, **Then** the packaged canonical source URL remains the target; Taco does not derive a replacement URL from the container location.
 
 ---
@@ -177,7 +177,7 @@ As a maintainer or user, I can identify and replace old Taco runtimes and reset 
 
 - **FR-032**: HTML prototype execution MUST occur only after explicit user action and in a separate page targeting the validated canonical `file:` URL.
 - **FR-033**: The preview link MUST use `_blank` and `noopener noreferrer`; prototype code MUST NOT execute in the Taco DOM or receive an opener relationship.
-- **FR-034**: Packaging and runtime validation MUST reject HTML without a matching canonical `file:` URL. Taco MUST NOT construct a `data:`, Blob, iframe, inline execution, or source-download fallback.
+- **FR-034**: CLI packaging MUST reject HTML without a matching canonical `file:` URL. Runtime validation additionally permits the committed showcase shell's exact portable `../<project-relative-path>` reference, resolving it only from a local `file:` Taco page. Taco MUST NOT construct a `data:`, Blob, iframe, inline execution, or source-download fallback.
 - **FR-035**: Selecting or displaying a prototype card MUST NOT parse the prototype as live DOM, run code, or initiate author-controlled network requests.
 
 ### Release and Recovery Requirements

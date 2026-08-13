@@ -80,7 +80,7 @@ title: "Tasks: Taco File Browser"
 
 - [x] T045 Classify `.html` / `.htm` files and route them to the Specify stage
 - [x] T046 Render an HTML prototype card instead of an inline preview or source editor
-- [x] T047 Record and open each HTML prototype's canonical absolute `file:` URL with `noopener noreferrer`, independently of the Taco container's location
+- [x] T047 Record and open each CLI-packaged HTML prototype's canonical absolute `file:` URL with `noopener noreferrer`; keep the committed showcase build reproducible with an exact local-only portable reference
 - [x] T048 Reject HTML without a matching canonical file URL and test classification, routing, validation, and the absence of `data:` or Blob preview fallbacks
 
 ## Phase 8 — Spec Kit Review Extension

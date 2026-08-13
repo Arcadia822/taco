@@ -4,7 +4,6 @@ import { defineConfig } from 'vitest/config'
 import { viteSingleFile } from 'vite-plugin-singlefile'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join, relative, resolve, sep } from 'node:path'
-import { pathToFileURL } from 'node:url'
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
 const projectRoot = resolve(new URL('.', import.meta.url).pathname)
@@ -19,7 +18,7 @@ const embeddedAssets = {
 
 const fileTitles: Record<string, string> = {
   'README.md': 'Taco',
-  'checklists/implementation.md': 'Taco v0.2 Implementation Audit',
+  'checklists/implementation.md': 'Taco v0.3 Implementation Audit',
   'checklists/requirements.md': 'Specification Quality Checklist: Taco File Browser',
   'contracts/taco-document.md': 'Contract: Taco File Bundle v1',
   'data-model.md': 'Data Model: File-first Taco Bundle',
@@ -64,7 +63,9 @@ const readFiles = (directory: string): EmbeddedFile[] => {
         mediaType: type,
         content: readFileSync(absolute, 'utf8'),
         ...(fileTitles[relativePath] ? { title: fileTitles[relativePath] } : {}),
-        ...(type === 'text/html' ? { sourceUrl: pathToFileURL(absolute).href } : {}),
+        // The committed showcase shell must be byte-identical across checkout locations.
+        // Runtime resolves this exact portable reference to a canonical file: URL.
+        ...(type === 'text/html' ? { sourceUrl: `../${path}` } : {}),
       })
     }
   }

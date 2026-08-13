@@ -5,7 +5,7 @@ taco_scope: plan
 
 ## 1. Mental Model
 
-Taco v0.2 is a small local knowledge base containing one Spec Kit feature directory. The file sidebar is the only global panel; the outline and comments belong to the selected document and share a persistent auxiliary area beneath the workspace Header.
+Taco v0.3 is a small local knowledge base containing one Spec Kit feature directory. The file sidebar is the only global panel; the outline and comments belong to the selected document and share a persistent auxiliary area beneath the workspace Header.
 
 ```text
 ┌──────────────────┬───────────────────────────────────────────────────────┐
@@ -86,11 +86,11 @@ YAML, JSON, and unknown files open directly in the generic source editor. It has
 
 JSON uses live syntax highlighting behind the native editing surface. YAML and unknown text keep plain source coloring. Long source lines scroll horizontally instead of wrapping.
 
-HTML and HTM files use a different boundary: near the top of the viewer, a centered single-line card shows only the file icon, the title, and an `Open Preview` action. Packaging records the canonical absolute `file:` URL, and the action opens it with `_blank` plus `noopener noreferrer` regardless of the Taco container's location; relative CSS, JavaScript, and image references therefore retain their normal filesystem base. Missing or mismatched URLs are rejected before the file enters a valid Taco. Taco never substitutes a `data:` or Blob URL, embeds a prototype in an iframe, or injects it into the current document.
+HTML and HTM files use a different boundary: near the top of the viewer, a centered single-line card shows only the file icon, the title, and an `Open Preview` action. CLI packaging records the canonical absolute `file:` URL, and the action opens it with `_blank` plus `noopener noreferrer` regardless of the Taco container's location; relative CSS, JavaScript, and image references therefore retain their normal filesystem base. The committed showcase shell uses only the exact `../<project-relative-path>` reference and resolves it to the same canonical `file:` URL at runtime, avoiding machine-specific build output. Missing or mismatched references are rejected before the file enters a valid Taco. Taco never substitutes a `data:` or Blob URL, embeds a prototype in an iframe, or injects it into the current document.
 
 ## 6. Search
 
-`⌘/Ctrl+K` opens a dialog that searches relative paths and file text. Selecting a result closes the dialog and opens the file. v0.2 does not rank or index semantic entities.
+`⌘/Ctrl+K` opens a dialog that searches relative paths and file text. Selecting a result closes the dialog and opens the file. v0.3 does not rank or index semantic entities.
 
 Search has no persistent Header button; it is a keyboard tool.
 

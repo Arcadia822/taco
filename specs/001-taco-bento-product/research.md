@@ -20,7 +20,7 @@ title: "Research: Taco File Browser"
 
 ## Decision 3 — Markdown First, Generic Source Editing for Other Formats
 
-**Decision**: v0.2 renders Markdown as WYSIWYG. YAML, JSON, and unknown text keep exact source in a generic editor; JSON gets syntax highlighting, but no format is projected into a structured form.
+**Decision**: v0.3 renders Markdown as WYSIWYG. YAML, JSON, and unknown text keep exact source in a generic editor; JSON gets syntax highlighting, but no format is projected into a structured form.
 
 **Reason**: Markdown covers the primary Spec Kit artifacts. Exact source editing preserves file fidelity, while a premature YAML/OpenAPI form would just repeat the same over-modeling mistake at a smaller scale.
 
