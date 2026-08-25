@@ -18,6 +18,18 @@ specify extension list
 
 The supported Taco source checkout already contains the production shell at `extensions/taco/assets/taco-shell.html`. Spec Kit copies that shell and the CLI into `.specify/extensions/taco/`, and registers both commands with the project's active Agent integration. No target-project npm installation is involved.
 
+## Release installation
+
+Install the published extension archive into the exact initialized Spec Kit project that should receive Taco:
+
+```bash
+specify extension add taco --from \
+  https://github.com/Arcadia822/taco/archive/refs/tags/v0.3.1.zip
+specify extension list
+```
+
+Release tags are generated from the `extensions/taco/` subtree, so the tagged archive contains `extension.yml` at its root. The source repository keeps the extension under `extensions/taco/` for development.
+
 The installing Agent must then merge the installed [`policies/taco-agent-policy.md`](policies/taco-agent-policy.md) into the target project's existing `AGENTS.md` without replacing unrelated instructions. Plugin installation is not complete until that durable prompt is present. It governs later `speckit.specify` work: new specs use YAML `title`, omit a duplicate H1, and begin the body at H2; routed custom Markdown uses YAML `taco_scope`. The policy also requires Taco update after every canonical feature-artifact change and the review-comment round trip; it does not restate packer's built-in Taco-output exclusion.
 
 ## Agent commands
@@ -71,6 +83,9 @@ When refreshing a legacy Taco, `pack --from` accepts its missing old HTML URL on
 
 ```text
 extension.yml
+README.md
+LICENSE
+CHANGELOG.md
 commands/update.md
 commands/review.md
 bin/taco.mjs
@@ -78,4 +93,4 @@ assets/taco-shell.html
 policies/taco-agent-policy.md
 ```
 
-The shell and CLI are local. Creating, updating, opening, and reviewing a Taco requires no network connection. A collaboration-enabled Taco can contain access credentials; follow [`../../docs/agent-installation.md`](../../docs/agent-installation.md) before sending its content to any external model, service, log, or ticket.
+The shell and CLI are local. Creating, updating, opening, and reviewing a Taco requires no network connection. A collaboration-enabled Taco can contain access credentials; follow the [Agent installation guide](https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md) before sending its content to any external model, service, log, or ticket.
