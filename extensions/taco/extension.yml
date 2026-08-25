@@ -10,7 +10,7 @@ extension:
   license: 'MIT'
 
 requires:
-  speckit_version: '>=0.16.0,<1.0.0'
+  speckit_version: '>=0.16.0,<2.0.0'
   commands:
     - 'speckit.specify'
 

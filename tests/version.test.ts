@@ -10,4 +10,11 @@ describe('release version', () => {
 
     expect(extensionVersion).toBe(packageJson.version)
   })
+
+  it('supports the validated Spec Kit 0.16 and 1.x release lines', () => {
+    const manifest = readFileSync(resolve('extensions/taco/extension.yml'), 'utf8')
+    const specKitRange = manifest.match(/^\s{2}speckit_version:\s*['"]([^'"]+)['"]\s*$/m)?.[1]
+
+    expect(specKitRange).toBe('>=0.16.0,<2.0.0')
+  })
 })
