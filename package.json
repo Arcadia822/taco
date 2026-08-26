@@ -1,7 +1,7 @@
 {
   "name": "taco",
   "private": true,
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "A single-file workspace for humans and agents to review, hand off, and manage software specs.",
   "license": "MIT",
   "author": "Arcadia",

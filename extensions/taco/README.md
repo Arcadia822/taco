@@ -29,7 +29,7 @@ Install the published extension archive into the exact initialized Spec Kit proj
 
 ```bash
 specify extension add taco --from \
-  https://github.com/Arcadia822/taco/archive/refs/tags/v0.3.1.zip
+  https://github.com/Arcadia822/taco/archive/refs/tags/v0.4.0.zip
 node .specify/extensions/taco/bin/taco.mjs prepare-template \
   --project-root "$PWD" \
   --json
