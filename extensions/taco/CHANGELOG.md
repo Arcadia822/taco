@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Prepare the core Spec Kit specification template during installation, using YAML frontmatter that distinguishes logical `feature_id` from an optional verified `git_branch` while preserving customized bodies.
+- Preserve replacement-token source text literally when embedding bundle JSON.
+
 ## 0.3.1 - 2026-08-25
 
 - Package complete Spec Kit feature directories as portable Taco review files.

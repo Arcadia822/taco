@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { parse } from 'yaml'
 
 const read = (path: string): string => readFileSync(path, 'utf8')
 
@@ -30,6 +31,30 @@ describe('Taco Agent instructions', () => {
     expect(installation).toContain('.specify/extensions/taco/policies/taco-agent-policy.md')
     expect(installation).toContain('a post-generation Taco hook cannot prevent malformed Markdown')
     expect(extension).toContain('new specs use YAML `title`, omit a duplicate H1')
+  })
+
+  it('replaces the core Spec Kit spec template with an unambiguous YAML contract', () => {
+    const manifest = parse(read('extensions/taco/extension.yml')) as {
+      provides: { templates: Array<{ name: string; file: string }> }
+    }
+    const declaration = manifest.provides.templates.find(({ name }) => name === 'spec-template')
+    expect(declaration?.file).toBe('templates/spec-template.md')
+    expect(read('docs/agent-installation.md')).toContain('prepare-template')
+
+    const template = read(`extensions/taco/${declaration!.file}`)
+    expect(template).toMatch(/^---\n/)
+    const frontmatter = parse(template.match(/^---\n([\s\S]*?)\n---/)![1]) as Record<string, string>
+    expect(frontmatter).toMatchObject({
+      title: '[FEATURE NAME]',
+      feature_id: '[###-feature-name]',
+      created: '[DATE]',
+      status: 'Draft',
+      input: 'User description: "$ARGUMENTS"',
+    })
+    expect(template).not.toContain('Feature Branch')
+    expect(template).not.toContain('git_branch')
+    expect(template).not.toMatch(/^#\s/m)
+    expect(template).toMatch(/^## User Scenarios & Testing/m)
   })
 
   it('keeps the repository routing prompt on YAML metadata', () => {
