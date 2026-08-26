@@ -515,6 +515,14 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .dialog-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid var(--line); }
 .dialog-head h2 { margin: 0; font: 700 22px var(--serif); }
 .dialog-body { padding: 18px; }
+.confirmation-dialog { width: min(440px, calc(100vw - 32px)); max-height: min(560px, calc(100dvh - 32px)); padding: 0; overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.confirmation-dialog::backdrop { background: rgba(32, 35, 31, .38); backdrop-filter: blur(3px); }
+.confirmation-dialog-title { margin: 0; padding: 18px 18px 0; font: 700 20px/1.25 var(--heading); text-wrap: balance; }
+.confirmation-dialog-body { display: grid; gap: 10px; padding: 12px 18px 18px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.confirmation-dialog-body p { margin: 0; overflow-wrap: anywhere; }
+.confirmation-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--line); }
+.confirmation-dialog-actions button { min-height: 32px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); font-size: 12px; font-weight: 650; }
+.confirmation-dialog-confirm { border-color: var(--accent-dark) !important; background: var(--accent) !important; color: #fff; }
 .search-input { width: 100%; padding: 12px 13px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
 .search-results { display: grid; gap: 7px; margin-top: 12px; }
 .search-result { display: grid; grid-template-columns: 16px 1fr; gap: 8px; align-items: center; padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); text-align: left; transition: background-color 120ms ease, border-color 120ms ease, transform 140ms var(--ease-out); }
@@ -571,7 +579,8 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
   .comment-quote-button:hover { border-left-color: var(--accent); color: var(--ink); }
   .outline-link:hover { background: var(--surface-2); color: var(--ink); }
   .comment-action:hover, .comment-submit:hover { background: var(--surface-2); color: var(--ink); }
-  .search-result:hover, .popover-action:hover { background: var(--surface-2); }
+  .search-result:hover, .popover-action:hover, .confirmation-dialog-cancel:hover { background: var(--surface-2); }
+  .confirmation-dialog-confirm:hover { background: color-mix(in srgb, var(--accent) 90%, #000) !important; }
   .share-person-remove:hover { color: #b4232f; }
 }
 
@@ -621,7 +630,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 }
 
 @media (pointer: coarse) {
-  .control-button, .sidebar-row, .popover-action, .comment-action, .comment-submit, .selection-comment-button { min-height: 44px; }
+  .control-button, .sidebar-row, .popover-action, .comment-action, .comment-submit, .selection-comment-button, .confirmation-dialog-actions button { min-height: 44px; }
   .control-button-icon { width: 44px; }
   .document-property-remove { width: 44px; height: 44px; margin: -7px; opacity: 1; }
   .document-property-chip-remove { width: 28px; height: 28px; opacity: 1; }

@@ -2,7 +2,7 @@ import { currentAuthorName, displayAuthorName, setAuthorName } from './identity.
 import { copy, type Locale } from './i18n.ts'
 import { localId } from './local-id.ts'
 import { bundleCanWrite, type TacoBundle, type TacoFile } from './model.ts'
-import type { SaveResult } from './kernel/save.ts'
+import { canWriteInPlace, type SaveResult } from './kernel/save.ts'
 import { storageGet } from './kernel/storage.ts'
 import { saveEditorInvite, saveSealedReader, collabRole, isCollabOwner } from './sharing.ts'
 import {
@@ -33,6 +33,7 @@ export interface ShareControllerOptions {
   menuButton: (label: string, action: () => void | Promise<void>, options?: MenuButtonOptions) => HTMLButtonElement
   selectFile: (file: TacoFile) => void
   paintPresence: () => void
+  confirmDownload: (credentialBearing: boolean) => Promise<boolean>
   reportExport: (result: SaveResult) => void
   toast: (message: string) => void
 }
@@ -226,6 +227,7 @@ export class ShareController {
 
   private async saveSharedVariant(kind: 'editor' | 'sealed'): Promise<void> {
     try {
+      if (!canWriteInPlace() && !await this.options.confirmDownload(kind === 'editor')) return
       if (kind === 'editor') {
         const transport = await this.goLive()
         if (!transport) return
