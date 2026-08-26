@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add principal-scoped in-place comment message editing, writable message-level tombstone deletion, deterministic ordering, edited/deleted CLI projections, and sync protocol v3 convergence.
 - Prepare the core Spec Kit specification template during installation, using YAML frontmatter that distinguishes logical `feature_id` from an optional verified `git_branch` while preserving customized bodies.
 - Preserve replacement-token source text literally when embedding bundle JSON.
 

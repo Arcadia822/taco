@@ -104,6 +104,7 @@ export class TacoSyncSession {
   private presenceValue: Omit<TacoPresence, 'color'> = emptyPresence()
   private active = false
   private closed = false
+  private incompatibleProtocols = new Set<string>()
   private readonly unsubscribeStore: () => void
   private readonly beforeUnload = (): void => this.send({ t: 'bye', a: this.actor })
 
@@ -290,7 +291,14 @@ export class TacoSyncSession {
     catch (error) { console.warn(`[taco-security] ${(error as Error).message}`); return }
     if (!input || typeof input !== 'object' || Array.isArray(input)) { console.warn('[taco-security] invalid-frame'); return }
     const frame = input as Partial<Frame>
-    if (frame.pv !== SYNC_V) return
+    if (frame.pv !== SYNC_V) {
+      const version = String(frame.pv ?? 'missing')
+      if (!this.incompatibleProtocols.has(version)) {
+        this.incompatibleProtocols.add(version)
+        console.warn(`[taco-sync] incompatible-protocol:${version}; expected:${SYNC_V}`)
+      }
+      return
+    }
     if (typeof frame.a !== 'string' || !frame.a || frame.a.length > 256) { console.warn('[taco-security] invalid-actor'); return }
     if (frame.a === this.actor) return
     if (!['hello', 'ops', 'need', 'p', 'snap', 'bye'].includes(String(frame.t))) {

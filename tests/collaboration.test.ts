@@ -340,4 +340,105 @@ describe('local collaboration', () => {
     applySyncDoc(materialized, leftDoc)
     expect(materialized.comments?.map((thread) => thread.messages[0].author).sort()).toEqual(['Ada', 'Grace'])
   })
+
+  it('preserves edit metadata and normalizes tombstones through sync projection', () => {
+    const source = bundle()
+    source.comments = [{
+      id: 'thread-message-state',
+      anchor: { path: source.files[0].path, position: { start: 0, end: 5 }, quote: { exact: 'Hello', prefix: '', suffix: '' } },
+      status: 'open',
+      messages: [{
+        id: 'message-state', author: 'Ada', authorId: 'principal-a', body: 'stale body',
+        createdAt: '2026-08-10T00:00:00.000Z', updatedAt: '2026-08-11T00:00:00.000Z', deletedAt: '2026-08-11T00:00:00.000Z',
+      }],
+      createdAt: '2026-08-10T00:00:00.000Z', updatedAt: '2026-08-11T00:00:00.000Z',
+    }]
+    const sync = toSyncDoc(source)
+    const message = sync.files[0].nodes.find((node) => node.id === 'message-state')
+    expect(message).toMatchObject({ body: '[Deleted message]', updatedAt: '2026-08-11T00:00:00.000Z', deletedAt: '2026-08-11T00:00:00.000Z' })
+    const target = bundle()
+    applySyncDoc(target, sync)
+    expect(target.comments?.[0].messages[0]).toMatchObject({ body: '[Deleted message]', deletedAt: '2026-08-11T00:00:00.000Z' })
+  })
+
+  it('converges concurrent message edit and deletion to a visible tombstone', () => {
+    const source = bundle()
+    source.comments = [{
+      id: 'thread-race',
+      anchor: { path: source.files[0].path, position: { start: 0, end: 5 }, quote: { exact: 'Hello', prefix: '', suffix: '' } },
+      status: 'open',
+      messages: [{ id: 'message-race', author: 'Ada', body: 'Initial', createdAt: '2026-08-10T00:00:00.000Z' }],
+      createdAt: '2026-08-10T00:00:00.000Z', updatedAt: '2026-08-10T00:00:00.000Z',
+    }]
+    const initial = toSyncDoc(source)
+    const leftDoc = structuredClone(initial)
+    const rightDoc = structuredClone(initial)
+    const left = new SyncState('left')
+    const right = new SyncState('right')
+    left.adopt(leftDoc)
+    right.adopt(rightDoc)
+    const leftBefore = structuredClone(leftDoc)
+    const rightBefore = structuredClone(rightDoc)
+    const leftMessage = leftDoc.files[0].nodes.find((node) => node.id === 'message-race')!
+    const rightMessage = rightDoc.files[0].nodes.find((node) => node.id === 'message-race')!
+    if (leftMessage.kind !== 'comment-message' || rightMessage.kind !== 'comment-message') throw new Error('missing message')
+    leftMessage.body = 'Concurrent edit'
+    leftMessage.updatedAt = '2026-08-10T00:00:01.000Z'
+    rightMessage.body = '[Deleted message]'
+    rightMessage.updatedAt = '2026-08-10T00:00:02.000Z'
+    rightMessage.deletedAt = '2026-08-10T00:00:02.000Z'
+    const leftOps = left.diff(leftBefore, leftDoc, { text: true })
+    const rightOps = right.diff(rightBefore, rightDoc, { text: true })
+    left.apply(leftDoc, rightOps)
+    right.apply(rightDoc, leftOps)
+    expect(leftDoc).toEqual(rightDoc)
+    const materialized = bundle()
+    applySyncDoc(materialized, leftDoc)
+    expect(materialized.comments?.[0].messages[0]).toMatchObject({ body: '[Deleted message]', deletedAt: '2026-08-10T00:00:02.000Z' })
+  })
+
+  it('reports and ignores an incompatible collaboration protocol once per version', () => {
+    const session = new TacoSyncSession(new TacoStore(bundle()))
+    const receive = (session as unknown as { onFrame(frame: Frame): void }).onFrame.bind(session)
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const frame = { t: 'bye' as const, a: 'old-peer', pv: SYNC_V - 1 }
+    receive(frame)
+    receive(frame)
+    expect(warning).toHaveBeenCalledTimes(1)
+    expect(warning).toHaveBeenCalledWith(`[taco-sync] incompatible-protocol:${SYNC_V - 1}; expected:${SYNC_V}`)
+    session.close()
+    warning.mockRestore()
+  })
+
+  it('does not resurrect a thread when a child edit races with thread deletion', () => {
+    const source = bundle()
+    source.comments = [{
+      id: 'thread-remove-race',
+      anchor: { path: source.files[0].path, position: { start: 0, end: 5 }, quote: { exact: 'Hello', prefix: '', suffix: '' } },
+      status: 'open',
+      messages: [{ id: 'message-remove-race', author: 'Ada', body: 'Initial', createdAt: '2026-08-10T00:00:00.000Z' }],
+      createdAt: '2026-08-10T00:00:00.000Z', updatedAt: '2026-08-10T00:00:00.000Z',
+    }]
+    const initial = toSyncDoc(source)
+    const leftDoc = structuredClone(initial)
+    const rightDoc = structuredClone(initial)
+    const left = new SyncState('left')
+    const right = new SyncState('right')
+    left.adopt(leftDoc)
+    right.adopt(rightDoc)
+    const leftBefore = structuredClone(leftDoc)
+    const rightBefore = structuredClone(rightDoc)
+    leftDoc.files[0].nodes = leftDoc.files[0].nodes.filter((node) => !['thread-remove-race', 'message-remove-race'].includes(node.id))
+    const rightMessage = rightDoc.files[0].nodes.find((node) => node.id === 'message-remove-race')!
+    if (rightMessage.kind !== 'comment-message') throw new Error('missing message')
+    rightMessage.body = 'Concurrent edit'
+    rightMessage.updatedAt = '2026-08-10T00:00:01.000Z'
+    const leftOps = left.diff(leftBefore, leftDoc, { text: true })
+    const rightOps = right.diff(rightBefore, rightDoc, { text: true })
+    left.apply(leftDoc, rightOps)
+    right.apply(rightDoc, leftOps)
+    expect(leftDoc).toEqual(rightDoc)
+    expect(leftDoc.files[0].nodes.some((node) => node.id === 'thread-remove-race')).toBe(false)
+    expect(leftDoc.files[0].nodes.some((node) => node.id === 'message-remove-race')).toBe(false)
+  })
 })

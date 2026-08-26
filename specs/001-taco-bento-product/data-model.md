@@ -45,8 +45,11 @@ classDiagram
   class TacoCommentMessage {
     +string id
     +string author
+    +string authorId
     +string body
     +datetime createdAt
+    +datetime updatedAt
+    +datetime deletedAt
   }
 
   class TacoCollab {
@@ -128,7 +131,11 @@ Comments use a thread model. A `TacoCommentThread` contains a stable `id`, an `o
 - `anchor.path`: the file path the comment belongs to; v0.3 does not allow renaming files, so this path does not change when a title is edited.
 - `anchor.position.start/end`: a fast lookup range based on the currently rendered text.
 - `anchor.quote.exact/prefix/suffix`: a Web Annotation-style quote with context; used to re-anchor after positions become invalid.
-- `messages[]`: each message contains a stable ID, a local author name, a body, and a creation time.
+- `messages[]`: each message contains a stable ID, local author label, optional opaque `authorId`, body, creation time, and optional `updatedAt` / `deletedAt` state.
+
+Messages are ordered by `createdAt`, then stable `id`; edits do not move them. New messages use a browser-profile principal scoped by `docId` for UI edit continuity. The principal is opaque, local, self-issued, and neither a verified account identity nor an authorization boundary outside the writable Taco capability. Editing requires an active message whose `authorId` matches the local principal. Any writable participant may delete any active message.
+
+Deletion retains the message position, author label, principal, creation time, and ID. It sets `deletedAt` and `updatedAt` to the deletion time and replaces the canonical body with `[Deleted message]`. The UI and CLI determine deletion only from `deletedAt`; an active author may use that same body text without creating a tombstone. Materialization and serialization normalize inconsistent deleted bodies to the sentinel. Root and only-message deletion never removes the surrounding thread; only the separate thread action does that.
 
 Storing both the position and the quote avoids binding comments to the volatile editor DOM. Comments are saved in the bundle and synced through the same CRDT; the collaboration role controls whether comments can be submitted, but does not promote comments into a remote business database.
 
@@ -139,3 +146,5 @@ Storing both the position and the quote avoids binding comments to the volatile 
 - Corrupt JSON or an illegal path: Recovery mode.
 - HTML/HTM: preserve the original text and require a matching canonical `file:` URL for the new-page prototype preview card.
 - Unknown media type: plain-text source.
+- Legacy messages without optional state fields remain active and round-trip unchanged. Legacy or non-matching principals are not editable but remain individually deletable in writable copies.
+- Live collaboration uses sync protocol v3 for message tombstones. Peers with other protocol versions are reported and ignored before any mixed-protocol mutation is applied.

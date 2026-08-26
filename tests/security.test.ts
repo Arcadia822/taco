@@ -117,6 +117,22 @@ describe('collaboration input validation', () => {
     expect(document.files[0].content).toBe('Safe')
   })
 
+  it('rejects malformed optional comment message timestamps atomically', () => {
+    const document = bundle()
+    document.comments = [{
+      id: 'thread-security',
+      anchor: { path: document.files[0].path, position: { start: 0, end: 4 }, quote: { exact: 'Safe', prefix: '', suffix: '' } },
+      status: 'open',
+      messages: [{ id: 'message-security', author: 'Ada', body: 'Review', createdAt: '2026-08-10T00:00:00.000Z' }],
+      createdAt: '2026-08-10T00:00:00.000Z', updatedAt: '2026-08-10T00:00:00.000Z',
+    }]
+    const sync = toSyncDoc(document)
+    const message = sync.files[0].nodes.find((node) => node.id === 'message-security') as unknown as Record<string, unknown>
+    message.deletedAt = 'invalid'
+    expect(() => rebuildSyncDoc(sync, document)).toThrow('security:invalid-comment-message')
+    expect(document.comments[0].messages[0].body).toBe('Review')
+  })
+
   it('rejects credential mutation and malformed operation units', () => {
     const valid = [{ a: 'peer', s: 1, l: 1, op: 'set', k: 'title', v: 'Remote' }]
     expect(validateOps(valid)).toEqual(valid)

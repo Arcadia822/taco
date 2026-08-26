@@ -85,6 +85,8 @@ When refreshing a legacy Taco, `pack --from` accepts its missing old HTML URL on
 
 `sync` records a SHA-256 baseline for every packed file. If both the canonical file and Taco copy changed since packaging, the import refuses every write. `--force` exists only for deliberate recovery and may be used by an Agent only after explicit authorization for the exact conflict paths.
 
+Comment projections retain edited and deleted messages in deterministic thread order. JSON output marks deleted messages with `deleted: true`, includes `deletedAt`, and returns `body: null`; human output renders a localized-neutral deletion placeholder. Agent review must retain those entries as context and must not treat the deleted sentinel as an open request.
+
 `validate` reads the inert Taco JSON block without executing the self-contained runtime. It reports `collab-secrets-present` before complete-file inspection when the Taco carries collaboration capabilities, and `runtime-security-outdated` when the shell predates the hardened runtime. It never prints credential values.
 
 ## Distribution contents

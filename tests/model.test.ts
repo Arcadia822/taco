@@ -136,4 +136,38 @@ describe('file-first Taco bundle', () => {
     commented.comments[0].anchor.path = 'specs/001-test/missing.md'
     expect(parseBundle(JSON.stringify(commented))).toMatchObject({ ok: false, err: 'shape' })
   })
+
+  it('accepts optional message timestamps, rejects malformed ones, and normalizes tombstones', () => {
+    const commented = bundle()
+    commented.comments = [{
+      id: 'thread-1',
+      anchor: { path: 'specs/001-test/spec.md', position: { start: 0, end: 6 }, quote: { exact: '# Spec', prefix: '', suffix: '' } },
+      status: 'open',
+      messages: [{
+        id: 'message-1', author: 'Ada', body: 'must not survive', createdAt: '2026-08-10T00:00:00.000Z',
+        updatedAt: '2026-08-11T00:00:00.000Z', deletedAt: '2026-08-11T00:00:00.000Z',
+      }],
+      createdAt: '2026-08-10T00:00:00.000Z', updatedAt: '2026-08-11T00:00:00.000Z',
+    }]
+    const parsed = parseBundle(JSON.stringify(commented))
+    expect(parsed).toMatchObject({ ok: true })
+    if (parsed.ok) expect(parsed.bundle.comments?.[0].messages[0].body).toBe('[Deleted message]')
+    commented.comments[0].messages[0].updatedAt = 'not-a-timestamp'
+    expect(parseBundle(JSON.stringify(commented))).toMatchObject({ ok: false, err: 'shape' })
+  })
+
+  it('round-trips a pre-feature comment message without adding optional fields', () => {
+    const legacy = bundle()
+    legacy.comments = [{
+      id: 'thread-legacy',
+      anchor: { path: 'specs/001-test/spec.md', position: { start: 0, end: 6 }, quote: { exact: '# Spec', prefix: '', suffix: '' } },
+      status: 'open',
+      messages: [{ id: 'message-legacy', author: 'Ada', authorId: 'legacy-actor', body: 'Legacy', createdAt: '2026-08-10T00:00:00.000Z' }],
+      createdAt: '2026-08-10T00:00:00.000Z', updatedAt: '2026-08-10T00:00:00.000Z',
+    }]
+    const serialized = JSON.stringify(legacy)
+    const parsed = parseBundle(serialized)
+    expect(parsed).toMatchObject({ ok: true })
+    if (parsed.ok) expect(JSON.stringify(parsed.bundle)).toBe(serialized)
+  })
 })

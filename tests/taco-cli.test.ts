@@ -574,4 +574,37 @@ describe('Taco extension CLI', () => {
       'runtime-security-outdated',
     ])
   })
+
+  it('projects edited and deleted messages without exposing the tombstone as active feedback', () => {
+    const project = mkdtempSync(join(tmpdir(), 'taco-message-comments-'))
+    const feature = join(project, 'specs/005-message-comments')
+    const output = join(feature, '005-message-comments.taco.html')
+    mkdirSync(feature, { recursive: true })
+    writeFileSync(join(feature, 'spec.md'), '# Message comments\n')
+    runJson(['pack', feature, '--project-root', project, '--output', output, '--shell', shell], project)
+    const bundle = readBundle(output)
+    bundle.comments = [{
+      id: 'thread-1',
+      anchor: { path: 'specs/005-message-comments/spec.md', position: { start: 0, end: 1 }, quote: { exact: '#', prefix: '', suffix: '' } },
+      status: 'open',
+      messages: [
+        { id: 'message-active', author: 'Ada', body: 'Corrected request', createdAt: '2026-08-10T00:00:00.000Z', updatedAt: '2026-08-11T00:00:00.000Z' },
+        { id: 'message-deleted', author: 'Grace', body: '[Deleted message]', createdAt: '2026-08-10T00:00:01.000Z', updatedAt: '2026-08-12T00:00:00.000Z', deletedAt: '2026-08-12T00:00:00.000Z' },
+      ],
+      createdAt: '2026-08-10T00:00:00.000Z', updatedAt: '2026-08-12T00:00:00.000Z',
+    }]
+    writeBundle(output, bundle)
+    runJson(['pack', feature, '--project-root', project, '--output', output, '--from', output, '--shell', shell], project)
+    expect(readBundle(output).comments).toEqual(bundle.comments)
+
+    const result = runJson<{ comments: Array<{ messages: Array<Record<string, unknown>> }> }>(['comments', output], project)
+    expect(result.comments[0].messages).toEqual([
+      expect.objectContaining({ id: 'message-active', body: 'Corrected request', updatedAt: '2026-08-11T00:00:00.000Z', deleted: false }),
+      expect.objectContaining({ id: 'message-deleted', body: null, deletedAt: '2026-08-12T00:00:00.000Z', deleted: true }),
+    ])
+    const human = execFileSync(process.execPath, [cli, 'comments', output], { cwd: project, encoding: 'utf8' })
+    expect(human).toContain('Ada: Corrected request')
+    expect(human).toContain('Grace: [message deleted]')
+    expect(human).not.toContain('Grace: [Deleted message]')
+  })
 })

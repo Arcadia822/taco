@@ -77,7 +77,7 @@ The project is licensed under the MIT License. You can study the implementation,
 
 - Package a complete specification directory into one portable `.taco.html` file that opens in a browser and works offline.
 - Browse, search, and edit the canonical Markdown and text files while preserving their real directory structure.
-- Review specs with anchored comments, then save an updated Taco or write the changes back to the original directory.
+- Review specs with anchored comment threads, including in-place editing of your own messages and tombstone deletion of individual messages without removing their replies; then save an updated Taco or write the changes back to the original directory.
 - Collaborate in real time on the same machine or across devices with encrypted sharing, editor and reader copies, and access controls.
 - Integrate with Spec Kit to keep each feature's Taco current and safely import human edits and comments with conflict detection.
 

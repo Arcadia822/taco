@@ -10,6 +10,7 @@ import {
 import type { TacoBundle } from '../model.ts'
 import type { SyncNode, TacoSyncDoc } from '../store.ts'
 import { SYNC_V, type Op, type SyncStateJSON } from './crdt.ts'
+import { DELETED_COMMENT_BODY } from '../comments.ts'
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -24,7 +25,7 @@ const DOC_SET_KEYS = new Set(['title'])
 const FILE_SET_KEYS = new Set(['path', 'mediaType', 'title', 'sourceHash'])
 const NODE_SET_KEYS = new Set([
   'type', 'html', 'anchor', 'status', 'createdAt', 'updatedAt', 'threadId', 'author',
-  'authorId', 'body',
+  'authorId', 'body', 'deletedAt',
 ])
 
 const rebuildNode = (value: unknown, path: string): SyncNode => {
@@ -66,14 +67,20 @@ const rebuildNode = (value: unknown, path: string): SyncNode => {
     if (!string(value.threadId, 256) || !string(value.author, 512) || !string(value.body, 100_000) || !timestamp(value.createdAt)) {
       throw new Error('security:invalid-comment-message')
     }
+    if ((value.updatedAt !== undefined && !timestamp(value.updatedAt))
+      || (value.deletedAt !== undefined && !timestamp(value.deletedAt))) {
+      throw new Error('security:invalid-comment-message')
+    }
     return {
       id: value.id,
       kind: 'comment-message',
       threadId: value.threadId,
       author: value.author,
       ...(string(value.authorId, 256) ? { authorId: value.authorId } : {}),
-      body: value.body,
+      body: value.deletedAt ? DELETED_COMMENT_BODY : value.body,
       createdAt: value.createdAt,
+      ...(timestamp(value.updatedAt) ? { updatedAt: value.updatedAt } : {}),
+      ...(timestamp(value.deletedAt) ? { deletedAt: value.deletedAt } : {}),
     }
   }
   throw new Error('security:unknown-sync-node')

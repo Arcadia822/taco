@@ -1,5 +1,6 @@
 import { MAX_BLOCK_HTML, SUPPORTED_BLOCK_TYPES } from './security.ts'
 import { localFileReference } from './local-file-url.ts'
+import { normalizeCommentMessage, sortCommentMessages } from './comments.ts'
 
 export const FORMAT = 'taco/files'
 export const FORMAT_VERSION = 1
@@ -47,6 +48,8 @@ export interface TacoCommentMessage {
   authorId?: string
   body: string
   createdAt: string
+  updatedAt?: string
+  deletedAt?: string
 }
 
 export interface TacoCommentThread {
@@ -176,10 +179,17 @@ export function parseBundle(json: string): ParseResult {
   }
 
   const bundle = raw as unknown as TacoBundle
+  for (const thread of bundle.comments ?? []) {
+    thread.messages = sortCommentMessages(thread.messages.map(normalizeCommentMessage))
+  }
   return { ok: true, bundle, ...(bundle.version > FORMAT_VERSION ? { frozen: 'version' as const } : {}) }
 }
 
 const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.length > 0
+const isTimestamp = (value: unknown): value is string => typeof value === 'string'
+  && value.length > 0
+  && value.length <= 128
+  && !Number.isNaN(Date.parse(value))
 
 const isCollabInvite = (value: unknown): value is TacoCollabInvite => isRecord(value)
   && isNonEmptyString(value.pub)
@@ -258,8 +268,8 @@ const isCommentThread = (value: unknown): value is TacoCommentThread => {
     && validQuote
     && validBlock
     && (value.status === 'open' || value.status === 'resolved')
-    && typeof value.createdAt === 'string'
-    && typeof value.updatedAt === 'string'
+    && isTimestamp(value.createdAt)
+    && isTimestamp(value.updatedAt)
     && Array.isArray(value.messages)
     && value.messages.length > 0
     && value.messages.every((message) => isRecord(message)
@@ -267,7 +277,9 @@ const isCommentThread = (value: unknown): value is TacoCommentThread => {
       && typeof message.author === 'string'
       && typeof message.body === 'string'
       && message.body.trim().length > 0
-      && typeof message.createdAt === 'string')
+      && isTimestamp(message.createdAt)
+      && (message.updatedAt === undefined || isTimestamp(message.updatedAt))
+      && (message.deletedAt === undefined || isTimestamp(message.deletedAt)))
 }
 
 export const fileByPath = (bundle: TacoBundle, path: string): TacoFile | null =>
