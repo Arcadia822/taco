@@ -13,10 +13,15 @@ Run from the exact initialized Spec Kit project that should receive Taco:
 
 ```bash
 specify extension add --dev /absolute/path/to/taco/extensions/taco
+node .specify/extensions/taco/bin/taco.mjs prepare-template \
+  --project-root "$PWD" \
+  --json
 specify extension list
 ```
 
 The supported Taco source checkout already contains the production shell at `extensions/taco/assets/taco-shell.html`. Spec Kit copies that shell and the CLI into `.specify/extensions/taco/`, and registers both commands with the project's active Agent integration. No target-project npm installation is involved.
+
+Taco also contributes `templates/spec-template.md`. The installation-time `prepare-template` operation replaces only the recognized core metadata header, preserves the remaining template body, and refuses to overwrite an unrecognized customization. It emits leading YAML properties: `title`, logical `feature_id`, `created`, `status`, and `input`. It intentionally omits `git_branch`; a feature identifier is not presented as an actual Git branch unless an Agent verifies and adds that optional property.
 
 ## Release installation
 
@@ -25,6 +30,9 @@ Install the published extension archive into the exact initialized Spec Kit proj
 ```bash
 specify extension add taco --from \
   https://github.com/Arcadia822/taco/archive/refs/tags/v0.3.1.zip
+node .specify/extensions/taco/bin/taco.mjs prepare-template \
+  --project-root "$PWD" \
+  --json
 specify extension list
 ```
 
@@ -90,6 +98,7 @@ commands/update.md
 commands/review.md
 bin/taco.mjs
 assets/taco-shell.html
+templates/spec-template.md
 policies/taco-agent-policy.md
 ```
 

@@ -18,6 +18,10 @@ requires:
     - 'speckit.specify'
 
 provides:
+  templates:
+    - name: 'spec-template'
+      file: 'templates/spec-template.md'
+      description: 'Spec Kit feature specification template with canonical Taco YAML metadata.'
   commands:
     - name: 'speckit.taco.update'
       file: 'commands/update.md'

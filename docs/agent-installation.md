@@ -30,6 +30,9 @@ Confirm the exact target with the user. It must already be initialized by Spec K
 
 ```bash
 specify extension add --dev /absolute/path/to/taco/extensions/taco
+node .specify/extensions/taco/bin/taco.mjs prepare-template \
+  --project-root "$PWD" \
+  --json
 specify extension list
 ```
 
@@ -42,13 +45,16 @@ Verify all of these installed files:
 .specify/extensions/taco/bin/taco.mjs
 .specify/extensions/taco/assets/taco-shell.html
 .specify/extensions/taco/policies/taco-agent-policy.md
+.specify/extensions/taco/templates/spec-template.md
 ```
 
 Also verify that the active Agent integration exposes `speckit.taco.update` and `speckit.taco.review`, and that `.specify/extensions.yml` registers Taco's mandatory post-lifecycle hooks. No target-project npm install is required.
 
-## Install the project policy
+## Install the authoring contract and project policy
 
 Plugin installation is incomplete until the installing Agent updates the target project's existing `AGENTS.md`. Read the installed `.specify/extensions/taco/policies/taco-agent-policy.md`, preserve every unrelated project instruction, and merge that policy. The resulting prompt governs later core Spec Kit commands such as `speckit.specify`; a post-generation Taco hook cannot prevent malformed Markdown that was already written.
+
+The extension also supplies `templates/spec-template.md`. The installation command above materializes its YAML header into `.specify/templates/spec-template.md` while preserving the standard template body. If the project template is customized in an incompatible way, the CLI refuses to overwrite it and requires a deliberate manual merge. Verify that the effective project template begins with YAML frontmatter. New specifications use `title`, logical `feature_id`, `created`, `status`, and `input`, then begin at H2. The template deliberately omits `git_branch`; an Agent may add it only after verifying that an actual branch exists. The feature directory name is not evidence that Git created a branch.
 
 The merged policy must be equivalent to:
 
@@ -57,6 +63,8 @@ The merged policy must be equivalent to:
 
 - Write new Spec Kit Markdown metadata as leading YAML frontmatter. Put document
   titles in `title`; never imitate metadata with `## title: "..."` or bold prose.
+- Use `feature_id` for the logical numbered feature identifier. Add `git_branch`
+  only after verifying that an actual Git branch exists.
 - When `speckit.specify` creates `spec.md`, do not add an ATX or Setext H1 that
   repeats the YAML title. Begin the body at H2 or lower. Preserve existing
   authored H1 content during unrelated edits.
@@ -84,7 +92,7 @@ The merged policy must be equivalent to:
   do not send their contents to external services without user authorization.
 ```
 
-Do not add packer's built-in Taco-output exclusion to `AGENTS.md`; the CLI owns that invariant. If the target has no `AGENTS.md`, create one containing this policy. Re-read the resulting file and verify that prior project instructions remain present and that all of these literal contracts survived the merge: YAML `title`, `speckit.specify`, no repeated H1, body begins at H2, YAML `taco_scope`, and the three routing values.
+Do not add packer's built-in Taco-output exclusion to `AGENTS.md`; the CLI owns that invariant. If the target has no `AGENTS.md`, create one containing this policy. Re-read the resulting file and verify that prior project instructions remain present and that all of these literal contracts survived the merge: YAML `title`, logical `feature_id`, verified-only `git_branch`, `speckit.specify`, no repeated H1, body begins at H2, YAML `taco_scope`, and the three routing values.
 
 ## Update a feature Taco
 
@@ -160,8 +168,9 @@ A collaboration-enabled Taco may contain relay configuration or access credentia
 An installation or review is complete only when the requested outcome is observed:
 
 - The exact target project lists Taco as installed.
-- The installed directory contains both Agent commands, the CLI, the production shell, and `policies/taco-agent-policy.md`.
+- The installed directory contains both Agent commands, the CLI, the production shell, the YAML specification template, and `policies/taco-agent-policy.md`.
 - Mandatory lifecycle hooks appear in `.specify/extensions.yml`.
+- `.specify/templates/spec-template.md` begins with Taco's YAML authoring contract.
 - The target project's `AGENTS.md` retains its previous instructions and contains Taco's authoring and review policy, including YAML `title`, no repeated H1, an H2-or-lower body start, and YAML `taco_scope`.
 - A generated Taco exists inside the expected feature directory with a nonzero embedded file count.
 - The generated Taco was presented as a native clickable local file. Direct browser verification is additionally required only when the Agent GUI explicitly supports autonomous local HTML navigation; Codex records that opening occurs after the user's click.

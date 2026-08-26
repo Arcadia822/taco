@@ -3,6 +3,10 @@
 - Write new Spec Kit Markdown metadata as leading YAML frontmatter. Put the
   document title in the `title` property between `---` delimiters. Never imitate
   metadata with headings such as `## title: "..."` or bold prose.
+- Use `feature_id` for the logical numbered feature identifier such as
+  `001-search`. Do not call it a branch. Add `git_branch` only when an actual Git
+  branch has been created and verified; Taco's spec template intentionally
+  omits that optional property.
 - When `speckit.specify` or another authoring command creates `spec.md`, do not
   add an ATX or Setext H1 that repeats the YAML title. Begin the Markdown body at
   H2 (`##`) or lower. Preserve an existing authored H1 during unrelated edits;

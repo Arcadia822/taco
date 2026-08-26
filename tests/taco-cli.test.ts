@@ -39,6 +39,61 @@ const runJson = <T>(args: string[], cwd: string): T =>
   ) as T
 
 describe('Taco extension CLI', () => {
+  it('prepares the Spec Kit template idempotently without replacing a customized body', () => {
+    const project = mkdtempSync(join(tmpdir(), 'taco-template-'))
+    const template = join(project, '.specify/templates/spec-template.md')
+    mkdirSync(dirname(template), { recursive: true })
+    writeFileSync(
+      template,
+      '# Feature Specification: [FEATURE NAME]\n\n**Feature Branch**: `[###-feature-name]`\n\n**Created**: [DATE]\n\n**Status**: Draft\n\n**Input**: User description: "$ARGUMENTS"\n\n## Custom project section\n\nKeep this body.\n',
+    )
+
+    const prepared = runJson<{ changed: boolean; template: string }>(
+      ['prepare-template', '--project-root', project],
+      project,
+    )
+    expect(prepared).toEqual({
+      command: 'prepare-template',
+      changed: true,
+      template: realpathSync(template),
+    })
+    expect(readFileSync(template, 'utf8')).toMatch(/^---\ntitle:/)
+    expect(readFileSync(template, 'utf8')).toContain('## Custom project section\n\nKeep this body.')
+
+    expect(
+      runJson<{ changed: boolean }>(['prepare-template', '--project-root', project], project),
+    ).toMatchObject({ changed: false })
+
+    writeFileSync(template, '# Custom template\n\nDo not overwrite.\n')
+    const refused = spawnSync(
+      process.execPath,
+      [cli, 'prepare-template', '--project-root', project, '--json'],
+      { cwd: project, encoding: 'utf8' },
+    )
+    expect(refused.status).toBe(1)
+    expect(JSON.parse(refused.stderr).error).toContain('Refusing to overwrite a customized')
+    expect(readFileSync(template, 'utf8')).toBe('# Custom template\n\nDo not overwrite.\n')
+  })
+
+  it('embeds replacement-token source text without corrupting the Taco JSON block', () => {
+    const project = mkdtempSync(join(tmpdir(), 'taco-replacement-token-'))
+    const feature = join(project, 'specs/000-replacement-token')
+    const output = join(feature, '000-replacement-token.taco.html')
+    const marker = String.fromCharCode(36, 39)
+    const content = `openapi: 3.1.0\npattern: 'value${marker}\n`
+    mkdirSync(feature, { recursive: true })
+    writeFileSync(join(feature, 'spec.md'), '---\ntitle: "Replacement token"\n---\n\n## Test\n')
+    writeFileSync(join(feature, 'openapi.yaml'), content)
+
+    runJson(
+      ['pack', feature, '--project-root', project, '--output', output, '--shell', shell],
+      project,
+    )
+
+    const bundle = readBundle(output)
+    expect(bundle.files.find((file) => file.path.endsWith('/openapi.yaml'))?.content).toBe(content)
+  })
+
   it('packs UTF-8 feature files with source baselines', () => {
     const project = mkdtempSync(join(tmpdir(), 'taco-pack-'))
     const feature = join(project, 'specs/001-demo')
