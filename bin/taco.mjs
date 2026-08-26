@@ -9,6 +9,7 @@ import {
   readdir,
   realpath,
   rename,
+  unlink,
   writeFile,
 } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
@@ -20,10 +21,14 @@ const DATA_BLOCK = /<script\b(?=[^>]*\bid=["']taco-document["'])[^>]*>[\s\S]*?<\
 const DATA_CONTENT = /(<script\b(?=[^>]*\bid=["']taco-document["'])[^>]*>)([\s\S]*?)(<\/script>)/i
 const here = dirname(fileURLToPath(import.meta.url))
 const defaultShell = resolve(here, '../assets/taco-shell.html')
+const defaultSpecTemplate = resolve(here, '../templates/spec-template.md')
+const LEGACY_SPEC_TEMPLATE_HEADER =
+  /^# Feature Specification: \[FEATURE NAME\]\r?\n\r?\n\*\*Feature Branch\*\*: `\[###-feature-name\]`\r?\n\r?\n\*\*Created\*\*: \[DATE\]\r?\n\r?\n\*\*Status\*\*: Draft\r?\n\r?\n\*\*Input\*\*: User description: "\$ARGUMENTS"\r?\n\r?\n/
 
 const usage = `Taco CLI
 
 Usage:
+  taco prepare-template [--project-root <dir>] [--json]
   taco pack <feature-directory> [--output <file>] [--project-root <dir>]
             [--title <title>] [--from <existing.taco.html>] [--shell <file>]
             [--ignore <relative-path-or-glob>]... [--json]
@@ -316,16 +321,19 @@ const embedBundle = (shell, bundle) => {
   const json = encodeBundle(bundle)
   const withBundle = shell.replace(
     DATA_BLOCK,
-    `<script type="application/taco+json" id="taco-document">\n${json}\n</script>`,
+    () => `<script type="application/taco+json" id="taco-document">\n${json}\n</script>`,
   )
   const escapedTitle = `${bundle.title} — Taco`
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
   if (/<title\b[^>]*>[\s\S]*?<\/title>/i.test(withBundle)) {
-    return withBundle.replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, `<title>${escapedTitle}</title>`)
+    return withBundle.replace(
+      /<title\b[^>]*>[\s\S]*?<\/title>/i,
+      () => `<title>${escapedTitle}</title>`,
+    )
   }
-  return withBundle.replace('</head>', `<title>${escapedTitle}</title></head>`)
+  return withBundle.replace('</head>', () => `<title>${escapedTitle}</title></head>`)
 }
 
 const collectFiles = async (featureDir, rootPath, existingByPath, ignorePatterns) => {
@@ -687,6 +695,12 @@ const printResult = (result, json) => {
       process.stdout.write(`Preserved ${result.commentsPreserved} comment threads.\n`)
     return
   }
+  if (result.command === 'prepare-template') {
+    process.stdout.write(
+      `${result.changed ? 'Prepared' : 'Verified'} Taco YAML spec template at ${result.template}.\n`,
+    )
+    return
+  }
   if (result.command === 'sync') {
     const label = result.dryRun ? 'Previewed' : result.applied ? 'Synced' : 'Refused'
     process.stdout.write(
@@ -704,6 +718,60 @@ const printResult = (result, json) => {
   }
 }
 
+export const prepareSpecTemplate = async (options = {}) => {
+  const projectRoot = await realpath(resolve(options.projectRoot ?? process.cwd()))
+  const specifyDirectory = join(projectRoot, '.specify')
+  if (!(await pathExists(specifyDirectory)))
+    throw new Error(`Spec Kit project directory was not found: ${specifyDirectory}`)
+  const specifyInfo = await lstat(specifyDirectory)
+  if (!specifyInfo.isDirectory() || specifyInfo.isSymbolicLink())
+    throw new Error(`Unsafe Spec Kit project directory: ${specifyDirectory}`)
+  const target = join(specifyDirectory, 'templates/spec-template.md')
+  if (!(await pathExists(target)))
+    throw new Error(`Spec Kit spec template was not found: ${target}`)
+  const targetInfo = await lstat(target)
+  if (!targetInfo.isFile() || targetInfo.isSymbolicLink())
+    throw new Error(`Unsafe Spec Kit spec template: ${target}`)
+
+  const [source, current] = await Promise.all([
+    readFile(defaultSpecTemplate, 'utf8'),
+    readFile(target, 'utf8'),
+  ])
+  const canonicalHeader = source.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n\r?\n/)?.[0]
+  if (!canonicalHeader) throw new Error('Installed Taco spec template has invalid YAML frontmatter')
+
+  const existingFrontmatter = current.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n\r?\n/)
+  const firstH2 = current.search(/^## /m)
+  if (
+    existingFrontmatter &&
+    /^title[ \t]*:/m.test(existingFrontmatter[1]) &&
+    /^feature_id[ \t]*:/m.test(existingFrontmatter[1]) &&
+    firstH2 >= existingFrontmatter[0].length &&
+    !/^#\s/m.test(current.slice(existingFrontmatter[0].length, firstH2))
+  ) {
+    return { command: 'prepare-template', template: target, changed: false }
+  }
+
+  if (!LEGACY_SPEC_TEMPLATE_HEADER.test(current)) {
+    throw new Error(
+      `Refusing to overwrite a customized Spec Kit template: ${target}; merge Taco YAML metadata manually`,
+    )
+  }
+
+  const next = current.replace(LEGACY_SPEC_TEMPLATE_HEADER, () => canonicalHeader)
+  const temporary = `${target}.taco-${randomUUID()}.tmp`
+  try {
+    await writeFile(temporary, next, 'utf8')
+    await rename(temporary, target)
+  } catch (error) {
+    try {
+      await unlink(temporary)
+    } catch {}
+    throw error
+  }
+  return { command: 'prepare-template', template: target, changed: true }
+}
+
 const main = async () => {
   const [command, ...argv] = process.argv.slice(2)
   if (command === '--help' || command === '-h') {
@@ -713,6 +781,12 @@ const main = async () => {
   const parsed = parseOptions(argv)
   if (!command || parsed.flag('help') || command === 'help') {
     process.stdout.write(`${usage}\n`)
+    return
+  }
+
+  if (command === 'prepare-template') {
+    const result = await prepareSpecTemplate({ projectRoot: parsed.option('project-root') })
+    printResult(result, parsed.flag('json'))
     return
   }
 
