@@ -45,6 +45,7 @@ describe('FileBrowser', () => {
     history.replaceState(null, '', '/')
     localStorage.clear()
     sessionStorage.clear()
+    sessionStorage.setItem('taco-session-author', 'Local user')
     Object.defineProperty(navigator, 'languages', { configurable: true, value: ['zh-CN'] })
     Object.defineProperty(navigator, 'language', { configurable: true, value: 'zh-CN' })
     Object.defineProperty(window, 'prompt', {
@@ -864,6 +865,87 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.comment-thread')?.textContent).toContain('Make this measurable.')
     expect(document.querySelector('.comment-count')?.textContent).toBe('1')
     expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(true)
+  })
+
+  it('collects a missing comment author in an application dialog without losing the pending submission', async () => {
+    sessionStorage.clear()
+    const editableBundle = structuredClone(testBundle)
+    new FileBrowser(document.getElementById('app')!, editableBundle)
+    await waitForEditor()
+    const paragraph = Array.from(document.querySelectorAll('.tiptap-editor-host .tiptap p'))
+      .find((node) => node.textContent?.includes('Readable Markdown.'))!
+    const text = paragraph.firstChild!
+    const range = document.createRange()
+    range.setStart(text, 0)
+    range.setEnd(text, 8)
+    const selection = window.getSelection()!
+    selection.removeAllRanges()
+    selection.addRange(range)
+    paragraph.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    document.querySelector<HTMLButtonElement>('.selection-comment-button')!.click()
+
+    const comment = document.querySelector<HTMLTextAreaElement>('.comment-composer .comment-input')!
+    comment.value = 'Keep this pending.'
+    comment.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    expect(window.prompt).not.toHaveBeenCalled()
+    expect(editableBundle.comments).toBeUndefined()
+    expect(document.querySelector('.author-name-dialog[open]')).not.toBeNull()
+
+    document.querySelector<HTMLButtonElement>('.author-name-dialog .comment-action')!.click()
+    expect(document.querySelector('.author-name-dialog')).toBeNull()
+    expect(document.querySelector<HTMLTextAreaElement>('.comment-composer .comment-input')?.value).toBe('Keep this pending.')
+
+    comment.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    const name = document.querySelector<HTMLInputElement>('.author-name-input')!
+    const confirm = document.querySelector<HTMLButtonElement>('.author-name-dialog .comment-submit')!
+    expect(confirm.disabled).toBe(true)
+    name.value = 'Ada'
+    name.dispatchEvent(new Event('input', { bubbles: true }))
+    expect(confirm.disabled).toBe(false)
+    name.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+
+    expect(editableBundle.comments?.[0]).toMatchObject({
+      anchor: { quote: { exact: 'Readable' } },
+      messages: [{ author: 'Ada', body: 'Keep this pending.' }],
+    })
+    expect(sessionStorage.getItem('taco-session-author')).toBe('Ada')
+    document.querySelector<HTMLButtonElement>('.workspace-header .share-button')!.click()
+    expect(document.querySelector<HTMLInputElement>('.collab-name-input')?.value).toBe('Ada')
+  })
+
+  it('uses the same application-owned identity step for a first reply', () => {
+    sessionStorage.clear()
+    const timestamp = '2026-08-26T00:00:00.000Z'
+    const replyBundle = structuredClone(testBundle)
+    replyBundle.comments = [{
+      id: 'thread-existing',
+      anchor: {
+        path: 'specs/001-browser/spec.md',
+        position: { start: 20, end: 28 },
+        quote: { exact: 'Readable', prefix: 'Outcome\n', suffix: ' Markdown.' },
+      },
+      status: 'open',
+      messages: [{ id: 'message-existing', author: 'Ada', body: 'Initial note.', createdAt: timestamp }],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }]
+    new FileBrowser(document.getElementById('app')!, replyBundle)
+    document.querySelector<HTMLButtonElement>('.comment-toggle')!.click()
+    document.querySelector<HTMLButtonElement>('.comment-thread-actions .comment-action')!.click()
+    const reply = document.querySelector<HTMLTextAreaElement>('.comment-reply-form .comment-input')!
+    reply.value = 'First reply.'
+    reply.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+
+    expect(replyBundle.comments[0].messages).toHaveLength(1)
+    expect(document.querySelector('.author-name-dialog[open]')).not.toBeNull()
+    const name = document.querySelector<HTMLInputElement>('.author-name-input')!
+    name.value = 'Grace'
+    name.dispatchEvent(new Event('input', { bubbles: true }))
+    name.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+
+    expect(replyBundle.comments[0].messages).toHaveLength(2)
+    expect(replyBundle.comments[0].messages[1]).toMatchObject({ author: 'Grace', body: 'First reply.' })
+    expect(window.prompt).not.toHaveBeenCalled()
   })
 
   it('keeps an unsubmitted comment draft out of the saved document state', async () => {
