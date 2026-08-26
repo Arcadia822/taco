@@ -133,6 +133,59 @@ export const createControlButton = (
   return button
 }
 
+export interface ConfirmDialogOptions {
+  title: string
+  messages: readonly string[]
+  confirmLabel: string
+  cancelLabel: string
+}
+
+export const showConfirmDialog = (options: ConfirmDialogOptions): Promise<boolean> =>
+  new Promise((resolve) => {
+    const dialog = el('dialog', 'confirmation-dialog') as HTMLDialogElement
+    dialog.setAttribute('aria-labelledby', 'taco-confirmation-title')
+
+    const title = el('h2', 'confirmation-dialog-title', options.title)
+    title.id = 'taco-confirmation-title'
+    const body = el('div', 'confirmation-dialog-body')
+    for (const message of options.messages) body.append(el('p', '', message))
+
+    const actions = el('div', 'confirmation-dialog-actions')
+    const cancel = el('button', 'confirmation-dialog-cancel', options.cancelLabel) as HTMLButtonElement
+    cancel.type = 'button'
+    const confirm = el('button', 'confirmation-dialog-confirm', options.confirmLabel) as HTMLButtonElement
+    confirm.type = 'button'
+    actions.append(cancel, confirm)
+    dialog.append(title, body, actions)
+
+    let settled = false
+    const finish = (accepted: boolean): void => {
+      if (settled) return
+      settled = true
+      try {
+        if (dialog.open && typeof dialog.close === 'function') dialog.close()
+      } finally {
+        dialog.remove()
+        resolve(accepted)
+      }
+    }
+
+    cancel.addEventListener('click', () => finish(false))
+    confirm.addEventListener('click', () => finish(true))
+    dialog.addEventListener('cancel', (event) => {
+      event.preventDefault()
+      finish(false)
+    })
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog) finish(false)
+    })
+
+    document.body.append(dialog)
+    if (typeof dialog.showModal === 'function') dialog.showModal()
+    else dialog.setAttribute('open', '')
+    cancel.focus()
+  })
+
 const extensionLabel = (file: TacoFile): string => {
   const name = fileName(file.path)
   const extension = name.includes('.') ? name.split('.').at(-1)! : 'txt'

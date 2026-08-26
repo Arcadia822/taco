@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { FileBrowser } from '../src/file-browser.ts'
+import { configureApp } from '../src/kernel/app.ts'
+import { capturePristine } from '../src/kernel/save.ts'
 import { MermaidRuntime, type MermaidApi } from '../src/mermaid.ts'
 import type { TacoBundle } from '../src/model.ts'
 
@@ -612,6 +614,44 @@ describe('FileBrowser', () => {
     expect(editableBundle.files[0].content).toBe(testBundle.files[0].content)
     expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(false)
     expect(document.querySelector('.save-button')?.getAttribute('aria-label')).toBe('保存')
+  })
+
+  it('confirms the download fallback and reports only that the download started', async () => {
+    Object.defineProperty(window, 'showSaveFilePicker', { configurable: true, value: undefined })
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn().mockReturnValue('blob:taco-download') })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    const downloadClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    configureApp({ appId: 'taco-test', appName: 'Taco' })
+    capturePristine()
+
+    const editableBundle = structuredClone(testBundle)
+    new FileBrowser(document.getElementById('app')!, editableBundle)
+    const title = document.querySelector<HTMLInputElement>('.workspace-header .bundle-title')!
+    title.value = 'Download fallback'
+    title.dispatchEvent(new Event('input', { bubbles: true }))
+
+    document.querySelector<HTMLButtonElement>('.save-button')!.click()
+    const firstDialog = document.querySelector<HTMLDialogElement>('.confirmation-dialog')!
+    expect(firstDialog.open).toBe(true)
+    expect(firstDialog.getAttribute('aria-labelledby')).toBe('taco-confirmation-title')
+    expect(firstDialog.querySelector('.confirmation-dialog-title')?.textContent).toBe('下载此 Taco？')
+    expect(firstDialog.querySelector('.confirmation-dialog-body')?.textContent).toContain('保存位置由浏览器设置决定')
+    expect(document.activeElement).toBe(firstDialog.querySelector('.confirmation-dialog-cancel'))
+
+    firstDialog.querySelector<HTMLButtonElement>('.confirmation-dialog-cancel')!.click()
+    await Promise.resolve()
+    expect(downloadClick).not.toHaveBeenCalled()
+    expect(document.querySelector('.confirmation-dialog')).toBeNull()
+    expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(true)
+
+    document.querySelector<HTMLButtonElement>('.save-button')!.click()
+    document.querySelector<HTMLButtonElement>('.confirmation-dialog-confirm')!.click()
+    await vi.waitFor(() => expect(document.querySelector('.taco-toast')).not.toBeNull())
+
+    expect(document.querySelector('.taco-toast')?.textContent).toBe('已开始下载 Taco 文件')
+    expect(downloadClick).toHaveBeenCalledTimes(1)
+    expect(document.querySelector('.save-button .button-label')?.textContent).toBe('保存')
+    expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(false)
   })
 
   it('keeps file collapse separate and makes the right panel permanent', () => {

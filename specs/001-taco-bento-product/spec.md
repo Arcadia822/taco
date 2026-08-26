@@ -65,7 +65,7 @@ As the holder of a local file, I want Taco to have the same single-file shell ca
 
 1. **Given** Taco is open locally, **When** the user switches language, **Then** the shell and browser controls switch language, but the spec file text is not translated or rewritten.
 2. **Given** the user opens the share menu, **When** they choose an editor invitation or a read-only copy, **Then** Taco saves a file copy with the corresponding permission that never leaks the Owner private key; the share menu offers no live read-only or template export.
-3. **Given** the user clicks Save, **When** the browser supports File System Access, **Then** Taco writes to the chosen `.taco.html`; when it is unsupported, it downloads a file with equivalent content.
+3. **Given** the user clicks Save, **When** the browser supports File System Access, **Then** Taco writes to the chosen `.taco.html`; when it is unsupported, Taco explains that the browser controls the download destination and downloads an equivalent file only after the user confirms.
 4. **Given** the file sidebar is visible, **When** the user clicks the control in its header, **Then** the file sidebar collapses and a re-expand control appears in the workspace header.
 
 ### User Story 5 — Local and cross-device collaboration (Priority: P1)

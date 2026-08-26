@@ -8,7 +8,7 @@ import {
   type TacoFile,
 } from './model.ts'
 import { Editor } from '@tiptap/core'
-import { canSaveAndUnpack, saveAndUnpack, saveCopy, saveFile, type SaveResult } from './kernel/save.ts'
+import { canSaveAndUnpack, canWriteInPlace, saveAndUnpack, saveCopy, saveFile, type SaveResult } from './kernel/save.ts'
 import { blockHtml, blocksFromEditor, createTacoEditorExtensions, ensureTacoBlockIds, migrateTacoBundleBlocks } from './tiptap-editor.ts'
 import { TacoStore } from './store.ts'
 import { TacoSyncSession } from './sync/session.ts'
@@ -30,6 +30,7 @@ import {
   el,
   fallbackFileTitle,
   setButtonIcon,
+  showConfirmDialog,
   sidebarRow,
   svgIcon,
 } from './ui-primitives.ts'
@@ -170,6 +171,7 @@ export class FileBrowser {
       menuButton: (label, action, options) => this.menuButton(label, action, options),
       selectFile: (file) => this.selectFile(file),
       paintPresence: () => this.presence.paint(),
+      confirmDownload: (credentialBearing) => this.confirmDownloadFallback(credentialBearing),
       reportExport: (result) => this.reportExport(result),
       toast: (message) => this.toast(message),
     })
@@ -906,7 +908,10 @@ export class FileBrowser {
       this.toast(this.t.unpackUnsupported)
       return
     }
-    if (hasCollabSecrets(this.bundle) && !window.confirm(this.t.credentialSaveConfirm)) return
+    const credentialBearing = hasCollabSecrets(this.bundle)
+    if (mode !== 'unpack' && !canWriteInPlace()) {
+      if (!await this.confirmDownloadFallback(credentialBearing)) return
+    } else if (credentialBearing && !window.confirm(this.t.credentialSaveConfirm)) return
     try {
       this.sync.stampInto(this.bundle)
       const result = mode === 'copy'
@@ -925,19 +930,33 @@ export class FileBrowser {
     if (result === 'directory-unavailable') { this.toast(this.t.directoryUnavailable); return }
     this.dirtyTracker.markSaved()
     this.syncDirtyState()
-    this.saveButton.querySelector('.button-label')!.textContent = this.t.saved
+    if (result !== 'downloaded') this.saveButton.querySelector('.button-label')!.textContent = this.t.saved
     this.toast(result === 'downloaded'
-      ? this.t.saveDownloaded
+      ? this.t.downloadStarted
       : result === 'saved-and-unpacked'
         ? this.t.saveUnpacked(this.bundle.files.length)
         : this.t.saved)
-    setTimeout(() => { this.saveButton.querySelector('.button-label')!.textContent = this.t.save }, 1800)
+    if (result !== 'downloaded') {
+      setTimeout(() => { this.saveButton.querySelector('.button-label')!.textContent = this.t.save }, 1800)
+    }
   }
 
   private reportExport(result: SaveResult): void {
     if (result === 'cancelled') { this.toast(this.t.saveCancelled); return }
     if (result === 'directory-unavailable') { this.toast(this.t.directoryUnavailable); return }
-    this.toast(result === 'downloaded' ? this.t.saveDownloaded : this.t.saved)
+    this.toast(result === 'downloaded' ? this.t.downloadStarted : this.t.saved)
+  }
+
+  private confirmDownloadFallback(credentialBearing: boolean): Promise<boolean> {
+    return showConfirmDialog({
+      title: this.t.downloadConfirmTitle,
+      messages: [
+        this.t.downloadConfirmBody,
+        ...(credentialBearing ? [this.t.downloadConfirmCredential] : []),
+      ],
+      confirmLabel: this.t.download,
+      cancelLabel: this.t.cancel,
+    })
   }
 
   private toast(message: string): void {
