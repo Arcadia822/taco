@@ -3,7 +3,7 @@ schema_version: '1.0'
 extension:
   id: 'taco'
   name: 'Taco Review'
-  version: '0.3.1'
+  version: '0.4.0'
   description: 'Packages Spec Kit features for human review and syncs edits and comments back.'
   author: 'Arcadia822'
   repository: 'https://github.com/Arcadia822/taco'
