@@ -1,7 +1,7 @@
 import { bundleCanWrite, type TacoBundle, type TacoCommentThread, type TacoFile, type TacoTextAnchor } from './model.ts'
 import { commentsForPath, createTextAnchor, resolveTextAnchor } from './comments.ts'
 import { domRange, textOffset } from './dom-text-range.ts'
-import { requireAuthorName } from './identity.ts'
+import { requireAuthorName } from './author-name-dialog.ts'
 import { copy, type Locale } from './i18n.ts'
 import { localId } from './local-id.ts'
 import type { SourceEditorController } from './source-editor.ts'
@@ -252,23 +252,24 @@ export class CommentsController {
 
   private addCommentThread(anchor: TacoTextAnchor, body: string): void {
     if (!bundleCanWrite(this.options.bundle)) return
-    const author = requireAuthorName(this.t.commentName)
-    if (!author) return
-    const timestamp = new Date().toISOString()
-    const thread: TacoCommentThread = {
-      id: localId('thread'),
-      anchor: structuredClone(anchor),
-      status: 'open',
-      messages: [{ id: localId('message'), author, authorId: this.options.sync.actor, body, createdAt: timestamp }],
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }
-    this.options.store.commit({ kind: 'comments', path: anchor.path }, () => { (this.options.bundle.comments ??= []).push(thread) })
-    this.options.sync.setPresence({ name: author })
-    this.pendingAnchor = null
-    this.removeSelectionButton()
-    this.paint()
-    this.refreshHighlights()
+    requireAuthorName({ title: this.t.yourName, hint: this.t.nameHint, cancel: this.t.cancel, confirm: this.t.addComment }, (author) => {
+      if (!bundleCanWrite(this.options.bundle)) return
+      const timestamp = new Date().toISOString()
+      const thread: TacoCommentThread = {
+        id: localId('thread'),
+        anchor: structuredClone(anchor),
+        status: 'open',
+        messages: [{ id: localId('message'), author, authorId: this.options.sync.actor, body, createdAt: timestamp }],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }
+      this.options.store.commit({ kind: 'comments', path: anchor.path }, () => { (this.options.bundle.comments ??= []).push(thread) })
+      this.options.sync.setPresence({ name: author })
+      this.pendingAnchor = null
+      this.removeSelectionButton()
+      this.paint()
+      this.refreshHighlights()
+    })
   }
 
   private openReplyComposer(card: HTMLElement, thread: TacoCommentThread): void {
@@ -285,15 +286,16 @@ export class CommentsController {
       event.preventDefault()
       const body = textarea.value.trim()
       if (!body) { this.options.toast(this.t.emptyComment); return }
-      const author = requireAuthorName(this.t.commentName)
-      if (!author) return
-      const timestamp = new Date().toISOString()
-      this.options.store.commit({ kind: 'comments', path: thread.anchor.path }, () => {
-        thread.messages.push({ id: localId('message'), author, authorId: this.options.sync.actor, body, createdAt: timestamp })
-        thread.updatedAt = timestamp
+      requireAuthorName({ title: this.t.yourName, hint: this.t.nameHint, cancel: this.t.cancel, confirm: this.t.reply }, (author) => {
+        if (!bundleCanWrite(this.options.bundle)) return
+        const timestamp = new Date().toISOString()
+        this.options.store.commit({ kind: 'comments', path: thread.anchor.path }, () => {
+          thread.messages.push({ id: localId('message'), author, authorId: this.options.sync.actor, body, createdAt: timestamp })
+          thread.updatedAt = timestamp
+        })
+        this.options.sync.setPresence({ name: author })
+        this.paint()
       })
-      this.options.sync.setPresence({ name: author })
-      this.paint()
     })
     card.append(form)
     textarea.focus()

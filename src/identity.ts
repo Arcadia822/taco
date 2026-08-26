@@ -17,10 +17,3 @@ export const setAuthorName = (value: string): string => {
   if (name) storageSet(LOCAL_KEY, name)
   return name
 }
-
-export const requireAuthorName = (promptLabel: string): string | null => {
-  const existing = currentAuthorName()
-  if (existing) return existing
-  const next = normalizeAuthorName(window.prompt(promptLabel)?.trim() ?? '')
-  return next ? setAuthorName(next) : null
-}
