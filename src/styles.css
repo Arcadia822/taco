@@ -473,7 +473,16 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .comment-message + .comment-message { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .comment-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 10px; }
 .comment-meta strong { color: var(--ink); font-size: 11px; }
+.comment-dates { display: inline-flex; align-items: center; gap: 6px; }
+.comment-edited::before { content: '·'; margin-right: 6px; }
 .comment-message p { margin: 5px 0 0; font-size: 12px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.comment-message.is-deleted { color: var(--muted); }
+.comment-message .comment-tombstone { font-style: italic; }
+.comment-message-actions { display: flex; justify-content: flex-end; gap: 4px; margin-top: 4px; opacity: 0; transition: opacity 120ms ease; }
+.comment-message:hover .comment-message-actions, .comment-message:focus-within .comment-message-actions { opacity: 1; }
+.comment-message-delete { color: var(--muted); }
+.comment-message-editor { margin-top: 7px; }
+.comment-validation { margin: 0; color: #b42318; font-size: 11px; line-height: 1.4; }
 .comment-form { display: grid; gap: 8px; }
 .comment-input { width: 100%; min-height: 82px; resize: vertical; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); color: var(--ink); font: 12px/1.5 var(--sans); }
 .comment-input:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
@@ -484,6 +493,8 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .comment-submit { background: var(--ink); color: var(--surface); font-weight: 650; }
 .comment-reply-form { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .comment-reply-form .comment-input { min-height: 66px; }
+@media (hover: none) { .comment-message-actions { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .comment-message-actions { transition: none; } }
 .author-name-dialog { width: min(380px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
 .author-name-dialog::backdrop { background: rgba(32, 35, 31, .38); backdrop-filter: blur(3px); }
 .author-name-form { display: grid; gap: 12px; padding: 18px; }

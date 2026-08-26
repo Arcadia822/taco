@@ -1,9 +1,10 @@
-import { bundleCanWrite, type TacoBundle, type TacoCommentThread, type TacoFile, type TacoTextAnchor } from './model.ts'
-import { commentsForPath, createTextAnchor, resolveTextAnchor } from './comments.ts'
+import { bundleCanWrite, type TacoBundle, type TacoCommentMessage, type TacoCommentThread, type TacoFile, type TacoTextAnchor } from './model.ts'
+import { canDeleteMessage, canEditMessage, commentsForPath, createTextAnchor, deleteCommentMessage, editCommentMessage, isDeletedMessage, resolveTextAnchor, sortCommentMessages } from './comments.ts'
 import { domRange, textOffset } from './dom-text-range.ts'
 import { requireAuthorName } from './author-name-dialog.ts'
 import { copy, type Locale } from './i18n.ts'
 import { localId } from './local-id.ts'
+import { commentPrincipal, type CommentPrincipal } from './identity.ts'
 import type { SourceEditorController } from './source-editor.ts'
 import type { TacoStore } from './store.ts'
 import type { TacoSyncSession } from './sync/session.ts'
@@ -27,6 +28,8 @@ export class CommentsController {
   private commentToggle: HTMLButtonElement | null = null
   private pendingAnchor: TacoTextAnchor | null = null
   private selectionButton: HTMLButtonElement | null = null
+  private principal: CommentPrincipal | null = null
+  private principalNoticeShown = false
 
   constructor(private readonly options: CommentsControllerOptions) {}
 
@@ -52,7 +55,9 @@ export class CommentsController {
     this.commentList.innerHTML = ''
     const path = this.options.getSelected()?.path
     const threads = path ? commentsForPath(this.options.bundle.comments, path) : []
-    const openCount = threads.filter((thread) => thread.status === 'open').length
+    const openCount = threads
+      .filter((thread) => thread.status === 'open')
+      .reduce((count, thread) => count + thread.messages.filter((message) => !isDeletedMessage(message)).length, 0)
     this.commentToggle.querySelector('.comment-count')?.remove()
     if (openCount) this.commentToggle.append(el('span', 'comment-count', String(openCount)))
 
@@ -205,13 +210,7 @@ export class CommentsController {
     quote.type = 'button'
     quote.addEventListener('click', () => this.activateCommentThread(thread))
     card.append(quote)
-    for (const message of thread.messages) {
-      const messageNode = el('div', 'comment-message')
-      const meta = el('div', 'comment-meta')
-      meta.append(el('strong', '', message.author), el('time', '', this.formatCommentDate(message.createdAt)))
-      messageNode.append(meta, el('p', '', message.body))
-      card.append(messageNode)
-    }
+    for (const message of sortCommentMessages(thread.messages)) card.append(this.buildCommentMessage(thread, message))
     if (!bundleCanWrite(this.options.bundle)) return card
     const actions = el('div', 'comment-thread-actions')
     const reply = el('button', 'comment-action', this.t.reply) as HTMLButtonElement
@@ -220,12 +219,134 @@ export class CommentsController {
     const resolve = el('button', 'comment-action', thread.status === 'open' ? this.t.resolve : this.t.reopen) as HTMLButtonElement
     resolve.type = 'button'
     resolve.addEventListener('click', () => this.toggleThreadStatus(thread))
-    const remove = el('button', 'comment-action comment-delete', this.t.delete) as HTMLButtonElement
+    const remove = el('button', 'comment-action comment-delete', this.t.deleteThread) as HTMLButtonElement
     remove.type = 'button'
     remove.addEventListener('click', () => this.deleteThread(thread))
     actions.append(reply, resolve, remove)
     card.append(actions)
     return card
+  }
+
+  private buildCommentMessage(thread: TacoCommentThread, message: TacoCommentMessage): HTMLElement {
+    const node = el('section', `comment-message${isDeletedMessage(message) ? ' is-deleted' : ''}`)
+    node.dataset.threadId = thread.id
+    node.dataset.messageId = message.id
+    const meta = el('div', 'comment-meta')
+    const dates = el('span', 'comment-dates')
+    const created = el('time', '', this.formatCommentDate(message.createdAt)) as HTMLTimeElement
+    created.dateTime = message.createdAt
+    dates.append(created)
+    if (message.updatedAt && !message.deletedAt) {
+      const edited = el('span', 'comment-edited', this.t.edited)
+      edited.setAttribute('aria-label', this.t.editedAt(this.formatCommentDate(message.updatedAt)))
+      edited.title = this.t.editedAt(this.formatCommentDate(message.updatedAt))
+      dates.append(edited)
+    }
+    meta.append(el('strong', '', message.author), dates)
+    node.append(meta)
+    if (isDeletedMessage(message)) {
+      const tombstone = el('p', 'comment-tombstone', this.t.messageDeleted)
+      tombstone.setAttribute('role', 'status')
+      node.append(tombstone)
+      return node
+    }
+    node.append(el('p', 'comment-body', message.body))
+    const writable = bundleCanWrite(this.options.bundle)
+    if (!writable) return node
+    const actions = el('div', 'comment-message-actions')
+    const principal = this.getPrincipal()
+    if (canEditMessage(message, principal.id, writable)) {
+      const edit = el('button', 'comment-action', this.t.editMessage) as HTMLButtonElement
+      edit.type = 'button'
+      edit.setAttribute('aria-label', this.t.editMessageBy(message.author))
+      edit.addEventListener('click', () => this.openMessageEditor(node, thread, message))
+      actions.append(edit)
+    }
+    if (canDeleteMessage(message, writable)) {
+      const remove = el('button', 'comment-action comment-message-delete', this.t.deleteMessage) as HTMLButtonElement
+      remove.type = 'button'
+      remove.setAttribute('aria-label', this.t.deleteMessageBy(message.author))
+      remove.addEventListener('click', () => this.deleteMessage(thread, message))
+      actions.append(remove)
+    }
+    if (actions.childElementCount) node.append(actions)
+    return node
+  }
+
+  private openMessageEditor(
+    node: HTMLElement,
+    thread: TacoCommentThread,
+    message: TacoCommentMessage,
+  ): void {
+    const existing = node.closest('.comment-thread')?.querySelector('.comment-message-editor')?.closest<HTMLElement>('.comment-message')
+    if (existing && existing !== node) {
+      const existingMessage = thread.messages.find((candidate) => candidate.id === existing.dataset.messageId)
+      if (existingMessage) existing.replaceWith(this.buildCommentMessage(thread, existingMessage))
+    }
+    const signature = `${message.body}\u0000${message.updatedAt ?? ''}\u0000${message.deletedAt ?? ''}`
+    node.querySelector('.comment-body')?.remove()
+    node.querySelector('.comment-message-actions')?.remove()
+    const form = el('form', 'comment-form comment-message-editor')
+    const textarea = el('textarea', 'comment-input') as HTMLTextAreaElement
+    textarea.value = message.body
+    textarea.setAttribute('aria-label', this.t.editMessageBy(message.author))
+    const error = el('p', 'comment-validation')
+    error.id = localId('comment-error')
+    error.setAttribute('role', 'alert')
+    error.hidden = true
+    textarea.setAttribute('aria-describedby', error.id)
+    const actions = el('div', 'comment-form-actions')
+    const cancel = el('button', 'comment-action', this.t.cancel) as HTMLButtonElement
+    cancel.type = 'button'
+    const save = el('button', 'comment-submit', this.t.saveMessage) as HTMLButtonElement
+    save.type = 'submit'
+    actions.append(cancel, save)
+    form.append(textarea, error, actions)
+    node.append(form)
+    const restore = (): void => {
+      node.replaceWith(this.buildCommentMessage(thread, message))
+      requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-message-id="${message.id}"] .comment-action`)?.focus())
+    }
+    cancel.addEventListener('click', restore)
+    textarea.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); restore() }
+    })
+    form.addEventListener('submit', (event) => {
+      event.preventDefault()
+      const body = textarea.value.trim()
+      if (!body) {
+        error.textContent = this.t.emptyComment
+        error.hidden = false
+        textarea.setAttribute('aria-invalid', 'true')
+        textarea.focus()
+        return
+      }
+      const current = thread.messages.find((candidate) => candidate.id === message.id)
+      const currentSignature = current ? `${current.body}\u0000${current.updatedAt ?? ''}\u0000${current.deletedAt ?? ''}` : ''
+      if (!current || currentSignature !== signature) {
+        this.options.toast(this.t.messageChangedRemotely)
+        this.paint()
+        return
+      }
+      if (body === current.body) { restore(); return }
+      const timestamp = new Date().toISOString()
+      this.options.store.commit({ kind: 'comments', path: thread.anchor.path }, () => {
+        editCommentMessage(thread, message.id, body, timestamp)
+      })
+      this.paint()
+      requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-message-id="${message.id}"] .comment-action`)?.focus())
+    })
+    requestAnimationFrame(() => { textarea.focus(); textarea.select() })
+  }
+
+  private deleteMessage(thread: TacoCommentThread, message: TacoCommentMessage): void {
+    if (!canDeleteMessage(message, bundleCanWrite(this.options.bundle))) return
+    if (typeof window.confirm === 'function' && !window.confirm(this.t.deleteMessageConfirm)) return
+    const timestamp = new Date().toISOString()
+    this.options.store.commit({ kind: 'comments', path: thread.anchor.path }, () => {
+      deleteCommentMessage(thread, message.id, timestamp)
+    })
+    this.paint()
   }
 
   private buildQuote(anchor: TacoTextAnchor, interactive = false): HTMLElement {
@@ -259,7 +380,7 @@ export class CommentsController {
         id: localId('thread'),
         anchor: structuredClone(anchor),
         status: 'open',
-        messages: [{ id: localId('message'), author, authorId: this.options.sync.actor, body, createdAt: timestamp }],
+        messages: [{ id: localId('message'), author, authorId: this.getPrincipal().id, body, createdAt: timestamp }],
         createdAt: timestamp,
         updatedAt: timestamp,
       }
@@ -290,7 +411,7 @@ export class CommentsController {
         if (!bundleCanWrite(this.options.bundle)) return
         const timestamp = new Date().toISOString()
         this.options.store.commit({ kind: 'comments', path: thread.anchor.path }, () => {
-          thread.messages.push({ id: localId('message'), author, authorId: this.options.sync.actor, body, createdAt: timestamp })
+          thread.messages.push({ id: localId('message'), author, authorId: this.getPrincipal().id, body, createdAt: timestamp })
           thread.updatedAt = timestamp
         })
         this.options.sync.setPresence({ name: author })
@@ -313,13 +434,22 @@ export class CommentsController {
 
   private deleteThread(thread: TacoCommentThread): void {
     if (!bundleCanWrite(this.options.bundle)) return
-    if (typeof window.confirm === 'function' && !window.confirm(this.t.delete)) return
+    if (typeof window.confirm === 'function' && !window.confirm(this.t.deleteThreadConfirm)) return
     const comments = this.options.bundle.comments ?? []
     const index = comments.findIndex((candidate) => candidate.id === thread.id)
     if (index === -1) return
     this.options.store.commit({ kind: 'comments', path: thread.anchor.path }, () => { comments.splice(index, 1) })
     this.paint()
     this.refreshHighlights()
+  }
+
+  private getPrincipal(): CommentPrincipal {
+    this.principal ??= commentPrincipal(this.options.bundle.docId)
+    if (!this.principal.persistent && !this.principalNoticeShown) {
+      this.principalNoticeShown = true
+      this.options.toast(this.t.principalSessionOnly)
+    }
+    return this.principal
   }
 
   private showSelectionCommentButton(anchor: TacoTextAnchor, left: number, top: number): void {

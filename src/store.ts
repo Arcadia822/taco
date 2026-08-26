@@ -1,5 +1,6 @@
 import { bundleCanWrite, ensureFileIds, type TacoBlock, type TacoBundle, type TacoCommentMessage, type TacoCommentThread, type TacoFile, type TacoTextAnchor } from './model.ts'
 import { rebuildSyncDoc } from './sync/validation.ts'
+import { normalizeCommentMessage, sortCommentMessages } from './comments.ts'
 
 export type SyncNode =
   | (TacoBlock & { kind: 'block' })
@@ -49,7 +50,7 @@ const toSyncFile = (bundle: TacoBundle, file: TacoFile): SyncFile => {
       createdAt: thread.createdAt,
       updatedAt: thread.updatedAt,
     })
-    for (const message of thread.messages) nodes.push({ ...clone(message), kind: 'comment-message', threadId: thread.id })
+    for (const message of sortCommentMessages(thread.messages)) nodes.push({ ...clone(normalizeCommentMessage(message)), kind: 'comment-message', threadId: thread.id })
   }
   return { ...clone(rest), id: file.id!, nodes }
 }
@@ -124,7 +125,7 @@ export const applySyncDoc = (bundle: TacoBundle, sync: TacoSyncDoc): void => {
       const threadMessages = messages
         .filter((message) => message.threadId === thread.id)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
-        .map(({ kind: _kind, threadId: _threadId, ...message }) => clone(message))
+        .map(({ kind: _kind, threadId: _threadId, ...message }) => normalizeCommentMessage(clone(message)))
       if (!threadMessages.length) continue
       comments.push({
         id: thread.id,

@@ -1,6 +1,53 @@
-import type { TacoCommentThread, TacoTextAnchor } from './model.ts'
+import type { TacoCommentMessage, TacoCommentThread, TacoTextAnchor } from './model.ts'
 
 const CONTEXT_LENGTH = 32
+export const DELETED_COMMENT_BODY = '[Deleted message]'
+
+export const isDeletedMessage = (message: TacoCommentMessage): boolean => Boolean(message.deletedAt)
+
+export const normalizeCommentMessage = (message: TacoCommentMessage): TacoCommentMessage =>
+  message.deletedAt && message.body !== DELETED_COMMENT_BODY
+    ? { ...message, body: DELETED_COMMENT_BODY }
+    : message
+
+export const sortCommentMessages = (messages: readonly TacoCommentMessage[]): TacoCommentMessage[] =>
+  [...messages].sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
+
+export const canEditMessage = (message: TacoCommentMessage, principal: string, writable: boolean): boolean =>
+  writable && !isDeletedMessage(message) && Boolean(principal) && message.authorId === principal
+
+export const canDeleteMessage = (message: TacoCommentMessage, writable: boolean): boolean =>
+  writable && !isDeletedMessage(message)
+
+export const editCommentMessage = (
+  thread: TacoCommentThread,
+  messageId: string,
+  body: string,
+  timestamp: string,
+): boolean => {
+  const message = thread.messages.find((candidate) => candidate.id === messageId)
+  if (!message || isDeletedMessage(message)) return false
+  const normalized = body.trim()
+  if (!normalized || normalized === message.body) return false
+  message.body = normalized
+  message.updatedAt = timestamp
+  thread.updatedAt = timestamp
+  return true
+}
+
+export const deleteCommentMessage = (
+  thread: TacoCommentThread,
+  messageId: string,
+  timestamp: string,
+): boolean => {
+  const message = thread.messages.find((candidate) => candidate.id === messageId)
+  if (!message || isDeletedMessage(message)) return false
+  message.body = DELETED_COMMENT_BODY
+  message.deletedAt = timestamp
+  message.updatedAt = timestamp
+  thread.updatedAt = timestamp
+  return true
+}
 
 export const createTextAnchor = (path: string, text: string, start: number, end: number): TacoTextAnchor => ({
   path,

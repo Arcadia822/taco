@@ -567,11 +567,16 @@ export const describeComments = (bundle, status = 'all') => {
         location: located && file ? positionFor(file.content, located.start) : null,
         stale: !located,
         messages: Array.isArray(thread.messages)
-          ? thread.messages.map((message) => ({
+          ? [...thread.messages]
+            .sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)) || String(left.id).localeCompare(String(right.id)))
+            .map((message) => ({
               id: message.id,
               author: message.author,
-              body: message.body,
+              body: message.deletedAt ? null : message.body,
               createdAt: message.createdAt,
+              ...(message.updatedAt ? { updatedAt: message.updatedAt } : {}),
+              deleted: Boolean(message.deletedAt),
+              ...(message.deletedAt ? { deletedAt: message.deletedAt } : {}),
             }))
           : [],
         createdAt: thread.createdAt,
@@ -669,7 +674,7 @@ const humanComments = (comments) => {
     .map((thread) => {
       const location = thread.location ? `:${thread.location.line}:${thread.location.column}` : ''
       const messages = thread.messages
-        .map((message) => `  ${message.author}: ${message.body}`)
+        .map((message) => `  ${message.author}: ${message.deleted ? '[message deleted]' : message.body}`)
         .join('\n')
       return `[${thread.status}] ${thread.path}${location}\n  > ${thread.quote}\n${messages}`
     })

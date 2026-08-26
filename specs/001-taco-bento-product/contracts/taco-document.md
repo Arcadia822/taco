@@ -69,6 +69,9 @@ Stage navigation adds no bundle fields. Core files and Spec Kit convention files
 - A `<` inside a string is safely escaped in the HTML to avoid ending the script block.
 - The runtime does not execute bundle content.
 - The bundle's core reading and editing depend on no external CDN, font, account, or backend; it connects to the relay specified by `collab.room` only when the user explicitly starts online collaboration.
+- Comment messages retain the required version-1 shape and may add `authorId`, `updatedAt`, and `deletedAt`. All timestamps are bounded ISO strings. `deletedAt` is the sole tombstone discriminator; deleted bodies serialize as the fixed non-empty `[Deleted message]` sentinel so older version-1 readers degrade to ordinary visible text instead of rejecting the bundle.
+- Message order is always `createdAt`, then `id`. Editing and deletion update the parent thread activity time without moving a message or deleting siblings. A deleted root or only message does not delete the thread.
+- Live CRDT frames require sync protocol v3. A peer with another protocol version is reported and ignored before operations, presence, or snapshots can partially synchronize.
 
 ## Renderer Strategy
 
@@ -97,6 +100,6 @@ The Spec Kit extension's file-level protocol is provided by the offline CLI:
 - `pack <feature-dir>`: read UTF-8 text files, record a `sourceHash`, attach each HTML file's canonical `file:` URL, and create a Taco.
 - `sync <taco> --dry-run --json`: before writing to disk, return each file's `created | updated | unchanged | conflict` status and all comments.
 - `sync <taco> --json`: write back to canonical paths only when the full pre-check has no conflict; missing files are not deleted.
-- `comments <taco> --status open --json`: return comment paths, quotes, line/column, stale status, and messages.
+- `comments <taco> --status open --json`: return comment paths, quotes, line/column, stale status, and ordered messages. Edited messages include `updatedAt`; deleted messages expose `deleted: true`, `deletedAt`, and `body: null` so the sentinel is never presented to an Agent as active feedback.
 
 A conflict is defined as: the target canonical file's current hash differs from both the `sourceHash` and the Taco's `content` hash. When any file conflicts, the default sync is all-or-nothing and writes no other file. `--force` is an explicit manual recovery operation and is not part of the automated Agent flow.

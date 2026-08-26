@@ -1015,4 +1015,148 @@ describe('FileBrowser', () => {
     expect(editableBundle.comments).toBeUndefined()
     expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(false)
   })
+
+  it('edits only principal-owned messages in place with validation, no-op and cancel semantics', () => {
+    localStorage.setItem('taco-comment-principal:browser-test', 'principal-local')
+    const timestamp = '2026-08-26T00:00:00.000Z'
+    const editableBundle = structuredClone(testBundle)
+    editableBundle.comments = [{
+      id: 'thread-actions',
+      anchor: { path: 'specs/001-browser/spec.md', position: { start: 20, end: 28 }, quote: { exact: 'Readable', prefix: 'Outcome\n', suffix: ' Markdown.' } },
+      status: 'open',
+      messages: [
+        { id: 'message-own', author: 'Same name', authorId: 'principal-local', body: 'Original', createdAt: timestamp },
+        { id: 'message-other', author: 'Same name', authorId: 'principal-other', body: 'Other', createdAt: '2026-08-26T00:00:01.000Z' },
+      ],
+      createdAt: timestamp,
+      updatedAt: '2026-08-26T00:00:01.000Z',
+    }]
+    new FileBrowser(document.getElementById('app')!, editableBundle)
+
+    expect(document.querySelectorAll('[data-message-id="message-own"] .comment-message-actions button')).toHaveLength(2)
+    expect(document.querySelectorAll('[data-message-id="message-other"] .comment-message-actions button')).toHaveLength(1)
+    expect(document.querySelector('[data-message-id="message-own"] .comment-action')?.getAttribute('aria-label')).toBe('编辑 Same name 的消息')
+    expect(document.querySelector('[data-message-id="message-other"] .comment-message-delete')?.getAttribute('aria-label')).toBe('删除 Same name 的消息')
+    document.querySelector<HTMLButtonElement>('[data-message-id="message-own"] .comment-action')!.click()
+    let editor = document.querySelector<HTMLTextAreaElement>('.comment-message-editor .comment-input')!
+    editor.value = '   '
+    editor.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    expect(editor.getAttribute('aria-invalid')).toBe('true')
+    expect(document.querySelector('.comment-validation')?.textContent).toBe('评论内容不能为空。')
+    expect(editableBundle.comments[0].messages[0].body).toBe('Original')
+
+    editor.value = 'Original'
+    editor.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    expect(editableBundle.comments[0].messages[0].updatedAt).toBeUndefined()
+    expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(false)
+
+    document.querySelector<HTMLButtonElement>('[data-message-id="message-own"] .comment-action')!.click()
+    editor = document.querySelector<HTMLTextAreaElement>('.comment-message-editor .comment-input')!
+    editor.value = 'Changed'
+    editor.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    expect(editableBundle.comments[0].messages[0]).toMatchObject({ body: 'Changed', updatedAt: expect.any(String) })
+    expect(document.querySelector('[data-message-id="message-own"] .comment-edited')?.textContent).toBe('已编辑')
+
+    document.querySelector<HTMLButtonElement>('[data-message-id="message-own"] .comment-action')!.click()
+    editor = document.querySelector<HTMLTextAreaElement>('.comment-message-editor .comment-input')!
+    editor.value = 'Cancelled'
+    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    expect(editableBundle.comments[0].messages[0].body).toBe('Changed')
+  })
+
+  it('deletes a selected root message as a tombstone and preserves replies and thread actions', () => {
+    localStorage.setItem('taco-comment-principal:browser-test', 'principal-local')
+    const confirm = vi.fn().mockReturnValue(true)
+    Object.defineProperty(window, 'confirm', { configurable: true, value: confirm })
+    const timestamp = '2026-08-26T00:00:00.000Z'
+    const editableBundle = structuredClone(testBundle)
+    editableBundle.comments = [{
+      id: 'thread-delete-message',
+      anchor: { path: 'specs/001-browser/spec.md', position: { start: 20, end: 28 }, quote: { exact: 'Readable', prefix: 'Outcome\n', suffix: ' Markdown.' } },
+      status: 'resolved',
+      messages: [
+        { id: 'message-root', author: 'Ada', authorId: 'principal-other', body: 'Root', createdAt: timestamp },
+        { id: 'message-reply', author: 'Grace', body: 'Reply remains', createdAt: '2026-08-26T00:00:01.000Z' },
+      ],
+      createdAt: timestamp,
+      updatedAt: '2026-08-26T00:00:01.000Z',
+    }]
+    new FileBrowser(document.getElementById('app')!, editableBundle)
+    document.querySelector<HTMLButtonElement>('[data-message-id="message-root"] .comment-message-delete')!.click()
+
+    expect(confirm).toHaveBeenCalledWith('删除此消息？评论线程和其他回复将保留。')
+    expect(editableBundle.comments).toHaveLength(1)
+    expect(editableBundle.comments[0].messages).toHaveLength(2)
+    expect(editableBundle.comments[0].messages[0]).toMatchObject({ body: '[Deleted message]', deletedAt: expect.any(String) })
+    expect(document.querySelector('[data-message-id="message-root"]')?.textContent).toContain('消息已删除')
+    expect(document.querySelector('[data-message-id="message-root"]')?.textContent).not.toContain('[Deleted message]')
+    expect(document.querySelector('[data-message-id="message-root"] .comment-message-actions')).toBeNull()
+    expect(document.querySelector('[data-message-id="message-reply"]')?.textContent).toContain('Reply remains')
+    expect(document.querySelectorAll('.comment-thread-actions button')).toHaveLength(3)
+    expect(editableBundle.comments[0].status).toBe('resolved')
+  })
+
+  it('counts active messages across open threads instead of counting threads', () => {
+    const timestamp = '2026-08-26T00:00:00.000Z'
+    const counterBundle = structuredClone(testBundle)
+    counterBundle.comments = [{
+      id: 'thread-counter',
+      anchor: { path: 'specs/001-browser/spec.md', position: { start: 20, end: 28 }, quote: { exact: 'Readable', prefix: '', suffix: '' } },
+      status: 'open',
+      messages: [
+        { id: 'message-one', author: 'Ada', body: 'One', createdAt: timestamp },
+        { id: 'message-two', author: 'Grace', body: 'Two', createdAt: '2026-08-26T00:00:01.000Z' },
+        { id: 'message-deleted', author: 'Lin', body: '[Deleted message]', createdAt: '2026-08-26T00:00:02.000Z', deletedAt: '2026-08-26T00:00:03.000Z' },
+      ],
+      createdAt: timestamp,
+      updatedAt: '2026-08-26T00:00:03.000Z',
+    }, {
+      id: 'thread-resolved-counter',
+      anchor: { path: 'specs/001-browser/spec.md', position: { start: 20, end: 28 }, quote: { exact: 'Readable', prefix: '', suffix: '' } },
+      status: 'resolved',
+      messages: [{ id: 'message-resolved', author: 'Ada', body: 'Resolved', createdAt: timestamp }],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }]
+    new FileBrowser(document.getElementById('app')!, counterBundle)
+    expect(document.querySelector('.comment-count')?.textContent).toBe('2')
+  })
+
+  it('refuses a stale in-place save after the underlying message changes', () => {
+    localStorage.setItem('taco-comment-principal:browser-test', 'principal-local')
+    const timestamp = '2026-08-26T00:00:00.000Z'
+    const editableBundle = structuredClone(testBundle)
+    editableBundle.comments = [{
+      id: 'thread-stale-edit',
+      anchor: { path: 'specs/001-browser/spec.md', position: { start: 20, end: 28 }, quote: { exact: 'Readable', prefix: '', suffix: '' } },
+      status: 'open',
+      messages: [{ id: 'message-stale', author: 'Ada', authorId: 'principal-local', body: 'Initial', createdAt: timestamp }],
+      createdAt: timestamp, updatedAt: timestamp,
+    }]
+    new FileBrowser(document.getElementById('app')!, editableBundle)
+    document.querySelector<HTMLButtonElement>('[data-message-id="message-stale"] .comment-action')!.click()
+    const editor = document.querySelector<HTMLTextAreaElement>('.comment-message-editor .comment-input')!
+    editor.value = 'Local stale edit'
+    editableBundle.comments[0].messages[0].body = 'Remote edit'
+    editableBundle.comments[0].messages[0].updatedAt = '2026-08-26T00:00:01.000Z'
+    editor.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    expect(editableBundle.comments[0].messages[0].body).toBe('Remote edit')
+    expect(document.querySelector('.taco-toast')?.textContent).toContain('此消息已在其他位置发生变化')
+  })
+
+  it('removes all message and thread mutation controls from reader copies', () => {
+    const reader = structuredClone(testBundle)
+    reader.access = 'reader'
+    reader.comments = [{
+      id: 'thread-reader',
+      anchor: { path: 'specs/001-browser/spec.md', position: { start: 20, end: 28 }, quote: { exact: 'Readable', prefix: '', suffix: '' } },
+      status: 'open',
+      messages: [{ id: 'message-reader', author: 'Ada', authorId: 'principal-local', body: 'Read only', createdAt: '2026-08-26T00:00:00.000Z' }],
+      createdAt: '2026-08-26T00:00:00.000Z', updatedAt: '2026-08-26T00:00:00.000Z',
+    }]
+    localStorage.setItem('taco-comment-principal:browser-test', 'principal-local')
+    new FileBrowser(document.getElementById('app')!, reader)
+    expect(document.querySelector('.comment-message-actions')).toBeNull()
+    expect(document.querySelector('.comment-thread-actions')).toBeNull()
+  })
 })

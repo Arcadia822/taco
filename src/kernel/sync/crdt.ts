@@ -123,9 +123,11 @@ export const DOC_NODE = '@doc'
  * frame (`pv`). v1 keyed elements by bare id, which collapsed the same id
  * appearing on multiple slides (the morph idiom); v2 state/ops are keyed
  * by composite element keys and are NOT interoperable, so v1 saved state
- * and v1 frames are discarded on sight.
+ * and v1 frames are discarded on sight. v3 adds synchronized comment-message
+ * deletion metadata; v2 peers are intentionally ignored so they cannot revive
+ * tombstoned messages by writing the last body value they understand.
  */
-export const SYNC_V = 2
+export const SYNC_V = 3
 
 /**
  * Largest asset value that may travel INSIDE an op, in characters of its data
@@ -434,7 +436,7 @@ export class SyncEngine {
    */
   static fromJSON<T extends SyncEngine>(this: new (actor: string) => T, actor: string, j: SyncStateJSON): T {
     const s = new this(actor)
-    if (j.v !== SYNC_V) return s // pre-v2 state keyed elements by bare id — unusable
+    if (j.v !== SYNC_V) return s // pre-v3 state lacks compatible node identity or message tombstone semantics
     s.lamport = j.lamport
     s.vv = j.vv ?? {}
     s.seq = s.vv[actor] ?? 0
@@ -1248,7 +1250,7 @@ export class SyncEngine {
    */
   mergeSnapshot(doc: BentoDoc, rdoc: BentoDoc, rstate: SyncStateJSON): ApplyResult {
     const res: ApplyResult = { changed: false, structure: false }
-    if (rstate.v !== SYNC_V) return res // pre-v2 snapshot: bare-id keys, unusable
+    if (rstate.v !== SYNC_V) return res // pre-v3 snapshots are not interoperable
     this.lamport = Math.max(this.lamport, rstate.lamport)
     for (const [a, s] of Object.entries(rstate.vv ?? {})) {
       if ((this.vv[a] ?? 0) < s) {
