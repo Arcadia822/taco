@@ -328,9 +328,12 @@ const embedBundle = (shell, bundle) => {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
   if (/<title\b[^>]*>[\s\S]*?<\/title>/i.test(withBundle)) {
-    return withBundle.replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, `<title>${escapedTitle}</title>`)
+    return withBundle.replace(
+      /<title\b[^>]*>[\s\S]*?<\/title>/i,
+      () => `<title>${escapedTitle}</title>`,
+    )
   }
-  return withBundle.replace('</head>', `<title>${escapedTitle}</title></head>`)
+  return withBundle.replace('</head>', () => `<title>${escapedTitle}</title></head>`)
 }
 
 const collectFiles = async (featureDir, rootPath, existingByPath, ignorePatterns) => {

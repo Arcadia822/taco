@@ -94,6 +94,42 @@ describe('Taco extension CLI', () => {
     expect(bundle.files.find((file) => file.path.endsWith('/openapi.yaml'))?.content).toBe(content)
   })
 
+  it('embeds replacement-token titles literally with and without an existing title element', () => {
+    const project = mkdtempSync(join(tmpdir(), 'taco-replacement-title-'))
+    const feature = join(project, 'specs/000-replacement-title')
+    const title = ['Add', '$&', '$`', "$'", '$1', '$$', 'pricing'].join(' ')
+    const escapedTitle = 'Add $&amp; $` $\' $1 $$ pricing — Taco'
+    const output = join(feature, 'Add_1_pricing.taco.html')
+    mkdirSync(feature, { recursive: true })
+    writeFileSync(join(feature, 'spec.md'), '---\ntitle: "Fallback"\n---\n\n## Test\n')
+
+    const shellWithTitle = readFileSync(shell, 'utf8')
+    const shellWithoutTitle = join(project, 'shell-without-title.html')
+    writeFileSync(
+      shellWithoutTitle,
+      shellWithTitle.replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, ''),
+    )
+
+    for (const shellPath of [shell, shellWithoutTitle]) {
+      runJson(
+        [
+          'pack',
+          feature,
+          '--project-root',
+          project,
+          '--output',
+          output,
+          '--shell',
+          shellPath,
+          '--title',
+          title,
+        ],
+        project,
+      )
+      expect(readFileSync(output, 'utf8')).toContain(`<title>${escapedTitle}</title>`)
+    }
+  })
+
   it('packs UTF-8 feature files with source baselines', () => {
     const project = mkdtempSync(join(tmpdir(), 'taco-pack-'))
     const feature = join(project, 'specs/001-demo')
