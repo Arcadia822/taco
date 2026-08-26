@@ -18,6 +18,7 @@ const bundle = (): TacoBundle => ({
     },
     { path: 'specs/001-test/contracts/openapi.yaml', mediaType: 'application/yaml', content: 'openapi: 3.1.0' },
     { path: 'specs/001-test/config.json', mediaType: 'application/json', content: '{"a":1}' },
+    { path: 'specs/001-test/diagrams/flow.MMD', mediaType: 'text/plain', content: 'flowchart LR\nA --> B' },
   ],
 })
 
@@ -41,7 +42,7 @@ describe('file-first Taco bundle', () => {
 
   it('classifies formats without parsing their contents', () => {
     const files = bundle().files
-    expect(files.map(fileKind)).toEqual(['markdown', 'markdown', 'html', 'yaml', 'json'])
+    expect(files.map(fileKind)).toEqual(['markdown', 'markdown', 'html', 'yaml', 'json', 'mermaid'])
   })
 
   it('rejects path traversal and files outside the declared root', () => {

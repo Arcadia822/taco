@@ -2,6 +2,7 @@ export interface SegmentedControlOption<Value extends string> {
   value: Value
   label: string
   title?: string
+  controls?: string
 }
 
 export interface SegmentedControlOptions<Value extends string> {
@@ -9,12 +10,14 @@ export interface SegmentedControlOptions<Value extends string> {
   value: Value
   options: readonly SegmentedControlOption<Value>[]
   className?: string
+  variant?: 'control' | 'tabs'
   onChange: (value: Value) => void
 }
 
 export interface SegmentedControl<Value extends string> {
   element: HTMLDivElement
   setValue: (value: Value) => void
+  buttonFor: (value: Value) => HTMLButtonElement | undefined
 }
 
 export const createSegmentedControl = <Value extends string>(
@@ -22,7 +25,8 @@ export const createSegmentedControl = <Value extends string>(
 ): SegmentedControl<Value> => {
   const element = document.createElement('div')
   element.className = ['segmented-control', config.className].filter(Boolean).join(' ')
-  element.setAttribute('role', 'group')
+  const tabs = config.variant === 'tabs'
+  element.setAttribute('role', tabs ? 'tablist' : 'group')
   element.setAttribute('aria-label', config.label)
 
   const buttons = new Map<Value, HTMLButtonElement>()
@@ -31,7 +35,10 @@ export const createSegmentedControl = <Value extends string>(
     for (const [optionValue, button] of buttons) {
       const active = optionValue === value
       button.classList.toggle('is-active', active)
-      button.setAttribute('aria-pressed', String(active))
+      if (tabs) {
+        button.setAttribute('aria-selected', String(active))
+        button.tabIndex = active ? 0 : -1
+      } else button.setAttribute('aria-pressed', String(active))
     }
   }
 
@@ -42,6 +49,8 @@ export const createSegmentedControl = <Value extends string>(
     button.textContent = option.label
     button.title = option.title ?? option.label
     button.dataset.segmentedValue = option.value
+    if (tabs) button.setAttribute('role', 'tab')
+    if (option.controls) button.setAttribute('aria-controls', option.controls)
     button.addEventListener('click', () => {
       setValue(option.value)
       config.onChange(option.value)
@@ -51,5 +60,5 @@ export const createSegmentedControl = <Value extends string>(
   }
 
   setValue(config.value)
-  return { element, setValue }
+  return { element, setValue, buttonFor: (value) => buttons.get(value) }
 }

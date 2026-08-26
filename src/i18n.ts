@@ -13,7 +13,7 @@ export const LOCALE_CHOICES = [
 export type Locale = typeof LOCALE_CHOICES[number]['code']
 
 const en = {
-  files: 'Spec files', search: 'Search', searchTitle: 'Search this spec',
+  files: 'Spec files', otherFiles: 'Other files', search: 'Search', searchTitle: 'Search this spec',
   stages: { spec: 'Specify', plan: 'Plan', tasks: 'Tasks' },
   searchPlaceholder: 'Search file names and contents…', noMatches: 'No matching files.',
   collapseFiles: 'Collapse file sidebar', expandFiles: 'Expand file sidebar',
@@ -57,7 +57,7 @@ const en = {
 export type Copy = typeof en
 
 const zhHans: Copy = {
-  files: '规格文件', search: '搜索', searchTitle: '搜索此规格',
+  files: '规格文件', otherFiles: '其他文件', search: '搜索', searchTitle: '搜索此规格',
   stages: { spec: '需求定义', plan: '技术规划', tasks: '任务拆解' },
   searchPlaceholder: '搜索文件名与内容…', noMatches: '没有匹配的文件。',
   collapseFiles: '收起文件侧栏', expandFiles: '展开文件侧栏',
@@ -99,7 +99,7 @@ const zhHans: Copy = {
 }
 
 const zhHant: Copy = {
-  files: '規格檔案', search: '搜尋', searchTitle: '搜尋此規格',
+  files: '規格檔案', otherFiles: '其他檔案', search: '搜尋', searchTitle: '搜尋此規格',
   stages: { spec: '需求定義', plan: '技術規劃', tasks: '任務拆解' },
   searchPlaceholder: '搜尋檔名與內容…', noMatches: '沒有相符的檔案。',
   collapseFiles: '收合檔案側邊欄', expandFiles: '展開檔案側邊欄',
@@ -141,7 +141,7 @@ const zhHant: Copy = {
 }
 
 const ja: Copy = {
-  files: '仕様ファイル', search: '検索', searchTitle: 'この仕様を検索',
+  files: '仕様ファイル', otherFiles: 'その他のファイル', search: '検索', searchTitle: 'この仕様を検索',
   stages: { spec: '要件定義', plan: '技術計画', tasks: 'タスク' },
   searchPlaceholder: 'ファイル名と内容を検索…', noMatches: '一致するファイルはありません。',
   collapseFiles: 'ファイルサイドバーを閉じる', expandFiles: 'ファイルサイドバーを開く',
@@ -183,7 +183,7 @@ const ja: Copy = {
 }
 
 const es: Copy = {
-  files: 'Archivos de especificación', search: 'Buscar', searchTitle: 'Buscar en esta especificación',
+  files: 'Archivos de especificación', otherFiles: 'Otros archivos', search: 'Buscar', searchTitle: 'Buscar en esta especificación',
   stages: { spec: 'Especificar', plan: 'Plan', tasks: 'Tareas' },
   searchPlaceholder: 'Buscar nombres y contenido…', noMatches: 'No hay archivos coincidentes.',
   collapseFiles: 'Contraer la barra de archivos', expandFiles: 'Expandir la barra de archivos',
@@ -225,7 +225,7 @@ const es: Copy = {
 }
 
 const fr: Copy = {
-  files: 'Fichiers de spécification', search: 'Rechercher', searchTitle: 'Rechercher dans cette spécification',
+  files: 'Fichiers de spécification', otherFiles: 'Autres fichiers', search: 'Rechercher', searchTitle: 'Rechercher dans cette spécification',
   stages: { spec: 'Spécifier', plan: 'Plan', tasks: 'Tâches' },
   searchPlaceholder: 'Rechercher dans les noms et le contenu…', noMatches: 'Aucun fichier correspondant.',
   collapseFiles: 'Réduire la barre des fichiers', expandFiles: 'Développer la barre des fichiers',
@@ -267,7 +267,7 @@ const fr: Copy = {
 }
 
 const de: Copy = {
-  files: 'Spezifikationsdateien', search: 'Suchen', searchTitle: 'Diese Spezifikation durchsuchen',
+  files: 'Spezifikationsdateien', otherFiles: 'Weitere Dateien', search: 'Suchen', searchTitle: 'Diese Spezifikation durchsuchen',
   stages: { spec: 'Spezifikation', plan: 'Plan', tasks: 'Aufgaben' },
   searchPlaceholder: 'Dateinamen und Inhalte durchsuchen…', noMatches: 'Keine passenden Dateien.',
   collapseFiles: 'Dateiseitenleiste einklappen', expandFiles: 'Dateiseitenleiste ausklappen',
@@ -309,7 +309,7 @@ const de: Copy = {
 }
 
 const it: Copy = {
-  files: 'File di specifica', search: 'Cerca', searchTitle: 'Cerca in questa specifica',
+  files: 'File di specifica', otherFiles: 'Altri file', search: 'Cerca', searchTitle: 'Cerca in questa specifica',
   stages: { spec: 'Specifica', plan: 'Piano', tasks: 'Attività' },
   searchPlaceholder: 'Cerca nomi e contenuti…', noMatches: 'Nessun file corrispondente.',
   collapseFiles: 'Comprimi la barra dei file', expandFiles: 'Espandi la barra dei file',
@@ -351,7 +351,7 @@ const it: Copy = {
 }
 
 const pt: Copy = {
-  files: 'Arquivos da especificação', search: 'Pesquisar', searchTitle: 'Pesquisar nesta especificação',
+  files: 'Arquivos da especificação', otherFiles: 'Outros arquivos', search: 'Pesquisar', searchTitle: 'Pesquisar nesta especificação',
   stages: { spec: 'Especificar', plan: 'Plano', tasks: 'Tarefas' },
   searchPlaceholder: 'Pesquisar nomes e conteúdo…', noMatches: 'Nenhum arquivo correspondente.',
   collapseFiles: 'Recolher a barra de arquivos', expandFiles: 'Expandir a barra de arquivos',

@@ -23,7 +23,10 @@ export class MermaidRuntime {
   constructor(private readonly loader: MermaidLoader = defaultMermaidLoader) {}
 
   load(): Promise<MermaidApi> {
-    this.mermaidPromise ??= this.loader()
+    this.mermaidPromise ??= this.loader().catch((error) => {
+      this.mermaidPromise = undefined
+      throw error
+    })
     return this.mermaidPromise
   }
 
@@ -57,7 +60,7 @@ export interface MermaidPluginLabels {
 let diagramSerial = 0
 
 type ApplyPreview = (preview: HTMLElement) => void
-type MermaidUnavailable = () => void
+type MermaidFailure = (error?: unknown) => void
 
 const cssToken = (styles: CSSStyleDeclaration, name: string, fallback: string): string =>
   styles.getPropertyValue(name).trim() || fallback
@@ -112,8 +115,9 @@ const renderDiagram = (
   source: string,
   labels: MermaidPluginLabels,
   applyPreview?: ApplyPreview,
-  onUnavailable?: MermaidUnavailable,
+  onUnavailable?: MermaidFailure,
   runtime: MermaidRuntime = defaultMermaidRuntime,
+  onRenderError?: MermaidFailure,
 ): void => {
   const id = `taco-mermaid-${++diagramSerial}`
   surface.className = 'surface is-loading'
@@ -123,9 +127,9 @@ const renderDiagram = (
     let mermaid: MermaidApi
     try {
       mermaid = await runtime.load()
-    } catch {
+    } catch (error) {
       host.dataset.mermaidUnavailable = 'true'
-      onUnavailable?.()
+      onUnavailable?.(error)
       return
     }
 
@@ -147,9 +151,10 @@ const renderDiagram = (
       const { svg } = await mermaid.render(id, source)
       surface.className = 'surface'
       surface.innerHTML = sanitizeMermaidSvg(svg)
-    } catch {
+    } catch (error) {
       surface.className = 'surface is-error'
       surface.textContent = labels.error
+      onRenderError?.(error)
     }
     applyPreview?.(host.cloneNode(true) as HTMLElement)
   }
@@ -161,8 +166,9 @@ export const createMermaidPreview = (
   source: string,
   labels: MermaidPluginLabels,
   applyPreview?: ApplyPreview,
-  onUnavailable?: MermaidUnavailable,
+  onUnavailable?: MermaidFailure,
   runtime: MermaidRuntime = defaultMermaidRuntime,
+  onRenderError?: MermaidFailure,
 ): HTMLElement => {
   const host = document.createElement('div')
   host.className = 'taco-mermaid-render'
@@ -172,7 +178,7 @@ export const createMermaidPreview = (
   const surface = document.createElement('div')
   surface.className = 'surface'
   host.append(surface)
-  renderDiagram(host, surface, source, labels, applyPreview, onUnavailable, runtime)
+  renderDiagram(host, surface, source, labels, applyPreview, onUnavailable, runtime, onRenderError)
   return host
 }
 

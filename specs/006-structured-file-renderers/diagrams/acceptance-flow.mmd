@@ -1,0 +1,9 @@
+flowchart LR
+  Pack["Taco CLI 打包"] --> Navigate["Other files 可发现"]
+  Navigate --> YAML{"文件类型"}
+  YAML -->|普通 YAML| Source["可编辑源码"]
+  YAML -->|OpenAPI YAML| API["OpenAPI 概览"]
+  YAML -->|MMD| Mermaid["Mermaid 预览"]
+  API --> Source
+  Mermaid --> Source
+  Source --> Save["保存原始文本"]

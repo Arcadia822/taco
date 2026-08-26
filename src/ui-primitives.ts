@@ -22,6 +22,7 @@ export type IconName =
   | 'square'
   | 'template'
   | 'key'
+  | 'zoom-in'
   | 'x'
 
 const iconPaths: Record<IconName, string> = {
@@ -46,6 +47,7 @@ const iconPaths: Record<IconName, string> = {
   square: '<rect width="14" height="14" x="5" y="5" rx="1"/>',
   template: '<rect width="18" height="14" x="3" y="5" rx="2"/><path d="M7 9h4"/><path d="M7 13h8"/>',
   key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L21 8"/>',
+  'zoom-in': '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/><path d="M11 8v6M8 11h6"/>',
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
 }
 
@@ -199,6 +201,7 @@ export const createFileTypeIcon = (file: TacoFile): SVGSVGElement => {
     html: 'file-code',
     yaml: 'file-code',
     json: 'braces',
+    mermaid: 'presentation',
     text: 'file',
   }
   const type = svgIcon(icon[kind])

@@ -1,0 +1,74 @@
+openapi: 3.1.0
+info:
+  title: Taco Acceptance API
+  version: 1.0.0
+  description: 用于验收 Taco OpenAPI 专用概览、源码切换与降级行为。
+servers:
+  - url: https://api.example.test/v1
+    description: Production example
+tags:
+  - name: tacos
+    description: Taco review operations
+paths:
+  /tacos:
+    get:
+      operationId: listTacos
+      summary: 列出 Taco 文件
+      tags: [tacos]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: 单页返回数量
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Taco 文件列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TacoFile'
+        '400':
+          description: 查询参数无效
+      security:
+        - bearerAuth: []
+    post:
+      operationId: createTaco
+      summary: 创建 Taco 文件
+      tags: [tacos]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TacoFile'
+      responses:
+        '201':
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TacoFile'
+components:
+  schemas:
+    TacoFile:
+      type: object
+      required: [path, mediaType, content]
+      properties:
+        path:
+          type: string
+        mediaType:
+          type: string
+        content:
+          type: string
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+security:
+  - bearerAuth: []

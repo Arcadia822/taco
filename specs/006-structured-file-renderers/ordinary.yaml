@@ -1,0 +1,22 @@
+# 普通 YAML 验收样例：注释、锚点、别名、序列与多行文本都应保留。
+application:
+  name: Taco Renderer Acceptance
+  enabled: true
+  retry_limit: 3
+  environments: &environments
+    - development
+    - staging
+    - production
+  primary_environment: production
+  summary: |-
+    这是一个普通 YAML 文件。
+    默认应直接进入“源码”视图，不显示“结构”页签。
+
+review:
+  expected_mode: Source
+  inherited_environments: *environments
+  nested:
+    owner: Arcadia
+    labels:
+      feature: structured-renderers
+      status: ready

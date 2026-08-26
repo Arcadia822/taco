@@ -48,6 +48,8 @@ import { localFileUrl } from './local-file-url.ts'
 import { frontmatterTitle, parseFrontmatter } from './frontmatter.ts'
 import { setEditorFrontmatterProperty } from './tiptap-document-properties.ts'
 import { tacoScope } from './stage-navigation.ts'
+import { createStructuredFileViewer, structuredFileLabels } from './structured-file-viewer.ts'
+import { createSegmentedControl } from './segmented-control.ts'
 
 type AuxiliaryTab = 'outline' | 'comments'
 
@@ -236,6 +238,7 @@ export class FileBrowser {
       labels: {
         files: this.t.files,
         collapseFiles: this.t.collapseFiles,
+        otherFiles: this.t.otherFiles,
         stages: this.t.stages,
       },
       stageOpenState: this.stageOpenState,
@@ -379,10 +382,33 @@ export class FileBrowser {
       this.mountMarkdownEditor(file, mountSerial)
     } else if (kind === 'html') {
       this.mountHtmlPrototype(file)
+    } else if (kind === 'yaml' || kind === 'json' || kind === 'mermaid') {
+      const structured = createStructuredFileViewer({
+        file,
+        kind,
+        labels: structuredFileLabels(this.locale),
+        mermaidLabels: this.mermaidLabels(),
+        mermaidRuntime: this.options.mermaidRuntime,
+        readOnly: !bundleCanWrite(this.bundle),
+        sourceLabel: this.t.sourceEditor(kind),
+        onChange: (content) => {
+          this.updateFileContent(file.path, content, undefined)
+          requestAnimationFrame(() => this.comments.refreshHighlights())
+        },
+        onModeChange: () => this.comments.refreshHighlights(),
+      })
+      this.sourceEditor = structured.sourceEditor
+      this.viewer.append(structured.element)
+      structured.sourceEditor.input.addEventListener('mouseup', (event) => this.comments.captureSourceSelection(structured.sourceEditor, file, event))
+      structured.sourceEditor.input.addEventListener('keyup', (event) => {
+        if (event.key === 'Shift') return
+        this.comments.captureSourceSelection(structured.sourceEditor, file)
+      })
+      this.comments.refreshHighlights()
     } else {
       const sourceEditor = createSourceEditor({
         value: file.content,
-        language: kind === 'json' ? 'json' : undefined,
+        language: undefined,
         label: this.t.sourceEditor(kind),
         readOnly: !bundleCanWrite(this.bundle),
         onChange: (content) => {
@@ -601,13 +627,20 @@ export class FileBrowser {
     panel.setAttribute('aria-label', this.t.rightPanel)
     const header = el('header', 'panel-header comment-panel-header')
     const close = createControlButton('x', this.t.close, () => this.closeCommentPanel(), 'comment-panel-close')
-    const tabs = el('div', 'right-panel-tabs segmented-control')
-    tabs.setAttribute('role', 'tablist')
-    tabs.setAttribute('aria-label', this.t.rightPanel)
-    this.outlineTab = this.buildAuxiliaryTab('outline', this.t.outline)
-    this.commentsTab = this.buildAuxiliaryTab('comments', this.t.comments)
-    tabs.append(this.outlineTab, this.commentsTab)
-    header.append(tabs, close)
+    const tabs = createSegmentedControl<AuxiliaryTab>({
+      label: this.t.rightPanel,
+      value: this.auxiliaryTab,
+      variant: 'tabs',
+      className: 'right-panel-tabs',
+      options: [
+        { value: 'outline', label: this.t.outline, controls: 'taco-outline' },
+        { value: 'comments', label: this.t.comments, controls: 'taco-comment-list' },
+      ],
+      onChange: (tab) => this.setAuxiliaryTab(tab),
+    })
+    this.outlineTab = tabs.buttonFor('outline')!
+    this.commentsTab = tabs.buttonFor('comments')!
+    header.append(tabs.element, close)
     this.outlineList = el('nav', 'document-outline')
     this.outlineList.id = 'taco-outline'
     this.outlineList.setAttribute('aria-label', this.t.outline)
@@ -617,15 +650,6 @@ export class FileBrowser {
     this.commentList.setAttribute('role', 'tabpanel')
     panel.append(header, this.outlineList, this.commentList)
     return panel
-  }
-
-  private buildAuxiliaryTab(tab: AuxiliaryTab, label: string): HTMLButtonElement {
-    const button = el('button', 'segmented-control-option', label) as HTMLButtonElement
-    button.type = 'button'
-    button.setAttribute('role', 'tab')
-    button.setAttribute('aria-controls', tab === 'outline' ? 'taco-outline' : 'taco-comment-list')
-    button.addEventListener('click', () => this.setAuxiliaryTab(tab))
-    return button
   }
 
   private setAuxiliaryTab(tab: AuxiliaryTab): void {
@@ -759,7 +783,8 @@ export class FileBrowser {
         this.comments.refreshHighlights(host)
       }
       this.outline.paint()
-    }
+    } else if (this.selected) this.paintViewer()
+    this.fileNavigation?.refresh(this.selected)
     this.syncWorkspaceHeader()
     this.comments.paint()
     this.syncDirtyState()

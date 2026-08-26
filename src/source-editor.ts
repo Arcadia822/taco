@@ -1,5 +1,29 @@
 import json from 'highlight.js/lib/languages/json'
+import yaml from 'highlight.js/lib/languages/yaml'
+import type { LanguageFn } from 'highlight.js'
 import { createLowlight } from 'lowlight'
+
+const mermaid: LanguageFn = (hljs) => ({
+  name: 'Mermaid',
+  aliases: ['mmd'],
+  keywords: {
+    keyword: [
+      'flowchart', 'graph', 'sequenceDiagram', 'classDiagram', 'stateDiagram-v2', 'erDiagram',
+      'journey', 'gantt', 'pie', 'quadrantChart', 'requirementDiagram', 'gitGraph', 'mindmap',
+      'timeline', 'sankey-beta', 'xychart-beta', 'block-beta', 'packet', 'architecture-beta', 'kanban',
+      'subgraph', 'end', 'direction', 'participant', 'actor', 'autonumber', 'activate', 'deactivate',
+      'loop', 'alt', 'else', 'opt', 'par', 'and', 'rect', 'critical', 'break', 'note', 'over',
+      'left', 'right', 'of', 'as', 'classDef', 'class', 'click', 'style', 'linkStyle',
+    ].join(' '),
+  },
+  contains: [
+    hljs.COMMENT('%%', '$'),
+    hljs.QUOTE_STRING_MODE,
+    { scope: 'symbol', begin: /(?:<-->|<--|-->|---|-\.->|==>|~~~|--x|--o|o--|x--)/ },
+    { scope: 'title', begin: /\b[A-Za-z_][\w-]*(?=\s*[[(\{])/ },
+    { scope: 'number', begin: hljs.NUMBER_RE },
+  ],
+})
 
 interface HighlightNode {
   type: string
@@ -16,7 +40,7 @@ export interface SourceCommentRange {
 
 interface SourceEditorOptions {
   value: string
-  language?: 'json'
+  language?: 'json' | 'yaml' | 'mermaid'
   label: string
   readOnly?: boolean
   onChange: (value: string) => void
@@ -29,7 +53,7 @@ export interface SourceEditorController {
   activateRange: (range: SourceCommentRange | null) => void
 }
 
-const lowlight = createLowlight({ json })
+const lowlight = createLowlight({ json, yaml, mermaid })
 
 const appendHighlightNode = (parent: Node, node: HighlightNode): void => {
   if (node.type === 'text') {
@@ -45,8 +69,8 @@ const appendHighlightNode = (parent: Node, node: HighlightNode): void => {
   parent.appendChild(element)
 }
 
-const renderJsonHighlight = (target: HTMLElement, value: string): void => {
-  const tree = lowlight.highlight('json', value) as unknown as HighlightNode
+const renderLanguageHighlight = (target: HTMLElement, language: 'json' | 'yaml' | 'mermaid', value: string): void => {
+  const tree = lowlight.highlight(language, value) as unknown as HighlightNode
   target.replaceChildren()
   for (const child of tree.children ?? []) appendHighlightNode(target, child)
 }
@@ -90,6 +114,7 @@ export const createSourceEditor = ({ value, language, label, readOnly = false, o
   input.wrap = 'off'
   input.setAttribute('aria-label', label)
   input.readOnly = readOnly
+  const usesCrLf = value.includes('\r\n') && !value.replace(/\r\n/g, '').includes('\n')
 
   const highlightLayer = document.createElement('pre')
   highlightLayer.className = 'source-editor-highlight'
@@ -102,7 +127,7 @@ export const createSourceEditor = ({ value, language, label, readOnly = false, o
   let commentRanges: SourceCommentRange[] = []
   let activeRange: SourceCommentRange | null = null
   const renderHighlight = (): void => {
-    if (language === 'json') renderJsonHighlight(highlight, input.value)
+    if (language) renderLanguageHighlight(highlight, language, input.value)
     else highlight.textContent = input.value
     for (const range of commentRanges) decorateTextRange(highlight, range, 'source-comment-highlight')
     if (activeRange) decorateTextRange(highlight, activeRange, 'source-comment-highlight is-active')
@@ -116,7 +141,7 @@ export const createSourceEditor = ({ value, language, label, readOnly = false, o
 
   input.addEventListener('input', () => {
     renderHighlight()
-    onChange(input.value)
+    onChange(usesCrLf ? input.value.replace(/\n/g, '\r\n') : input.value)
     resize()
   })
   input.addEventListener('scroll', () => {

@@ -13,6 +13,7 @@ interface DirNode {
 export interface FileNavigationLabels {
   files: string
   collapseFiles: string
+  otherFiles: string
   stages: Record<StageId, string>
 }
 
@@ -127,6 +128,21 @@ export class FileNavigation {
       stage.querySelector('.file-row')?.classList.add('is-featured')
       navigation.append(stage)
     }
+    if (structure.unassigned.length) {
+      const other = el('details', 'stage-group other-files-group') as HTMLDetailsElement
+      other.dataset.stage = 'other'
+      this.bindDisclosureState(other, 'other', this.options.stageOpenState)
+      other.append(sidebarRow('summary', {
+        className: 'stage-summary',
+        label: this.options.labels.otherFiles,
+        labelClass: 'stage-name',
+        trailing: this.disclosureIcon('stage-caret'),
+      }))
+      const tree = el('div', 'file-tree')
+      this.renderDirectory(buildTree(this.options.bundle, structure.unassigned), tree, true)
+      other.append(tree)
+      navigation.append(other)
+    }
     scroll.append(navigation)
     this.element.append(scroll)
     scroll.scrollTop = this.scrollTop
@@ -178,13 +194,16 @@ export class FileNavigation {
       parent.append(container)
     }
     const list = el('ul', 'tree-list')
-    const directories = [...node.dirs.values()].sort((left, right) => left.name.localeCompare(right.name))
+    const locale = document.documentElement.lang || undefined
+    const directories = [...node.dirs.values()].sort((left, right) =>
+      left.name.localeCompare(right.name, locale) || left.path.localeCompare(right.path, locale))
     for (const directory of directories) {
       const item = el('li')
       this.renderDirectory(directory, item)
       list.append(item)
     }
-    for (const file of [...node.files].sort((left, right) => fileName(left.path).localeCompare(fileName(right.path)))) {
+    for (const file of [...node.files].sort((left, right) =>
+      fileName(left.path).localeCompare(fileName(right.path), locale) || left.path.localeCompare(right.path, locale))) {
       const item = el('li')
       item.append(this.fileButton(file))
       list.append(item)
