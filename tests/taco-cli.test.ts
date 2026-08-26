@@ -15,7 +15,7 @@ interface CliBundle {
   docId: string
   title: string
   root: string
-  files: Array<{ path: string; title?: string; content: string; sourceUrl?: string; sourceHash?: string }>
+  files: Array<{ path: string; mediaType: string; title?: string; content: string; sourceUrl?: string; sourceHash?: string }>
   packOptions?: { ignore: string[] }
   comments?: Array<Record<string, unknown>>
 }
@@ -135,8 +135,10 @@ describe('Taco extension CLI', () => {
     const feature = join(project, 'specs/001-demo')
     const output = join(feature, '001-demo.taco.html')
     mkdirSync(join(feature, 'contracts'), { recursive: true })
+    mkdirSync(join(feature, 'diagrams'), { recursive: true })
     writeFileSync(join(feature, 'spec.md'), '---\ntitle: "Demo from YAML"\n---\n\n## Outcome\n\nOriginal text.\n')
     writeFileSync(join(feature, 'contracts/api.json'), '{"ok":true}\n')
+    writeFileSync(join(feature, 'diagrams/flow.mmd'), 'flowchart LR\n  A --> B\n')
     writeFileSync(join(feature, 'prototype.html'), '<!doctype html><title>Prototype</title>\n')
 
     const result = runJson<{ files: number; root: string; output: string }>(
@@ -145,13 +147,15 @@ describe('Taco extension CLI', () => {
     )
     const bundle = readBundle(output)
 
-    expect(result).toMatchObject({ files: 3, root: 'specs/001-demo', output })
+    expect(result).toMatchObject({ files: 4, root: 'specs/001-demo', output })
     expect(bundle.title).toBe('001-demo')
     expect(bundle.files.map((file) => file.path)).toEqual([
       'specs/001-demo/contracts/api.json',
+      'specs/001-demo/diagrams/flow.mmd',
       'specs/001-demo/prototype.html',
       'specs/001-demo/spec.md',
     ])
+    expect(bundle.files.find((file) => file.path.endsWith('/flow.mmd'))?.mediaType).toBe('text/plain')
     expect(bundle.files.every((file) => /^[a-f0-9]{64}$/.test(file.sourceHash ?? ''))).toBe(true)
     expect(bundle.files.find((file) => file.path.endsWith('/spec.md'))?.title).toBe('Demo from YAML')
     expect(bundle.files.find((file) => file.path.endsWith('/prototype.html'))?.sourceUrl)

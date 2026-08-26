@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { LOCALE_CHOICES, copy, resolveLocale } from '../src/i18n.ts'
+import { structuredFileLabels } from '../src/structured-file-viewer.ts'
 
 describe('shell internationalization', () => {
   it('matches Bento bundled locale choices and provides a complete catalog for each', () => {
@@ -20,6 +21,7 @@ describe('shell internationalization', () => {
       expect(Object.keys(copy[code]).sort()).toEqual(englishKeys)
       expect(copy[code].language).not.toBe('')
       expect(copy[code].saveUnpacked(2)).toContain('2')
+      expect(Object.values(structuredFileLabels(code)).every((value) => value.trim().length > 0)).toBe(true)
     }
   })
 

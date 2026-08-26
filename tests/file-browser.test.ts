@@ -21,7 +21,7 @@ const testBundle: TacoBundle = {
     { path: 'specs/001-browser/plan.md', mediaType: 'text/markdown', content: '# Plan' },
     { path: 'specs/001-browser/interaction-design.md', mediaType: 'text/markdown', content: '**Taco scope**: plan\n\n# Interaction' },
     { path: 'specs/001-browser/tasks.md', mediaType: 'text/markdown', content: '# Tasks\n\n- [ ] T001 Browse files' },
-    { path: 'specs/001-browser/contracts/api.yaml', mediaType: 'application/yaml', content: 'openapi: 3.1.0' },
+    { path: 'specs/001-browser/contracts/api.yaml', mediaType: 'application/yaml', content: 'service:\n  name: Taco' },
   ],
 }
 
@@ -134,6 +134,7 @@ describe('FileBrowser', () => {
     expect(document.querySelector('[data-stage="spec"] [data-path$="README.md"]')).not.toBeNull()
     expect(document.querySelector('[data-stage="plan"] [data-path$="interaction-design.md"]')).not.toBeNull()
     expect(document.querySelector('[data-stage="custom"]')).toBeNull()
+    expect(document.querySelector('.other-files-group')).toBeNull()
     expect(document.querySelector('[data-role]')).toBeNull()
     expect(document.querySelectorAll('.stage-summary .sidebar-row-icon')).toHaveLength(0)
     expect(document.querySelectorAll('.stage-summary .stage-caret [data-icon="chevron-right"]')).toHaveLength(3)
@@ -149,20 +150,42 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.document-inline-title [data-icon="file-text"]')).not.toBeNull()
   })
 
+  it('renders every bundled file exactly once, including a nested Other files fallback', () => {
+    const completeBundle = structuredClone(testBundle)
+    completeBundle.files.push(
+      { path: 'specs/001-browser/notes/readme.txt', mediaType: 'text/plain', content: 'Review note' },
+      { path: 'specs/001-browser/diagrams/data-model.mmd', mediaType: 'text/plain', content: 'flowchart LR\nA --> B' },
+      { path: 'specs/001-browser/notes/custom.xyz', mediaType: 'text/plain', content: 'Unknown but readable' },
+    )
+    new FileBrowser(document.getElementById('app')!, completeBundle, { mermaidRuntime })
+
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('.file-row')).map((row) => row.dataset.path)
+    expect(rows).toHaveLength(completeBundle.files.length)
+    expect(new Set(rows).size).toBe(completeBundle.files.length)
+    expect(new Set(rows)).toEqual(new Set(completeBundle.files.map(({ path }) => path)))
+    expect(document.querySelector('[data-stage="other"]')).not.toBeNull()
+    expect(document.querySelector('[data-stage="other"] [data-path$="data-model.mmd"]')).not.toBeNull()
+    expect(Array.from(document.querySelectorAll('[data-stage="other"] .folder-name')).map((node) => node.textContent)).toEqual(['diagrams', 'notes'])
+    const unknown = document.querySelector<HTMLButtonElement>('[data-stage="other"] [data-path$="custom.xyz"]')!
+    unknown.click()
+    expect(document.querySelector<HTMLTextAreaElement>('.source-editor-input')?.value).toBe('Unknown but readable')
+  })
+
   it('edits YAML in the generic source editor', () => {
     const editableBundle = structuredClone(testBundle)
     new FileBrowser(document.getElementById('app')!, editableBundle)
     const yaml = document.querySelector<HTMLButtonElement>('[data-path$="api.yaml"]')!
     yaml.click()
+    expect(document.querySelector('[data-segmented-value="structure"]')).toBeNull()
     const editor = document.querySelector<HTMLTextAreaElement>('.source-editor-input')!
     expect(document.querySelector('.source-notice')).toBeNull()
-    expect(document.querySelector('.source-editor-highlight')?.textContent).toBe('openapi: 3.1.0')
+    expect(document.querySelector('.source-editor-highlight')?.textContent).toBe('service:\n  name: Taco')
     expect(document.querySelector('.file-viewer')?.classList.contains('is-source-file')).toBe(false)
     expect(yaml.querySelector('[data-icon="file-code"]')).not.toBeNull()
-    expect(editor.value).toContain('openapi: 3.1.0')
-    editor.value = 'openapi: 3.1.1'
+    expect(editor.value).toContain('name: Taco')
+    editor.value = 'service:\n  name: Bento'
     editor.dispatchEvent(new Event('input', { bubbles: true }))
-    expect(editableBundle.files.at(-1)?.content).toBe('openapi: 3.1.1')
+    expect(editableBundle.files.at(-1)?.content).toBe('service:\n  name: Bento')
     expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(true)
     expect(document.querySelector('.tiptap')).toBeNull()
     expect(document.querySelector('.workspace-header .mode-control')).toBeNull()
@@ -171,6 +194,53 @@ describe('FileBrowser', () => {
       ['大纲', true],
       ['评论', false],
     ])
+  })
+
+  it('opens OpenAPI in an overview and returns anchored comments to canonical source', () => {
+    const content = [
+      'openapi: 3.1.0',
+      'info:',
+      '  title: Inventory API',
+      '  version: 1.0.0',
+      'paths:',
+      '  /items:',
+      '    get:',
+      '      summary: List items',
+      '      responses:',
+      "        '200':",
+      '          description: OK',
+    ].join('\n')
+    const openapiBundle = structuredClone(testBundle)
+    const path = 'specs/001-browser/contracts/openapi.yaml'
+    openapiBundle.files.push({ path, mediaType: 'application/yaml', content })
+    openapiBundle.comments = [{
+      id: 'thread-openapi',
+      anchor: {
+        path,
+        position: { start: 0, end: 7 },
+        quote: { exact: 'openapi', prefix: '', suffix: ': 3.1.0\ninfo:' },
+      },
+      status: 'open',
+      messages: [{ id: 'message-openapi', author: 'Reviewer', body: 'Confirm the contract version.', createdAt: '2026-08-26T00:00:00.000Z' }],
+      createdAt: '2026-08-26T00:00:00.000Z',
+      updatedAt: '2026-08-26T00:00:00.000Z',
+    }]
+    new FileBrowser(document.getElementById('app')!, openapiBundle)
+    document.querySelector<HTMLButtonElement>('[data-path$="openapi.yaml"]')!.click()
+
+    expect(document.querySelector('.openapi-overview')).not.toBeNull()
+    expect(document.querySelector('[data-segmented-value="structure"]')).toBeNull()
+    expect(document.querySelector('.openapi-overview')?.textContent).toContain('Inventory API')
+    expect(document.querySelector('.openapi-overview')?.textContent).toContain('GET')
+    expect(document.querySelector<HTMLElement>('.source-editor-yaml')?.hidden).toBe(true)
+    expect(document.querySelector<HTMLTextAreaElement>('.source-editor-input')?.isConnected).toBe(true)
+    document.querySelector<HTMLButtonElement>('.comment-quote-button')!.click()
+    const source = document.querySelector<HTMLTextAreaElement>('.source-editor-yaml .source-editor-input')!
+    expect(source).not.toBeNull()
+    expect(source.selectionStart).toBe(0)
+    expect(source.selectionEnd).toBe(7)
+    expect(source.value).toBe(content)
+    expect(openapiBundle.files.at(-1)?.content).toBe(content)
   })
 
   it('syntax-highlights JSON while preserving source editing', () => {
@@ -488,6 +558,48 @@ describe('FileBrowser', () => {
     expect(canvas.scrollTop).toBe(110)
     canvas.dispatchEvent(pointerEvent('pointerup', 150, 170))
     expect(canvas.classList.contains('is-dragging')).toBe(false)
+  })
+
+  it('renders standalone Mermaid files and saves only their raw source', async () => {
+    const source = 'flowchart LR\n  Brief --> Plan'
+    const standaloneBundle = structuredClone(testBundle)
+    standaloneBundle.files.push({ path: 'specs/001-browser/diagrams/architecture.mmd', mediaType: 'text/plain', content: source })
+    new FileBrowser(document.getElementById('app')!, standaloneBundle, { mermaidRuntime })
+    document.querySelector<HTMLButtonElement>('[data-path$="architecture.mmd"]')!.click()
+
+    await vi.waitFor(() => expect(document.querySelector('.standalone-mermaid-preview svg')).not.toBeNull())
+    expect(document.querySelector('[data-path$="architecture.mmd"] [data-icon="presentation"]')).not.toBeNull()
+    const standaloneZoom = document.querySelector<HTMLButtonElement>('.standalone-mermaid-zoom')!
+    expect(standaloneZoom.textContent).toBe('')
+    expect(standaloneZoom.getAttribute('aria-label')).toBe('放大 Mermaid 图表')
+    expect(standaloneZoom.querySelector('[data-icon="zoom-in"]')).not.toBeNull()
+    expect(standaloneBundle.files.at(-1)?.content).toBe(source)
+    expect(standaloneBundle.files.at(-1)?.blocks).toBeUndefined()
+
+    document.querySelector<HTMLButtonElement>('[data-segmented-value="source"]')!.click()
+    const editor = document.querySelector<HTMLTextAreaElement>('.source-editor-input')!
+    expect(document.querySelector('.source-editor-mermaid .hljs-keyword')?.textContent).toBe('flowchart')
+    expect(document.querySelector('.source-editor-mermaid .hljs-symbol')?.textContent).toBe('-->')
+    expect(editor.value).toBe(source)
+    editor.value = `${source}\n  Plan --> Done`
+    editor.dispatchEvent(new Event('input', { bubbles: true }))
+    expect(standaloneBundle.files.at(-1)?.content).toBe(`${source}\n  Plan --> Done`)
+    expect(standaloneBundle.files.at(-1)?.blocks).toBeUndefined()
+  })
+
+  it('falls back standalone Mermaid render failures to editable source', async () => {
+    mermaidLoader.mockResolvedValue({
+      initialize: vi.fn(),
+      render: vi.fn().mockRejectedValue(new Error('invalid syntax')),
+    })
+    const standaloneBundle = structuredClone(testBundle)
+    standaloneBundle.files.push({ path: 'specs/001-browser/diagram.mmd', mediaType: 'text/plain', content: 'not a diagram' })
+    new FileBrowser(document.getElementById('app')!, standaloneBundle, { mermaidRuntime })
+    document.querySelector<HTMLButtonElement>('[data-path$="diagram.mmd"]')!.click()
+
+    await vi.waitFor(() => expect(document.querySelector<HTMLElement>('.source-editor-mermaid')?.hidden).toBe(false))
+    expect(document.querySelector('.structured-diagnostic')?.textContent).toContain('Mermaid')
+    expect(document.querySelector<HTMLTextAreaElement>('.source-editor-input')?.value).toBe('not a diagram')
   })
 
   it('falls back to the editable Mermaid code block when the cloud module is unavailable', async () => {
@@ -808,6 +920,7 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.share-readonly-note')?.textContent).toContain('只读副本')
 
     document.querySelector<HTMLButtonElement>('.file-row[data-path$="api.yaml"]')!.click()
+    expect(document.querySelector('[data-segmented-value="structure"]')).toBeNull()
     expect(document.querySelector<HTMLTextAreaElement>('.source-editor-input')?.readOnly).toBe(true)
   })
 

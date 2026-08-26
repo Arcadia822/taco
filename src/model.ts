@@ -290,14 +290,16 @@ export const relativePath = (bundle: TacoBundle, file: TacoFile): string =>
 
 export const fileName = (path: string): string => path.split('/').at(-1) ?? path
 
-export type FileKind = 'markdown' | 'html' | 'yaml' | 'json' | 'text'
+export type FileKind = 'markdown' | 'html' | 'yaml' | 'json' | 'mermaid' | 'text'
 
 export function fileKind(file: TacoFile): FileKind {
   const lower = file.path.toLowerCase()
-  if (file.mediaType === 'text/markdown' || lower.endsWith('.md')) return 'markdown'
-  if (file.mediaType === 'text/html' || lower.endsWith('.html') || lower.endsWith('.htm')) return 'html'
-  if (file.mediaType.includes('yaml') || /\.ya?ml$/.test(lower)) return 'yaml'
-  if (file.mediaType.includes('json') || lower.endsWith('.json')) return 'json'
+  const mediaType = file.mediaType.toLowerCase()
+  if (mediaType === 'text/markdown' || lower.endsWith('.md')) return 'markdown'
+  if (mediaType === 'text/html' || lower.endsWith('.html') || lower.endsWith('.htm')) return 'html'
+  if (lower.endsWith('.mmd')) return 'mermaid'
+  if (mediaType.includes('yaml') || /\.ya?ml$/.test(lower)) return 'yaml'
+  if (mediaType.includes('json') || lower.endsWith('.json')) return 'json'
   return 'text'
 }
 
