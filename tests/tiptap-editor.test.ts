@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Editor } from '@tiptap/core'
-import { blockHtml, createTacoEditorExtensions, migrateTacoBundleBlocks } from '../src/tiptap-editor.ts'
+import { Node as ProseMirrorNode } from '@tiptap/pm/model'
+import { blockHtml, blocksFromEditor, ensureTacoBlockIds, createTacoEditorExtensions, migrateTacoBundleBlocks } from '../src/tiptap-editor.ts'
 import { setEditorFrontmatterProperty } from '../src/tiptap-document-properties.ts'
 import type { TacoBundle } from '../src/model.ts'
 
@@ -32,6 +33,36 @@ afterEach(() => {
 })
 
 describe('Tiptap Markdown integration', () => {
+  it.each([
+    'text ![x](image.png "Image title") text',
+    '[![Badge](badge.svg)](https://example.invalid)\n[![Other](other.svg)](https://example.invalid)',
+    '- text ![x](image.png) text',
+    '| Image |\n| --- |\n| text ![x](image.png) text |',
+    '![x](image.png)',
+  ])('round-trips schema-valid images: %s', (markdown) => {
+    const extensions = createTacoEditorExtensions(labels)
+    editor = new Editor({ extensions, content: markdown, contentType: 'markdown' })
+    expect(() => editor!.state.doc.check()).not.toThrow()
+    ensureTacoBlockIds(editor, 'images', true)
+    const serialized = editor.getMarkdown()
+    expect(serialized).toContain(markdown.includes('Badge') ? '[![Badge](badge.svg)](https://example.invalid)' : '![x](image.png')
+    const html = blockHtml(blocksFromEditor(editor, extensions))
+    editor.commands.setContent(html, { parseOptions: { preserveWhitespace: 'full' } })
+    expect(() => editor!.state.doc.check()).not.toThrow()
+    expect(editor.getMarkdown()).toBe(markdown.includes('Badge') ? serialized.replace(/\n/g, ' ') : serialized)
+    editor.commands.insertContentAt(1, 'Edited ')
+    expect(editor.getMarkdown()).toContain('Edited')
+    expect(editor.getMarkdown()).toContain(markdown.includes('Badge') ? '[![Other](other.svg)](https://example.invalid)' : '![x](image.png')
+  })
+
+  it('preserves text links and titled linked images without duplicate wrapping', () => {
+    const markdown = '[**Read docs**](https://example.invalid/docs) [![x](image.png "Image title")](https://example.invalid/image "Link title")'
+    editor = new Editor({ extensions: createTacoEditorExtensions(labels), content: markdown, contentType: 'markdown' })
+    expect(editor.getMarkdown()).toBe(markdown)
+    expect(editor.getHTML()).toContain('title="Link title"')
+    expect(editor.getHTML()).toContain('title="Image title"')
+  })
+
   it('renders YAML frontmatter as an editable property component', () => {
     const markdown = [
       '---',
@@ -197,12 +228,41 @@ describe('Tiptap Markdown integration', () => {
       }],
     }
 
-    expect(() => migrateTacoBundleBlocks(bundle, labels)).not.toThrow()
+    expect(migrateTacoBundleBlocks(bundle, labels)).toEqual([])
     expect(bundle.files[0].blocks).toHaveLength(1)
-    expect(bundle.files[0].blocks?.[0].type).toBe('image')
+    expect(bundle.files[0].blocks?.[0].type).toBe('paragraph')
     expect(bundle.files[0].blocks?.[0].html).toContain('data-taco-source="docs/assets/taco-overview.png"')
     expect(bundle.files[0].blocks?.[0].html).not.toContain('src="docs/assets/taco-overview.png"')
     expect(blockHtml(bundle.files[0].blocks)).toContain('data-taco-source="docs/assets/taco-overview.png"')
+  })
+
+  it('preserves legacy standalone image block identity when opening saved HTML', () => {
+    const blocks = [{ id: 'existing-image', type: 'image', html: '<img src="image.png" alt="x">' }]
+    editor = new Editor({ extensions: createTacoEditorExtensions(labels), content: blockHtml(blocks) })
+    expect(editor.state.doc.firstChild?.attrs.tacoBlockId).toBe('existing-image')
+    expect(editor.getMarkdown()).toBe('![x](image.png)')
+    expect(() => editor!.state.doc.check()).not.toThrow()
+  })
+
+  it('reports per-file migration failures and continues without changing failed source', () => {
+    const bundle: TacoBundle = {
+      format: 'taco/files', version: 1, docId: 'failure', title: 'Failure', root: 'specs/failure',
+      files: ['spec.md', 'plan.md', 'tasks.md'].map((name) => ({
+        path: `specs/failure/${name}`, mediaType: 'text/markdown', content: `## ${name}`,
+      })),
+    }
+    const destroy = vi.spyOn(Editor.prototype, 'destroy')
+    const original = bundle.files[1].content
+    const check = vi.spyOn(ProseMirrorNode.prototype, 'check').mockImplementationOnce(() => { throw new Error('unsupported document') })
+    const failures = migrateTacoBundleBlocks(bundle, labels)
+    check.mockRestore()
+    expect(failures).toEqual([{ path: 'specs/failure/spec.md', message: 'unsupported document' }])
+    expect(bundle.files[0].blocks).toBeUndefined()
+    expect(bundle.files[1].content).toBe(original)
+    expect(bundle.files[1].blocks).toHaveLength(1)
+    expect(bundle.files[2].blocks).toHaveLength(1)
+    expect(destroy).toHaveBeenCalledTimes(3)
+    destroy.mockRestore()
   })
 
   it('keeps frontmatter source in the collaboration block HTML', () => {

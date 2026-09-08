@@ -85,6 +85,7 @@ export class FileBrowser {
   private outlineTab!: HTMLButtonElement
   private commentsTab!: HTMLButtonElement
   private workspacePath!: HTMLElement
+  private readonly markdownMigrationErrors = new Map<string, string>()
   private markdownEditor: Editor | null = null
   private sourceEditor: SourceEditorController | null = null
   private htmlPreviewUrl: string | null = null
@@ -128,7 +129,9 @@ export class FileBrowser {
       __DEFAULT_LOCALE__ ? [__DEFAULT_LOCALE__] : undefined,
     )
     document.documentElement.lang = this.locale
-    migrateTacoBundleBlocks(bundle, this.mermaidLabels())
+    for (const failure of migrateTacoBundleBlocks(bundle, this.mermaidLabels())) {
+      this.markdownMigrationErrors.set(failure.path, failure.message)
+    }
     this.dirtyTracker = new BundleDirtyTracker(bundle)
     this.narrowLayout = matchMedia('(max-width: 820px)')
     this.sidebarClosed = this.narrowLayout.matches
@@ -478,7 +481,24 @@ export class FileBrowser {
     this.viewer.append(shell)
   }
 
+  private mountMarkdownFallback(host: HTMLElement, file: TacoFile, message: string): void {
+    host.dataset.editorError = message
+    const source = createSourceEditor({
+      value: file.content,
+      label: this.t.sourceEditor('markdown'),
+      readOnly: true,
+      onChange: () => {},
+    })
+    this.sourceEditor = source
+    host.replaceChildren(el('p', 'editor-error', `${this.t.editorFailed} ${file.path}: ${message}`), source.element)
+  }
+
   private mountMarkdownEditor(file: TacoFile, mountSerial: number): void {
+    const migrationError = this.markdownMigrationErrors.get(file.path)
+    if (migrationError) {
+      this.mountMarkdownFallback(this.viewer, file, migrationError)
+      return
+    }
     const parsedFrontmatter = parseFrontmatter(file.content)
     const canonicalTitle = frontmatterTitle(file.content)
     if (canonicalTitle) file.title = canonicalTitle
@@ -525,14 +545,14 @@ export class FileBrowser {
       onCodeBlockComment: (target) => this.comments.startCodeBlockComment(editorHost, file, target),
     })
     const hasBlocks = Boolean(file.blocks?.length)
-    let editor: Editor
+    let editor: Editor | undefined
     try {
       editor = new Editor({
         element: editorHost,
         extensions,
         editable: bundleCanWrite(this.bundle),
         content: hasBlocks ? blockHtml(file.blocks) : file.content,
-        ...(hasBlocks ? {} : { contentType: 'markdown' as const }),
+        ...(hasBlocks ? { parseOptions: { preserveWhitespace: 'full' as const } } : { contentType: 'markdown' as const }),
         editorProps: {
           attributes: {
             class: 'tiptap',
@@ -556,13 +576,14 @@ export class FileBrowser {
         onFocus: ({ editor: activeEditor }) => this.presence.publish(activeEditor, true),
         onBlur: ({ editor: activeEditor }) => this.presence.publish(activeEditor, false),
       })
+      editor.state.doc.check()
+      ensureTacoBlockIds(editor, file.id ?? file.path, !hasBlocks)
     } catch (error) {
-      editorHost.dataset.editorError = error instanceof Error ? error.message : String(error)
-      editorHost.replaceChildren(el('p', 'editor-error', this.t.editorFailed))
+      editor?.destroy()
+      this.mountMarkdownFallback(editorHost, file, error instanceof Error ? error.message : String(error))
       return
     }
     this.markdownEditor = editor
-    ensureTacoBlockIds(editor, file.id ?? file.path, !hasBlocks)
     if (!file.blocks?.length) {
       file.blocks = blocksFromEditor(editor, extensions)
       this.store.changed({ kind: 'file', fileId: file.id! })
@@ -764,7 +785,7 @@ export class FileBrowser {
       const selection = this.markdownEditor.state.selection
       this.applyingRemoteEditor = true
       try {
-        this.markdownEditor.commands.setContent(blockHtml(this.selected.blocks) || '<p></p>', { emitUpdate: false })
+        this.markdownEditor.commands.setContent(blockHtml(this.selected.blocks) || '<p></p>', { emitUpdate: false, parseOptions: { preserveWhitespace: 'full' } })
         this.selected.content = this.markdownEditor.getMarkdown()
         const title = frontmatterTitle(this.selected.content)
         if (title) this.selected.title = title

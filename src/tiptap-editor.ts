@@ -1,4 +1,6 @@
 import StarterKit from '@tiptap/starter-kit'
+import Paragraph from '@tiptap/extension-paragraph'
+import Link from '@tiptap/extension-link'
 import { Markdown } from '@tiptap/markdown'
 import { Editor, Extension, generateHTML } from '@tiptap/core'
 import Image, { type ImageOptions } from '@tiptap/extension-image'
@@ -59,12 +61,43 @@ export interface TacoEditorExtensionOptions {
   propertyLabels?: DocumentPropertiesLabels
 }
 
+// Tiptap's default paragraph parser unwraps standalone images for its block
+// image schema. Inline images must remain inside a paragraph in every context.
+const ImageParagraph = Paragraph.extend({
+  parseMarkdown(token, helpers) {
+    if (token.tokens?.length === 1 && token.tokens[0].type === 'image') {
+      return helpers.createNode('paragraph', undefined, helpers.parseInline(token.tokens))
+    }
+    return Paragraph.config.parseMarkdown!.call(this, token, helpers)
+  },
+})
+
+// The upstream Markdown mark helper only marks text, dropping links on atoms.
+const ImageLink = Link.extend({
+  parseMarkdown(token, helpers) {
+    return helpers.parseInline(token.tokens ?? []).map((node) => ({
+      ...node,
+      marks: [...(node.marks ?? []), { type: 'link', attrs: { href: token.href, title: token.title || null } }],
+    }))
+  },
+})
+
 const SafeImage = Image.extend({
   addOptions(): ImageOptions {
     return {
       ...this.parent?.(),
       allowBase64: true,
+      inline: true,
     } as ImageOptions
+  },
+  renderMarkdown(node, helpers, context) {
+    let markdown = Image.config.renderMarkdown!.call(this, node, helpers, context)
+    const link = node.marks?.find((mark) => mark.type === 'link')
+    if (link) {
+      const title = link.attrs?.title ? ` "${link.attrs.title}"` : ''
+      markdown = `[${markdown}](${link.attrs?.href ?? ''}${title})`
+    }
+    return markdown
   },
   addAttributes() {
     return {
@@ -79,7 +112,9 @@ const SafeImage = Image.extend({
 })
 
 export const createTacoEditorExtensions = (labels: MermaidPluginLabels, options: TacoEditorExtensionOptions = {}) => [
-  StarterKit.configure({ codeBlock: false }),
+  StarterKit.configure({ codeBlock: false, paragraph: false, link: false }),
+  ImageParagraph,
+  ImageLink,
   TacoBlockIdentity,
   createDocumentProperties(options.propertyLabels),
   CenteredBlock,
@@ -128,14 +163,40 @@ export const blocksFromEditor = (editor: Editor, extensions: ReturnType<typeof c
 }
 
 export const blockHtml = (blocks: TacoBlock[] | undefined): string =>
-  (blocks ?? []).map((block) => sanitizeEditorHtml(block.html)).join('')
+  (blocks ?? []).map((block) => {
+    const container = document.createElement('div')
+    container.innerHTML = sanitizeEditorHtml(block.html)
+    // Tiptap strips newline-only HTML text nodes before parsing. A soft break
+    // between inline images is still a word separator; retain it as a space.
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) {
+      const text = walker.currentNode
+      if (/^\n\s*$/.test(text.textContent ?? '') && text.parentElement?.closest('p, h1, h2, h3, h4, h5, h6') && !text.parentElement.closest('pre, code')) {
+        text.textContent = ' '
+      }
+    }
+    const html = container.innerHTML
+    // Older Taco files stored standalone images as top-level blocks. Keep their
+    // collaboration identity on the paragraph required by the inline schema.
+    if (block.type !== 'image') return html
+    const paragraph = document.createElement('p')
+    paragraph.setAttribute('data-taco-block-id', block.id)
+    paragraph.innerHTML = html
+    return paragraph.outerHTML
+  }).join('')
 
 /**
  * Upgrade legacy Markdown before a collaboration session adopts the bundle.
  * Doing this lazily after peers connect makes identical deterministic blocks
  * look like concurrent insert operations, which can duplicate their IDs.
  */
-export const migrateTacoBundleBlocks = (bundle: TacoBundle, labels: MermaidPluginLabels): void => {
+export interface TacoBlockMigrationFailure {
+  path: string
+  message: string
+}
+
+export const migrateTacoBundleBlocks = (bundle: TacoBundle, labels: MermaidPluginLabels): TacoBlockMigrationFailure[] => {
+  const failures: TacoBlockMigrationFailure[] = []
   for (const file of bundle.files) {
     if (fileKind(file) !== 'markdown') continue
     const hasFrontmatter = Boolean(splitFrontmatter(file.content))
@@ -143,13 +204,17 @@ export const migrateTacoBundleBlocks = (bundle: TacoBundle, labels: MermaidPlugi
     const legacyPropertiesBlock = file.blocks?.some((block) => block.type === 'documentProperties' && !block.html.includes('data-yaml=')) ?? false
     if (file.blocks?.length && hasFrontmatter === blockHasFrontmatter && !legacyPropertiesBlock) continue
     const extensions = createTacoEditorExtensions(labels, { renderMermaid: false })
-    const editor = new Editor({
-      extensions,
-      content: file.content,
-      contentType: 'markdown',
-    })
-    ensureTacoBlockIds(editor, file.id ?? file.path, true)
-    file.blocks = blocksFromEditor(editor, extensions)
-    editor.destroy()
+    let editor: Editor | undefined
+    try {
+      editor = new Editor({ extensions, content: file.content, contentType: 'markdown' })
+      editor.state.doc.check()
+      ensureTacoBlockIds(editor, file.id ?? file.path, true)
+      file.blocks = blocksFromEditor(editor, extensions)
+    } catch (error) {
+      failures.push({ path: file.path, message: error instanceof Error ? error.message : String(error) })
+    } finally {
+      editor?.destroy()
+    }
   }
+  return failures
 }

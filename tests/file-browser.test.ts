@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { FileBrowser } from '../src/file-browser.ts'
 import { configureApp } from '../src/kernel/app.ts'
 import { capturePristine } from '../src/kernel/save.ts'
@@ -81,6 +82,45 @@ describe('FileBrowser', () => {
     })
   })
 
+  it('starts with linked README badges and inline images in another document', async () => {
+    const bundle = structuredClone(testBundle)
+    bundle.files[0].content = 'text ![x](image.png) text'
+    bundle.files.push({
+      path: `${bundle.root}/README.md`, mediaType: 'text/markdown',
+      content: '[![Badge](badge.svg)](https://example.invalid)\n[![Other](other.svg)](https://example.invalid)',
+    })
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    const editor = await waitForEditor()
+    expect(editor.querySelectorAll('a[href="https://example.invalid"] img[data-taco-source]')).toHaveLength(2)
+    expect(bundle.files[0].blocks?.[0].html).toContain('data-taco-source="image.png"')
+    expect(document.querySelector('.editor-error')).toBeNull()
+    browser.destroy()
+  })
+
+  it('isolates a non-selected migration failure and exposes its original source', async () => {
+    const bundle = structuredClone(testBundle)
+    const failingFile = bundle.files[1]
+    const originalCheck = ProseMirrorNode.prototype.check
+    const check = vi.spyOn(ProseMirrorNode.prototype, 'check').mockImplementation(function (this: ProseMirrorNode) {
+      if (this.textContent.includes('Requirements checklist')) throw new Error('unsupported document')
+      return originalCheck.call(this)
+    })
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    check.mockRestore()
+    expect((await waitForEditor()).textContent).toContain('Outcome')
+    expect(bundle.files[0].blocks?.length).toBeGreaterThan(0)
+    expect(failingFile.blocks).toBeUndefined()
+    const link = document.querySelector<HTMLElement>(`[data-path="${failingFile.path}"]`)
+    expect(link).not.toBeNull()
+    link!.click()
+    expect(document.querySelector('.editor-error')?.textContent).toContain(failingFile.path)
+    expect(document.querySelector('.editor-error')?.textContent).toContain('unsupported document')
+    const source = document.querySelector<HTMLTextAreaElement>('textarea')
+    expect(source?.value).toBe(failingFile.content)
+    expect(source?.readOnly).toBe(true)
+    browser.destroy()
+  })
+
   it('uses the three-color chart-bubble mark in expanded and collapsed headers', () => {
     new FileBrowser(document.getElementById('app')!, structuredClone(testBundle))
 
@@ -114,7 +154,7 @@ describe('FileBrowser', () => {
     await waitForEditor()
     await new Promise((resolve) => requestAnimationFrame(resolve))
 
-    expect(Array.from(document.querySelectorAll<HTMLImageElement>('.tiptap img')).map((image) => image.getAttribute('src')))
+    expect(Array.from(document.querySelectorAll<HTMLImageElement>('.tiptap img[data-taco-source]')).map((image) => image.getAttribute('src')))
       .toEqual([logo, screenshot])
   })
 
