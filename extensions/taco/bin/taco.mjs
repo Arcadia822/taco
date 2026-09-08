@@ -29,6 +29,7 @@ const usage = `Taco CLI
 
 Usage:
   taco prepare-template [--project-root <dir>] [--json]
+  taco prepare-policy [--project-root <dir>] [--dry-run] [--json]
   taco pack <feature-directory> [--output <file>] [--project-root <dir>]
             [--title <title>] [--from <existing.taco.html>] [--shell <file>]
             [--ignore <relative-path-or-glob>]... [--json]
@@ -700,6 +701,11 @@ const printResult = (result, json) => {
       process.stdout.write(`Preserved ${result.commentsPreserved} comment threads.\n`)
     return
   }
+  if (result.command === 'prepare-policy') {
+    process.stdout.write(`Taco process: ${result.processPath ?? 'undetermined'} (${result.process.status}); AGENTS.md: ${result.agents.status}.\n`)
+    if (result.reason) process.stdout.write(`${result.reason}\nNo policy files were written.\n`)
+    return
+  }
   if (result.command === 'prepare-template') {
     process.stdout.write(
       `${result.changed ? 'Prepared' : 'Verified'} Taco YAML spec template at ${result.template}.\n`,
@@ -720,6 +726,205 @@ const printResult = (result, json) => {
   }
   if (result.command === 'validate') {
     process.stdout.write(`Validated Taco runtime security ${result.securityVersion ?? 'unknown'}: ${result.issues.length ? result.issues.join(', ') : 'no issues'}.\n`)
+  }
+}
+
+
+const POLICY_START = '<!-- taco:process-policy:start -->'
+const POLICY_END = '<!-- taco:process-policy:end -->'
+const POLICY_HEADING = '## Taco Spec Kit authoring and review'
+// Exact shipped v0.4 policy and installation-guide variant, before process routing.
+const LEGACY_POLICY_HASHES = new Set([
+  'a96f7e2283c26e20dfe28f876cccfe0412d68f53eeff18cf329cd216f58dd651',
+  '316f0dcb802eeb05f880af44eff53eb116facd3bdfed3642feaf4ddd48d63ea6',
+])
+const ROUTE_PREFIX = 'Before any Spec Kit or Taco work, read and follow the Taco workflow in '
+
+// Read only local, regular files, including every parent component. In particular,
+// access() is insufficient: it hides dangling symlinks as nonexistent paths.
+const readPolicyFile = async (root, target) => {
+  await assertNoSymlinkPath(root, target)
+  try {
+    const info = await lstat(target)
+    if (!info.isFile()) throw new Error(`Not a regular policy file: ${target}`)
+    return { content: await readFile(target, 'utf8'), mode: info.mode }
+  } catch (error) {
+    if (error?.code === 'ENOENT') return { content: null, mode: 0o644 }
+    throw error
+  }
+}
+
+const routeLinks = (content) => {
+  const prose = content.replace(/^([ \t]*)(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1\2[^\n]*(?:\n|$)/gm, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+  const definitions = new Map([...prose.matchAll(/^ {0,3}\[([^\]]+)\]:\s*<?([^\s>]+)>?/gm)]
+    .map((match) => [match[1].toLowerCase(), match[2]]))
+  const links = [...prose.matchAll(/\[([^\]]+)\]\(\s*(?:<([^>]+)>|([^\s)]+))(?:\s+"[^"]*")?\s*\)/g)]
+    .map((match) => ({ label: match[1], path: match[2] ?? match[3] }))
+  for (const match of prose.matchAll(/\[([^\]]+)\]\[([^\]]*)\]/g)) {
+    const path = definitions.get((match[2] || match[1]).toLowerCase())
+    if (path) links.push({ label: match[1], path })
+  }
+  return { prose, links }
+}
+
+const selectProcessPath = async (root, agents) => {
+  const pending = [{ path: join(root, 'AGENTS.md'), content: agents }]
+  const visited = new Set()
+  const candidates = new Set()
+  let declared = false
+  const routingErrors = []
+  while (pending.length) {
+    const document = pending.shift()
+    if (visited.has(document.path)) continue
+    visited.add(document.path)
+    if (visited.size > 16) {
+      routingErrors.push('Context routing exceeds 16 documents; merge manually')
+      break
+    }
+    const { prose, links } = routeLinks(document.content)
+    const declaration = prose.replace(/\]\([^)]*\)/g, ']')
+      .replace(/^ {0,3}\[[^\]]+\]:.*$/gm, '')
+      .split(/\r?\n/).filter((line) => !/(?:\b(?:not|without|never|no)\b|未采用|不使用|未使用|不采用)[^.!?。]*\b5xP\b/i.test(line)).join('\n')
+    declared ||= /\b5xP\b/i.test(declaration)
+    for (const link of links) {
+      const isProcess = /\bprocess\b/i.test(link.label) || /(?:^|\/)process\.md(?:#.*)?$/i.test(link.path)
+      const isContext = /\b(context|5xP)\b/i.test(link.label) || /(?:^|\/)(context|5xp)\.md$/i.test(link.path)
+      if (!isProcess && !isContext) continue
+      try {
+        const local = decodeURIComponent(link.path.split('#')[0])
+        if (!local || /^[a-z][a-z\d+.-]*:/i.test(local) || isAbsolute(local) || local.includes('\\') || local.includes('\0'))
+          throw new Error(`Context routing must use a local relative Markdown link: ${link.path}`)
+        const target = resolve(dirname(document.path), local)
+        if (!isWithin(root, target) || target === root || !/\.md$/i.test(target))
+          throw new Error(`Unsafe context routing destination: ${link.path}`)
+        if (isProcess) candidates.add(target)
+        if (isContext && !isProcess && !visited.has(target)) {
+          const context = await readPolicyFile(root, target)
+          if (context.content === null) throw new Error(`Missing declared context document: ${target}`)
+          pending.push({ path: target, content: context.content })
+        }
+      } catch (error) {
+        routingErrors.push(error.message)
+      }
+    }
+  }
+  if (!declared) return { path: join(root, 'docs/taco-process.md'), model: 'dedicated' }
+  if (routingErrors.length) throw new Error(routingErrors.join('; '))
+  if (candidates.size !== 1) throw new Error('Declared 5xP context must route to exactly one Process document; merge manually')
+  const path = [...candidates][0]
+  if (path === join(root, 'AGENTS.md')) throw new Error('The Process document must be separate from AGENTS.md')
+  return { path, model: '5xp' }
+}
+
+const appendPolicyText = (content, addition) =>
+  `${content}${content && !content.endsWith('\n') ? '\n' : ''}${content && !content.endsWith('\n\n') ? '\n' : ''}${addition}\n`
+
+export const prepareProjectPolicy = async (options = {}) => {
+  const result = {
+    command: 'prepare-policy', processPath: null, model: null,
+    process: { path: null, status: 'manual-merge' },
+    agents: { path: null, status: 'manual-merge' },
+    dryRun: Boolean(options.dryRun), applied: false, migrated: false,
+  }
+  try {
+    const root = await realpath(resolve(options.projectRoot ?? process.cwd()))
+    const specify = join(root, '.specify')
+    await assertNoSymlinkPath(root, specify)
+    if (!(await lstat(specify)).isDirectory()) throw new Error(`Not an initialized Spec Kit project: ${root}`)
+    const agentsPath = join(root, 'AGENTS.md')
+    result.agents.path = agentsPath
+    const agents = await readPolicyFile(root, agentsPath)
+    const selected = await selectProcessPath(root, agents.content ?? '')
+    result.processPath = selected.path
+    result.process.path = selected.path
+    result.model = selected.model
+    const destination = await readPolicyFile(root, selected.path)
+    if (selected.model === '5xp' && destination.content === null)
+      throw new Error(`Declared Process document does not exist: ${selected.path}`)
+    const stock = (await readFile(resolve(here, '../policies/taco-agent-policy.md'), 'utf8')).trim()
+    const policyBody = stock.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n\s*/, '')
+    const block = `${POLICY_START}\n${policyBody}\n${POLICY_END}`
+    let nextAgents = agents.content ?? '---\ntitle: "Agent instructions"\n---\n'
+    // Only an exact stock section may be removed. A following H2 belongs to the
+    // project and is preserved; local additions under the Taco heading refuse.
+    const headings = [...nextAgents.matchAll(/^## Taco Spec Kit authoring and review[^\r\n]*\r?$/gm)]
+    if (headings.length > 1) throw new Error('Multiple legacy Taco sections in AGENTS.md; merge manually')
+    if (headings.length) {
+      const start = headings[0].index
+      const tail = nextAgents.slice(start + headings[0][0].length)
+      const boundary = tail.search(/^#{1,2} /m)
+      const end = boundary < 0 ? nextAgents.length : start + headings[0][0].length + boundary
+      const legacy = nextAgents.slice(start, end).trim().replace(/\r\n/g, '\n')
+      if (legacy !== policyBody.replace(/\r\n/g, '\n') && !LEGACY_POLICY_HASHES.has(sha256(legacy)))
+        throw new Error('Customized Taco policy in AGENTS.md; preserve it and merge manually')
+      nextAgents = nextAgents.slice(0, start) + nextAgents.slice(end)
+      result.migrated = true
+    }
+    const relativePath = posix(relative(root, selected.path))
+    const route = `${ROUTE_PREFIX}[${relativePath}](<${relativePath}>).`
+    const existingRoutes = nextAgents.split(/\r?\n/).filter((line) => line.startsWith(ROUTE_PREFIX))
+    if (existingRoutes.length > 1 || (existingRoutes.length === 1 && existingRoutes[0] !== route))
+      throw new Error('Customized or duplicate Taco routing instruction in AGENTS.md; merge manually')
+    if (!existingRoutes.length) nextAgents = appendPolicyText(nextAgents, route)
+    let nextProcess = destination.content ?? '---\ntitle: "Taco workflow"\ntaco_scope: plan\n---\n'
+    const starts = nextProcess.split(POLICY_START).length - 1
+    const ends = nextProcess.split(POLICY_END).length - 1
+    if (starts || ends) {
+      if (starts !== 1 || ends !== 1 || !nextProcess.includes(block))
+        throw new Error('Customized or malformed Taco process block; preserve it and merge manually')
+      const outside = nextProcess.replace(block, '')
+      if (outside.includes(POLICY_HEADING)) throw new Error('Duplicate Taco process section; merge manually')
+    } else {
+      if (nextProcess.includes(POLICY_HEADING)) throw new Error('Unmanaged Taco process section; merge manually')
+      nextProcess = appendPolicyText(nextProcess, block)
+    }
+    const files = [
+      { path: selected.path, before: destination, next: nextProcess, report: result.process },
+      { path: agentsPath, before: agents, next: nextAgents, report: result.agents },
+    ]
+    for (const file of files) file.report.status = file.before.content === file.next ? 'unchanged' : file.before.content === null ? 'created' : 'updated'
+    if (options.dryRun) return result
+    // Stage both outputs before replacing either canonical file. Recheck sources
+    // and link safety immediately before commit, and roll back any partial commit.
+    const staged = []
+    const committed = []
+    try {
+      for (const file of files.filter((file) => file.report.status !== 'unchanged')) {
+        await assertNoSymlinkPath(root, file.path)
+        await mkdir(dirname(file.path), { recursive: true })
+        const temporary = `${file.path}.taco-${randomUUID()}.tmp`
+        await writeFile(temporary, file.next, { encoding: 'utf8', mode: file.before.mode, flag: 'wx' })
+        staged.push({ ...file, temporary })
+      }
+      for (const file of files) {
+        const current = await readPolicyFile(root, file.path)
+        if (current.content !== file.before.content) throw new Error(`Policy file changed during preparation: ${file.path}`)
+      }
+      for (const file of staged) {
+        await rename(file.temporary, file.path)
+        committed.push(file)
+      }
+    } catch (error) {
+      for (const file of committed.reverse()) {
+        if (file.before.content === null) await unlink(file.path)
+        else {
+          await writeFile(file.temporary, file.before.content, { encoding: 'utf8', mode: file.before.mode, flag: 'wx' })
+          await rename(file.temporary, file.path)
+        }
+      }
+      throw error
+    } finally {
+      for (const file of staged) await unlink(file.temporary).catch(() => {})
+    }
+    result.applied = true
+    return result
+  } catch (error) {
+    result.process.status = 'manual-merge'
+    result.agents.status = 'manual-merge'
+    result.migrated = false
+    result.reason = error.message
+    return result
   }
 }
 
@@ -786,6 +991,13 @@ const main = async () => {
   const parsed = parseOptions(argv)
   if (!command || parsed.flag('help') || command === 'help') {
     process.stdout.write(`${usage}\n`)
+    return
+  }
+
+  if (command === 'prepare-policy') {
+    const result = await prepareProjectPolicy({ projectRoot: parsed.option('project-root'), dryRun: parsed.flag('dry-run') })
+    printResult(result, parsed.flag('json'))
+    if (result.reason) process.exitCode = 2
     return
   }
 

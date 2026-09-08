@@ -79,7 +79,7 @@ As a user, I expect Taco to contain every eligible file under the feature direct
 ### Functional Requirements
 
 - **FR-001**: The distributable extension MUST contain `extension.yml`, Agent command prompts, the Node.js CLI, and the latest production Taco shell.
-- **FR-002**: Installing the extension into an initialized Spec Kit project and merging Taco's durable policy into its existing `AGENTS.md` MUST be sufficient to use Taco in that project; no npm package, hosted account, service, or second Taco install may be required.
+- **FR-002**: Installing the extension into an initialized Spec Kit project and preparing Taco's durable policy in its declared 5xP Process document or `docs/taco-process.md`, with one imperative reference in `AGENTS.md` MUST be sufficient to use Taco in that project; no npm package, hosted account, service, or second Taco install may be required.
 - **FR-003**: The extension MUST provide `speckit.taco.update [feature-directory]` and `speckit.taco.review [taco-file]`.
 - **FR-004**: `speckit.taco.update` MUST resolve exactly one feature directory, require its `spec.md`, and create or refresh `<feature-directory>/<feature-directory-name>.taco.html`.
 - **FR-005**: The extension MUST register mandatory update hooks after core lifecycle commands that can create or change feature artifacts.
@@ -93,7 +93,7 @@ As a user, I expect Taco to contain every eligible file under the feature direct
 - **FR-013**: Review MUST expose every open thread's ID, status, path, anchor text, resolved position when available, stale state, and complete message history to the Agent.
 - **FR-014**: The Agent MUST apply actionable feedback to canonical files, classify every open thread as handled, deferred, or stale, and invoke update afterward to refresh the same Taco.
 - **FR-015**: `--force` MUST remain unavailable to normal automatic behavior and may be used only after explicit user authorization for the exact reported conflict paths.
-- **FR-016**: The root README Quickstart, Chinese README, Agent guide, and extension README MUST describe the same installation—including the required project `AGENTS.md` merge—output location, commands, ignore behavior, hooks, and review loop.
+- **FR-016**: The root README Quickstart, Chinese README, Agent guide, and extension README MUST describe the same installation—including the required process-policy preparation and single `AGENTS.md` reference—output location, commands, ignore behavior, hooks, and review loop.
 - **FR-017**: Installation and round-trip verification MUST run against the currently supported Spec Kit CLI in a clean temporary project using a declared Agent integration.
 - **FR-018**: Collaboration-enabled Taco files MUST continue to be treated as potentially credential-bearing and MUST NOT be sent to an external model, service, log, or ticket without user authorization.
 - **FR-019**: After every successful update, the Agent MUST expose the exact generated Taco through the Agent GUI's native clickable local-file or artifact surface. In Codex it MUST return a clickable absolute file link and MUST NOT attempt autonomous `file://` navigation; the user's click hands the file to Browser. Another GUI MAY additionally open and verify it only when autonomous local HTML navigation is explicitly supported. The Agent MUST NOT substitute a `data:` URL, upload the Taco, weaken browser security, or substitute another application URL.
@@ -139,4 +139,12 @@ As a user, I expect Taco to contain every eligible file under the feature direct
 - Automatically resolving review conflicts.
 - Treating Taco as a second requirements database.
 - Uploading Taco content to an external service during installation or review.
-- Replacing or removing a target project's unrelated `AGENTS.md` instructions; the Taco plugin policy is merged alongside them.
+- Replacing or removing a target project's unrelated `AGENTS.md` instructions; the Taco plugin policy is bounded in the selected process document and `AGENTS.md` receives only one mandatory reference.
+
+## Process policy preparation
+
+- `prepare-policy` follows explicitly declared 5xP context routing to one Process document, including nested context links. Without that declaration it uses `docs/taco-process.md`; a lone `PROCESS.md` does not imply 5xP.
+- It preserves unrelated content and installs a bounded stock policy plus one mandatory `AGENTS.md` reference. A second run changes neither file.
+- Exact stock legacy Agent sections migrate safely. Customized blocks, duplicate or ambiguous routing, unsafe paths, or missing declared Process files require a deliberate merge without writing either document.
+- JSON reports the absolute selected process path and each file as created, updated, unchanged, or manual-merge. Dry-run never writes.
+- The process document retains the complete authoring, update, presentation, review-preflight, conflict, comment, and credential contract. No browser, container-format, sync, or historical artifact changes are required.

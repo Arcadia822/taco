@@ -28,11 +28,8 @@
   absolute file link and let the user's click open it in Browser; do not attempt
   autonomous `file://` navigation. Other GUIs may open and verify it directly
   only when they explicitly support local HTML navigation.
-- Before complete-file inspection, run the installed CLI `validate --json`
-  locally to check credential and runtime warnings without executing the Taco.
 - Import a saved human review through `speckit.taco.review` (in Codex,
-  `$speckit-taco-review`). Run `sync --dry-run --json` before writing, stop on
-  conflicts, and never
+  `$speckit-taco-review`). Preview before writing, stop on conflicts, and never
   use `--force` without explicit authorization for the exact paths.
 - Read every open comment and its complete history, modify canonical files to
   address actionable feedback, then update the same Taco for the next review.

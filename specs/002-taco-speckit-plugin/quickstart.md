@@ -8,12 +8,14 @@ This procedure is the acceptance test for the user-facing README. Run it in a di
 specify init taco-plugin-smoke --integration codex --no-git
 cd taco-plugin-smoke
 specify extension add --dev /absolute/path/to/taco/extensions/taco
+node .specify/extensions/taco/bin/taco.mjs prepare-template --project-root "$PWD" --json
+node .specify/extensions/taco/bin/taco.mjs prepare-policy --project-root "$PWD" --json
 specify extension list
 ```
 
 Installation passes only if `.specify/extensions/taco/` contains `extension.yml`, `commands/update.md`, `commands/review.md`, `bin/taco.mjs`, and `assets/taco-shell.html`, and if the selected integration exposes both Taco commands.
 
-The installing Agent must also merge the Taco Spec Kit review policy from `docs/agent-installation.md` into the target project's `AGENTS.md`, preserving all existing instructions. Installation is incomplete until that durable policy is present.
+Require `prepare-policy` to report `applied: true`. Verify the complete bounded policy in the declared 5xP Process document (including `context/PROCESS.md`) or `docs/taco-process.md` without 5xP, and exactly one imperative reference in `AGENTS.md`. Preserve every unrelated instruction and verify a second run reports both files unchanged. Preview legacy migration with `--dry-run --json`; customized policy, ambiguous routing, or unsafe destinations must report `manual-merge` and leave both files untouched. A lone root `PROCESS.md` must not imply adoption of 5xP.
 
 ## Package
 

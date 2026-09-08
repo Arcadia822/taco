@@ -34,3 +34,5 @@
 - [x] T018 Run update and review smoke tests using only files installed into that project.
 - [x] T019 Audit every functional requirement and Quickstart claim against observed evidence.
 - [x] T020 Add native clickable-file presentation to generated update/review skills and all plugin-facing documentation, with user-click Browser handoff in Codex.
+
+- [x] T019 Route durable Taco policy into declared 5xP Process documentation or `docs/taco-process.md`, keeping one imperative Agent reference; verify safe stock migration, idempotency, structured status, and fail-closed customization/path handling.

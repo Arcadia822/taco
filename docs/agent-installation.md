@@ -8,7 +8,7 @@ Taco currently ships from this repository, not npm. Do not run `npm install -g t
 
 There are two distinct requested outcomes:
 
-1. **Install Taco in a Spec Kit project:** install `extensions/taco/` and merge Taco's persistent review policy into the target project's `AGENTS.md`. Together these are the complete plugin installation: Agent commands, hooks, CLI, production browser shell, and durable project instructions.
+1. **Install Taco in a Spec Kit project:** install `extensions/taco/` and prepare Taco's persistent policy in project-owned process documentation and add one mandatory routing reference to `AGENTS.md`. Together these are the complete plugin installation: Agent commands, hooks, CLI, production browser shell, and durable project instructions.
 2. **Build the standalone source artifact:** from the Taco source repository, build `dist-single/Taco_Spec.taco.html`.
 
 Do not require the standalone artifact as a second installation step for a target Spec Kit project. The extension already carries the same production shell.
@@ -33,6 +33,9 @@ specify extension add --dev /absolute/path/to/taco/extensions/taco
 node .specify/extensions/taco/bin/taco.mjs prepare-template \
   --project-root "$PWD" \
   --json
+node .specify/extensions/taco/bin/taco.mjs prepare-policy \
+  --project-root "$PWD" \
+  --json
 specify extension list
 ```
 
@@ -52,47 +55,21 @@ Also verify that the active Agent integration exposes `speckit.taco.update` and 
 
 ## Install the authoring contract and project policy
 
-Plugin installation is incomplete until the installing Agent updates the target project's existing `AGENTS.md`. Read the installed `.specify/extensions/taco/policies/taco-agent-policy.md`, preserve every unrelated project instruction, and merge that policy. The resulting prompt governs later core Spec Kit commands such as `speckit.specify`; a post-generation Taco hook cannot prevent malformed Markdown that was already written.
+Plugin installation is incomplete until `prepare-policy` reports `applied: true` and neither file has status `manual-merge`. The installed `.specify/extensions/taco/policies/taco-agent-policy.md` supplies the complete authoring and review policy. The CLI places that policy in project-owned process documentation; `AGENTS.md` contains only one imperative reference. Read and follow that reference before core commands such as `speckit.specify`; a post-generation Taco hook cannot prevent malformed Markdown that was already written.
+
+### Process routing and safe migration
+
+- A project declares 5xP in its `AGENTS.md` context routing, or in a linked context router. The CLI follows local relative Markdown links labeled `Context` or `5xP` (also `context.md` and `5xp.md`), then selects exactly one Process link by its `Process` label or `PROCESS.md` filename. Inline and full/collapsed reference-style links are supported. Routes are relative to the containing document, so `[Process](context/PROCESS.md)` and a context router linking `PROCESS.md` work equally. Fenced examples and HTML comments are not declarations. Routing is limited to 16 documents; unsupported or ambiguous routing requires a deliberate merge.
+- The declared Process file must already exist. The CLI never assumes a root `PROCESS.md` and never infers 5xP from a generically named file alone. Without a 5xP declaration it uses `docs/taco-process.md`, without creating other 5xP documents.
+- The complete policy is bounded by `<!-- taco:process-policy:start -->` and `<!-- taco:process-policy:end -->`. Preserve those markers. Unrelated Process and Agent instructions remain intact.
+- `AGENTS.md` receives one instruction: “Before any Spec Kit or Taco work, read and follow the Taco workflow in [the selected process document].” It does not receive the full policy.
+- Rerunning the command is a no-op. JSON reports absolute `processPath`, `model` (`5xp` or `dedicated`), per-file `process.status` and `agents.status` (`created`, `updated`, `unchanged`, or `manual-merge`), `migrated`, `dryRun`, and `applied`. `--dry-run --json` previews the same preparation without writing. A manual merge returns exit code 2 with a reason and writes neither file.
+- To migrate an older installation, run `prepare-policy --dry-run --json` and then rerun without `--dry-run`. Only an exact stock Taco section from the shipped policy or former installation guide is removed from `AGENTS.md`; its full replacement is installed in the selected Process document. Existing customized sections, modified managed blocks, duplicate routes, missing or ambiguous Process destinations, symlinks, and paths outside the project fail closed.
+- When manual merge is required, inspect the reported files, retain every local rule, and reconcile the local policy with the installed stock policy deliberately. Resolve the project's declared Process route before rerunning; never delete local customization merely to make preparation succeed. Keep project-specific rules outside the managed Taco block and retain one imperative reference in `AGENTS.md`.
 
 The extension also supplies `templates/spec-template.md`. The installation command above materializes its YAML header into `.specify/templates/spec-template.md` while preserving the standard template body. If the project template is customized in an incompatible way, the CLI refuses to overwrite it and requires a deliberate manual merge. Verify that the effective project template begins with YAML frontmatter. New specifications use `title`, logical `feature_id`, `created`, `status`, and `input`, then begin at H2. The template deliberately omits `git_branch`; an Agent may add it only after verifying that an actual branch exists. The feature directory name is not evidence that Git created a branch.
 
-The merged policy must be equivalent to:
-
-```md
-## Taco Spec Kit authoring and review
-
-- Write new Spec Kit Markdown metadata as leading YAML frontmatter. Put document
-  titles in `title`; never imitate metadata with `## title: "..."` or bold prose.
-- Use `feature_id` for the logical numbered feature identifier. Add `git_branch`
-  only after verifying that an actual Git branch exists.
-- When `speckit.specify` creates `spec.md`, do not add an ATX or Setext H1 that
-  repeats the YAML title. Begin the body at H2 or lower. Preserve existing
-  authored H1 content during unrelated edits.
-- For an otherwise-unassigned Markdown file, write `taco_scope` in YAML. Offer
-  `spec`, `plan`, and `tasks`; preserve other text values but do not route them.
-  Do not generate the legacy `**Taco scope**: ...` form.
-- Keep each Spec Kit feature directory canonical. Store its review file at
-  `<feature-directory>/<feature-name>.taco.html` and update it only through the
-  installed Taco commands.
-- After changing any feature artifact—including spec, plan, tasks, research,
-  contracts, checklists, or recorded implementation progress—invoke
-  `speckit.taco.update` before reporting the operation complete. In Codex this
-  command is `$speckit-taco-update`.
-- After a successful update, present the exact generated Taco through the Agent
-  GUI's native clickable file or artifact surface. In Codex, return a clickable
-  absolute file link and let the user's click open it in Browser; do not attempt
-  autonomous `file://` navigation. Other GUIs may open and verify it directly
-  only when they explicitly support local HTML navigation.
-- Import a saved human review through `speckit.taco.review` (in Codex,
-  `$speckit-taco-review`). Preview before writing, stop on conflicts, and never
-  use `--force` without explicit authorization for the exact paths.
-- Read every open comment and its complete history, modify canonical files to
-  address actionable feedback, then update the same Taco for the next review.
-- Treat collaboration-enabled Taco files as potentially credential-bearing;
-  do not send their contents to external services without user authorization.
-```
-
-Do not add packer's built-in Taco-output exclusion to `AGENTS.md`; the CLI owns that invariant. If the target has no `AGENTS.md`, create one containing this policy. Re-read the resulting file and verify that prior project instructions remain present and that all of these literal contracts survived the merge: YAML `title`, logical `feature_id`, verified-only `git_branch`, `speckit.specify`, no repeated H1, body begins at H2, YAML `taco_scope`, and the three routing values.
+The process policy must retain YAML `title`, logical `feature_id`, verified-only `git_branch`, `speckit.specify`, no repeated H1, an H2-first body, YAML `taco_scope` with the three routing values, canonical feature directories, update and native file presentation, local review preflight and conflict handling, complete comment handling, and collaboration credential boundaries. Re-read both resulting files: `AGENTS.md` must route to the selected process document and every unrelated instruction must remain. Do not add packer's built-in Taco-output exclusion to the policy; the CLI owns that invariant.
 
 ## Update a feature Taco
 
@@ -171,7 +148,7 @@ An installation or review is complete only when the requested outcome is observe
 - The installed directory contains both Agent commands, the CLI, the production shell, the YAML specification template, and `policies/taco-agent-policy.md`.
 - Mandatory lifecycle hooks appear in `.specify/extensions.yml`.
 - `.specify/templates/spec-template.md` begins with Taco's YAML authoring contract.
-- The target project's `AGENTS.md` retains its previous instructions and contains Taco's authoring and review policy, including YAML `title`, no repeated H1, an H2-or-lower body start, and YAML `taco_scope`.
+- The selected Process document contains the complete bounded Taco policy, including YAML `title`, no repeated H1, an H2-or-lower body start, and YAML `taco_scope`. `AGENTS.md` retains prior instructions and contains one mandatory reference; `prepare-policy` reports each file's status and a second run reports both unchanged.
 - A generated Taco exists inside the expected feature directory with a nonzero embedded file count.
 - The generated Taco was presented as a native clickable local file. Direct browser verification is additionally required only when the Agent GUI explicitly supports autonomous local HTML navigation; Codex records that opening occurs after the user's click.
 - Its reported default and explicit exclusions match the requested policy.
