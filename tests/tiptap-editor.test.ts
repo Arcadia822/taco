@@ -63,6 +63,35 @@ describe('Tiptap Markdown integration', () => {
     expect(editor.getHTML()).toContain('title="Image title"')
   })
 
+  it.each([
+    '[![x](image.png)](<https://example.invalid/a b>)',
+    '[![x](image.png)](<https://example.invalid/a)b>)',
+    '[![x](image.png)](<https://example.invalid/a\\<b\\>>)',
+    '[![x](image.png)](https://example.invalid "Say \\"hello\\" with \\\\ slash")',
+  ])('preserves linked image destinations and titles after editing and saving: %s', (markdown) => {
+    const extensions = createTacoEditorExtensions(labels)
+    editor = new Editor({ extensions, content: markdown, contentType: 'markdown' })
+    const original = editor.state.doc.firstChild!.firstChild!
+    expect(original.type.name).toBe('image')
+    const originalLink = original.marks.find((mark) => mark.type.name === 'link')!
+    expect(originalLink).toBeDefined()
+    ensureTacoBlockIds(editor, 'linked-image', true)
+    editor.commands.setContent(blockHtml(blocksFromEditor(editor, extensions)), { parseOptions: { preserveWhitespace: 'full' } })
+    editor.commands.insertContentAt(editor.state.doc.content.size, {
+      type: 'paragraph', content: [{ type: 'text', text: 'Edited' }],
+    })
+    const saved = editor.getMarkdown()
+    editor.commands.setContent(saved, { contentType: 'markdown' })
+    expect(() => editor!.state.doc.check()).not.toThrow()
+    expect(editor.state.doc.textContent).toBe('Edited')
+    const image = editor.state.doc.firstChild!.lastChild!
+    expect(image.type.name).toBe('image')
+    expect(image.attrs.src).toBe(original.attrs.src)
+    const link = image.marks.find((mark) => mark.type.name === 'link')
+    expect(link?.attrs.href).toBe(originalLink.attrs.href)
+    expect(link?.attrs.title).toBe(originalLink.attrs.title)
+  })
+
   it('renders YAML frontmatter as an editable property component', () => {
     const markdown = [
       '---',

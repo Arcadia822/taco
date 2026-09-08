@@ -72,6 +72,14 @@ const ImageParagraph = Paragraph.extend({
   },
 })
 
+const markdownLink = (content: string, attrs: Record<string, unknown> | undefined): string => {
+  const href = String(attrs?.href ?? '')
+  const escapedHref = href.replace(/\\/g, '\\\\').replace(/[<>]/g, '\\$&')
+  const destination = /[\s()<>]/.test(href) ? `<${escapedHref}>` : escapedHref
+  const title = attrs?.title ? ` "${String(attrs.title).replace(/[\\"]/g, '\\$&')}"` : ''
+  return `[${content}](${destination}${title})`
+}
+
 // The upstream Markdown mark helper only marks text, dropping links on atoms.
 const ImageLink = Link.extend({
   parseMarkdown(token, helpers) {
@@ -94,8 +102,7 @@ const SafeImage = Image.extend({
     let markdown = Image.config.renderMarkdown!.call(this, node, helpers, context)
     const link = node.marks?.find((mark) => mark.type === 'link')
     if (link) {
-      const title = link.attrs?.title ? ` "${link.attrs.title}"` : ''
-      markdown = `[${markdown}](${link.attrs?.href ?? ''}${title})`
+      markdown = markdownLink(markdown, link.attrs)
     }
     return markdown
   },
