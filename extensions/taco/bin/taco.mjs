@@ -754,9 +754,47 @@ const readPolicyFile = async (root, target) => {
   }
 }
 
+const policyProse = (content) => {
+  let fence = null
+  let comment = false
+  const lines = content.split(/\r?\n/).map((line) => {
+    if (fence) {
+      const closing = line.match(/^ {0,3}(`{3,}|~{3,})[ \t]*$/)
+      if (closing && closing[1][0] === fence[0] && closing[1].length >= fence.length) fence = null
+      return ''
+    }
+    let prose = ''
+    let remaining = line
+    while (remaining) {
+      if (comment) {
+        const end = remaining.indexOf('-->')
+        if (end < 0) return prose
+        remaining = remaining.slice(end + 3)
+        comment = false
+      } else {
+        const start = remaining.indexOf('<!--')
+        if (start < 0) {
+          prose += remaining
+          break
+        }
+        prose += remaining.slice(0, start)
+        remaining = remaining.slice(start + 4)
+        comment = true
+      }
+    }
+    const opening = prose.match(/^ {0,3}(`{3,}|~{3,})(.*)$/)
+    if (opening && (opening[1][0] !== '`' || !opening[2].includes('`'))) {
+      fence = opening[1]
+      return ''
+    }
+    return prose
+  })
+  if (fence || comment) throw new Error('Unclosed Markdown fence or HTML comment in policy routing; merge manually')
+  return lines.join('\n')
+}
+
 const routeLinks = (content) => {
-  const prose = content.replace(/^([ \t]*)(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1\2[^\n]*(?:\n|$)/gm, '')
-    .replace(/<!--[\s\S]*?-->/g, '')
+  const prose = policyProse(content)
   const definitions = new Map([...prose.matchAll(/^ {0,3}\[([^\]]+)\]:\s*<?([^\s>]+)>?/gm)]
     .map((match) => [match[1].toLowerCase(), match[2]]))
   const links = [...prose.matchAll(/\[([^\]]+)\]\(\s*(?:<([^>]+)>|([^\s)]+))(?:\s+"[^"]*")?\s*\)/g)]
@@ -863,7 +901,7 @@ export const prepareProjectPolicy = async (options = {}) => {
     }
     const relativePath = posix(relative(root, selected.path))
     const route = `${ROUTE_PREFIX}[${relativePath}](<${relativePath}>).`
-    const existingRoutes = nextAgents.split(/\r?\n/).filter((line) => line.startsWith(ROUTE_PREFIX))
+    const existingRoutes = policyProse(nextAgents).split(/\r?\n/).filter((line) => line.startsWith(ROUTE_PREFIX))
     if (existingRoutes.length > 1 || (existingRoutes.length === 1 && existingRoutes[0] !== route))
       throw new Error('Customized or duplicate Taco routing instruction in AGENTS.md; merge manually')
     if (!existingRoutes.length) nextAgents = appendPolicyText(nextAgents, route)

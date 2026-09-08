@@ -69,6 +69,28 @@ describe('Taco process policy preparation', () => {
     expect(read(root, 'AGENTS.md')).toContain(agents)
   })
 
+  it.each(['fence', 'longer-closing-fence', 'comment'])('preserves %s examples while installing a real mandatory route', (kind) => {
+    const root = project()
+    const route = 'Before any Spec Kit or Taco work, read and follow the Taco workflow in [docs/taco-process.md](<docs/taco-process.md>).'
+    const example = kind === 'comment' ? `<!--\n${route}\n-->` : `  \`\`\`md\n${route}\n${kind === 'longer-closing-fence' ? '````' : '```'}`
+    const agents = `## Team instructions\n\nExample only:\n${example}\n\nKeep our team rules.\n`
+    write(root, 'AGENTS.md', agents)
+    expect(run(root)).toMatchObject({ status: 0, applied: true, agents: { status: 'updated' } })
+    const installed = read(root, 'AGENTS.md')
+    expect(installed).toBe(`${agents}\n${route}\n`)
+    expect(run(root)).toMatchObject({ status: 0, process: { status: 'unchanged' }, agents: { status: 'unchanged' } })
+    expect(read(root, 'AGENTS.md')).toBe(installed)
+  })
+
+  it.each(['```md', '<!--'])('refuses an unclosed %s example without appending an inactive route', (opening) => {
+    const root = project()
+    const agents = `## Team instructions\n\n${opening}\nBefore any Spec Kit or Taco work, read and follow the Taco workflow in [docs/taco-process.md](<docs/taco-process.md>).\n`
+    write(root, 'AGENTS.md', agents)
+    expect(run(root)).toMatchObject({ status: 2, applied: false, agents: { status: 'manual-merge' } })
+    expect(read(root, 'AGENTS.md')).toBe(agents)
+    expect(existsSync(join(root, 'docs/taco-process.md'))).toBe(false)
+  })
+
   it('previews creation and migration without writing', () => {
     const root = project()
     write(root, 'AGENTS.md', stock)
