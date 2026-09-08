@@ -16,6 +16,9 @@ specify extension add --dev /absolute/path/to/taco/extensions/taco
 node .specify/extensions/taco/bin/taco.mjs prepare-template \
   --project-root "$PWD" \
   --json
+node .specify/extensions/taco/bin/taco.mjs prepare-policy \
+  --project-root "$PWD" \
+  --json
 specify extension list
 ```
 
@@ -33,12 +36,21 @@ specify extension add taco --from \
 node .specify/extensions/taco/bin/taco.mjs prepare-template \
   --project-root "$PWD" \
   --json
+node .specify/extensions/taco/bin/taco.mjs prepare-policy \
+  --project-root "$PWD" \
+  --json
 specify extension list
 ```
 
 Release tags are generated from the `extensions/taco/` subtree, so the tagged archive contains `extension.yml` at its root. The source repository keeps the extension under `extensions/taco/` for development.
 
-The installing Agent must then merge the installed [`policies/taco-agent-policy.md`](policies/taco-agent-policy.md) into the target project's existing `AGENTS.md` without replacing unrelated instructions. Plugin installation is not complete until that durable prompt is present. It governs later `speckit.specify` work: new specs use YAML `title`, omit a duplicate H1, and begin the body at H2; routed custom Markdown uses YAML `taco_scope`. The policy also requires Taco update after every canonical feature-artifact change and the review-comment round trip; it does not restate packer's built-in Taco-output exclusion.
+The installing Agent must run `prepare-policy` to install the complete [`policies/taco-agent-policy.md`](policies/taco-agent-policy.md) in project-owned process documentation. For a declared 5xP context, it follows the project's Process link, including `context/PROCESS.md`; otherwise it uses `docs/taco-process.md`. A generically named file alone does not declare 5xP. `AGENTS.md` retains unrelated instructions and receives only one imperative reference requiring the Agent to read the workflow before any Spec Kit or Taco work. Plugin installation is incomplete until this routing is present.
+
+The CLI follows relative Markdown context links labeled `Context` or `5xP` (or named `context.md`/`5xp.md`) and selects exactly one link labeled `Process` or named `PROCESS.md` after detecting a 5xP declaration. Inline and full/collapsed reference links are supported; ambiguous or unsupported routing needs deliberate merging. See the [Agent installation guide](../../docs/agent-installation.md#process-routing-and-safe-migration) for the complete contract.
+
+The process policy governs later `speckit.specify` work: new specs use YAML `title`, omit a duplicate H1, and begin the body at H2; routed custom Markdown uses YAML `taco_scope`. It also requires update after every canonical feature-artifact change and the complete review-comment round trip.
+
+`prepare-policy --dry-run --json` previews the operation. JSON reports `processPath`, `model`, `process.status`, `agents.status`, `migrated`, `dryRun`, and `applied`; file statuses are `created`, `updated`, `unchanged`, or `manual-merge`. Repeated installation is unchanged. Exact stock legacy Taco sections in `AGENTS.md` migrate automatically; customized sections or managed blocks and unsafe or ambiguous destinations return exit code 2 without writing either file. Preserve local rules and deliberately reconcile them outside the managed policy block before rerunning. The CLI never initializes 5xP for an ordinary project.
 
 ## Agent commands
 

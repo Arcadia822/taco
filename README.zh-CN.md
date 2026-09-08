@@ -40,7 +40,7 @@ canonical spec directory → 一个 .taco.html → 人类评审 → Agent 同步
 https://github.com/Arcadia822/taco
 ```
 
-Agent 会读取 Taco repo 中的说明，把 Spec Kit extension 安装到当前 repo，并将 Taco 的持久评审规则合并进项目现有的 `AGENTS.md`。这套 plugin 安装流程就是 Taco 安装：它同时带来 Agent 命令、强制生命周期 hooks、离线 CLI、自包含浏览器 shell，以及保证 Taco 持续更新的项目规则；不需要第二次安装 Taco。
+Agent 会读取 Taco repo 中的说明，把 Spec Kit extension 安装到当前 repo，并运行 `prepare-policy`，将 Taco 的持久工作流写入项目已声明的 5xP Process 文档；未采用 5xP 的项目使用 `docs/taco-process.md`。现有 `AGENTS.md` 只增加一句必须先阅读该文档的引用。这套 plugin 安装流程就是 Taco 安装：它同时带来 Agent 命令、强制生命周期 hooks、离线 CLI、自包含浏览器 shell，以及保证 Taco 持续更新的项目规则；不需要第二次安装 Taco。
 
 安装之后，SDD 流程如下：
 
@@ -59,7 +59,7 @@ flowchart LR
     K --> E
 ```
 
-项目本地 `AGENTS.md` 会为后续 spec 记录这套流程。
+项目本地 `AGENTS.md` 会将后续 Spec Kit 和 Taco 工作路由到流程文档。安装保留原有指令，重复执行不产生改动；路由不明确或 Taco 政策经过本地定制时，需要明确的人工合并。
 
 ## 为什么开源
 
