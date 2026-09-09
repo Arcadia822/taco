@@ -14,7 +14,7 @@
 ## Requirement Completeness
 
 - [x] Requirements cover install, update, review, packaging, ignore behavior, security, and documentation.
-- [x] Plugin installation explicitly includes a non-destructive Taco policy merge into the target project's `AGENTS.md`.
+- [x] Plugin installation explicitly includes non-destructive Process policy preparation with one mandatory `AGENTS.md` reference.
 - [x] Default exclusions are exhaustive: Taco outputs and hidden paths only.
 - [x] Explicit ignore behavior defines repetition, safety, reporting, replacement, and refresh persistence.
 - [x] Output location and canonical-source ownership are unambiguous.

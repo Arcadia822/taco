@@ -40,7 +40,7 @@ for future specs. Follow the installation instructions in the Taco repository:
 https://github.com/Arcadia822/taco
 ```
 
-The Agent reads Taco's repository instructions, installs the Spec Kit extension into the current repository, and merges Taco's persistent review policy into the existing project `AGENTS.md`. That plugin installation is Taco: it includes the Agent commands, mandatory lifecycle hooks, offline CLI, self-contained browser shell, and the project rule that keeps Taco current. No second Taco install is required.
+The Agent reads Taco's repository instructions, installs the Spec Kit extension into the current repository, and runs `prepare-policy` to install Taco's persistent workflow in the declared 5xP Process document, or `docs/taco-process.md` for projects without 5xP. The existing project `AGENTS.md` receives one mandatory reference to that document. That plugin installation is Taco: it includes the Agent commands, mandatory lifecycle hooks, offline CLI, self-contained browser shell, and the project rule that keeps Taco current. No second Taco install is required.
 
 After installation, the SDD flow is:
 
@@ -59,7 +59,7 @@ flowchart LR
     K --> E
 ```
 
-The project-local `AGENTS.md` records this flow for subsequent specs.
+The project-local `AGENTS.md` routes subsequent Spec Kit and Taco work to the process document. Existing instructions are preserved; rerunning preparation is a no-op. Ambiguous routing or customized Taco policy requires a deliberate merge.
 
 ## Why open source
 

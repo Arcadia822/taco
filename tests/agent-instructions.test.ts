@@ -15,7 +15,7 @@ describe('Taco Agent instructions', () => {
     expect(update).toContain("Never substitute a `data:` URL")
   })
 
-  it('installs a durable YAML-title and no-H1 authoring prompt', () => {
+  it('routes a complete durable authoring and review prompt through process documentation', () => {
     const policy = read('extensions/taco/policies/taco-agent-policy.md')
     const installation = read('docs/agent-installation.md')
     const extension = read('extensions/taco/README.md')
@@ -31,6 +31,17 @@ describe('Taco Agent instructions', () => {
     expect(installation).toContain('.specify/extensions/taco/policies/taco-agent-policy.md')
     expect(installation).toContain('a post-generation Taco hook cannot prevent malformed Markdown')
     expect(extension).toContain('new specs use YAML `title`, omit a duplicate H1')
+    for (const path of ['README.md', 'README.zh-CN.md', 'docs/agent-installation.md', 'extensions/taco/README.md', 'specs/002-taco-speckit-plugin/spec.md', 'specs/002-taco-speckit-plugin/plan.md', 'specs/002-taco-speckit-plugin/quickstart.md']) {
+      expect(read(path), path).toContain('docs/taco-process.md')
+      expect(read(path), path).toContain('5xP')
+      expect(read(path), path).toContain('AGENTS.md')
+    }
+    expect(installation).toContain('prepare-policy')
+    expect(installation).toContain('manual-merge')
+    expect(installation).toContain('one imperative reference')
+    for (const contract of ['`feature_id`', '`git_branch`', '`spec`, `plan`, and `tasks`', 'canonical', 'speckit.taco.update', 'native clickable', 'validate --json', 'sync --dry-run --json', '--force', 'complete history', 'credential-bearing']) {
+      expect(policy, contract).toContain(contract)
+    }
   })
 
   it('replaces the core Spec Kit spec template with an unambiguous YAML contract', () => {
