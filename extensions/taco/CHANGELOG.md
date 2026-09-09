@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.5.0 - 2026-09-09
+
+- Route Taco workflow policy through project process documentation while preserving one durable `AGENTS.md` reference.
+- Prevent linked badges and inline Markdown images from crashing editor startup.
 - Package validated local PNG assets into self-contained reviews, resolve nested relative Markdown image paths offline, and preserve exact binary bytes during save and sync.
 
 ## 0.4.0 - 2026-08-26

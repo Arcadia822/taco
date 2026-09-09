@@ -91,12 +91,12 @@ After update succeeds, always expose the exact generated Taco through the active
 
 ### Packaging rules
 
-- Include every visible UTF-8 regular file recursively.
+- Include every visible UTF-8 regular file recursively and validated local PNG assets up to 10 MiB.
 - The packer itself excludes all `*.taco.html` files and all paths with a segment beginning `.`.
 - Do not reproduce the Taco-output exclusion in Agent instructions; it is a deterministic packer invariant.
 - Additional exclusions require repeatable `--ignore "<feature-relative-path-or-glob>"` parameters. Supported wildcards are `*`, `?`, and `**`.
 - An existing Taco retains its explicit ignore set on refresh. Supplying new `--ignore` values replaces that set.
-- Never silently omit a visible symlink, unsupported filesystem entry, or non-UTF-8 file. Let packaging fail with the exact path unless the user explicitly ignores it.
+- Never silently omit a visible symlink, unsupported filesystem entry, malformed or oversized PNG, or other non-UTF-8 file. Let packaging fail with the exact path unless the user explicitly ignores it.
 - Every packaged `.html` or `.htm` file must receive its canonical absolute `file:` URL from the CLI. A missing or mismatched URL is a packaging error; do not hand-edit the Taco or replace it with a `data:` URL.
 - Refreshing a legacy Taco is the migration path: `pack --from` may read the old bundle long enough to preserve its state, then rewrites every HTML entry with the canonical local URL. Standalone validation remains fail-closed for the legacy bundle before refresh.
 
