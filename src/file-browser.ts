@@ -42,7 +42,7 @@ import { LOCALE_CHOICES, copy, resolveLocale, type Locale } from './i18n.ts'
 import { OutlineController } from './outline-controller.ts'
 import { PresenceController } from './presence-controller.ts'
 import { ShareController } from './share-controller.ts'
-import { resolveEmbeddedMarkdownAssets } from './markdown-assets.ts'
+import { openPngPreview, resolveEmbeddedMarkdownAssets } from './markdown-assets.ts'
 import { hasCollabSecrets } from './security.ts'
 import { localFileUrl } from './local-file-url.ts'
 import { frontmatterTitle, parseFrontmatter } from './frontmatter.ts'
@@ -381,7 +381,14 @@ export class FileBrowser {
     }
     const kind = fileKind(file)
 
-    if (kind === 'markdown') {
+    if (file.mediaType === 'image/png') {
+      const image = el('img', 'png-document-preview')
+      image.src = file.content
+      image.alt = file.title || fallbackFileTitle(file)
+      const open = el('button', '', 'View full size')
+      open.addEventListener('click', () => openPngPreview(file))
+      this.viewer.append(open, image)
+    } else if (kind === 'markdown') {
       this.mountMarkdownEditor(file, mountSerial)
     } else if (kind === 'html') {
       this.mountHtmlPrototype(file)

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Package validated local PNG assets into self-contained reviews, resolve nested relative Markdown image paths offline, and preserve exact binary bytes during save and sync.
+
 ## 0.4.0 - 2026-08-26
 
 - Make every packaged UTF-8 file discoverable exactly once through the canonical stage groups or the `Other files` group.

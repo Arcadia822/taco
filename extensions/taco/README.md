@@ -89,7 +89,7 @@ node .specify/extensions/taco/bin/taco.mjs validate \
   --json
 ```
 
-`pack` embeds every visible UTF-8 regular file below the feature root. Its only default exclusions are all `*.taco.html` files and paths containing a hidden segment beginning `.`. Repeatable `--ignore` values accept safe feature-relative paths or `*`, `?`, and `**` globs. The explicit ignore set is stored in the Taco and reused on refresh unless new `--ignore` values replace it. An unignored symlink, unsupported entry, or non-UTF-8 file is an error rather than a silent omission.
+`pack` embeds every visible UTF-8 regular file and validated local `.png` assets up to 10 MiB below the feature root. PNGs are stored as binary-derived data URLs, resolve from Markdown relative to the containing document (including nested `../` paths), and remain available offline. Their SHA-256 baselines use raw bytes so `sync` can preserve or recreate PNGs without UTF-8 corruption. The only default exclusions are all `*.taco.html` files and paths containing a hidden segment beginning `.`. Repeatable `--ignore` values accept safe feature-relative paths or `*`, `?`, and `**` globs. The explicit ignore set is stored in the Taco and reused on refresh unless new `--ignore` values replace it. An unignored symlink, unsupported entry, malformed or oversized PNG, or other non-UTF-8 file is an error rather than a silent omission.
 
 For every `.html` or `.htm` file, `pack` records the canonical absolute `file:` URL and validates that it ends in the same project-relative path. Missing or mismatched local URLs are rejected; the runtime never replaces them with a `data:` or Blob preview URL.
 
@@ -111,6 +111,7 @@ CHANGELOG.md
 commands/update.md
 commands/review.md
 bin/taco.mjs
+bin/png.mjs
 assets/taco-shell.html
 templates/spec-template.md
 policies/taco-agent-policy.md

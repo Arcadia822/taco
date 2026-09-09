@@ -1,3 +1,4 @@
+import { decodePng } from '../extensions/taco/bin/png.mjs'
 import { MAX_BLOCK_HTML, SUPPORTED_BLOCK_TYPES } from './security.ts'
 import { localFileReference } from './local-file-url.ts'
 import { normalizeCommentMessage, sortCommentMessages } from './comments.ts'
@@ -147,6 +148,10 @@ export function parseBundle(json: string): ParseResult {
     }
     if (value.sourceHash !== undefined && (typeof value.sourceHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.sourceHash))) {
       return { ok: false, err: 'shape', detail: `file sourceHash is invalid: ${value.path}` }
+    }
+    if (value.mediaType === 'image/png') {
+      try { decodePng(value.content, value.path) }
+      catch (error) { return { ok: false, err: 'shape', detail: (error as Error).message } }
     }
     const html = value.mediaType === 'text/html' || /\.html?$/i.test(value.path)
     if (html && !localFileReference(value.sourceUrl, value.path)) {
