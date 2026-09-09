@@ -732,3 +732,11 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
   html { scroll-behavior: auto; }
   *, *::before, *::after { transition-duration: .001ms !important; animation-duration: .001ms !important; }
 }
+
+.markdown-asset-tools { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; overflow-wrap: anywhere; }
+.markdown-asset-tools:empty { display: none; }
+.markdown-asset-tools p { flex-basis: 100%; }
+.png-document-preview { display: block; max-width: 100%; height: auto; margin-top: 12px; }
+.png-preview { max-width: 95vw; max-height: 95vh; overflow: auto; }
+.png-preview img { display: block; max-width: none; margin-top: 12px; }
+.png-preview::backdrop { background: #0009; }

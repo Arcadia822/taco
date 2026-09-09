@@ -104,7 +104,7 @@ speckit.taco.review specs/001-example/001-example.taco.html
 
 `review` performs a read-only preflight before writing Taco edits back to their original paths. It then hands open comments to the agent with their anchored text, position, and complete message history. Every file includes the SHA-256 baseline captured when it was packaged. If both the source file and the Taco copy changed, the entire sync refuses to write instead of silently choosing one side. Agent-facing installation and CLI details live in [`extensions/taco/README.md`](extensions/taco/README.md).
 
-The packer includes every visible UTF-8 regular file. Its only default exclusions are `*.taco.html` and hidden paths; repeatable `--ignore` parameters add explicit feature-relative path or glob exclusions. Visible unsupported content fails packaging instead of disappearing silently.
+The packer includes every visible UTF-8 regular file plus validated local PNG assets up to 10 MiB. PNGs are embedded for offline Markdown rendering and preserved as binary data during review round trips. Its only default exclusions are `*.taco.html` and hidden paths; repeatable `--ignore` parameters add explicit feature-relative path or glob exclusions. Visible unsupported content fails packaging instead of disappearing silently.
 
 After each successful update, the Agent presents the exact generated Taco as a native clickable local file. In Codex, the user click opens it in Browser; the Agent does not attempt autonomous `file://` navigation. Other Agent GUIs may additionally open and verify the file only when they explicitly support local HTML navigation.
 

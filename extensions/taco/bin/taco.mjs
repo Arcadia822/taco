@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { MAX_PNG_SIZE, PNG_DATA_URL_PREFIX, decodePng, validatePngBytes } from './png.mjs'
+
 import { createHash, randomUUID } from 'node:crypto'
 import {
   access,
@@ -89,6 +91,7 @@ const mediaType = (path) => {
   if (lower.endsWith('.svg')) return 'image/svg+xml'
   if (lower.endsWith('.xml')) return 'application/xml'
   if (lower.endsWith('.toml')) return 'application/toml'
+  if (lower.endsWith('.png')) return 'image/png'
   return 'text/plain'
 }
 
@@ -292,6 +295,7 @@ export const validateBundle = (bundle, { allowLegacyHtmlSourceUrl = false } = {}
     if (!html && file.sourceUrl !== undefined) {
       throw new Error(`sourceUrl is only valid for HTML files: ${file.path}`)
     }
+    if (file.mediaType === 'image/png') decodePng(file.content, file.path)
     paths.add(file.path)
   }
   if (bundle.comments !== undefined && !Array.isArray(bundle.comments))
@@ -372,25 +376,37 @@ const collectFiles = async (featureDir, rootPath, existingByPath, ignorePatterns
           `Unsupported filesystem entry in feature directory: ${relativePath}; exclude it with --ignore`,
         )
       }
+      const type = mediaType(relativePath)
+      const isPng = type === 'image/png'
       let content
-      try {
-        content = decoder.decode(await readFile(absolute))
-      } catch {
-        throw new Error(`File is not valid UTF-8: ${relativePath}; exclude it with --ignore`)
+      let rawBuffer = null
+      if (isPng) {
+        const size = (await lstat(absolute)).size
+        if (size > MAX_PNG_SIZE) {
+          throw new Error(`PNG image exceeds 10 MiB limit: ${relativePath} (${size} bytes); optimize or exclude with --ignore`)
+        }
+        rawBuffer = await readFile(absolute)
+        validatePngBytes(rawBuffer, relativePath)
+        content = `${PNG_DATA_URL_PREFIX}${rawBuffer.toString('base64')}`
+      } else {
+        try {
+          content = decoder.decode(await readFile(absolute))
+        } catch {
+          throw new Error(`File is not valid UTF-8: ${relativePath}; exclude it with --ignore`)
+        }
       }
       const path = `${rootPath}/${relativePath}`
       const previous = existingByPath.get(path)
-      const type = mediaType(relativePath)
       files.push({
         ...(previous?.id ? { id: previous.id } : {}),
         title: type === 'text/markdown'
           ? titleFrom(content, entry.name)
-          : previous?.title || titleFrom(content, entry.name),
+          : previous?.title || (isPng ? entry.name : titleFrom(content, entry.name)),
         path,
         mediaType: type,
         content,
         ...(type === 'text/html' ? { sourceUrl: pathToFileURL(absolute).href } : {}),
-        sourceHash: sha256(content),
+        sourceHash: sha256(rawBuffer || content),
       })
     }
   }
@@ -618,9 +634,20 @@ export const sync = async ({
       throw new Error(`Taco file escapes feature root: ${file.path}`)
     await assertNoSymlinkPath(rootDirectory, target)
     const exists = await pathExists(target)
-    const current = exists ? await readFile(target, 'utf8') : null
-    const currentHash = current === null ? null : sha256(current)
-    const tacoHash = sha256(file.content)
+    const isPng = file.mediaType === 'image/png'
+    let currentHash = null
+    let tacoHash = null
+    if (isPng) {
+      if (exists) {
+        const diskBuffer = await readFile(target)
+        currentHash = sha256(diskBuffer)
+      }
+      tacoHash = sha256(decodePng(file.content, file.path))
+    } else {
+      const current = exists ? await readFile(target, 'utf8') : null
+      currentHash = current === null ? null : sha256(current)
+      tacoHash = sha256(file.content)
+    }
     const baselineHash =
       typeof file.sourceHash === 'string' && /^[a-f0-9]{64}$/.test(file.sourceHash)
         ? file.sourceHash
@@ -636,6 +663,7 @@ export const sync = async ({
       state,
       baselineKnown: Boolean(baselineHash),
       content: file.content,
+      mediaType: file.mediaType,
     })
   }
 
@@ -645,7 +673,11 @@ export const sync = async ({
       if (change.state !== 'created' && change.state !== 'updated') continue
       await mkdir(dirname(change.target), { recursive: true })
       const temporary = `${change.target}.taco-${process.pid}-${randomUUID()}.tmp`
-      await writeFile(temporary, change.content, 'utf8')
+      if (change.mediaType === 'image/png') {
+        await writeFile(temporary, decodePng(change.content, change.path))
+      } else {
+        await writeFile(temporary, change.content, 'utf8')
+      }
       await rename(temporary, change.target)
     }
   }

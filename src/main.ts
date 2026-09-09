@@ -62,7 +62,8 @@ function boot(bundle: TacoBundle): void {
       const needle = query.trim().toLocaleLowerCase()
       if (!needle) return []
       return bundle.files
-        .filter((file) => file.path.toLocaleLowerCase().includes(needle) || file.content.toLocaleLowerCase().includes(needle))
+        .filter((file) => file.path.toLocaleLowerCase().includes(needle)
+          || (file.mediaType !== 'image/png' && file.content.toLocaleLowerCase().includes(needle)))
         .map(credentialFreeFile)
     },
   }

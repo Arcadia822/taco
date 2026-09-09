@@ -171,4 +171,23 @@ describe('file-first Taco bundle', () => {
     expect(parsed).toMatchObject({ ok: true })
     if (parsed.ok) expect(JSON.stringify(parsed.bundle)).toBe(serialized)
   })
+
+  it('accepts image/png files with valid data URLs and rejects invalid payloads', () => {
+    const pngBundle = bundle()
+    pngBundle.files.push({
+      path: 'specs/001-test/design/screen.png',
+      mediaType: 'image/png',
+      content: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      sourceHash: 'a'.repeat(64),
+    })
+    expect(parseBundle(JSON.stringify(pngBundle))).toMatchObject({ ok: true })
+
+    const invalidContent = structuredClone(pngBundle)
+    invalidContent.files[invalidContent.files.length - 1].content = 'not-a-data-url'
+    expect(parseBundle(JSON.stringify(invalidContent))).toMatchObject({ ok: false, err: 'shape' })
+
+    const hasSourceUrl = structuredClone(pngBundle)
+    hasSourceUrl.files[hasSourceUrl.files.length - 1].sourceUrl = 'file:///path/to/screen.png'
+    expect(parseBundle(JSON.stringify(hasSourceUrl))).toMatchObject({ ok: false, err: 'shape' })
+  })
 })

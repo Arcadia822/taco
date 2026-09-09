@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 The Bento authors
 // Adapted for Taco from Bento kernel/src/save.ts.
+import { decodePng } from '../../extensions/taco/bin/png.mjs'
 
 import type { KernelDoc } from './doc.ts'
 import { appConfig } from './app.ts'
@@ -69,7 +70,7 @@ interface WritableLike {
 
 export interface FileHandleLike {
   createWritable(): Promise<WritableLike>
-  getFile?(): Promise<{ text(): Promise<string> }>
+  getFile?(): Promise<{ text(): Promise<string>; arrayBuffer?(): Promise<ArrayBuffer> }>
   name: string
 }
 
@@ -142,6 +143,30 @@ async function pickHandle(
 }
 
 async function writeHandle(handle: FileHandleLike, content: string, mediaType = 'text/html'): Promise<void> {
+  if (mediaType === 'image/png') {
+    const bytes = decodePng(content, handle.name)
+    if (handle.getFile) {
+      const existing = await handle.getFile()
+      if (existing.arrayBuffer) {
+        const current = new Uint8Array(await existing.arrayBuffer())
+        if (current.length === bytes.length && current.every((byte, i) => byte === bytes[i])) return
+        if (current.length) throw new Error(`Refusing to overwrite changed PNG: ${handle.name}; use CLI sync to review the conflict`)
+      }
+    }
+    const writable = await handle.createWritable()
+    await writable.write(new Blob([bytes], { type: mediaType }))
+    await writable.close()
+    if (handle.getFile) {
+      const savedFile = await handle.getFile()
+      if (savedFile.arrayBuffer) {
+        const writtenBytes = new Uint8Array(await savedFile.arrayBuffer())
+        if (writtenBytes.length !== bytes.length || writtenBytes.some((byte, i) => byte !== bytes[i])) {
+          throw new Error('The saved file did not pass write verification')
+        }
+      }
+    }
+    return
+  }
   const writable = await handle.createWritable()
   await writable.write(new Blob([content], { type: mediaType }))
   await writable.close()
