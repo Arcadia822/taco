@@ -94,7 +94,15 @@ export class CommentsController {
     const end = textOffset(article, target.content, target.content.childNodes.length)
     if (end <= start) return
     const anchor = createTextAnchor(file.path, article.textContent ?? '', start, end)
-    anchor.block = { id: target.blockId, type: 'codeBlock', language: target.language }
+    anchor.block = {
+      id: target.blockId,
+      type: 'codeBlock',
+      language: target.language,
+      ...(target.nodeId ? { nodeId: target.nodeId } : {}),
+      ...(target.nodeLabel ? { nodeLabel: target.nodeLabel } : {}),
+      ...(target.lineNumber ? { lineNumber: target.lineNumber } : {}),
+      ...(target.lineText ? { lineText: target.lineText } : {}),
+    }
     this.pendingAnchor = anchor
     this.options.openComments()
     this.paint()
@@ -357,7 +365,15 @@ export class CommentsController {
   }
 
   private blockReferenceLabel(anchor: TacoTextAnchor): string {
-    if (anchor.block?.language === 'mermaid') return this.t.mermaidBlockReference
+    if (anchor.block?.language === 'mermaid') {
+      if (anchor.block.nodeLabel || anchor.block.nodeId) {
+        return `${this.t.mermaidBlockReference} · ${anchor.block.nodeLabel || anchor.block.nodeId}`
+      }
+      if (anchor.block.lineNumber) {
+        return `${this.t.mermaidBlockReference} · L${anchor.block.lineNumber}`
+      }
+      return this.t.mermaidBlockReference
+    }
     const language = anchor.block?.language ? this.displayCodeLanguage(anchor.block.language) : ''
     return this.t.codeBlockReference(language)
   }
@@ -477,6 +493,21 @@ export class CommentsController {
       block.classList.add('is-active-comment')
       const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
       block.scrollIntoView?.({ behavior, block: 'center' })
+      if (thread.anchor.block.nodeId) {
+        const node = block.querySelector<SVGElement>(`[data-node-id="${CSS.escape(thread.anchor.block.nodeId)}"]`)
+        if (node) {
+          block.querySelectorAll('.interactive-mermaid-node.is-node-active').forEach((n) => n.classList.remove('is-node-active'))
+          node.classList.add('is-node-active')
+        }
+      }
+      if (thread.anchor.block.lineNumber) {
+        const line = block.querySelector<HTMLElement>(`[data-line="${thread.anchor.block.lineNumber}"]`)
+        if (line) {
+          block.querySelectorAll('.mermaid-code-line.is-line-active').forEach((l) => l.classList.remove('is-line-active'))
+          line.classList.add('is-line-active')
+          line.scrollIntoView?.({ behavior, block: 'nearest' })
+        }
+      }
       return
     }
     const sourceEditor = this.options.getSourceEditor()

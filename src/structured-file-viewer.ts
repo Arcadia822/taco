@@ -1,5 +1,5 @@
 import { parseAllDocuments, type Document } from 'yaml'
-import { createMermaidPreview, type MermaidPluginLabels, type MermaidRuntime } from './mermaid.ts'
+import { createMermaidPreview, MERMAID_THEMES, type MermaidPluginLabels, type MermaidRuntime, type MermaidTheme } from './mermaid.ts'
 import { createSegmentedControl } from './segmented-control.ts'
 import { createSourceEditor, type SourceEditorController } from './source-editor.ts'
 import { fileName, type TacoFile } from './model.ts'
@@ -484,8 +484,17 @@ const openStandaloneMermaidZoom = (
   close.title = labels.close
   const canvas = el('div', 'mermaid-zoom-canvas')
   const diagram = createMermaidPreview(source, labels, undefined, undefined, runtime)
-  canvas.append(diagram)
-  controls.append(zoomOut, zoomLevel, zoomIn, reset, close)
+  const themeSelect = el('select', 'tiptap-code-block-theme-select') as HTMLSelectElement
+  themeSelect.setAttribute('aria-label', labels.theme || 'Theme')
+  MERMAID_THEMES.forEach(({ id, label }) => {
+    const opt = el('option', '', label) as HTMLOptionElement
+    opt.value = id
+    themeSelect.append(opt)
+  })
+  themeSelect.addEventListener('change', () => {
+    diagram.setMermaidTheme(themeSelect.value as MermaidTheme)
+  })
+  controls.append(themeSelect, zoomOut, zoomLevel, zoomIn, reset, close)
   header.append(el('span', '', labels.previewTitle), controls)
   dialog.append(header, canvas)
   let zoom = 1
@@ -669,7 +678,19 @@ export const createStructuredFileViewer = (options: StructuredFileViewerOptions)
       options.mermaidRuntime,
       () => fail(options.mermaidLabels.error),
     )
-    previewShell.append(zoom, diagram)
+    const themeSelect = el('select', 'tiptap-code-block-theme-select') as HTMLSelectElement
+    themeSelect.setAttribute('aria-label', options.mermaidLabels.theme || 'Theme')
+    MERMAID_THEMES.forEach(({ id, label }) => {
+      const opt = el('option', '', label) as HTMLOptionElement
+      opt.value = id
+      themeSelect.append(opt)
+    })
+    themeSelect.addEventListener('change', () => {
+      diagram.setMermaidTheme(themeSelect.value as MermaidTheme)
+    })
+    const actions = el('div', 'standalone-mermaid-actions')
+    actions.append(themeSelect, zoom)
+    previewShell.append(actions, diagram)
     diagnostics.replaceChildren()
     showDerived(previewShell)
     paintToolbar()

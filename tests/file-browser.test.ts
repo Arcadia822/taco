@@ -495,7 +495,6 @@ describe('FileBrowser', () => {
     new FileBrowser(document.getElementById('app')!, mermaidBundle, { mermaidRuntime })
     await waitForEditor()
     await new Promise((resolve) => requestAnimationFrame(resolve))
-
     const diagram = document.querySelector<HTMLElement>('.tiptap-code-block .taco-mermaid-render')
     expect(diagram).not.toBeNull()
     expect(diagram?.querySelector('.surface')).not.toBeNull()
@@ -503,13 +502,11 @@ describe('FileBrowser', () => {
     expect(diagram?.querySelector('svg')?.hasAttribute('data-test-mermaid')).toBe(false)
     expect(mermaidLoader).toHaveBeenCalledTimes(1)
     expect(mermaidInitialize).toHaveBeenCalledWith(expect.objectContaining({
-      theme: 'base',
+      theme: 'redux',
+      layout: 'elk',
+      look: 'neo',
       htmlLabels: false,
       flowchart: { curve: 'basis' },
-      themeVariables: expect.objectContaining({
-        primaryBorderColor: '#00875a',
-        primaryColor: '#f1f5f3',
-      }),
     }))
     expect(document.querySelector('.tiptap-code-block-source code')?.textContent).toContain('Brief --> Plan')
     const edit = document.querySelector<HTMLButtonElement>('.tiptap-code-block-edit')!
@@ -543,11 +540,36 @@ describe('FileBrowser', () => {
     expect(edit.getAttribute('aria-pressed')).toBe('true')
     expect(document.querySelectorAll('.tiptap-code-block-lines span')).toHaveLength(2)
 
-    edit.click()
+    document.querySelector<HTMLButtonElement>('.tiptap-code-block-edit')!.click()
     await new Promise((resolve) => requestAnimationFrame(resolve))
-    expect(codeBlock.querySelector<HTMLElement>('.tiptap-code-block-source')?.hidden).toBe(true)
-    expect(codeBlock.querySelector<HTMLElement>('.tiptap-code-block-preview')?.hidden).toBe(false)
+    expect(document.querySelector<HTMLElement>('.tiptap-code-block-source')?.hidden).toBe(true)
+    expect(document.querySelector<HTMLElement>('.tiptap-code-block-preview')?.hidden).toBe(false)
 
+    const activeBlock = document.querySelector<HTMLElement>('.tiptap-code-block')!
+    const themeSelect = activeBlock.querySelector<HTMLSelectElement>('.tiptap-code-block-theme-select')!
+    expect(themeSelect).not.toBeNull()
+    themeSelect.value = 'neo'
+    themeSelect.dispatchEvent(new Event('change', { bubbles: true }))
+    if (typeof themeSelect.onchange === 'function') {
+      themeSelect.onchange(new Event('change'))
+    }
+    await vi.waitFor(() => expect(mermaidInitialize.mock.calls.some((c) => c[0]?.theme === 'neo')).toBe(true))
+
+    const panelToggle = activeBlock.querySelector<HTMLButtonElement>('.tiptap-code-block-panel')!
+    expect(panelToggle).not.toBeNull()
+    expect(activeBlock.querySelector<HTMLElement>('.mermaid-floating-code-panel')?.hidden).toBe(true)
+    panelToggle.click()
+    expect(activeBlock.querySelector<HTMLElement>('.mermaid-floating-code-panel')?.hidden).toBe(false)
+    expect(panelToggle.classList.contains('is-active')).toBe(true)
+
+    const line2Comment = activeBlock.querySelector<HTMLButtonElement>('.mermaid-code-line[data-line="2"] .mermaid-line-comment-btn')!
+    expect(line2Comment).not.toBeNull()
+    line2Comment.click()
+    const lineCommentInput = document.querySelector<HTMLTextAreaElement>('.comment-composer .comment-input')!
+    expect(lineCommentInput).not.toBeNull()
+    lineCommentInput.value = 'Comment on Brief to Plan edge'
+    lineCommentInput.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    expect(mermaidBundle.comments?.some((c) => c.anchor.block?.lineNumber === 2)).toBe(true)
     zoom.click()
     expect(document.querySelector('.mermaid-zoom-dialog[open]')).not.toBeNull()
     const zoomedDiagram = document.querySelector<HTMLElement>('.mermaid-zoom-canvas .taco-mermaid-render')!

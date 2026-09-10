@@ -38,7 +38,7 @@ the bundled specification diagrams and is not embedded in Taco single-file artif
 
 - Project: Mermaid
 - Source: https://github.com/mermaid-js/mermaid
-- Version: 11.16.1
+- Version: 12.0.0
 - License: MIT
 
 Taco uses Lucide icons for its interface iconography:

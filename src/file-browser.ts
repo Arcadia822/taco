@@ -625,6 +625,10 @@ export class FileBrowser {
       plainText: this.t.codePlainText,
       loading: this.t.mermaidLoading,
       error: this.t.mermaidError,
+      theme: this.t.mermaidTheme,
+      codePanel: this.t.mermaidCodePanel,
+      lineComment: this.t.mermaidLineComment,
+      nodeComment: this.t.mermaidNodeComment,
     }
   }
 
