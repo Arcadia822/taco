@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Upgrade Mermaid to 12.0.0 with ELK layout, Redux/Neo defaults, and native theme paint preserved by a scoped SVG/CSS sanitizer.
+- Unify standalone Mermaid into a full-width diagram view with an editable, syntax-highlighted floating source card in normal and enlarged views.
+- Focus diagram nodes and matching source without opening a composer; an anchored node toolbar and the existing source-selection action create comments explicitly.
+- Fix empty standalone Mermaid enlargement, linked inline-code README migration, and recursively embedded generated Taco files in the production showcase.
+
 ## 0.4.0 - 2026-08-26
 
 - Make every packaged UTF-8 file discoverable exactly once through the canonical stage groups or the `Other files` group.

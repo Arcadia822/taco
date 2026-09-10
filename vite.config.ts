@@ -51,7 +51,7 @@ interface EmbeddedFile {
 const readFiles = (directory: string): EmbeddedFile[] => {
   const files: EmbeddedFile[] = []
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    if (entry.name === '.DS_Store') continue
+    if (entry.name.startsWith('.') || entry.name.endsWith('.taco.html')) continue
     const absolute = join(directory, entry.name)
     if (entry.isDirectory()) files.push(...readFiles(absolute))
     else if (entry.isFile()) {

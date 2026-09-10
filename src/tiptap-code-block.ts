@@ -21,6 +21,7 @@ import {
   type MermaidRuntime,
   type MermaidTheme,
 } from './mermaid.ts'
+import { createSourceEditor, type SourceEditorController, type SourceCommentRange } from './source-editor.ts'
 
 const lowlight = createLowlight({
   bash,
@@ -148,6 +149,9 @@ export interface TacoCodeBlockCommentTarget {
   nodeLabel?: string
   lineNumber?: number
   lineText?: string
+  selection?: SourceCommentRange
+  selectionEvent?: MouseEvent
+  sourceEditor?: SourceEditorController
 }
 
 export interface MermaidSplitViewController {
@@ -156,6 +160,8 @@ export interface MermaidSplitViewController {
   setTheme: (theme: MermaidTheme) => void
   toggleCodePanel: (force?: boolean) => boolean
   isCodePanelOpen: () => boolean
+  sourceEditor: SourceEditorController
+  updateCode: (code: string) => void
 }
 
 export const createMermaidSplitView = (
@@ -165,155 +171,124 @@ export const createMermaidSplitView = (
     runtime?: MermaidRuntime
     initialTheme?: MermaidTheme
     initialPanelOpen?: boolean
+    sourceEditor?: SourceEditorController
+    readOnly?: boolean
+    onChange?: (code: string) => void
     onUnavailable?: (error?: unknown) => void
     onRenderError?: (error?: unknown) => void
+    onRendered?: () => void
     onThemeChange?: (theme: MermaidTheme) => void
     onPanelToggle?: (open: boolean) => void
-    onComment?: (target: { nodeId?: string; nodeLabel?: string; lineNumber?: number; lineText?: string }) => void
+    onComment?: (target: { nodeId?: string; nodeLabel?: string; lineNumber?: number; lineText?: string; selection?: SourceCommentRange; selectionEvent?: MouseEvent; sourceEditor?: SourceEditorController }) => void
   } = {},
 ): MermaidSplitViewController => {
   let isPanelOpen = options.initialPanelOpen ?? false
-  const lineMap = parseMermaidLineMap(code)
+  let lineMap = parseMermaidLineMap(code)
   const container = document.createElement('div')
   container.className = 'tiptap-mermaid-container'
-
-  const codePanel = document.createElement('aside')
+  const codePanel = document.createElement('section')
   codePanel.className = 'mermaid-floating-code-panel'
+  codePanel.setAttribute('aria-label', labels.codePanel || labels.source)
+  const toggleCodePanel = (force = !isPanelOpen): boolean => {
+    isPanelOpen = force
+    codePanel.hidden = !force
+    options.onPanelToggle?.(force)
+    return force
+  }
+  const header = document.createElement('header')
+  header.className = 'mermaid-code-panel-header'
+  const title = document.createElement('span')
+  title.textContent = labels.codePanel || labels.source
+  const close = iconButton('x', labels.close, 'mermaid-code-panel-close')
+  close.addEventListener('click', () => toggleCodePanel(false))
+  header.append(title, close)
+  const sourceEditor = options.sourceEditor ?? createSourceEditor({
+    value: code,
+    language: 'mermaid',
+    label: labels.source,
+    readOnly: options.readOnly,
+    onChange: (next) => { updateCode(next); options.onChange?.(next) },
+  })
+  codePanel.append(header, sourceEditor.element)
   codePanel.hidden = !isPanelOpen
-
-  const codePanelHeader = document.createElement('div')
-  codePanelHeader.className = 'mermaid-code-panel-header'
-  const codePanelTitle = document.createElement('span')
-  codePanelTitle.textContent = labels.codePanel || 'Code panel'
-  const codePanelClose = document.createElement('button')
-  codePanelClose.type = 'button'
-  codePanelClose.className = 'mermaid-code-panel-close'
-  codePanelClose.textContent = '×'
-  codePanelClose.title = labels.close
-  codePanelClose.addEventListener('click', () => {
-    isPanelOpen = false
-    codePanel.hidden = true
-    options.onPanelToggle?.(false)
-  })
-  codePanelHeader.append(codePanelTitle, codePanelClose)
-
-  const codePanelBody = document.createElement('div')
-  codePanelBody.className = 'mermaid-code-panel-body'
-
-  const lines = code.split('\n')
-  lines.forEach((lineText, idx) => {
-    const lineNum = idx + 1
-    const lineRow = document.createElement('div')
-    lineRow.className = 'mermaid-code-line'
-    lineRow.dataset.line = String(lineNum)
-
-    const gutter = document.createElement('span')
-    gutter.className = 'mermaid-line-gutter'
-
-    const lineNumSpan = document.createElement('span')
-    lineNumSpan.className = 'mermaid-line-num'
-    lineNumSpan.textContent = String(lineNum)
-
-    const commentBtn = document.createElement('button')
-    commentBtn.type = 'button'
-    commentBtn.className = 'mermaid-line-comment-btn'
-    commentBtn.title = `${labels.lineComment || 'Comment on line'} ${lineNum}`
-    commentBtn.textContent = '+'
-    commentBtn.addEventListener('click', (event) => {
-      event.stopPropagation()
-      options.onComment?.({ lineNumber: lineNum, lineText: lineText.trim() })
-    })
-    gutter.append(lineNumSpan, commentBtn)
-
-    const textSpan = document.createElement('span')
-    textSpan.className = 'mermaid-line-text'
-    textSpan.textContent = lineText || ' '
-
-    lineRow.append(gutter, textSpan)
-
-    lineRow.addEventListener('mouseenter', () => {
-      lineRow.classList.add('is-line-hovered')
-      const targetNodes = lineMap.lineToNodes.get(lineNum) ?? []
-      targetNodes.forEach((nodeId) => previewHost.highlightNode(nodeId))
-    })
-
-    lineRow.addEventListener('mouseleave', () => {
-      lineRow.classList.remove('is-line-hovered')
-      previewHost.highlightNode(null)
-    })
-
-    lineRow.addEventListener('click', () => {
-      codePanelBody.querySelectorAll('.is-line-active').forEach((r) => r.classList.remove('is-line-active'))
-      lineRow.classList.add('is-line-active')
-      const targetNodes = lineMap.lineToNodes.get(lineNum) ?? []
-      if (targetNodes[0]) {
-        previewHost.focusNode(targetNodes[0])
-      }
-    })
-
-    codePanelBody.append(lineRow)
-  })
-
-  codePanel.append(codePanelHeader, codePanelBody)
-
-  const diagramStage = document.createElement('div')
-  diagramStage.className = 'mermaid-diagram-stage'
-
-  const previewHost = createMermaidPreview(
-    code,
-    labels,
-    undefined,
-    options.onUnavailable,
-    options.runtime,
-    options.onRenderError,
-    {
-      theme: options.initialTheme ?? 'redux',
-      onThemeChange: options.onThemeChange,
-      onNodeHover: (nodeId) => {
-        codePanelBody.querySelectorAll('.is-line-hovered').forEach((r) => r.classList.remove('is-line-hovered'))
-        if (nodeId) {
-          const targetLines = lineMap.nodeToLines.get(nodeId) ?? []
-          targetLines.forEach((l) => {
-            codePanelBody.querySelector(`[data-line="${l}"]`)?.classList.add('is-line-hovered')
-          })
-          if (targetLines[0]) {
-            codePanelBody.querySelector(`[data-line="${targetLines[0]}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-          }
-        }
-      },
-      onNodeClick: (nodeId, nodeLabel) => {
-        if (!isPanelOpen) {
-          isPanelOpen = true
-          codePanel.hidden = false
-          options.onPanelToggle?.(true)
-        }
-        codePanelBody.querySelectorAll('.is-line-active').forEach((r) => r.classList.remove('is-line-active'))
-        const targetLines = lineMap.nodeToLines.get(nodeId) ?? []
-        targetLines.forEach((l) => {
-          codePanelBody.querySelector(`[data-line="${l}"]`)?.classList.add('is-line-active')
-        })
-        if (targetLines[0]) {
-          codePanelBody.querySelector(`[data-line="${targetLines[0]}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-        }
-        options.onComment?.({ nodeId, nodeLabel })
-      },
+  const stage = document.createElement('div')
+  stage.className = 'mermaid-diagram-stage'
+  const toolbar = document.createElement('div')
+  toolbar.className = 'mermaid-node-toolbar'
+  toolbar.setAttribute('role', 'toolbar')
+  toolbar.setAttribute('aria-label', labels.nodeComment || labels.comment)
+  toolbar.hidden = true
+  const comment = iconButton('message-square', labels.comment)
+  toolbar.append(comment)
+  let selected: { nodeId: string; nodeLabel: string } | null = null
+  let selectedElement: Element | null = null
+  const positionToolbar = (): void => {
+    if (!selectedElement || !selectedElement.isConnected) { toolbar.hidden = true; return }
+    const rect = selectedElement.getBoundingClientRect()
+    const parent = container.getBoundingClientRect()
+    toolbar.style.left = `${rect.left + rect.width / 2 - parent.left}px`
+    toolbar.style.top = `${Math.max(8, rect.top - parent.top - 40)}px`
+  }
+  comment.addEventListener('click', () => { if (selected) options.onComment?.(selected) })
+  const lineRange = (line: number): SourceCommentRange => {
+    const lines = sourceEditor.input.value.split('\n')
+    const start = lines.slice(0, line - 1).reduce((sum, text) => sum + text.length + 1, 0)
+    return { start, end: start + (lines[line - 1]?.length ?? 0) }
+  }
+  const previewHost = createMermaidPreview(code, labels, undefined, options.onUnavailable, options.runtime, options.onRenderError, {
+    theme: options.initialTheme ?? 'redux',
+    onRendered: options.onRendered,
+    onNodeHover: (nodeId) => {
+      const line = nodeId ? lineMap.nodeToLines.get(nodeId)?.[0] : undefined
+      sourceEditor.highlightRange(line ? lineRange(line) : null)
     },
-  )
-  diagramStage.append(previewHost)
-  container.append(codePanel, diagramStage)
-
+    onThemeChange: options.onThemeChange,
+    onNodeClick: (nodeId, nodeLabel, event) => {
+      selected = { nodeId, nodeLabel }
+      selectedElement = event.currentTarget as Element
+      toggleCodePanel(true)
+      previewHost.focusNode(nodeId)
+      const line = lineMap.nodeToLines.get(nodeId)?.[0]
+      if (line) sourceEditor.activateRange(lineRange(line))
+      toolbar.hidden = !options.onComment
+      positionToolbar()
+    },
+  })
+  stage.append(previewHost)
+  container.append(stage, codePanel, toolbar)
+  container.addEventListener('scroll', positionToolbar, true)
+  const syncSelection = (event?: MouseEvent): void => {
+    const input = sourceEditor.input
+    const lineNumber = input.value.slice(0, input.selectionStart).split('\n').length
+    previewHost.focusNode(lineMap.lineToNodes.get(lineNumber)?.[0] ?? null)
+    if (input.selectionEnd <= input.selectionStart) return
+    options.onComment?.({
+      lineNumber,
+      lineText: input.value.slice(input.selectionStart, input.selectionEnd),
+      selection: { start: input.selectionStart, end: input.selectionEnd },
+      selectionEvent: event,
+      sourceEditor,
+    })
+  }
+  sourceEditor.input.addEventListener('mouseup', (event) => { event.stopPropagation(); syncSelection(event) })
+  sourceEditor.input.addEventListener('keyup', (event) => { event.stopPropagation(); if (event.key !== 'Shift') syncSelection() })
+  const updateCode = (next: string): void => {
+    code = next
+    lineMap = parseMermaidLineMap(next)
+    toolbar.hidden = true
+    if (sourceEditor.input.value !== next) {
+      sourceEditor.input.value = next
+      sourceEditor.setCommentRanges([])
+    }
+    previewHost.updateCode(next)
+  }
   return {
     element: container,
     previewHost,
-    setTheme: (theme: MermaidTheme) => {
-      previewHost.setMermaidTheme(theme)
-    },
-    toggleCodePanel: (force?: boolean) => {
-      isPanelOpen = typeof force === 'boolean' ? force : !isPanelOpen
-      codePanel.hidden = !isPanelOpen
-      options.onPanelToggle?.(isPanelOpen)
-      return isPanelOpen
-    },
+    sourceEditor,
+    updateCode,
+    setTheme: (theme) => { toolbar.hidden = true; previewHost.setMermaidTheme(theme) },
+    toggleCodePanel,
     isCodePanelOpen: () => isPanelOpen,
   }
 }
@@ -325,7 +300,7 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
 }).extend({
   addNodeView() {
     const { renderMermaid = true, mermaidRuntime, onComment } = options
-    return ({ node }) => {
+    return ({ node, editor, getPos }) => {
       let currentNode = node
       let sourceVisible = expandedMermaidNodes.has(node)
       let currentTheme: MermaidTheme = 'redux'
@@ -362,8 +337,6 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
         splitController?.setTheme(currentTheme)
       }
       themeSelect.addEventListener('change', handleThemeChange)
-      themeSelect.addEventListener('input', handleThemeChange)
-      themeSelect.onchange = handleThemeChange
       const panelButton = iconButton('panel-left', labels.codePanel || 'Code panel', 'tiptap-code-block-panel')
       panelButton.addEventListener('click', (event) => {
         event.preventDefault()
@@ -406,6 +379,14 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
           number.textContent = String(index + 1)
           return number
         }))
+      }
+      const updateSource = (value: string): void => {
+        if (!editor.isEditable) return
+        const pos = getPos()
+        if (typeof pos !== 'number') return
+        const tr = editor.state.tr
+        tr.replaceWith(pos + 1, pos + currentNode.nodeSize - 1, value ? editor.schema.text(value) : [])
+        editor.view.dispatch(tr)
       }
 
       const openZoom = (): void => {
@@ -459,6 +440,8 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
         canvas.className = 'mermaid-zoom-canvas'
 
         const zoomSplit = createMermaidSplitView(currentNode.textContent, labels, {
+          readOnly: !editor.isEditable,
+          onChange: updateSource,
           runtime: mermaidRuntime,
           initialTheme: currentTheme,
           initialPanelOpen: codePanelVisible,
@@ -486,7 +469,8 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
           },
         })
         const diagram = zoomSplit.previewHost
-        canvas.append(zoomSplit.element)
+        diagram.parentElement!.append(canvas)
+        canvas.append(diagram)
 
         zoomThemeSelect.addEventListener('change', () => {
           const selected = zoomThemeSelect.value as MermaidTheme
@@ -508,7 +492,7 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
 
         controls.append(zoomThemeSelect, zoomPanelButton, zoomOut, zoomLevel, zoomIn, reset, close)
         header.append(title, controls)
-        dialog.append(header, canvas)
+        dialog.append(header, zoomSplit.element)
         const paintZoom = (): void => {
           const percentage = Math.round(zoom * 100)
           diagram.style.setProperty('--mermaid-zoom-width', `${percentage}%`)
@@ -550,6 +534,7 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
         }, { passive: false })
         canvas.addEventListener('pointerdown', (event) => {
           if (dragPointerId !== undefined || event.button !== 0) return
+          if ((event.target as Element).closest('.interactive-mermaid-node, button')) return
           dragPointerId = event.pointerId
           dragStartX = event.clientX
           dragStartY = event.clientY
@@ -573,6 +558,7 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
         canvas.addEventListener('pointerup', stopDragging)
         canvas.addEventListener('pointercancel', stopDragging)
         dialog.addEventListener('keydown', (event) => {
+          if ((event.target as Element).closest('textarea, input, select, button')) return
           if (event.key === '+' || event.key === '=') setZoom(zoom + ZOOM_STEP)
           else if (event.key === '-' || event.key === '_') setZoom(zoom - ZOOM_STEP)
           else if (event.key === '0') resetZoom()
@@ -635,7 +621,13 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
 
         if (renderMermaid && isMermaid && !sourceVisible && !mermaidUnavailable && (code !== renderedMermaid || !splitController)) {
           renderedMermaid = code
+          if (splitController) {
+            splitController.updateCode(code)
+            return
+          }
           splitController = createMermaidSplitView(code, labels, {
+            readOnly: !editor.isEditable,
+            onChange: updateSource,
             runtime: mermaidRuntime,
             initialTheme: currentTheme,
             initialPanelOpen: codePanelVisible,
@@ -732,11 +724,7 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
       actions.append(themeSelect, panelButton, editButton, zoomButton, commentButton, copyButton)
       tools.append(language, actions)
       dom.append(tools, preview, source)
-      try {
-        paint()
-      } catch (e) {
-        console.error('PAINT_CRASHED:', e)
-      }
+      paint()
 
       return {
         dom,

@@ -95,74 +95,73 @@ export const sanitizeEditorHtml = (html: string): string => {
 
 export const sanitizeRenderedHtml = (html: string): string => sanitizeEditorHtml(html)
 
-const overrideSvgStyle = (element: Element, declarations: string): void => {
-  const current = element.getAttribute('style')?.trim().replace(/;+$/, '')
-  element.setAttribute('style', `${current ? `${current};` : ''}${declarations}`)
+const SVG_PAINT_PROPERTIES = new Set([
+  'fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width', 'stroke-opacity',
+  'stroke-dasharray', 'stroke-dashoffset', 'stroke-linecap', 'stroke-linejoin',
+  'color', 'opacity', 'font-family', 'font-size', 'font-weight', 'font-style',
+  'text-anchor', 'dominant-baseline', 'alignment-baseline', 'text-decoration',
+  'rx', 'ry', 'marker-start', 'marker-mid', 'marker-end',
+])
+
+const safeSvgDeclarations = (text: string): string => {
+  const style = document.createElement('span').style
+  style.cssText = text
+  const safe = document.createElement('span').style
+  for (let index = 0; index < style.length; index++) {
+    const name = style.item(index)
+    const value = style.getPropertyValue(name)
+    if (!SVG_PAINT_PROPERTIES.has(name) || /[\\<>@]|expression|var\s*\(/i.test(value)) continue
+    if (/url\s*\(/i.test(value) && !/^url\(["']?#[\w-]+["']?\)$/i.test(value.trim())) continue
+    safe.setProperty(name, value, style.getPropertyPriority(name))
+  }
+  return safe.cssText
 }
 
 export const sanitizeMermaidSvg = (svg: string): string => {
   if (svg.length > MAX_BLOCK_HTML) throw new Error('security:mermaid-too-large')
+  const original = new DOMParser().parseFromString(svg, 'image/svg+xml')
+  const themeCss = Array.from(original.querySelectorAll('style')).map((style) => style.textContent ?? '').join('\n')
   const sanitized = String(DOMPurify.sanitize(svg, {
     USE_PROFILES: { svg: true, svgFilters: true },
     FORBID_TAGS: ['a', 'foreignObject', 'image', 'script', 'style', 'use'],
     FORBID_ATTR: ['href', 'xlink:href'],
     ALLOW_DATA_ATTR: false,
+    ADD_ATTR: ['data-look', 'data-color-id'],
     ALLOW_ARIA_ATTR: true,
   }))
   const parsed = new DOMParser().parseFromString(sanitized, 'image/svg+xml')
   const root = parsed.documentElement
   if (root.localName !== 'svg' || parsed.querySelector('parsererror')) throw new Error('security:mermaid-invalid-svg')
-  overrideSvgStyle(root, 'color:var(--doc-ink)')
-  for (const element of Array.from(root.querySelectorAll('*'))) {
+  const rootId = root.id
+  for (const element of [root, ...Array.from(root.querySelectorAll('*'))]) {
     for (const attribute of Array.from(element.attributes)) {
       const name = attribute.name.toLowerCase()
       const value = attribute.value
-      if (name.startsWith('on') || name === 'srcdoc' || /(?:@import|url\s*\(\s*['"]?(?:https?:|\/\/|data:))/i.test(value)) {
+      if (name.startsWith('on') || name === 'srcdoc' || /@import|\\/i.test(value)
+        || (/url\s*\(/i.test(value) && !/^url\(["']?#[\w-]+["']?\)$/i.test(value.trim()))) {
         element.removeAttribute(attribute.name)
       }
     }
+    if (element.hasAttribute('style')) element.setAttribute('style', safeSvgDeclarations(element.getAttribute('style')!))
   }
-  for (const relation of Array.from(root.querySelectorAll('path.relation'))) {
-    relation.setAttribute('fill', 'none')
-    overrideSvgStyle(relation, 'fill:none;stroke:var(--doc-subtle);stroke-width:1.25px')
+  // Retain native theme paint only. No imports, animations, external resources,
+  // page selectors, or layout properties survive into the document.
+  const rules: string[] = []
+  if (/^[\w-]+$/.test(rootId)) {
+    for (const match of themeCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selectors = match[1].split(',').map((selector) => selector.trim())
+      if (selectors.some((selector) =>
+        !(selector === `#${rootId}` || selector.startsWith(`#${rootId} `))
+        || /[\\<>@~+]/.test(selector),
+      )) continue
+      const declarations = safeSvgDeclarations(match[2])
+      if (declarations) rules.push(`${selectors.join(',')}{${declarations}}`)
+    }
   }
-  for (const relation of Array.from(root.querySelectorAll('path.flowchart-link, .edgePath path'))) {
-    overrideSvgStyle(relation, 'fill:none;stroke:var(--doc-subtle);stroke-width:1.25px')
-  }
-  for (const text of Array.from(root.querySelectorAll('text'))) {
-    text.setAttribute('fill', 'var(--doc-ink)')
-    text.setAttribute('stroke', 'none')
-    overrideSvgStyle(text, 'fill:var(--doc-ink);stroke:none')
-  }
-  for (const label of Array.from(root.querySelectorAll(
-    '.rough-node .label text, .node .label text, .image-shape .label text, .icon-shape .label text, .edgeLabel text, .flowchartTitleText',
-  ))) {
-    label.setAttribute('text-anchor', 'middle')
-    overrideSvgStyle(label, 'text-anchor:middle')
-  }
-  for (const shape of Array.from(root.querySelectorAll('.node rect, .node circle, .node ellipse, .node polygon, .node > path, g.classGroup rect'))) {
-    overrideSvgStyle(shape, 'fill:var(--doc-soft);stroke:var(--accent);stroke-width:1px')
-  }
-  for (const divider of Array.from(root.querySelectorAll('g.classGroup line'))) {
-    overrideSvgStyle(divider, 'stroke:var(--accent);stroke-width:1px')
-  }
-  for (const marker of Array.from(root.querySelectorAll('marker.composition, marker.aggregation, marker.dependency, marker.lollipop'))) {
-    const width = Number(marker.getAttribute('markerWidth'))
-    const height = Number(marker.getAttribute('markerHeight'))
-    if (Number.isFinite(width) && width > 20) marker.setAttribute('markerWidth', '20')
-    if (Number.isFinite(height) && height > 28) marker.setAttribute('markerHeight', '28')
-    marker.setAttribute('markerUnits', 'userSpaceOnUse')
-  }
-  for (const shape of Array.from(root.querySelectorAll('marker path, marker polygon, marker circle'))) {
-    overrideSvgStyle(shape, 'fill:var(--doc-subtle);stroke:var(--doc-subtle);stroke-width:1px')
-  }
-  for (const shape of Array.from(root.querySelectorAll('marker.aggregation path, marker.aggregation polygon, marker.aggregation circle'))) {
-    overrideSvgStyle(shape, 'fill:var(--surface);stroke:var(--doc-subtle);stroke-width:1px')
-  }
-  for (const background of Array.from(root.querySelectorAll('.edgeLabel rect.background'))) {
-    background.setAttribute('fill', 'none')
-    background.setAttribute('stroke', 'none')
-    overrideSvgStyle(background, 'fill:var(--surface);stroke:none')
+  if (rules.length) {
+    const style = parsed.createElementNS('http://www.w3.org/2000/svg', 'style')
+    style.textContent = rules.join('\n')
+    root.prepend(style)
   }
   return new XMLSerializer().serializeToString(root)
 }

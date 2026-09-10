@@ -18,6 +18,7 @@ const bundle = (): TacoBundle => ({
 describe('embedded Markdown assets', () => {
   it('resolves marketing README images without changing their canonical source', () => {
     const documentBundle = bundle()
+    documentBundle.docId = 'cli-generated-product-id'
     const root = document.createElement('div')
     root.innerHTML = [
       '<img src="https://raw.githubusercontent.com/Arcadia822/taco/main/src/assets/taco-logo.svg">',

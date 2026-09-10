@@ -8,6 +8,12 @@ export const MERMAID_THEMES = [
   { id: 'neo', label: 'Neo' },
   { id: 'neutral', label: 'Neutral' },
   { id: 'default', label: 'Classic' },
+  { id: 'forest', label: 'Forest' },
+  { id: 'base', label: 'Base' },
+  { id: 'dark', label: 'Dark' },
+  { id: 'redux-dark', label: 'Redux Dark' },
+  { id: 'redux-dark-color', label: 'Redux Dark Color' },
+  { id: 'neo-dark', label: 'Neo Dark' },
 ] as const
 
 export type MermaidTheme = (typeof MERMAID_THEMES)[number]['id']
@@ -147,6 +153,7 @@ export interface MermaidRenderOptions {
   onNodeClick?: (nodeId: string, nodeLabel: string, event: MouseEvent) => void
   onNodeHover?: (nodeId: string | null) => void
   onThemeChange?: (theme: MermaidTheme) => void
+  onRendered?: () => void
 }
 
 export interface MermaidPreviewElement extends HTMLElement {
@@ -154,6 +161,7 @@ export interface MermaidPreviewElement extends HTMLElement {
   focusNode: (nodeId: string | null) => void
   setMermaidTheme: (theme: MermaidTheme) => void
   getMermaidTheme: () => MermaidTheme
+  updateCode: (source: string) => void
 }
 
 let diagramSerial = 0
@@ -174,7 +182,7 @@ const resolveEffectiveTheme = (theme: MermaidTheme, dark: boolean): string => {
 }
 
 const resolveLook = (theme: MermaidTheme): 'neo' | 'classic' =>
-  ['redux', 'redux-color', 'neo'].includes(theme) ? 'neo' : 'classic'
+  /^(redux|neo)/.test(theme) ? 'neo' : 'classic'
 
 export const highlightNode = (host: HTMLElement, nodeId: string | null): void => {
   const allNodes = host.querySelectorAll<SVGElement>('.interactive-mermaid-node')
@@ -211,29 +219,9 @@ const bindSvgNodeInteractions = (
 ): void => {
   const nodeElements = Array.from(svgRoot.querySelectorAll<SVGGElement>('.node, .classGroup, g.node'))
   for (const nodeEl of nodeElements) {
-    const rawId = nodeEl.id || ''
-    let matchedId: string | null = null
-    const flowMatch = rawId.match(/(?:flowchart|classId|state)-([A-Za-z0-9_-]+)(?:-\d+)?$/)
-    if (flowMatch && lineMap.nodeToLines.has(flowMatch[1])) {
-      matchedId = flowMatch[1]
-    } else {
-      for (const candidate of lineMap.nodeToLines.keys()) {
-        if (rawId.includes(candidate)) {
-          matchedId = candidate
-          break
-        }
-      }
-    }
-
-    if (!matchedId) {
-      const text = nodeEl.textContent?.trim() || ''
-      for (const [id, label] of lineMap.nodeLabels.entries()) {
-        if (text === label || text.includes(label)) {
-          matchedId = id
-          break
-        }
-      }
-    }
+    const rawId = nodeEl.id.replace(/^taco-mermaid-\d+-/, '')
+    const candidate = rawId.match(/^(?:flowchart|classId|state)-(.+)-\d+$/)?.[1] ?? rawId
+    const matchedId = lineMap.nodeToLines.has(candidate) ? candidate : undefined
 
     if (matchedId) {
       nodeEl.setAttribute('data-node-id', matchedId)
@@ -241,6 +229,14 @@ const bindSvgNodeInteractions = (
 
       const finalId = matchedId
       const finalLabel = lineMap.nodeLabels.get(finalId) || finalId
+      nodeEl.setAttribute('tabindex', '0')
+      nodeEl.setAttribute('role', 'button')
+      nodeEl.setAttribute('aria-label', finalLabel)
+      nodeEl.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return
+        event.preventDefault()
+        nodeEl.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
 
       nodeEl.addEventListener('mouseenter', () => {
         highlightNode(host, finalId)
@@ -275,12 +271,15 @@ const renderDiagram = (
   const id = `taco-mermaid-${++diagramSerial}`
   surface.className = 'surface is-loading'
   surface.textContent = labels.loading
+  surface.dataset.renderId = id
 
   const draw = async (): Promise<void> => {
+    if (surface.dataset.renderId !== id) return
     let mermaid: MermaidApi
     try {
       mermaid = await runtime.load()
     } catch (error) {
+      if (surface.dataset.renderId !== id) return
       host.dataset.mermaidUnavailable = 'true'
       onUnavailable?.(error)
       return
@@ -306,6 +305,7 @@ const renderDiagram = (
     })
     try {
       const { svg } = await mermaid.render(id, source)
+      if (surface.dataset.renderId !== id) return
       surface.className = 'surface'
       surface.innerHTML = sanitizeMermaidSvg(svg)
       host.dataset.mermaidTheme = currentTheme
@@ -316,7 +316,9 @@ const renderDiagram = (
       if (svgRoot) {
         bindSvgNodeInteractions(svgRoot, lineMap, host, options)
       }
+      options?.onRendered?.()
     } catch (error) {
+      if (surface.dataset.renderId !== id) return
       surface.className = 'surface is-error'
       surface.textContent = labels.error
       onRenderError?.(error)
@@ -373,6 +375,11 @@ export const createMermaidPreview = (
     }
   }
   host.getMermaidTheme = () => activeTheme
+  host.updateCode = (nextSource) => {
+    if (source === nextSource) return
+    source = nextSource
+    redraw()
+  }
 
   return host
 }

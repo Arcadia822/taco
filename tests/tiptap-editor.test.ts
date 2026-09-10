@@ -4,6 +4,7 @@ import { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { blockHtml, blocksFromEditor, ensureTacoBlockIds, createTacoEditorExtensions, migrateTacoBundleBlocks } from '../src/tiptap-editor.ts'
 import { setEditorFrontmatterProperty } from '../src/tiptap-document-properties.ts'
 import type { TacoBundle } from '../src/model.ts'
+import { readFileSync } from 'node:fs'
 
 const labels = {
   source: 'Edit Mermaid source',
@@ -33,6 +34,19 @@ afterEach(() => {
 })
 
 describe('Tiptap Markdown integration', () => {
+  it('round-trips the canonical marketing README with centered logo and badges', () => {
+    const content = readFileSync('specs/001-taco-bento-product/README.md', 'utf8')
+    const extensions = createTacoEditorExtensions(labels, { renderMermaid: false })
+    editor = new Editor({ extensions, content, contentType: 'markdown' })
+    editor.state.doc.check()
+    ensureTacoBlockIds(editor, 'readme', true)
+    const html = blockHtml(blocksFromEditor(editor, extensions))
+    editor.commands.setContent(html, { parseOptions: { preserveWhitespace: 'full' } })
+    editor.state.doc.check()
+    expect(editor.getHTML()).toContain('taco-logo.svg')
+    expect(editor.getHTML()).toContain('badge.svg')
+    expect(editor.getMarkdown()).toContain('Taco')
+  })
   it.each([
     'text ![x](image.png "Image title") text',
     '[![Badge](badge.svg)](https://example.invalid)\n[![Other](other.svg)](https://example.invalid)',

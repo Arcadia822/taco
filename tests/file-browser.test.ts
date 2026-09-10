@@ -550,9 +550,6 @@ describe('FileBrowser', () => {
     expect(themeSelect).not.toBeNull()
     themeSelect.value = 'neo'
     themeSelect.dispatchEvent(new Event('change', { bubbles: true }))
-    if (typeof themeSelect.onchange === 'function') {
-      themeSelect.onchange(new Event('change'))
-    }
     await vi.waitFor(() => expect(mermaidInitialize.mock.calls.some((c) => c[0]?.theme === 'neo')).toBe(true))
 
     const panelToggle = activeBlock.querySelector<HTMLButtonElement>('.tiptap-code-block-panel')!
@@ -562,9 +559,12 @@ describe('FileBrowser', () => {
     expect(activeBlock.querySelector<HTMLElement>('.mermaid-floating-code-panel')?.hidden).toBe(false)
     expect(panelToggle.classList.contains('is-active')).toBe(true)
 
-    const line2Comment = activeBlock.querySelector<HTMLButtonElement>('.mermaid-code-line[data-line="2"] .mermaid-line-comment-btn')!
-    expect(line2Comment).not.toBeNull()
-    line2Comment.click()
+    const floatingSource = activeBlock.querySelector<HTMLTextAreaElement>('.mermaid-floating-code-panel textarea')!
+    const lineStart = floatingSource.value.indexOf('\n') + 1
+    floatingSource.focus()
+    floatingSource.setSelectionRange(lineStart, floatingSource.value.indexOf('\n', lineStart) === -1 ? floatingSource.value.length : floatingSource.value.indexOf('\n', lineStart))
+    floatingSource.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+    document.querySelector<HTMLButtonElement>('.selection-comment-button')!.click()
     const lineCommentInput = document.querySelector<HTMLTextAreaElement>('.comment-composer .comment-input')!
     expect(lineCommentInput).not.toBeNull()
     lineCommentInput.value = 'Comment on Brief to Plan edge'
@@ -638,7 +638,7 @@ describe('FileBrowser', () => {
     expect(standaloneBundle.files.at(-1)?.content).toBe(source)
     expect(standaloneBundle.files.at(-1)?.blocks).toBeUndefined()
 
-    document.querySelector<HTMLButtonElement>('[data-segmented-value="source"]')!.click()
+    document.querySelector<HTMLButtonElement>('.standalone-mermaid-source')!.click()
     const editor = document.querySelector<HTMLTextAreaElement>('.source-editor-input')!
     expect(document.querySelector('.source-editor-mermaid .hljs-keyword')?.textContent).toBe('flowchart')
     expect(document.querySelector('.source-editor-mermaid .hljs-symbol')?.textContent).toBe('-->')
@@ -659,7 +659,7 @@ describe('FileBrowser', () => {
     new FileBrowser(document.getElementById('app')!, standaloneBundle, { mermaidRuntime })
     document.querySelector<HTMLButtonElement>('[data-path$="diagram.mmd"]')!.click()
 
-    await vi.waitFor(() => expect(document.querySelector<HTMLElement>('.source-editor-mermaid')?.hidden).toBe(false))
+    await vi.waitFor(() => expect(document.querySelector<HTMLElement>('.mermaid-floating-code-panel')?.hidden).toBe(false))
     expect(document.querySelector('.structured-diagnostic')?.textContent).toContain('Mermaid')
     expect(document.querySelector<HTMLTextAreaElement>('.source-editor-input')?.value).toBe('not a diagram')
   })

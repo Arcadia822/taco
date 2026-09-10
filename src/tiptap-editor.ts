@@ -4,6 +4,7 @@ import Link from '@tiptap/extension-link'
 import { Markdown } from '@tiptap/markdown'
 import { Editor, Extension, generateHTML } from '@tiptap/core'
 import Image, { type ImageOptions } from '@tiptap/extension-image'
+import Code from '@tiptap/extension-code'
 import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
@@ -119,7 +120,8 @@ const SafeImage = Image.extend({
 })
 
 export const createTacoEditorExtensions = (labels: MermaidPluginLabels, options: TacoEditorExtensionOptions = {}) => [
-  StarterKit.configure({ codeBlock: false, paragraph: false, link: false }),
+  StarterKit.configure({ codeBlock: false, code: false, paragraph: false, link: false }),
+  Code.extend({ excludes: 'bold italic strike underline code' }),
   ImageParagraph,
   ImageLink,
   TacoBlockIdentity,

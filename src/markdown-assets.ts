@@ -1,7 +1,7 @@
 import { relativePath, type TacoBundle, type TacoFile } from './model.ts'
 
 const marketingDocument = (bundle: TacoBundle, file: TacoFile): boolean =>
-  bundle.docId === 'taco-product-spec' && relativePath(bundle, file) === 'README.md'
+  bundle.root === 'specs/001-taco-bento-product' && relativePath(bundle, file) === 'README.md'
 
 export const resolveEmbeddedMarkdownAssets = (
   root: ParentNode,

@@ -394,6 +394,7 @@ export class FileBrowser {
         mermaidRuntime: this.options.mermaidRuntime,
         readOnly: !bundleCanWrite(this.bundle),
         sourceLabel: this.t.sourceEditor(kind),
+        onNodeComment: (source) => this.comments.captureSourceSelection(source, file, undefined, true),
         onChange: (content) => {
           this.updateFileContent(file.path, content, undefined)
           requestAnimationFrame(() => this.comments.refreshHighlights())

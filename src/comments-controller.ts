@@ -90,8 +90,9 @@ export class CommentsController {
     this.removeSelectionButton()
     const article = editorHost.querySelector<HTMLElement>('.tiptap')
     if (!article || !article.contains(target.content)) return
-    const start = textOffset(article, target.content, 0)
-    const end = textOffset(article, target.content, target.content.childNodes.length)
+    const blockStart = textOffset(article, target.content, 0)
+    const start = blockStart + (target.selection?.start ?? 0)
+    const end = target.selection ? blockStart + target.selection.end : textOffset(article, target.content, target.content.childNodes.length)
     if (end <= start) return
     const anchor = createTextAnchor(file.path, article.textContent ?? '', start, end)
     anchor.block = {
@@ -103,12 +104,18 @@ export class CommentsController {
       ...(target.lineNumber ? { lineNumber: target.lineNumber } : {}),
       ...(target.lineText ? { lineText: target.lineText } : {}),
     }
+    if (target.selection && target.sourceEditor) {
+      const rect = target.sourceEditor.input.getBoundingClientRect()
+      this.showSelectionCommentButton(anchor, target.selectionEvent?.clientX ?? rect.left + 8, (target.selectionEvent?.clientY ?? rect.top) + 8)
+      return
+    }
+    document.querySelector<HTMLDialogElement>('.mermaid-zoom-dialog[open]')?.dispatchEvent(new Event('cancel', { cancelable: true }))
     this.pendingAnchor = anchor
     this.options.openComments()
     this.paint()
   }
 
-  captureSourceSelection(sourceEditor: SourceEditorController, file: TacoFile, event?: MouseEvent): void {
+  captureSourceSelection(sourceEditor: SourceEditorController, file: TacoFile, event?: MouseEvent, immediate = false): void {
     if (!bundleCanWrite(this.options.bundle)) return
     this.removeSelectionButton()
     const { input } = sourceEditor
@@ -117,6 +124,13 @@ export class CommentsController {
     if (end <= start) return
     const anchor = createTextAnchor(file.path, input.value, start, end)
     if (!anchor.quote.exact.trim()) return
+    if (immediate) {
+      document.querySelector<HTMLDialogElement>('.mermaid-zoom-dialog[open]')?.dispatchEvent(new Event('cancel', { cancelable: true }))
+      this.pendingAnchor = anchor
+      this.options.openComments()
+      this.paint()
+      return
+    }
     const rect = input.getBoundingClientRect()
     const left = event?.clientX || rect.left + 8
     const top = event?.clientY ? event.clientY + 8 : rect.top + 8
@@ -477,10 +491,11 @@ export class CommentsController {
     button.style.top = `${Math.min(innerHeight - 44, Math.max(8, top))}px`
     button.addEventListener('mousedown', (event) => event.preventDefault())
     button.addEventListener('click', () => {
+      document.querySelector<HTMLDialogElement>('.mermaid-zoom-dialog[open]')?.dispatchEvent(new Event('cancel', { cancelable: true }))
       this.options.openComments()
       this.paint()
     })
-    document.body.append(button)
+    ;(document.querySelector('.mermaid-zoom-dialog[open]') ?? document.body).append(button)
     this.selectionButton = button
   }
 
@@ -501,11 +516,14 @@ export class CommentsController {
         }
       }
       if (thread.anchor.block.lineNumber) {
-        const line = block.querySelector<HTMLElement>(`[data-line="${thread.anchor.block.lineNumber}"]`)
-        if (line) {
-          block.querySelectorAll('.mermaid-code-line.is-line-active').forEach((l) => l.classList.remove('is-line-active'))
-          line.classList.add('is-line-active')
-          line.scrollIntoView?.({ behavior, block: 'nearest' })
+        const toggle = block.querySelector<HTMLButtonElement>('.tiptap-code-block-panel')
+        if (toggle?.getAttribute('aria-pressed') !== 'true') toggle?.click()
+        const input = block.querySelector<HTMLTextAreaElement>('.mermaid-floating-code-panel textarea')
+        if (input) {
+          const lines = input.value.split('\n')
+          const start = lines.slice(0, thread.anchor.block.lineNumber - 1).reduce((sum, line) => sum + line.length + 1, 0)
+          input.focus()
+          input.setSelectionRange(start, start + (lines[thread.anchor.block.lineNumber - 1]?.length ?? 0))
         }
       }
       return

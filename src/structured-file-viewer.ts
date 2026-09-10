@@ -1,5 +1,6 @@
 import { parseAllDocuments, type Document } from 'yaml'
-import { createMermaidPreview, MERMAID_THEMES, type MermaidPluginLabels, type MermaidRuntime, type MermaidTheme } from './mermaid.ts'
+import { MERMAID_THEMES, type MermaidPluginLabels, type MermaidRuntime, type MermaidTheme } from './mermaid.ts'
+import { createMermaidSplitView, type MermaidSplitViewController } from './tiptap-code-block.ts'
 import { createSegmentedControl } from './segmented-control.ts'
 import { createSourceEditor, type SourceEditorController } from './source-editor.ts'
 import { fileName, type TacoFile } from './model.ts'
@@ -459,9 +460,8 @@ const button = (label: string, className: string): HTMLButtonElement => {
 }
 
 const openStandaloneMermaidZoom = (
-  source: string,
+  view: MermaidSplitViewController,
   labels: MermaidPluginLabels,
-  runtime?: MermaidRuntime,
 ): void => {
   const dialog = el('dialog', 'mermaid-zoom-dialog') as HTMLDialogElement
   dialog.setAttribute('aria-label', labels.zoom)
@@ -483,7 +483,13 @@ const openStandaloneMermaidZoom = (
   close.setAttribute('aria-label', labels.close)
   close.title = labels.close
   const canvas = el('div', 'mermaid-zoom-canvas')
-  const diagram = createMermaidPreview(source, labels, undefined, undefined, runtime)
+  const diagram = view.previewHost
+  const origin = view.element.parentElement!
+  const stage = diagram.parentElement!
+  stage.append(canvas)
+  canvas.append(diagram)
+  const sourceToggle = button(labels.codePanel || 'Code panel', 'tiptap-code-block-button')
+  sourceToggle.addEventListener('click', () => view.toggleCodePanel())
   const themeSelect = el('select', 'tiptap-code-block-theme-select') as HTMLSelectElement
   themeSelect.setAttribute('aria-label', labels.theme || 'Theme')
   MERMAID_THEMES.forEach(({ id, label }) => {
@@ -491,12 +497,13 @@ const openStandaloneMermaidZoom = (
     opt.value = id
     themeSelect.append(opt)
   })
+  themeSelect.value = diagram.getMermaidTheme()
   themeSelect.addEventListener('change', () => {
     diagram.setMermaidTheme(themeSelect.value as MermaidTheme)
   })
-  controls.append(themeSelect, zoomOut, zoomLevel, zoomIn, reset, close)
+  controls.append(themeSelect, sourceToggle, zoomOut, zoomLevel, zoomIn, reset, close)
   header.append(el('span', '', labels.previewTitle), controls)
-  dialog.append(header, canvas)
+  dialog.append(header, view.element)
   let zoom = 1
   let drag: { id: number; x: number; y: number; left: number; top: number } | null = null
   const paint = (): void => {
@@ -521,6 +528,7 @@ const openStandaloneMermaidZoom = (
   }, { passive: false })
   canvas.addEventListener('pointerdown', (event) => {
     if (event.button !== 0 || drag) return
+    if ((event.target as Element).closest('.interactive-mermaid-node, button, textarea')) return
     drag = { id: event.pointerId, x: event.clientX, y: event.clientY, left: canvas.scrollLeft, top: canvas.scrollTop }
     canvas.setPointerCapture?.(event.pointerId)
     canvas.classList.add('is-dragging')
@@ -538,13 +546,22 @@ const openStandaloneMermaidZoom = (
   canvas.addEventListener('pointerup', stop)
   canvas.addEventListener('pointercancel', stop)
   dialog.addEventListener('keydown', (event) => {
+    if ((event.target as Element).closest('textarea, input, select, button')) return
     if (event.key === '+' || event.key === '=') setZoom(zoom + .25)
     else if (event.key === '-' || event.key === '_') setZoom(zoom - .25)
     else if (event.key === '0') { setZoom(1); canvas.scrollLeft = 0; canvas.scrollTop = 0 }
     else return
     event.preventDefault()
   })
-  const finish = (): void => { if (typeof dialog.close === 'function') dialog.close(); else dialog.remove(); dialog.remove() }
+  const finish = (): void => {
+    stage.append(diagram)
+    canvas.remove()
+    diagram.style.removeProperty('--mermaid-zoom-width')
+    diagram.style.removeProperty('--mermaid-zoom-min-width')
+    origin.append(view.element)
+    if (typeof dialog.close === 'function') dialog.close()
+    dialog.remove()
+  }
   close.addEventListener('click', finish)
   dialog.addEventListener('cancel', (event) => { event.preventDefault(); finish() })
   dialog.addEventListener('click', (event) => { if (event.target === dialog) finish() })
@@ -563,6 +580,7 @@ export interface StructuredFileViewerOptions {
   readOnly: boolean
   sourceLabel: string
   onChange: (content: string) => void
+  onNodeComment?: (editor: SourceEditorController) => void
   onModeChange: () => void
 }
 
@@ -579,8 +597,8 @@ export const createStructuredFileViewer = (options: StructuredFileViewerOptions)
   shell.append(toolbar, diagnostics, content)
   let mode: StructuredMode = options.kind === 'mermaid' ? 'preview' : 'source'
   let available: StructuredMode[] = ['source']
-  let renderSerial = 0
   let firstPaint = true
+  let mermaidView: MermaidSplitViewController | null = null
 
   const rawSource = createSourceEditor({
     value: options.file.content,
@@ -589,6 +607,10 @@ export const createStructuredFileViewer = (options: StructuredFileViewerOptions)
     readOnly: options.readOnly,
     onChange: (value) => {
       options.onChange(value)
+      if (options.kind === 'mermaid') {
+        mermaidView?.updateCode(value)
+        return
+      }
       if (mode !== 'source') mode = 'source'
       paint()
     },
@@ -600,7 +622,13 @@ export const createStructuredFileViewer = (options: StructuredFileViewerOptions)
     element: rawSource.element,
     input: rawSource.input,
     setCommentRanges: rawSource.setCommentRanges,
+    highlightRange: rawSource.highlightRange,
     activateRange: (range) => {
+      if (options.kind === 'mermaid') {
+        if (range) mermaidView?.toggleCodePanel(true)
+        rawSource.activateRange(range)
+        return
+      }
       if (range && mode !== 'source') { mode = 'source'; paint() }
       rawSource.activateRange(range)
     },
@@ -650,34 +678,31 @@ export const createStructuredFileViewer = (options: StructuredFileViewerOptions)
   }
 
   const paintMermaid = (): void => {
-    available = ['preview', 'source']
-    if (mode !== 'preview') {
-      diagnostics.replaceChildren()
-      showSource()
-      paintToolbar()
-      return
-    }
-    const serial = ++renderSerial
+    toolbar.hidden = true
+    mermaidView = createMermaidSplitView(rawSource.input.value, options.mermaidLabels, {
+      runtime: options.mermaidRuntime,
+      sourceEditor: rawSource,
+      readOnly: options.readOnly,
+      onComment: (target) => {
+        if (target.nodeId) options.onNodeComment?.(sourceEditor)
+      },
+      onRendered: () => diagnostics.replaceChildren(),
+      onUnavailable: () => {
+        diagnostics.replaceChildren(diagnosticNode(options.labels.mermaidUnavailable))
+        mermaidView?.toggleCodePanel(true)
+      },
+      onRenderError: () => {
+        diagnostics.replaceChildren(diagnosticNode(options.mermaidLabels.error))
+        mermaidView?.toggleCodePanel(true)
+      },
+    })
+    const view = mermaidView
     const previewShell = el('div', 'standalone-mermaid-preview')
     const zoom = button(options.mermaidLabels.zoom, 'standalone-mermaid-zoom')
     zoom.replaceChildren(svgIcon('zoom-in'))
-    zoom.addEventListener('click', () => openStandaloneMermaidZoom(rawSource.input.value, options.mermaidLabels, options.mermaidRuntime))
-    const fail = (message: string): void => {
-      if (serial !== renderSerial) return
-      mode = 'source'
-      diagnostics.replaceChildren(diagnosticNode(message))
-      showSource()
-      paintToolbar()
-      requestAnimationFrame(options.onModeChange)
-    }
-    const diagram = createMermaidPreview(
-      rawSource.input.value,
-      options.mermaidLabels,
-      undefined,
-      () => fail(options.labels.mermaidUnavailable),
-      options.mermaidRuntime,
-      () => fail(options.mermaidLabels.error),
-    )
+    zoom.addEventListener('click', () => openStandaloneMermaidZoom(view, options.mermaidLabels))
+    const sourceToggle = button(options.mermaidLabels.codePanel || 'Code panel', 'standalone-mermaid-source')
+    sourceToggle.addEventListener('click', () => view.toggleCodePanel())
     const themeSelect = el('select', 'tiptap-code-block-theme-select') as HTMLSelectElement
     themeSelect.setAttribute('aria-label', options.mermaidLabels.theme || 'Theme')
     MERMAID_THEMES.forEach(({ id, label }) => {
@@ -685,15 +710,11 @@ export const createStructuredFileViewer = (options: StructuredFileViewerOptions)
       opt.value = id
       themeSelect.append(opt)
     })
-    themeSelect.addEventListener('change', () => {
-      diagram.setMermaidTheme(themeSelect.value as MermaidTheme)
-    })
+    themeSelect.addEventListener('change', () => view.setTheme(themeSelect.value as MermaidTheme))
     const actions = el('div', 'standalone-mermaid-actions')
-    actions.append(themeSelect, zoom)
-    previewShell.append(actions, diagram)
-    diagnostics.replaceChildren()
-    showDerived(previewShell)
-    paintToolbar()
+    actions.append(themeSelect, sourceToggle, zoom)
+    previewShell.append(actions, view.element)
+    content.replaceChildren(previewShell)
   }
 
   const paintStructured = (): void => {
