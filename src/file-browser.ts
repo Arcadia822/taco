@@ -100,6 +100,11 @@ export class FileBrowser {
   private readonly dirtyTracker: BundleDirtyTracker
   private readonly cleanups: Array<() => void> = []
   private readonly narrowLayout: MediaQueryList
+  private readonly systemAppearance = window.matchMedia('(prefers-color-scheme: dark)')
+  private themePreference: 'system' | 'light' | 'dark' = 'system'
+  private readonly handleSystemAppearanceChange = (): void => {
+    if (this.themePreference === 'system') this.applyAppearance()
+  }
   private applyingRemoteEditor = false
   private sidebarClosed: boolean
   private commentPanelOpen: boolean
@@ -129,6 +134,9 @@ export class FileBrowser {
       __DEFAULT_LOCALE__ ? [__DEFAULT_LOCALE__] : undefined,
     )
     document.documentElement.lang = this.locale
+    const savedTheme = storageGet('taco-theme')
+    this.themePreference = savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'system'
+    this.applyAppearance()
     for (const failure of migrateTacoBundleBlocks(bundle, this.mermaidLabels())) {
       this.markdownMigrationErrors.set(failure.path, failure.message)
     }
@@ -200,6 +208,7 @@ export class FileBrowser {
     document.addEventListener('keydown', this.handleDocumentKeyDown)
     window.addEventListener('resize', this.handleWindowResize)
     this.narrowLayout.addEventListener('change', this.handleNarrowLayoutChange)
+    this.systemAppearance.addEventListener('change', this.handleSystemAppearanceChange)
   }
 
   destroy(): void {
@@ -207,6 +216,7 @@ export class FileBrowser {
     document.removeEventListener('keydown', this.handleDocumentKeyDown)
     window.removeEventListener('resize', this.handleWindowResize)
     this.narrowLayout.removeEventListener('change', this.handleNarrowLayoutChange)
+    this.systemAppearance.removeEventListener('change', this.handleSystemAppearanceChange)
     for (const cleanup of this.cleanups.splice(0)) cleanup()
     this.sync.close()
     this.markdownEditor?.destroy()
@@ -285,6 +295,24 @@ export class FileBrowser {
     const saveGroup = el('div', 'save-group v2-button-group')
     saveGroup.append(this.saveButton, saveMore)
     const language = createControlButton('globe', this.t.language, () => this.openLanguageMenu(language))
+    const theme = createControlButton(
+      this.themePreference === 'system' ? 'presentation' : this.themePreference === 'dark' ? 'moon' : 'sun',
+      this.t.mermaidTheme,
+      () => {
+        const menu = this.openPopover(theme, 'theme-menu')
+        for (const preference of ['system', 'light', 'dark'] as const) {
+          const label = preference === 'system' ? this.t.systemTheme : preference === 'light' ? this.t.lightTheme : this.t.darkTheme
+          menu.append(this.menuButton(label, () => {
+            this.themePreference = preference
+            storageSet('taco-theme', preference)
+            setButtonIcon(theme, preference === 'system' ? 'presentation' : preference === 'dark' ? 'moon' : 'sun')
+            this.applyAppearance()
+            menu.remove()
+          }, { active: preference === this.themePreference }))
+        }
+      },
+      'theme-toggle',
+    )
     this.commentToggle = createControlButton('message-square', this.t.openComments, () => this.toggleCommentPanel())
     this.commentToggle.classList.add('comment-toggle')
     this.commentToggle.setAttribute('aria-controls', 'taco-comments')
@@ -299,6 +327,7 @@ export class FileBrowser {
       this.commentToggle,
       share,
       saveGroup,
+      theme,
       language,
     )
 
@@ -401,6 +430,7 @@ export class FileBrowser {
         mermaidRuntime: this.options.mermaidRuntime,
         readOnly: !bundleCanWrite(this.bundle),
         sourceLabel: this.t.sourceEditor(kind),
+        onNodeComment: (source) => this.comments.captureSourceSelection(source, file, undefined, true),
         onChange: (content) => {
           this.updateFileContent(file.path, content, undefined)
           requestAnimationFrame(() => this.comments.refreshHighlights())
@@ -632,6 +662,13 @@ export class FileBrowser {
       plainText: this.t.codePlainText,
       loading: this.t.mermaidLoading,
       error: this.t.mermaidError,
+      theme: this.t.mermaidTheme,
+      direction: this.t.mermaidDirection,
+      liveUpdate: this.t.mermaidLiveUpdate,
+      updateDiagram: this.t.mermaidUpdateDiagram,
+      codePanel: this.t.mermaidCodePanel,
+      lineComment: this.t.mermaidLineComment,
+      nodeComment: this.t.mermaidNodeComment,
     }
   }
 
@@ -931,6 +968,17 @@ export class FileBrowser {
     button.classList.toggle('is-active', options.active === true)
     button.addEventListener('click', () => { void action() })
     return button
+  }
+
+  private applyAppearance(): void {
+    const appearance = this.themePreference === 'system'
+      ? this.systemAppearance.matches ? 'dark' : 'light'
+      : this.themePreference
+    if (document.documentElement.dataset.theme === appearance) return
+    document.documentElement.dataset.theme = appearance
+    document.querySelectorAll('.tiptap-mermaid-container').forEach((container) => {
+      container.dispatchEvent(new CustomEvent('taco-appearance-change', { detail: appearance }))
+    })
   }
 
   private openLanguageMenu(anchor: HTMLElement): void {

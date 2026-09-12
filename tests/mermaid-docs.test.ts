@@ -2,6 +2,8 @@ import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import mermaid from 'mermaid'
 import { sanitizeMermaidSvg } from '../src/security.ts'
+import { ensureMermaidConfig, extractMermaidThemeFromCode, updateMermaidCodeTheme, updateMermaidDirection } from '../src/mermaid.ts'
+import { parse as parseYaml } from 'yaml'
 
 const documents = [
   'README.md',
@@ -59,23 +61,6 @@ describe('embedded technical diagrams', () => {
       expect(sanitized).toContain('TacoBundle')
       expect(sanitized).toContain('TacoFile')
       expect(sanitized).toContain('files')
-      const parsed = new DOMParser().parseFromString(sanitized, 'image/svg+xml')
-      expect(parsed.querySelectorAll('text').length).toBeGreaterThan(0)
-      expect(Array.from(parsed.querySelectorAll('text')).every((text) =>
-        text.getAttribute('fill') === 'var(--doc-ink)' && text.getAttribute('stroke') === 'none'
-        && text.getAttribute('style')?.includes('fill:var(--doc-ink);stroke:none')))
-        .toBe(true)
-      expect(Array.from(parsed.querySelectorAll('marker.composition, marker.aggregation, marker.dependency, marker.lollipop')).every((marker) =>
-        Number(marker.getAttribute('markerWidth')) <= 20 && Number(marker.getAttribute('markerHeight')) <= 28
-        && marker.getAttribute('markerUnits') === 'userSpaceOnUse'))
-        .toBe(true)
-      expect(Array.from(parsed.querySelectorAll('path.relation')).every((path) => path.getAttribute('fill') === 'none'))
-        .toBe(true)
-      expect(Array.from(parsed.querySelectorAll('path.relation')).every((path) =>
-        path.getAttribute('style')?.includes('fill:none;stroke:var(--doc-subtle);stroke-width:1.25px')))
-        .toBe(true)
-      expect(Array.from(parsed.querySelectorAll('.edgeLabel rect.background')).every((rect) => rect.getAttribute('fill') === 'none'))
-        .toBe(true)
 
       const readme = await readFile('README.md', 'utf8')
       const flowSource = readme.match(/```mermaid\n([\s\S]*?)\n```/)?.[1]
@@ -83,30 +68,41 @@ describe('embedded technical diagrams', () => {
       const { svg: flowSvg } = await mermaid.render('taco-flow-regression', flowSource!)
       const flow = new DOMParser().parseFromString(sanitizeMermaidSvg(flowSvg), 'image/svg+xml')
 
-      expect(flow.querySelectorAll('.node rect, .node circle, .node ellipse, .node polygon, .node > path').length)
-        .toBeGreaterThan(0)
-      expect(Array.from(flow.querySelectorAll('.node rect, .node circle, .node ellipse, .node polygon, .node > path')).every((shape) =>
-        shape.getAttribute('style')?.includes('fill:var(--doc-soft);stroke:var(--accent);stroke-width:1px')))
-        .toBe(true)
-      const flowLabels = Array.from(flow.querySelectorAll(
-        '.rough-node .label text, .node .label text, .image-shape .label text, .icon-shape .label text, .edgeLabel text, .flowchartTitleText',
-      ))
-      expect(flowLabels.length).toBeGreaterThan(0)
-      expect(flowLabels.every((label) =>
-        label.getAttribute('text-anchor') === 'middle'
-        && label.getAttribute('style')?.includes('text-anchor:middle')))
-        .toBe(true)
-      expect(Array.from(flow.querySelectorAll('path.flowchart-link, .edgePath path')).every((path) =>
-        path.getAttribute('style')?.includes('fill:none;stroke:var(--doc-subtle);stroke-width:1.25px')))
-        .toBe(true)
-      expect(Array.from(flow.querySelectorAll('marker path, marker polygon, marker circle')).every((shape) =>
-        shape.getAttribute('style')?.includes('fill:var(--doc-subtle);stroke:var(--doc-subtle);stroke-width:1px')))
-        .toBe(true)
+      const text = Array.from(flow.querySelectorAll('text')).map((node) => node.textContent).join(' ')
+      expect(text).toContain('speckit.specify')
+      expect(text).toContain('Conflicts?')
     } finally {
       if (originalBox) Object.defineProperty(svgPrototype, 'getBBox', { configurable: true, value: originalBox })
       else Reflect.deleteProperty(svgPrototype, 'getBBox')
       if (originalLength) Object.defineProperty(svgPrototype, 'getComputedTextLength', { configurable: true, value: originalLength })
       else Reflect.deleteProperty(svgPrototype, 'getComputedTextLength')
     }
+  })
+
+  it('changes the outer direction without rewriting nested diagram directions', () => {
+    const flow = 'flowchart LR\nsubgraph Nested\n  direction BT\n  A --> B\nend\nB --> C'
+    expect(updateMermaidDirection(flow, 'TB')).toBe(flow.replace('flowchart LR', 'flowchart TB'))
+    const states = 'stateDiagram-v2\nstate Nested {\n  direction LR\n  A --> B\n}\nNested --> Done'
+    expect(updateMermaidDirection(states, 'BT')).toMatch(/^stateDiagram-v2\n[ \t]*direction BT\nstate Nested \{\n  direction LR\n  A --> B\n\}\nNested --> Done$/)
+    const sequence = 'sequenceDiagram\nAlice->>Bob: direction LR'
+    expect(updateMermaidDirection(sequence, 'TB')).toBe(sequence)
+  })
+
+  it('preserves explicit layout and custom theme settings when changing themes', () => {
+    const source = '%%{init: {"layout":"dagre","theme":"forest","themeVariables":{"primaryColor":"#ff00ff"}}}%%\nflowchart LR\nA --> B'
+    const migrated = ensureMermaidConfig(source)
+    expect(extractMermaidThemeFromCode(migrated)).toBe('forest')
+    expect(ensureMermaidConfig(migrated)).toBe(migrated)
+    const changed = updateMermaidCodeTheme(source, 'neutral')
+    expect(extractMermaidThemeFromCode(changed)).toBe('neutral')
+    const parts = changed.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/)!
+    expect(parseYaml(parts[1]).config).toMatchObject({ layout: 'dagre', themeVariables: { primaryColor: '#ff00ff' } })
+    expect(parts[2]).toBe('flowchart LR\nA --> B')
+  })
+
+  it('does not replace a partially edited configuration with a second directive', () => {
+    const source = '%%{init: {"theme": "forest", "themeVariables": } }%%\nflowchart LR\nA --> B'
+    expect(ensureMermaidConfig(source)).toBe(source)
+    expect(updateMermaidCodeTheme(source, 'dark')).toBe(source)
   })
 })

@@ -12,7 +12,7 @@ Build a self-contained browser for a single Spec Kit feature directory. At build
 - **Runtime**: browser; optional Cloudflare Worker blind relay for cross-device collaboration
 - **Build**: Vite + `vite-plugin-singlefile`
 - **Markdown**: Tiptap 3 + the official Markdown extension; canonical output uses `getMarkdown()`
-- **Diagrams**: Mermaid 11.16.1, loaded on demand from a pinned CDN ESM address for the current document in strict security mode; falls back to source when offline
+- **Diagrams**: Mermaid 12.0.0, loaded on demand from a pinned CDN ESM address for the current document in strict security mode; falls back to source when offline
 - **Sanitization**: DOMPurify
 - **Testing**: Vitest + jsdom
 - **Storage**: an embedded UTF-8 file bundle; canonical Markdown plus collaboration block/cache state

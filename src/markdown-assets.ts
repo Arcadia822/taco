@@ -5,7 +5,7 @@ import { inertImageAttributes } from './security.ts'
 declare const __EMBEDDED_ASSETS__: Record<string, string> | undefined
 
 const marketingDocument = (bundle: TacoBundle, file: TacoFile): boolean =>
-  bundle.docId === 'taco-product-spec' && relativePath(bundle, file) === 'README.md'
+  bundle.root === 'specs/001-taco-bento-product' && relativePath(bundle, file) === 'README.md'
 
 const resolveRelativePath = (fromFilePath: string, targetPath: string): string | null => {
   let target: string

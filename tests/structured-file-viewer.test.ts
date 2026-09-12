@@ -223,34 +223,46 @@ describe('structured file analysis and rendering', () => {
   it('previews standalone Mermaid and falls back to source on load or render failure', async () => {
     const successfulApi: MermaidApi = {
       initialize: vi.fn(),
-      render: vi.fn().mockResolvedValue({ svg: '<svg><text>Safe</text></svg>' }),
+      render: vi.fn().mockResolvedValue({ svg: '<svg xmlns="http://www.w3.org/2000/svg"><g id="taco-mermaid-42-flowchart-A-0" class="node"><text>A</text></g><g id="taco-mermaid-42-flowchart-AA-1" class="node"><text>AA</text></g></svg>' }),
     }
     const diagram = file('diagram.mmd', 'flowchart LR\n  A --> B', 'text/plain')
+    let commentSelection = ''
     const success = createStructuredFileViewer({
       file: diagram, kind: 'mermaid', labels: structuredFileLabels('en'), mermaidLabels,
       mermaidRuntime: new MermaidRuntime(vi.fn().mockResolvedValue(successfulApi)),
       readOnly: false, sourceLabel: 'Mermaid source editor', onChange: vi.fn(), onModeChange: vi.fn(),
+      onNodeComment: (source) => { commentSelection = source.input.value.slice(source.input.selectionStart, source.input.selectionEnd) },
     })
     document.body.append(success.element)
-    await vi.waitFor(() => expect(document.querySelector('.standalone-mermaid-preview svg')).not.toBeNull())
+    await vi.waitFor(() => expect(document.querySelector('.standalone-mermaid-preview .taco-mermaid-render svg')).not.toBeNull())
+    const node = success.element.querySelector<SVGGElement>('[data-node-id="A"]')!
+    node.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(success.sourceEditor.input.value.slice(success.sourceEditor.input.selectionStart, success.sourceEditor.input.selectionEnd)).toBe('  A --> B')
+    expect(commentSelection).toBe('')
+    success.element.querySelector<HTMLButtonElement>('.mermaid-node-toolbar button')!.click()
+    expect(commentSelection).toBe('  A --> B')
+    success.element.querySelector<HTMLButtonElement>('.mermaid-code-panel-close')!.click()
     const standaloneZoom = document.querySelector<HTMLButtonElement>('.standalone-mermaid-zoom')!
-    expect(standaloneZoom.textContent).toBe('')
-    expect(standaloneZoom.getAttribute('aria-label')).toBe('Zoom')
-    expect(standaloneZoom.querySelector('[data-icon="zoom-in"]')).not.toBeNull()
-    document.querySelector<HTMLButtonElement>('[data-segmented-value="source"]')!.click()
+    standaloneZoom.click()
+    expect(document.querySelector('.mermaid-zoom-dialog[open] .mermaid-zoom-canvas svg')).not.toBeNull()
+    document.querySelector<HTMLButtonElement>('.mermaid-zoom-close')!.click()
+    expect(success.sourceEditor.input.isConnected).toBe(true)
+    expect(document.querySelector('[data-segmented-value="source"]')).toBeNull()
+    document.querySelector<HTMLButtonElement>('.standalone-mermaid-source')!.click()
     expect(document.querySelector('.source-editor-mermaid .hljs-keyword')?.textContent).toBe('flowchart')
     expect(document.querySelector('.source-editor-mermaid .hljs-symbol')?.textContent).toBe('-->')
     success.sourceEditor.input.focus()
-    success.sourceEditor.input.setSelectionRange(10, 10)
-    success.sourceEditor.input.setRangeText(' TB', 10, 10, 'end')
+    const directionStart = success.sourceEditor.input.value.indexOf('flowchart LR') + 'flowchart '.length
+    success.sourceEditor.input.setSelectionRange(directionStart, directionStart + 2)
+    success.sourceEditor.input.setRangeText('TB', directionStart, directionStart + 2, 'end')
     success.sourceEditor.input.dispatchEvent(new Event('input', { bubbles: true }))
     expect(document.activeElement).toBe(success.sourceEditor.input)
     expect(document.querySelector('.source-editor-input')).toBe(success.sourceEditor.input)
-    document.querySelector<HTMLButtonElement>('[data-segmented-value="preview"]')!.click()
-    expect(success.sourceEditor.element.hidden).toBe(true)
+    document.querySelector<HTMLButtonElement>('.standalone-mermaid-source')!.click()
+    expect(success.sourceEditor.element.closest<HTMLElement>('.mermaid-floating-code-panel')?.hidden).toBe(true)
     expect(success.sourceEditor.input.isConnected).toBe(true)
-    document.querySelector<HTMLButtonElement>('[data-segmented-value="source"]')!.click()
-    expect(success.sourceEditor.element.hidden).toBe(false)
+    document.querySelector<HTMLButtonElement>('.standalone-mermaid-source')!.click()
+    expect(success.sourceEditor.element.closest<HTMLElement>('.mermaid-floating-code-panel')?.hidden).toBe(false)
 
     document.body.innerHTML = ''
     const failed = createStructuredFileViewer({
@@ -259,7 +271,7 @@ describe('structured file analysis and rendering', () => {
       readOnly: false, sourceLabel: 'Mermaid source editor', onChange: vi.fn(), onModeChange: vi.fn(),
     })
     document.body.append(failed.element)
-    await vi.waitFor(() => expect(failed.sourceEditor.element.hidden).toBe(false))
+    await vi.waitFor(() => expect(failed.sourceEditor.element.closest<HTMLElement>('.mermaid-floating-code-panel')?.hidden).toBe(false))
     expect(document.querySelector('.structured-diagnostic')?.textContent).toContain('unavailable')
     expect(failed.sourceEditor.input.value).toBe(diagram.content)
 
@@ -271,8 +283,13 @@ describe('structured file analysis and rendering', () => {
       readOnly: false, sourceLabel: 'Mermaid source editor', onChange: vi.fn(), onModeChange: vi.fn(),
     })
     document.body.append(renderFailed.element)
-    await vi.waitFor(() => expect(renderFailed.sourceEditor.element.hidden).toBe(false))
+    await vi.waitFor(() => expect(renderFailed.sourceEditor.element.closest<HTMLElement>('.mermaid-floating-code-panel')?.hidden).toBe(false))
     expect(document.querySelector('.structured-diagnostic')?.textContent).toContain('Invalid Mermaid')
+    vi.mocked(renderFailureApi.render).mockResolvedValue({ svg: '<svg><text>Repaired</text></svg>' })
+    renderFailed.sourceEditor.input.value = 'flowchart TB\nA --> B'
+    renderFailed.sourceEditor.input.dispatchEvent(new Event('input', { bubbles: true }))
+    await vi.waitFor(() => expect(document.querySelector('.structured-diagnostic')).toBeNull())
+    expect(document.querySelector('.taco-mermaid-render svg')?.textContent).toBe('Repaired')
   })
 
   it('allows a failed Mermaid module load to be retried', async () => {

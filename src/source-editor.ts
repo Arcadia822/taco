@@ -17,6 +17,7 @@ const mermaid: LanguageFn = (hljs) => ({
     ].join(' '),
   },
   contains: [
+    { begin: /^---[ \t]*$/, end: /^---[ \t]*$/, subLanguage: 'yaml' },
     hljs.COMMENT('%%', '$'),
     hljs.QUOTE_STRING_MODE,
     { scope: 'symbol', begin: /(?:<-->|<--|-->|---|-\.->|==>|~~~|--x|--o|o--|x--)/ },
@@ -51,6 +52,7 @@ export interface SourceEditorController {
   input: HTMLTextAreaElement
   setCommentRanges: (ranges: SourceCommentRange[]) => void
   activateRange: (range: SourceCommentRange | null) => void
+  highlightRange: (range: SourceCommentRange | null) => void
 }
 
 const lowlight = createLowlight({ json, yaml, mermaid })
@@ -126,11 +128,13 @@ export const createSourceEditor = ({ value, language, label, readOnly = false, o
 
   let commentRanges: SourceCommentRange[] = []
   let activeRange: SourceCommentRange | null = null
+  let hoverRange: SourceCommentRange | null = null
   const renderHighlight = (): void => {
     if (language) renderLanguageHighlight(highlight, language, input.value)
     else highlight.textContent = input.value
     for (const range of commentRanges) decorateTextRange(highlight, range, 'source-comment-highlight')
     if (activeRange) decorateTextRange(highlight, activeRange, 'source-comment-highlight is-active')
+    if (hoverRange) decorateTextRange(highlight, hoverRange, 'source-comment-highlight')
   }
   renderHighlight()
 
@@ -149,7 +153,7 @@ export const createSourceEditor = ({ value, language, label, readOnly = false, o
     highlightLayer.scrollTop = input.scrollTop
   }, { passive: true })
   input.addEventListener('keydown', (event) => {
-    if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey) return
+    if (input.readOnly || event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey) return
     event.preventDefault()
     const start = input.selectionStart
     const end = input.selectionEnd
@@ -162,6 +166,7 @@ export const createSourceEditor = ({ value, language, label, readOnly = false, o
   return {
     element: host,
     input,
+    highlightRange: (range) => { hoverRange = range; renderHighlight() },
     setCommentRanges: (ranges) => {
       commentRanges = ranges
       renderHighlight()

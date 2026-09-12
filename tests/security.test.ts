@@ -55,14 +55,15 @@ describe('untrusted Taco input policy', () => {
     const svg = sanitizeMermaidSvg('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><style>@import url(https://attacker.test/x)</style><foreignObject><img src=x onerror=alert(2) /></foreignObject><a href="https://attacker.test/"><rect width="10" height="10" /></a><path style="fill:url(https://attacker.test/p)" d="M0 0" /><path class="relation" d="M0 0 C10 0 10 10 20 10"/><g class="node"><g class="label"><text>Centered node</text></g></g><g class="edgeLabel"><rect class="background" width="20" height="10"/><text>Centered edge</text></g></svg>')
     expect(svg).not.toMatch(/onload|onerror|foreignObject|<style|<a\b|https:\/\/attacker/i)
     const parsed = new DOMParser().parseFromString(svg, 'image/svg+xml')
-    expect(Array.from(parsed.querySelectorAll('.node .label text, .edgeLabel text')).every((label) =>
-      label.getAttribute('text-anchor') === 'middle'
-      && label.getAttribute('style')?.includes('text-anchor:middle')))
-      .toBe(true)
-    expect(svg).toContain('<svg')
-    expect(parsed.querySelector('path.relation')?.getAttribute('fill')).toBe('none')
-    expect(parsed.querySelector('.edgeLabel rect.background')?.getAttribute('fill')).toBe('none')
-    expect(parsed.querySelector('.edgeLabel rect.background')?.getAttribute('stroke')).toBe('none')
+    expect(parsed.documentElement.textContent).toContain('Centered node')
+    expect(parsed.documentElement.textContent).toContain('Centered edge')
+  })
+
+  it('preserves native diagram paint without allowing stylesheet escape or resource loads', () => {
+    const svg = sanitizeMermaidSvg('<svg id="diagram" xmlns="http://www.w3.org/2000/svg"><style>#diagram .node{fill:#abc;stroke:#123;position:fixed;background:url(https://evil.test/pixel)}body{color:red}#diagram ~ body{color:red}#diagram .leak{fill:url(https://evil.test/pixel)}@import "https://evil.test/font";</style><g class="node"><rect width="20" height="10"/></g></svg>')
+    expect(svg).toContain('fill: #abc')
+    expect(svg).toContain('stroke: #123')
+    expect(svg).not.toMatch(/evil\.test|position|background|body|@import/)
   })
 
   it('reports credential-bearing and outdated files without returning values', () => {

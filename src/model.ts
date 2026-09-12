@@ -40,6 +40,10 @@ export interface TacoTextAnchor {
     id: string
     type: 'codeBlock'
     language: string
+    nodeId?: string
+    nodeLabel?: string
+    lineNumber?: number
+    lineText?: string
   }
 }
 

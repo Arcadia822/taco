@@ -51,7 +51,7 @@ interface EmbeddedFile {
 const readFiles = (directory: string): EmbeddedFile[] => {
   const files: EmbeddedFile[] = []
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    if (entry.name === '.DS_Store') continue
+    if (entry.name.startsWith('.') || entry.name.endsWith('.taco.html')) continue
     const absolute = join(directory, entry.name)
     if (entry.isDirectory()) files.push(...readFiles(absolute))
     else if (entry.isFile()) {
@@ -89,6 +89,15 @@ export default defineConfig({
     __EMBEDDED_ASSETS__: JSON.stringify(embeddedAssets),
   },
   plugins: [
+    {
+      name: 'taco-external-mermaid',
+      apply: 'build',
+      moduleParsed({ id }) {
+        if (/(?:^|\/)node_modules\/mermaid\//.test(id.replaceAll('\\', '/'))) {
+          this.error('Taco runtime must load Mermaid from the pinned CDN, not bundle it')
+        }
+      },
+    },
     {
       name: 'taco-spec-files',
       transformIndexHtml(html: string) {
