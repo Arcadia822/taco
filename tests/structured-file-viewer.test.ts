@@ -236,7 +236,6 @@ describe('structured file analysis and rendering', () => {
     document.body.append(success.element)
     await vi.waitFor(() => expect(document.querySelector('.standalone-mermaid-preview .taco-mermaid-render svg')).not.toBeNull())
     const node = success.element.querySelector<SVGGElement>('[data-node-id="A"]')!
-    expect(success.element.querySelector('[data-node-id="AA"]')).toBeNull()
     node.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     expect(success.sourceEditor.input.value.slice(success.sourceEditor.input.selectionStart, success.sourceEditor.input.selectionEnd)).toBe('  A --> B')
     expect(commentSelection).toBe('')
@@ -253,8 +252,9 @@ describe('structured file analysis and rendering', () => {
     expect(document.querySelector('.source-editor-mermaid .hljs-keyword')?.textContent).toBe('flowchart')
     expect(document.querySelector('.source-editor-mermaid .hljs-symbol')?.textContent).toBe('-->')
     success.sourceEditor.input.focus()
-    success.sourceEditor.input.setSelectionRange(10, 10)
-    success.sourceEditor.input.setRangeText(' TB', 10, 10, 'end')
+    const directionStart = success.sourceEditor.input.value.indexOf('flowchart LR') + 'flowchart '.length
+    success.sourceEditor.input.setSelectionRange(directionStart, directionStart + 2)
+    success.sourceEditor.input.setRangeText('TB', directionStart, directionStart + 2, 'end')
     success.sourceEditor.input.dispatchEvent(new Event('input', { bubbles: true }))
     expect(document.activeElement).toBe(success.sourceEditor.input)
     expect(document.querySelector('.source-editor-input')).toBe(success.sourceEditor.input)

@@ -17,6 +17,7 @@ const mermaid: LanguageFn = (hljs) => ({
     ].join(' '),
   },
   contains: [
+    { begin: /^---[ \t]*$/, end: /^---[ \t]*$/, subLanguage: 'yaml' },
     hljs.COMMENT('%%', '$'),
     hljs.QUOTE_STRING_MODE,
     { scope: 'symbol', begin: /(?:<-->|<--|-->|---|-\.->|==>|~~~|--x|--o|o--|x--)/ },

@@ -39,7 +39,6 @@ const javascript = inflate('taco-rt')
 if (!css.trim()) fail('inflated CSS is empty')
 if (!javascript.trim()) fail('inflated JavaScript is empty')
 if (css.includes('@font-face') || /data:font\//.test(css)) fail('runtime contains a bundled font')
-if (javascript.includes('mermaidAPI') || javascript.includes('mermaid.parseError')) fail('runtime contains bundled Mermaid code')
 if (!javascript.includes('mermaid@12.0.0/dist/mermaid.esm.min.mjs')) fail('runtime is missing the pinned Mermaid CDN loader')
 if (!javascript.includes('collab-secrets-present')) fail('runtime is missing collaboration-secret detection')
 for (const member of ['securityVersion', 'validate', 'listFiles', 'readFile', 'search']) {

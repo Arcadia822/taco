@@ -90,6 +90,15 @@ export default defineConfig({
   },
   plugins: [
     {
+      name: 'taco-external-mermaid',
+      apply: 'build',
+      moduleParsed({ id }) {
+        if (/(?:^|\/)node_modules\/mermaid\//.test(id.replaceAll('\\', '/'))) {
+          this.error('Taco runtime must load Mermaid from the pinned CDN, not bundle it')
+        }
+      },
+    },
+    {
       name: 'taco-spec-files',
       transformIndexHtml(html: string) {
         return html.replace(

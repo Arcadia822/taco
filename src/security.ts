@@ -101,6 +101,7 @@ const SVG_PAINT_PROPERTIES = new Set([
   'color', 'opacity', 'font-family', 'font-size', 'font-weight', 'font-style',
   'text-anchor', 'dominant-baseline', 'alignment-baseline', 'text-decoration',
   'rx', 'ry', 'marker-start', 'marker-mid', 'marker-end',
+  'max-width', 'width', 'height',
 ])
 
 const safeSvgDeclarations = (text: string): string => {

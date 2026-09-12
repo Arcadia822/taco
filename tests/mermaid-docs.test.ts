@@ -2,6 +2,8 @@ import { readFile } from 'node:fs/promises'
 import { describe, expect, it } from 'vitest'
 import mermaid from 'mermaid'
 import { sanitizeMermaidSvg } from '../src/security.ts'
+import { ensureMermaidConfig, extractMermaidThemeFromCode, updateMermaidCodeTheme, updateMermaidDirection } from '../src/mermaid.ts'
+import { parse as parseYaml } from 'yaml'
 
 const documents = [
   'README.md',
@@ -75,5 +77,32 @@ describe('embedded technical diagrams', () => {
       if (originalLength) Object.defineProperty(svgPrototype, 'getComputedTextLength', { configurable: true, value: originalLength })
       else Reflect.deleteProperty(svgPrototype, 'getComputedTextLength')
     }
+  })
+
+  it('changes the outer direction without rewriting nested diagram directions', () => {
+    const flow = 'flowchart LR\nsubgraph Nested\n  direction BT\n  A --> B\nend\nB --> C'
+    expect(updateMermaidDirection(flow, 'TB')).toBe(flow.replace('flowchart LR', 'flowchart TB'))
+    const states = 'stateDiagram-v2\nstate Nested {\n  direction LR\n  A --> B\n}\nNested --> Done'
+    expect(updateMermaidDirection(states, 'BT')).toMatch(/^stateDiagram-v2\n[ \t]*direction BT\nstate Nested \{\n  direction LR\n  A --> B\n\}\nNested --> Done$/)
+    const sequence = 'sequenceDiagram\nAlice->>Bob: direction LR'
+    expect(updateMermaidDirection(sequence, 'TB')).toBe(sequence)
+  })
+
+  it('preserves explicit layout and custom theme settings when changing themes', () => {
+    const source = '%%{init: {"layout":"dagre","theme":"forest","themeVariables":{"primaryColor":"#ff00ff"}}}%%\nflowchart LR\nA --> B'
+    const migrated = ensureMermaidConfig(source)
+    expect(extractMermaidThemeFromCode(migrated)).toBe('forest')
+    expect(ensureMermaidConfig(migrated)).toBe(migrated)
+    const changed = updateMermaidCodeTheme(source, 'neutral')
+    expect(extractMermaidThemeFromCode(changed)).toBe('neutral')
+    const parts = changed.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/)!
+    expect(parseYaml(parts[1]).config).toMatchObject({ layout: 'dagre', themeVariables: { primaryColor: '#ff00ff' } })
+    expect(parts[2]).toBe('flowchart LR\nA --> B')
+  })
+
+  it('does not replace a partially edited configuration with a second directive', () => {
+    const source = '%%{init: {"theme": "forest", "themeVariables": } }%%\nflowchart LR\nA --> B'
+    expect(ensureMermaidConfig(source)).toBe(source)
+    expect(updateMermaidCodeTheme(source, 'dark')).toBe(source)
   })
 })

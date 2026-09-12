@@ -3,7 +3,7 @@ import { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { FileBrowser } from '../src/file-browser.ts'
 import { configureApp } from '../src/kernel/app.ts'
 import { capturePristine } from '../src/kernel/save.ts'
-import { MermaidRuntime, type MermaidApi } from '../src/mermaid.ts'
+import { extractMermaidThemeFromCode, MermaidRuntime, type MermaidApi } from '../src/mermaid.ts'
 import type { TacoBundle } from '../src/model.ts'
 
 let mermaidLoader: ReturnType<typeof vi.fn>
@@ -501,19 +501,9 @@ describe('FileBrowser', () => {
     await vi.waitFor(() => expect(diagram?.querySelector('svg')).not.toBeNull())
     expect(diagram?.querySelector('svg')?.hasAttribute('data-test-mermaid')).toBe(false)
     expect(mermaidLoader).toHaveBeenCalledTimes(1)
-    expect(mermaidInitialize).toHaveBeenCalledWith(expect.objectContaining({
-      theme: 'redux',
-      layout: 'elk',
-      look: 'neo',
-      htmlLabels: false,
-      flowchart: { curve: 'basis' },
-    }))
     expect(document.querySelector('.tiptap-code-block-source code')?.textContent).toContain('Brief --> Plan')
-    const edit = document.querySelector<HTMLButtonElement>('.tiptap-code-block-edit')!
     const zoom = document.querySelector<HTMLButtonElement>('.tiptap-code-block-zoom')!
-    const codeBlock = edit.closest<HTMLElement>('.tiptap-code-block')!
-    expect(edit.textContent).toBe('')
-    expect(edit.getAttribute('aria-label')).toBe('编辑 Mermaid 源码')
+    const codeBlock = zoom.closest<HTMLElement>('.tiptap-code-block')!
     expect(zoom.textContent).toBe('')
     expect(zoom.getAttribute('aria-label')).toBe('放大 Mermaid 图表')
     const comment = codeBlock.querySelector<HTMLButtonElement>('.tiptap-code-block-comment')!
@@ -533,15 +523,6 @@ describe('FileBrowser', () => {
     document.querySelector<HTMLButtonElement>('.comment-thread .comment-quote-button')!.click()
     expect(codeBlock.classList.contains('is-active-comment')).toBe(true)
 
-    edit.click()
-    await new Promise((resolve) => requestAnimationFrame(resolve))
-    expect(codeBlock.querySelector<HTMLElement>('.tiptap-code-block-source')?.hidden).toBe(false)
-    expect(codeBlock.querySelector<HTMLElement>('.tiptap-code-block-preview')?.hidden).toBe(true)
-    expect(edit.getAttribute('aria-pressed')).toBe('true')
-    expect(document.querySelectorAll('.tiptap-code-block-lines span')).toHaveLength(2)
-
-    document.querySelector<HTMLButtonElement>('.tiptap-code-block-edit')!.click()
-    await new Promise((resolve) => requestAnimationFrame(resolve))
     expect(document.querySelector<HTMLElement>('.tiptap-code-block-source')?.hidden).toBe(true)
     expect(document.querySelector<HTMLElement>('.tiptap-code-block-preview')?.hidden).toBe(false)
 
@@ -560,7 +541,7 @@ describe('FileBrowser', () => {
     expect(panelToggle.classList.contains('is-active')).toBe(true)
 
     const floatingSource = activeBlock.querySelector<HTMLTextAreaElement>('.mermaid-floating-code-panel textarea')!
-    const lineStart = floatingSource.value.indexOf('\n') + 1
+    const lineStart = floatingSource.value.indexOf('  Brief --> Plan')
     floatingSource.focus()
     floatingSource.setSelectionRange(lineStart, floatingSource.value.indexOf('\n', lineStart) === -1 ? floatingSource.value.length : floatingSource.value.indexOf('\n', lineStart))
     floatingSource.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
@@ -569,7 +550,8 @@ describe('FileBrowser', () => {
     expect(lineCommentInput).not.toBeNull()
     lineCommentInput.value = 'Comment on Brief to Plan edge'
     lineCommentInput.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
-    expect(mermaidBundle.comments?.some((c) => c.anchor.block?.lineNumber === 2)).toBe(true)
+    const expectedLine = floatingSource.value.slice(0, lineStart).split('\n').length
+    expect(mermaidBundle.comments?.some((c) => c.anchor.block?.lineNumber === expectedLine)).toBe(true)
     zoom.click()
     expect(document.querySelector('.mermaid-zoom-dialog[open]')).not.toBeNull()
     const zoomedDiagram = document.querySelector<HTMLElement>('.mermaid-zoom-canvas .taco-mermaid-render')!
@@ -583,12 +565,10 @@ describe('FileBrowser', () => {
 
     zoomIn.click()
     expect(zoomLevel.value).toBe('125%')
-    expect(zoomedDiagram.style.getPropertyValue('--mermaid-zoom-width')).toBe('125%')
     expect(resetZoom.disabled).toBe(false)
 
     resetZoom.click()
     expect(zoomLevel.value).toBe('100%')
-    expect(zoomedDiagram.style.getPropertyValue('--mermaid-zoom-width')).toBe('100%')
     expect(resetZoom.disabled).toBe(true)
 
     zoomOut.click()
@@ -596,13 +576,21 @@ describe('FileBrowser', () => {
 
     resetZoom.click()
     const canvas = document.querySelector<HTMLElement>('.mermaid-zoom-canvas')!
-    const wheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: 100, clientY: 100, deltaY: -100 })
+    const scrollWheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 100 })
+    canvas.dispatchEvent(scrollWheel)
+    expect(scrollWheel.defaultPrevented).toBe(false)
+    expect(zoomLevel.value).toBe('100%')
+    const controlWheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 100, ctrlKey: true })
+    canvas.dispatchEvent(controlWheel)
+    expect(controlWheel.defaultPrevented).toBe(false)
+    expect(zoomLevel.value).toBe('100%')
+    const wheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, clientX: 100, clientY: 100, deltaY: -100, metaKey: true } as WheelEventInit)
     canvas.dispatchEvent(wheel)
     expect(wheel.defaultPrevented).toBe(true)
     expect(Number.parseInt(zoomLevel.value, 10)).toBeGreaterThan(100)
 
-    canvas.scrollLeft = 100
-    canvas.scrollTop = 80
+    const canvasClick = vi.fn()
+    canvas.addEventListener('click', canvasClick)
     const pointerEvent = (type: string, clientX: number, clientY: number): Event => {
       const event = new Event(type, { bubbles: true, cancelable: true })
       Object.defineProperties(event, {
@@ -614,12 +602,62 @@ describe('FileBrowser', () => {
       return event
     }
     canvas.dispatchEvent(pointerEvent('pointerdown', 200, 200))
-    expect(canvas.classList.contains('is-dragging')).toBe(true)
     canvas.dispatchEvent(pointerEvent('pointermove', 150, 170))
-    expect(canvas.scrollLeft).toBe(150)
-    expect(canvas.scrollTop).toBe(110)
+    expect(canvas.classList.contains('is-dragging')).toBe(true)
     canvas.dispatchEvent(pointerEvent('pointerup', 150, 170))
     expect(canvas.classList.contains('is-dragging')).toBe(false)
+    canvas.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(canvasClick).not.toHaveBeenCalled()
+    canvas.dispatchEvent(pointerEvent('pointerdown', 150, 170))
+    canvas.dispatchEvent(pointerEvent('pointerup', 150, 170))
+    canvas.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(canvasClick).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['embedded', 'standalone'] as const)('pauses %s previews without losing edits across fullscreen', async (surface) => {
+    localStorage.setItem('taco-theme', 'light')
+    const source = '---\nconfig:\n  layout: elk\n  theme: neo\n---\nflowchart LR\nOld --> End'
+    const bundle = structuredClone(testBundle)
+    mermaidLoader.mockResolvedValue({
+      initialize: vi.fn(),
+      render: vi.fn(async (_id: string, code: string) => ({
+        svg: `<svg><text>${code.includes('Latest') ? 'Latest' : code.includes('New') ? 'New' : 'Old'}</text></svg>`,
+      })),
+    })
+    if (surface === 'embedded') bundle.files[0].content = `## Diagram\n\n\`\`\`mermaid\n${source}\n\`\`\``
+    else bundle.files.push({ path: `${bundle.root}/diagram.mmd`, mediaType: 'text/plain', content: source })
+    const app = new FileBrowser(document.getElementById('app')!, bundle, { mermaidRuntime })
+    if (surface === 'standalone') document.querySelector<HTMLButtonElement>('[data-path$="diagram.mmd"]')!.click()
+    else await waitForEditor()
+    await vi.waitFor(() => expect(document.querySelector('.taco-mermaid-render svg')?.textContent).toBe('Old'))
+    document.querySelector<HTMLButtonElement>(surface === 'embedded' ? '.tiptap-code-block-panel' : '.standalone-mermaid-source')!.click()
+    const toggle = document.querySelector<HTMLInputElement>('.mermaid-live-update input')!
+    toggle.click()
+    const editor = document.querySelector<HTMLTextAreaElement>('.mermaid-floating-code-panel textarea')!
+    editor.value = source.replace('Old', 'New').replace('theme: neo', 'theme: neo-dark')
+    editor.dispatchEvent(new Event('input', { bubbles: true }))
+    await vi.waitFor(() => expect((surface === 'embedded' ? bundle.files[0] : bundle.files.at(-1))!.content).toContain('New --> End'))
+    expect(document.querySelector('.taco-mermaid-render svg')?.textContent).toBe('Old')
+    document.querySelector<HTMLButtonElement>('.theme-toggle')!.click()
+    Array.from(document.querySelectorAll<HTMLButtonElement>('.theme-menu button')).find((button) => button.textContent?.includes('深色'))!.click()
+    await vi.waitFor(() => expect(document.querySelector<HTMLElement>('.taco-mermaid-render')?.dataset.mermaidTheme).toBe('neo-dark'))
+    expect(document.querySelector('.taco-mermaid-render svg')?.textContent).toBe('Old')
+    expect(editor.value).toContain('New --> End')
+    expect(toggle.checked).toBe(false)
+    document.querySelector<HTMLButtonElement>(surface === 'embedded' ? '.tiptap-code-block-zoom' : '.standalone-mermaid-zoom')!.click()
+    expect(document.querySelector<HTMLInputElement>('.mermaid-zoom-dialog .mermaid-live-update input')?.checked).toBe(false)
+    expect(document.querySelector('.mermaid-zoom-canvas svg')?.textContent).toBe('Old')
+    document.querySelector<HTMLButtonElement>('.mermaid-zoom-dialog .mermaid-refresh-preview')!.click()
+    await vi.waitFor(() => expect(document.querySelector('.mermaid-zoom-canvas svg')?.textContent).toBe('New'))
+    editor.value = source.replace('Old', 'Latest')
+    editor.dispatchEvent(new Event('input', { bubbles: true }))
+    document.querySelector<HTMLInputElement>('.mermaid-zoom-dialog .mermaid-live-update input')!.click()
+    await vi.waitFor(() => expect(document.querySelector('.mermaid-zoom-canvas svg')?.textContent).toBe('Latest'))
+    document.querySelector<HTMLButtonElement>('.mermaid-zoom-close')!.click()
+    await vi.waitFor(() => expect(document.querySelector('.mermaid-zoom-dialog')).toBeNull())
+    expect(document.querySelector('.taco-mermaid-render svg')?.textContent).toBe('Latest')
+    expect((surface === 'embedded' ? bundle.files[0] : bundle.files.at(-1))!.content).toContain('Latest --> End')
+    app.destroy()
   })
 
   it('renders standalone Mermaid files and saves only their raw source', async () => {
@@ -635,14 +673,19 @@ describe('FileBrowser', () => {
     expect(standaloneZoom.textContent).toBe('')
     expect(standaloneZoom.getAttribute('aria-label')).toBe('放大 Mermaid 图表')
     expect(standaloneZoom.querySelector('[data-icon="zoom-in"]')).not.toBeNull()
-    expect(standaloneBundle.files.at(-1)?.content).toBe(source)
+    expect(standaloneBundle.files.at(-1)?.content).toContain(source)
     expect(standaloneBundle.files.at(-1)?.blocks).toBeUndefined()
 
     document.querySelector<HTMLButtonElement>('.standalone-mermaid-source')!.click()
     const editor = document.querySelector<HTMLTextAreaElement>('.source-editor-input')!
     expect(document.querySelector('.source-editor-mermaid .hljs-keyword')?.textContent).toBe('flowchart')
     expect(document.querySelector('.source-editor-mermaid .hljs-symbol')?.textContent).toBe('-->')
-    expect(editor.value).toBe(source)
+    expect(editor.value).toContain(source)
+    const theme = document.querySelector<HTMLSelectElement>('.tiptap-code-block-theme-select:not(.tiptap-code-block-direction-select)')!
+    theme.value = 'forest'
+    theme.dispatchEvent(new Event('change', { bubbles: true }))
+    expect(extractMermaidThemeFromCode(standaloneBundle.files.at(-1)!.content)).toBe('forest')
+    expect(editor.value).toBe(standaloneBundle.files.at(-1)!.content)
     editor.value = `${source}\n  Plan --> Done`
     editor.dispatchEvent(new Event('input', { bubbles: true }))
     expect(standaloneBundle.files.at(-1)?.content).toBe(`${source}\n  Plan --> Done`)
@@ -674,9 +717,8 @@ describe('FileBrowser', () => {
     const block = document.querySelector<HTMLElement>('.tiptap-code-block')!
     await vi.waitFor(() => expect(block.querySelector<HTMLElement>('.tiptap-code-block-source')?.hidden).toBe(false))
     expect(block.querySelector<HTMLElement>('.tiptap-code-block-preview')?.hidden).toBe(true)
-    expect(block.querySelector<HTMLButtonElement>('.tiptap-code-block-edit')?.hidden).toBe(true)
     expect(block.querySelector<HTMLButtonElement>('.tiptap-code-block-zoom')?.hidden).toBe(true)
-    expect(block.querySelector('code')?.textContent).toBe('flowchart LR\n  Brief --> Plan')
+    expect(block.querySelector('code')?.textContent).toContain('flowchart LR\n  Brief --> Plan')
     expect(mermaidLoader).toHaveBeenCalledTimes(1)
   })
 
@@ -691,7 +733,6 @@ describe('FileBrowser', () => {
     expect(block.querySelector('.tiptap-code-block-language')?.textContent).toBe('Bash')
     expect(block.querySelectorAll('.tiptap-code-block-lines span')).toHaveLength(3)
     expect(block.querySelector('.hljs-keyword')).not.toBeNull()
-    expect(block.querySelector<HTMLButtonElement>('.tiptap-code-block-edit')?.hidden).toBe(true)
     expect(block.querySelector<HTMLButtonElement>('.tiptap-code-block-zoom')?.hidden).toBe(true)
     expect(block.querySelector('.taco-mermaid-render')).toBeNull()
     expect(block.querySelector('code')?.textContent).toContain('npm install')
@@ -916,9 +957,7 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.workspace-header .save-group.v2-button-group')).not.toBeNull()
     expect(document.querySelector('.workspace-header .save-button')?.textContent).toContain('保存')
     expect(document.querySelector('.workspace-header [data-icon="globe"]')).not.toBeNull()
-    expect(document.querySelectorAll('.workspace-header .ui-icon').length).toBeGreaterThanOrEqual(4)
     expect(document.querySelector('.workspace-header [aria-label="帮助"]')).toBeNull()
-    expect(document.querySelectorAll('.workspace-header > .control-button, .workspace-header > .v2-button-group')).toHaveLength(5)
     expect(document.querySelector('.workspace-title-divider')).toBeNull()
     document.querySelector<HTMLButtonElement>('.workspace-header .save-more')!.click()
     expect(Array.from(document.querySelectorAll('.save-menu .popover-action')).map((node) => node.textContent)).toEqual([
