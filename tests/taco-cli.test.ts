@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -610,5 +611,127 @@ describe('Taco extension CLI', () => {
     expect(human).toContain('Ada: Corrected request')
     expect(human).toContain('Grace: [message deleted]')
     expect(human).not.toContain('Grace: [Deleted message]')
+  })
+
+  it('packs local PNG assets into self-contained Taco HTML without --ignore and syncs non-destructively', () => {
+    const project = mkdtempSync(join(tmpdir(), 'taco-png-feature-'))
+    const feature = join(project, 'specs/007-png-feature')
+    const output = join(feature, '007-png-feature.taco.html')
+    const samplePng = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      'base64',
+    )
+    const samplePngHash = createHash('sha256').update(samplePng).digest('hex')
+
+    mkdirSync(join(feature, 'design'), { recursive: true })
+    mkdirSync(join(feature, 'checklists'), { recursive: true })
+    writeFileSync(
+      join(feature, 'spec.md'),
+      '---\ntitle: "PNG Feature"\n---\n\n## Overview\n\n![UI](design/screen.png)\n',
+    )
+    writeFileSync(
+      join(feature, 'checklists/requirements.md'),
+      '---\ntitle: "Checklist"\ntaco_scope: tasks\n---\n\n## Checklist\n\n![UI](../design/screen.png)\n',
+    )
+    writeFileSync(join(feature, 'design/screen.png'), samplePng)
+
+    // 1. Pack without --ignore succeeds
+    const packResult = runJson<{ files: number }>(
+      ['pack', feature, '--project-root', project, '--output', output, '--shell', shell],
+      project,
+    )
+    expect(packResult).toMatchObject({ command: 'pack', files: 3 })
+
+    const bundle = readBundle(output)
+    const pngFile = bundle.files.find((f) => f.path.endsWith('/design/screen.png'))
+    expect(pngFile).toBeDefined()
+    expect(pngFile?.mediaType).toBe('image/png')
+    expect(pngFile?.content).toBe(
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    )
+    expect(pngFile?.sourceHash).toBe(samplePngHash)
+
+    // 2. Validate passes
+    const validateResult = runJson<{ issues: string[] }>(['validate', output], project)
+    expect(validateResult.issues).toEqual([])
+
+    // 3. Sync on clean directory reports unchanged
+    const syncClean = runJson<{
+      applied: boolean
+      summary: { created: number; updated: number; unchanged: number; conflicts: number }
+      files: Array<{ path: string; state: string }>
+    }>(['sync', output, '--project-root', project], project)
+    expect(syncClean.applied).toBe(true)
+    expect(syncClean.summary).toEqual({ created: 0, updated: 0, unchanged: 3, conflicts: 0 })
+    expect(readFileSync(join(feature, 'design/screen.png'))).toEqual(samplePng)
+
+    // 4. Edit markdown text in bundle and sync back
+    const specFile = bundle.files.find((f) => f.path.endsWith('/spec.md'))
+    if (specFile) {
+      specFile.content = '---\ntitle: "PNG Feature"\n---\n\n## Overview\n\n![UI](design/screen.png)\n\nAdded notes.\n'
+    }
+    writeBundle(output, bundle)
+
+    const syncEdited = runJson<{
+      applied: boolean
+      summary: { created: number; updated: number; unchanged: number; conflicts: number }
+    }>(['sync', output, '--project-root', project], project)
+    expect(syncEdited.applied).toBe(true)
+    expect(syncEdited.summary).toEqual({ created: 0, updated: 1, unchanged: 2, conflicts: 0 })
+    expect(readFileSync(join(feature, 'spec.md'), 'utf8')).toContain('Added notes.')
+    expect(readFileSync(join(feature, 'spec.md'), 'utf8')).toContain('![UI](design/screen.png)')
+    expect(readFileSync(join(feature, 'design/screen.png'))).toEqual(samplePng)
+
+    // 5. If PNG is deleted from disk, sync recreates it with exact binary content
+    unlinkSync(join(feature, 'design/screen.png'))
+    const syncRecreate = runJson<{
+      applied: boolean
+      summary: { created: number; updated: number; unchanged: number; conflicts: number }
+    }>(['sync', output, '--project-root', project], project)
+    expect(syncRecreate.applied).toBe(true)
+    expect(syncRecreate.summary).toEqual({ created: 1, updated: 0, unchanged: 2, conflicts: 0 })
+    expect(readFileSync(join(feature, 'design/screen.png'))).toEqual(samplePng)
+  })
+
+  it('fails packing on empty, corrupt, or oversized PNG assets', () => {
+    const project = mkdtempSync(join(tmpdir(), 'taco-invalid-png-'))
+    const feature = join(project, 'specs/007-invalid-png')
+    mkdirSync(join(feature, 'design'), { recursive: true })
+    writeFileSync(join(feature, 'spec.md'), '---\ntitle: "Invalid PNG"\n---\n\n## Spec\n')
+
+    // Empty PNG
+    writeFileSync(join(feature, 'design/empty.png'), Buffer.alloc(0))
+    const emptyFailure = spawnSync(
+      process.execPath,
+      [cli, 'pack', feature, '--project-root', project, '--json'],
+      { cwd: project, encoding: 'utf8' },
+    )
+    expect(emptyFailure.status).toBe(1)
+    expect(JSON.parse(emptyFailure.stderr).error).toContain('Empty PNG image: design/empty.png')
+    unlinkSync(join(feature, 'design/empty.png'))
+
+    // Corrupt PNG (invalid signature)
+    writeFileSync(join(feature, 'design/corrupt.png'), Buffer.from('NOT A PNG FILE'))
+    const corruptFailure = spawnSync(
+      process.execPath,
+      [cli, 'pack', feature, '--project-root', project, '--json'],
+      { cwd: project, encoding: 'utf8' },
+    )
+    expect(corruptFailure.status).toBe(1)
+    expect(JSON.parse(corruptFailure.stderr).error).toContain('Corrupt or invalid PNG image: design/corrupt.png')
+    unlinkSync(join(feature, 'design/corrupt.png'))
+
+    // Oversized PNG (>10MB)
+    const oversized = Buffer.alloc(10 * 1024 * 1024 + 1)
+    // Set valid PNG signature so it passes magic check and hits size check
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(oversized, 0)
+    writeFileSync(join(feature, 'design/large.png'), oversized)
+    const largeFailure = spawnSync(
+      process.execPath,
+      [cli, 'pack', feature, '--project-root', project, '--json'],
+      { cwd: project, encoding: 'utf8' },
+    )
+    expect(largeFailure.status).toBe(1)
+    expect(JSON.parse(largeFailure.stderr).error).toContain('PNG image exceeds 10 MiB limit: design/large.png')
   })
 })

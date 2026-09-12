@@ -104,7 +104,7 @@ speckit.taco.review specs/001-example/001-example.taco.html
 
 `review` 会先执行只读预检，再把 Taco 中的直接修改写回原始路径，并把开放评论连同锚定文本、位置和完整消息交给 Agent 处理。每个文件携带打包时的 SHA-256 基线；如果原文件与 Taco 两边都发生变化，整次同步拒绝写入，不会悄悄选择一边。面向 Agent 的安装与 CLI 细节见 [`extensions/taco/README.md`](extensions/taco/README.md)。
 
-打包器包含所有可见 UTF-8 普通文件。唯一默认排除项是 `*.taco.html` 和隐藏路径；可重复的 `--ignore` 参数用于增加 feature-relative 路径或 glob 排除。其他可见但不受支持的内容会让打包明确失败，不会被静默丢弃。
+打包器包含所有可见 UTF-8 普通文件，以及单个不超过 10 MiB、验证通过的本地 PNG 资源。PNG 会嵌入 Taco 以供 Markdown 离线渲染，并在评审往返过程中按二进制数据原样保留。唯一默认排除项是 `*.taco.html` 和隐藏路径；可重复的 `--ignore` 参数用于增加 feature-relative 路径或 glob 排除。其他可见但不受支持的内容会让打包明确失败，不会被静默丢弃。
 
 每次 update 成功后，Agent 都会把对应 Taco 作为原生、可点击的本地文件展示。在 Codex 中，由用户点击后交给 Browser 打开；Agent 不会尝试自主导航到 `file://`。其他 Agent GUI 只有在明确支持本地 HTML 导航时，才额外自动打开并验证文件。
 

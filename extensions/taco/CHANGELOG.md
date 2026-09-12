@@ -14,6 +14,12 @@
 - Remove the raw codeblock toggle from embedded Markdown Mermaid diagrams; retain their floating source editor and render-failure recovery.
 - Fix empty standalone Mermaid enlargement, linked inline-code README migration, and recursively embedded generated Taco files in the production showcase.
 
+## 0.5.0 - 2026-09-09
+
+- Route Taco workflow policy through project process documentation while preserving one durable `AGENTS.md` reference.
+- Prevent linked badges and inline Markdown images from crashing editor startup.
+- Package validated local PNG assets into self-contained reviews, resolve nested relative Markdown image paths offline, and preserve exact binary bytes during save and sync.
+
 ## 0.4.0 - 2026-08-26
 
 - Make every packaged UTF-8 file discoverable exactly once through the canonical stage groups or the `Other files` group.

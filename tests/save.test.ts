@@ -5,6 +5,7 @@ import {
   adoptFileHandle,
   saveAndUnpack,
   saveFile,
+  unpackBundle,
   serializeFile,
   suggestedFileName,
   titleForFileName,
@@ -137,6 +138,51 @@ describe('single-file save serializer', () => {
 
     await expect(saveFile(bundle)).resolves.toBe('saved')
     expect(showSaveFilePicker).not.toHaveBeenCalled()
+  })
+
+  it('unpacks PNG assets as exact binary bytes', async () => {
+    const pngDataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+    const expected = Uint8Array.from(atob(pngDataUrl.slice(pngDataUrl.indexOf(',') + 1)), (char) => char.charCodeAt(0))
+    const writes = new Map<string, { bytes: Uint8Array; mediaType: string }>()
+    const readBlob = (blob: Blob): Promise<Uint8Array> => new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.addEventListener('load', () => resolve(new Uint8Array(reader.result as ArrayBuffer)))
+      reader.addEventListener('error', () => reject(reader.error))
+      reader.readAsArrayBuffer(blob)
+    })
+    const directory = (path = ''): DirectoryHandleLike => ({
+      name: path.split('/').at(-1) ?? 'workspace',
+      getDirectoryHandle: async (name) => directory(path ? `${path}/${name}` : name),
+      getFileHandle: async (name) => {
+        const filePath = path ? `${path}/${name}` : name
+        let bytes = new Uint8Array()
+        return {
+          name,
+          createWritable: async () => ({
+            write: async (blob) => {
+              bytes = await readBlob(blob)
+              writes.set(filePath, { bytes, mediaType: blob.type })
+            },
+            close: async () => undefined,
+          }),
+          getFile: async () => ({
+            text: async () => new TextDecoder().decode(bytes),
+            arrayBuffer: async () => bytes.slice().buffer,
+          }),
+        } satisfies FileHandleLike
+      },
+    })
+    const pngBundle = structuredClone(bundle)
+    pngBundle.files = [{
+      path: 'specs/001-save/design/screen.png',
+      mediaType: 'image/png',
+      content: pngDataUrl,
+    }]
+
+    await unpackBundle(directory(), pngBundle)
+
+    expect(writes.get('design/screen.png')?.mediaType).toBe('image/png')
+    expect(writes.get('design/screen.png')?.bytes).toEqual(expected)
   })
 
   it('does not misreport a denied directory grant as a completed cancellation', async () => {
