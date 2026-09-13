@@ -535,12 +535,15 @@ describe('FileBrowser', () => {
 
     const panelToggle = activeBlock.querySelector<HTMLButtonElement>('.tiptap-code-block-panel')!
     expect(panelToggle).not.toBeNull()
+    expect(panelToggle.hidden).toBe(true)
     expect(activeBlock.querySelector<HTMLElement>('.mermaid-floating-code-panel')?.hidden).toBe(true)
-    panelToggle.click()
-    expect(activeBlock.querySelector<HTMLElement>('.mermaid-floating-code-panel')?.hidden).toBe(false)
-    expect(panelToggle.classList.contains('is-active')).toBe(true)
-
-    const floatingSource = activeBlock.querySelector<HTMLTextAreaElement>('.mermaid-floating-code-panel textarea')!
+    zoom.click()
+    expect(document.querySelector('.mermaid-zoom-dialog[open]')).not.toBeNull()
+    const zoomPanelToggle = document.querySelector<HTMLButtonElement>('.mermaid-zoom-panel')!
+    expect(zoomPanelToggle).not.toBeNull()
+    zoomPanelToggle.click()
+    expect(document.querySelector<HTMLElement>('.mermaid-zoom-dialog .mermaid-floating-code-panel')?.hidden).toBe(false)
+    const floatingSource = document.querySelector<HTMLTextAreaElement>('.mermaid-zoom-dialog .mermaid-floating-code-panel textarea')!
     const lineStart = floatingSource.value.indexOf('  Brief --> Plan')
     floatingSource.focus()
     floatingSource.setSelectionRange(lineStart, floatingSource.value.indexOf('\n', lineStart) === -1 ? floatingSource.value.length : floatingSource.value.indexOf('\n', lineStart))
@@ -552,7 +555,6 @@ describe('FileBrowser', () => {
     lineCommentInput.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     const expectedLine = floatingSource.value.slice(0, lineStart).split('\n').length
     expect(mermaidBundle.comments?.some((c) => c.anchor.block?.lineNumber === expectedLine)).toBe(true)
-    zoom.click()
     expect(document.querySelector('.mermaid-zoom-dialog[open]')).not.toBeNull()
     const zoomedDiagram = document.querySelector<HTMLElement>('.mermaid-zoom-canvas .taco-mermaid-render')!
     const zoomIn = document.querySelector<HTMLButtonElement>('.mermaid-zoom-in')!
@@ -630,7 +632,12 @@ describe('FileBrowser', () => {
     if (surface === 'standalone') document.querySelector<HTMLButtonElement>('[data-path$="diagram.mmd"]')!.click()
     else await waitForEditor()
     await vi.waitFor(() => expect(document.querySelector('.taco-mermaid-render svg')?.textContent).toBe('Old'))
-    document.querySelector<HTMLButtonElement>(surface === 'embedded' ? '.tiptap-code-block-panel' : '.standalone-mermaid-source')!.click()
+    if (surface === 'embedded') {
+      document.querySelector<HTMLButtonElement>('.tiptap-code-block-zoom')!.click()
+      document.querySelector<HTMLButtonElement>('.mermaid-zoom-panel')!.click()
+    } else {
+      document.querySelector<HTMLButtonElement>('.standalone-mermaid-source')!.click()
+    }
     const toggle = document.querySelector<HTMLInputElement>('.mermaid-live-update input')!
     toggle.click()
     const editor = document.querySelector<HTMLTextAreaElement>('.mermaid-floating-code-panel textarea')!
@@ -644,7 +651,9 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.taco-mermaid-render svg')?.textContent).toBe('Old')
     expect(editor.value).toContain('New --> End')
     expect(toggle.checked).toBe(false)
-    document.querySelector<HTMLButtonElement>(surface === 'embedded' ? '.tiptap-code-block-zoom' : '.standalone-mermaid-zoom')!.click()
+    if (surface === 'standalone') {
+      document.querySelector<HTMLButtonElement>('.standalone-mermaid-zoom')!.click()
+    }
     expect(document.querySelector<HTMLInputElement>('.mermaid-zoom-dialog .mermaid-live-update input')?.checked).toBe(false)
     expect(document.querySelector('.mermaid-zoom-canvas svg')?.textContent).toBe('Old')
     document.querySelector<HTMLButtonElement>('.mermaid-zoom-dialog .mermaid-refresh-preview')!.click()
@@ -919,7 +928,7 @@ describe('FileBrowser', () => {
     expect(app.classList.contains('sidebar-closed')).toBe(true)
     document.querySelector<HTMLButtonElement>('.workspace-header [aria-label="语言"]')!.click()
     const english = Array.from(document.querySelectorAll<HTMLButtonElement>('.language-menu .popover-action'))
-      .find((button) => button.textContent === 'English')!
+      .find((button) => button.textContent?.includes('English'))!
     english.click()
 
     expect(app.classList.contains('sidebar-closed')).toBe(true)
@@ -955,6 +964,7 @@ describe('FileBrowser', () => {
     new FileBrowser(document.getElementById('app')!, structuredClone(testBundle))
     expect(document.querySelector('.workspace-header .share-button')).not.toBeNull()
     expect(document.querySelector('.workspace-header .save-group.v2-button-group')).not.toBeNull()
+    expect(document.querySelector('.workspace-header .copy-review-group.v2-button-group')).not.toBeNull()
     expect(document.querySelector('.workspace-header .save-button')?.textContent).toContain('保存')
     expect(document.querySelector('.workspace-header [data-icon="globe"]')).not.toBeNull()
     expect(document.querySelector('.workspace-header [aria-label="帮助"]')).toBeNull()
@@ -963,7 +973,7 @@ describe('FileBrowser', () => {
     expect(Array.from(document.querySelectorAll('.save-menu .popover-action')).map((node) => node.textContent)).toEqual([
       '保存',
       '保存副本…',
-      '保存并解包到文件夹…',
+      '解包到文件夹…',
     ])
     expect(document.querySelectorAll('.save-menu .popover-action.sidebar-row')).toHaveLength(3)
     expect(document.querySelectorAll('.save-menu .popover-action-label.sidebar-row-label')).toHaveLength(3)

@@ -20,6 +20,7 @@ export class BundleDirtyTracker {
   private documentDirty = false
   private dirtyFiles = new Set<string>()
   private commentsDirty = false
+  private baselineContents = new Map<string, string>()
 
   constructor(private readonly bundle: TacoBundle) {
     this.markSaved()
@@ -28,6 +29,22 @@ export class BundleDirtyTracker {
   isDirty(): boolean {
     return this.documentDirty || this.commentsDirty || this.dirtyFiles.size > 0
   }
+  getDirtyFileIds(): Set<string> {
+    return new Set(this.dirtyFiles)
+  }
+  getBaselineContent(id: string): string | undefined {
+    return this.baselineContents.get(id)
+  }
+
+
+  isDocumentDirty(): boolean {
+    return this.documentDirty
+  }
+
+  isCommentsDirty(): boolean {
+    return this.commentsDirty
+  }
+
 
   note(change: StoreChange): void {
     if (change.kind === 'all') {
@@ -54,6 +71,7 @@ export class BundleDirtyTracker {
     this.savedDocument = documentSignature(this.bundle)
     this.savedComments = commentsSignature(this.bundle)
     this.savedFiles = new Map(this.bundle.files.map((file) => [file.id ?? file.path, fileSignature(file)]))
+    this.baselineContents = new Map(this.bundle.files.map((file) => [file.id ?? file.path, file.content]))
     this.documentDirty = false
     this.commentsDirty = false
     this.dirtyFiles.clear()

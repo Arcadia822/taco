@@ -5,14 +5,48 @@ export const CenteredBlock = Node.create({
   group: 'block',
   content: 'block+',
   defining: true,
+  addAttributes() {
+    return {
+      rawHtml: {
+        default: null,
+        parseHTML: (element) => element.getAttribute('data-taco-raw-html'),
+        renderHTML: (attributes) => (attributes.rawHtml ? { 'data-taco-raw-html': attributes.rawHtml } : {}),
+      },
+    }
+  },
 
   parseHTML() {
     return [
-      { tag: 'div[align="center"]' },
-      { tag: 'div[data-taco-align="center"]' },
+      {
+        tag: 'div[align="center"]',
+        getAttrs: (node) => {
+          const element = node as HTMLElement
+          const rawAttr = element.getAttribute('data-taco-raw-html') || element.dataset.tacoRawHtml
+          let raw = rawAttr
+          if (raw && raw.startsWith('%')) {
+            try { raw = decodeURIComponent(raw) } catch {}
+          }
+          return {
+            rawHtml: raw || null,
+          }
+        },
+      },
+      {
+        tag: 'div[data-taco-align="center"]',
+        getAttrs: (node) => {
+          const element = node as HTMLElement
+          const rawAttr = element.getAttribute('data-taco-raw-html') || element.dataset.tacoRawHtml
+          let raw = rawAttr
+          if (raw && raw.startsWith('%')) {
+            try { raw = decodeURIComponent(raw) } catch {}
+          }
+          return {
+            rawHtml: raw || null,
+          }
+        },
+      },
     ]
   },
-
   renderHTML({ HTMLAttributes }) {
     return ['div', mergeAttributes(HTMLAttributes, {
       align: 'center',
@@ -20,8 +54,10 @@ export const CenteredBlock = Node.create({
       class: 'taco-centered-block',
     }), 0]
   },
-
   renderMarkdown(node, helpers) {
+    if (node.attrs?.rawHtml) {
+      return String(node.attrs.rawHtml)
+    }
     return `<div align="center">\n${helpers.renderChildren(node.content ?? [], '\n')}\n</div>`
   },
 })

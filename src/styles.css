@@ -89,6 +89,33 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .v2-button-group > :not(:last-child) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .save-group .save-more { border-left: 1px solid color-mix(in srgb, #fff 34%, transparent); }
 .save-group .save-more .ui-icon { width: 13px; height: 13px; }
+.copy-review-group .copy-review-main {
+  width: auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-2);
+  color: var(--ink);
+  padding: 0 10px;
+  position: relative;
+}
+.copy-review-group .copy-review-main.is-dirty {
+  color: var(--ink);
+}
+.copy-review-group .copy-review-main.is-dirty::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 5px;
+  height: 5px;
+  border: 1.5px solid var(--surface-2);
+  border-radius: 50%;
+  background: var(--accent);
+}
+.copy-review-group .copy-review-more { background: var(--surface-2); color: var(--ink); border-left: 1px solid var(--line); }
+.copy-review-group .copy-review-more .ui-icon { width: 13px; height: 13px; }
 .save-button { position: relative; }
 .save-button.is-dirty { color: #fff; }
 .save-button.is-dirty::after { content: ''; position: absolute; top: 4px; right: 4px; width: 5px; height: 5px; border: 1.5px solid var(--accent); border-radius: 50%; background: #fef3c7; }
@@ -906,6 +933,38 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .taco-toast.is-leaving { opacity: 0; transform: translate(-50%, calc(100% + 12px)); transition-duration: 140ms; }
 
 @starting-style {
+.popover-action .sidebar-row-leading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--sidebar-icon-size);
+  height: var(--sidebar-icon-size);
+}
+.popover-action .ui-icon {
+  width: var(--sidebar-icon-size);
+  height: var(--sidebar-icon-size);
+  color: var(--muted);
+}
+.popover-action.is-active .ui-icon {
+  color: var(--ink);
+}
+.lang-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink) 8%, var(--surface-2));
+  color: var(--muted);
+  font: 700 9px/1 var(--sans);
+  letter-spacing: -0.02em;
+  user-select: none;
+}
+.popover-action.is-active .lang-badge {
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface-2));
+  color: var(--accent-dark);
+}
   .topbar-popover { opacity: 0; transform: translateY(-4px) scale(.98); }
   .taco-toast { opacity: 0; transform: translate(-50%, calc(100% + 12px)); }
   .selection-comment-button { opacity: 0; transform: translateY(-4px) scale(.97); }

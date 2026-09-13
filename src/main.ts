@@ -13,6 +13,14 @@ export interface TacoFileApi {
   listFiles(): Array<{ path: string; mediaType: string; bytes: number }>
   readFile(path: string): TacoFile | null
   search(query: string): TacoFile[]
+  getReviewHandoff(): {
+    title: string
+    root: string
+    originPath: string | null
+    changedFiles: Array<{ path: string; mediaType: string; content: string; diff?: string }>
+    comments: unknown[]
+  }
+  fileHash?: (content: string, mediaType?: string) => string
 }
 
 const dismissSplash = (): void => {
@@ -40,7 +48,8 @@ function boot(bundle: TacoBundle): void {
   document.title = `${bundle.title} — Taco`
   const root = document.getElementById('app')
   if (!root) throw new Error('Taco root element is missing')
-  new FileBrowser(root, bundle)
+  const browser = new FileBrowser(root, bundle)
+  ;(window as unknown as { __browser: FileBrowser }).__browser = browser
   dismissSplashAfterPaint()
 
   window.taco = {
@@ -65,6 +74,16 @@ function boot(bundle: TacoBundle): void {
         .filter((file) => file.path.toLocaleLowerCase().includes(needle)
           || (file.mediaType !== 'image/png' && file.content.toLocaleLowerCase().includes(needle)))
         .map(credentialFreeFile)
+    },
+    getReviewHandoff: () => {
+      const changedFiles = browser.getModifiedReviewFiles()
+      return {
+        title: bundle.title,
+        root: bundle.root,
+        originPath: new URLSearchParams(location.search).get('origin_path') || null,
+        changedFiles,
+        comments: bundle.comments ?? [],
+      }
     },
   }
 }

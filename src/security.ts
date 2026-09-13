@@ -21,7 +21,7 @@ const EDITOR_TAGS = [
 
 const EDITOR_ATTRS = [
   'align', 'alt', 'checked', 'class', 'colspan', 'data-key', 'data-taco-align',
-  'data-bom', 'data-closed', 'data-eol', 'data-taco-block-id', 'data-taco-source', 'data-type', 'data-yaml', 'disabled', 'height', 'href', 'rel', 'rowspan',
+  'data-bom', 'data-closed', 'data-eol', 'data-taco-block-id', 'data-taco-raw-html', 'data-taco-source', 'data-type', 'data-yaml', 'disabled', 'height', 'href', 'rel', 'rowspan',
   'src', 'target', 'title', 'type', 'width',
 ]
 
@@ -72,6 +72,9 @@ const postProcessEditorHtml = (html: string): string => {
       element.setAttribute('src', attrs.src)
       if (attrs['data-taco-source']) element.dataset.tacoSource = attrs['data-taco-source']
       else delete element.dataset.tacoSource
+    }
+    if (element.hasAttribute('data-taco-raw-html')) {
+      element.dataset.tacoRawHtml = element.getAttribute('data-taco-raw-html') ?? ''
     }
     if (element instanceof HTMLInputElement) {
       if (element.type !== 'checkbox') element.remove()
