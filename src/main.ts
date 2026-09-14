@@ -49,7 +49,6 @@ function boot(bundle: TacoBundle): void {
   const root = document.getElementById('app')
   if (!root) throw new Error('Taco root element is missing')
   const browser = new FileBrowser(root, bundle)
-  ;(window as unknown as { __browser: FileBrowser }).__browser = browser
   dismissSplashAfterPaint()
 
   window.taco = {

@@ -932,7 +932,6 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .taco-toast { position: fixed; left: 50%; bottom: 26px; z-index: 100; padding: 9px 13px; border-radius: 8px; background: var(--ink); color: var(--surface); box-shadow: var(--shadow); font-size: 13px; opacity: 1; transform: translate(-50%, 0); transition: opacity 180ms var(--ease-out), transform 180ms var(--ease-out); }
 .taco-toast.is-leaving { opacity: 0; transform: translate(-50%, calc(100% + 12px)); transition-duration: 140ms; }
 
-@starting-style {
 .popover-action .sidebar-row-leading {
   display: flex;
   align-items: center;
@@ -965,6 +964,8 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
   background: color-mix(in srgb, var(--accent) 22%, var(--surface-2));
   color: var(--accent-dark);
 }
+
+@starting-style {
   .topbar-popover { opacity: 0; transform: translateY(-4px) scale(.98); }
   .taco-toast { opacity: 0; transform: translate(-50%, calc(100% + 12px)); }
   .selection-comment-button { opacity: 0; transform: translateY(-4px) scale(.97); }

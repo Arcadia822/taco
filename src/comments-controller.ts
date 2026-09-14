@@ -95,18 +95,6 @@ export class CommentsController {
     const end = target.selection ? blockStart + target.selection.end : textOffset(article, target.content, target.content.childNodes.length)
     if (end <= start) return
     const anchor = createTextAnchor(file.path, article.textContent ?? '', start, end)
-    if (target.language === 'mermaid') {
-      if (target.nodeId || target.nodeLabel) {
-        const label = target.nodeLabel && target.nodeLabel !== target.nodeId
-          ? `${target.nodeLabel} (${target.nodeId})`
-          : target.nodeId || target.nodeLabel
-        anchor.quote.exact = `${this.t.mermaidBlockReference} · 节点: ${label}`
-      } else if (target.lineNumber) {
-        anchor.quote.exact = `${this.t.mermaidBlockReference} · 行 ${target.lineNumber}: "${target.lineText?.trim() || ''}"`
-      } else {
-        anchor.quote.exact = this.t.mermaidBlockReference
-      }
-    }
     anchor.block = {
       id: target.blockId,
       type: 'codeBlock',

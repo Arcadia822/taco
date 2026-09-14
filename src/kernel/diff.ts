@@ -1,8 +1,237 @@
-export interface FileDiffHunk {
+/**
+ * Internal line diff representation.
+ */
+interface DiffChange {
+  type: 'same' | 'add' | 'del'
+  line: string
+  noNewline?: boolean
+}
+
+interface SplitResult {
+  lines: string[]
+  hasTrailingNewline: boolean
+}
+
+function splitLines(text: string): SplitResult {
+  if (text.length === 0) {
+    return { lines: [], hasTrailingNewline: false }
+  }
+  const hasTrailingNewline = text.endsWith('\n')
+  const stripped = hasTrailingNewline ? text.slice(0, -1) : text
+  const lines = stripped.split('\n')
+  return { lines, hasTrailingNewline }
+}
+
+type EditOp =
+  | { type: 'same'; aIdx: number; bIdx: number }
+  | { type: 'del'; aIdx: number }
+  | { type: 'add'; bIdx: number }
+
+/**
+ * Computes the length of LCS row-by-row using linear space O(m).
+ * Can traverse `a` and `b` in forward (reverse=false) or reverse (reverse=true) direction
+ * directly over the source arrays without allocating intermediate reversed copies.
+ */
+function lcsLengths(
+  a: string[],
+  aStart: number,
+  aEnd: number,
+  b: string[],
+  bStart: number,
+  bEnd: number,
+  reverse: boolean,
+): Int32Array {
+  const m = bEnd - bStart
+  let prev = new Int32Array(m + 1)
+  let curr = new Int32Array(m + 1)
+
+  const aCount = aEnd - aStart
+  for (let i = 0; i < aCount; i++) {
+    const aLine = reverse ? a[aEnd - 1 - i] : a[aStart + i]
+    for (let j = 0; j < m; j++) {
+      const bLine = reverse ? b[bEnd - 1 - j] : b[bStart + j]
+      if (aLine === bLine) {
+        curr[j + 1] = prev[j] + 1
+      } else {
+        const left = curr[j]
+        const up = prev[j + 1]
+        curr[j + 1] = left > up ? left : up
+      }
+    }
+    // Swap rows; curr[0] is always 0 and all curr[j+1] are overwritten on every iteration
+    const temp = prev
+    prev = curr
+    curr = temp
+  }
+
+  return prev
+}
+
+/**
+ * Hirschberg's linear-memory algorithm for finding the Longest Common Subsequence.
+ * Time complexity: O(n * m)
+ * Space complexity: O(m)
+ */
+function hirschberg(
+  a: string[],
+  aStart: number,
+  aEnd: number,
+  b: string[],
+  bStart: number,
+  bEnd: number,
+  ops: EditOp[],
+): void {
+  // Trim common prefix
+  while (aStart < aEnd && bStart < bEnd && a[aStart] === b[bStart]) {
+    ops.push({ type: 'same', aIdx: aStart, bIdx: bStart })
+    aStart++
+    bStart++
+  }
+
+  // Trim common suffix
+  let suffixCount = 0
+  while (aStart < aEnd && bStart < bEnd && a[aEnd - 1] === b[bEnd - 1]) {
+    suffixCount++
+    aEnd--
+    bEnd--
+  }
+
+  const n = aEnd - aStart
+  const m = bEnd - bStart
+
+  if (n === 0) {
+    for (let j = bStart; j < bEnd; j++) {
+      ops.push({ type: 'add', bIdx: j })
+    }
+  } else if (m === 0) {
+    for (let i = aStart; i < aEnd; i++) {
+      ops.push({ type: 'del', aIdx: i })
+    }
+  } else if (n === 1) {
+    const single = a[aStart]
+    let found = -1
+    for (let j = bStart; j < bEnd; j++) {
+      if (b[j] === single) {
+        found = j
+        break
+      }
+    }
+    if (found !== -1) {
+      for (let j = bStart; j < found; j++) {
+        ops.push({ type: 'add', bIdx: j })
+      }
+      ops.push({ type: 'same', aIdx: aStart, bIdx: found })
+      for (let j = found + 1; j < bEnd; j++) {
+        ops.push({ type: 'add', bIdx: j })
+      }
+    } else {
+      ops.push({ type: 'del', aIdx: aStart })
+      for (let j = bStart; j < bEnd; j++) {
+        ops.push({ type: 'add', bIdx: j })
+      }
+    }
+  } else {
+    // Split a in half
+    const midA = aStart + Math.floor(n / 2)
+
+    // Forward LCS from aStart..midA against bStart..bEnd
+    const scoreL = lcsLengths(a, aStart, midA, b, bStart, bEnd, false)
+
+    // Backward LCS from midA..aEnd against bStart..bEnd (in reverse without copying)
+    const scoreR = lcsLengths(a, midA, aEnd, b, bStart, bEnd, true)
+
+    // Find optimal split point in b: max(scoreL[j] + scoreR[m - j])
+    let maxVal = -1
+    let bestJ = 0
+    for (let j = 0; j <= m; j++) {
+      const total = scoreL[j] + scoreR[m - j]
+      if (total > maxVal) {
+        maxVal = total
+        bestJ = j
+      }
+    }
+
+    const midB = bStart + bestJ
+
+    // Conquer left and right
+    hirschberg(a, aStart, midA, b, bStart, midB, ops)
+    hirschberg(a, midA, aEnd, b, midB, bEnd, ops)
+  }
+
+  // Add back trimmed common suffix
+  for (let s = 0; s < suffixCount; s++) {
+    ops.push({ type: 'same', aIdx: aEnd + s, bIdx: bEnd + s })
+  }
+}
+
+/**
+ * Computes diff changes list with accurate trailing newline tracking.
+ */
+function computeDiffChanges(
+  oldLines: string[],
+  oldHasNewline: boolean,
+  newLines: string[],
+  newHasNewline: boolean,
+): DiffChange[] {
+  const ops: EditOp[] = []
+  hirschberg(oldLines, 0, oldLines.length, newLines, 0, newLines.length, ops)
+
+  const changes: DiffChange[] = []
+  const oldLen = oldLines.length
+  const newLen = newLines.length
+
+  for (const op of ops) {
+    if (op.type === 'same') {
+      const isLastOld = op.aIdx === oldLen - 1
+      const isLastNew = op.bIdx === newLen - 1
+
+      const oldEofNoNewline = isLastOld && !oldHasNewline
+      const newEofNoNewline = isLastNew && !newHasNewline
+
+      if (oldEofNoNewline !== newEofNoNewline) {
+        // Newline status differs at EOF for this line!
+        changes.push({
+          type: 'del',
+          line: oldLines[op.aIdx],
+          noNewline: oldEofNoNewline,
+        })
+        changes.push({
+          type: 'add',
+          line: newLines[op.bIdx],
+          noNewline: newEofNoNewline,
+        })
+      } else {
+        changes.push({
+          type: 'same',
+          line: oldLines[op.aIdx],
+          noNewline: oldEofNoNewline,
+        })
+      }
+    } else if (op.type === 'del') {
+      const isLastOld = op.aIdx === oldLen - 1
+      changes.push({
+        type: 'del',
+        line: oldLines[op.aIdx],
+        noNewline: isLastOld && !oldHasNewline,
+      })
+    } else if (op.type === 'add') {
+      const isLastNew = op.bIdx === newLen - 1
+      changes.push({
+        type: 'add',
+        line: newLines[op.bIdx],
+        noNewline: isLastNew && !newHasNewline,
+      })
+    }
+  }
+
+  return changes
+}
+
+interface HunkRange {
   oldStart: number
-  oldLines: number
+  oldCount: number
   newStart: number
-  newLines: number
+  newCount: number
   lines: string[]
 }
 
@@ -10,57 +239,29 @@ export interface FileDiffHunk {
  * Computes a standard unified diff between two multi-line texts.
  */
 export function createUnifiedDiff(oldText: string, newText: string, path: string): string {
-  const oldLines = oldText.split('\n')
-  const newLines = newText.split('\n')
   if (oldText === newText) return ''
 
-  // LCS (Longest Common Subsequence) DP or Myers diff for lines
-  const n = oldLines.length
-  const m = newLines.length
+  const oldSplit = splitLines(oldText)
+  const newSplit = splitLines(newText)
 
-  // Build edit distance matrix for reasonable-sized files
-  const maxLines = 4000
-  if (n > maxLines || m > maxLines) {
-    // For very large files, return summary diff
-    return `--- a/${path}\n+++ b/${path}\n@@ -1,${n} +1,${m} @@\n- (file changed, ${n} lines replaced by ${m} lines)\n+ (file changed, ${n} lines replaced by ${m} lines)`
-  }
+  const diff = computeDiffChanges(
+    oldSplit.lines,
+    oldSplit.hasTrailingNewline,
+    newSplit.lines,
+    newSplit.hasTrailingNewline,
+  )
 
-  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0))
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < m; j++) {
-      if (oldLines[i] === newLines[j]) {
-        dp[i + 1][j + 1] = dp[i][j] + 1
-      } else {
-        dp[i + 1][j + 1] = Math.max(dp[i + 1][j], dp[i][j + 1])
-      }
-    }
-  }
-
-  // Backtrack to find diff edits
-  let i = n
-  let j = m
-  const diff: Array<{ type: 'same' | 'add' | 'del'; line: string }> = []
-  while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
-      diff.unshift({ type: 'same', line: oldLines[i - 1] })
-      i--
-      j--
-    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
-      diff.unshift({ type: 'add', line: newLines[j - 1] })
-      j--
-    } else if (i > 0 && (j === 0 || dp[i][j - 1] < dp[i - 1][j])) {
-      diff.unshift({ type: 'del', line: oldLines[i - 1] })
-      i--
-    }
-  }
-
-  // Group into hunks with 3 lines of context
   const context = 3
-  const hunks: string[] = []
+  const hunks: HunkRange[] = []
   let k = 0
 
+  // Incremental line number tracking across all hunks: O(diff.length) total
+  let oldLineNum = 1
+  let newLineNum = 1
+  let curPos = 0
+
   while (k < diff.length) {
-    // Find next edit
+    // Find next change
     while (k < diff.length && diff[k].type === 'same') k++
     if (k >= diff.length) break
 
@@ -82,39 +283,93 @@ export function createUnifiedDiff(oldText: string, newText: string, path: string
       }
     }
 
-    // Calculate line numbers for hunk
-    let oldLineNum = 1
-    for (let p = 0; p < start; p++) {
-      if (diff[p].type !== 'add') oldLineNum++
+    // Advance line numbers incrementally from curPos to start
+    while (curPos < start) {
+      const t = diff[curPos].type
+      if (t !== 'add') oldLineNum++
+      if (t !== 'del') newLineNum++
+      curPos++
     }
-    let newLineNum = 1
-    for (let p = 0; p < start; p++) {
-      if (diff[p].type !== 'del') newLineNum++
-    }
+
+    const hunkOldStartLine = oldLineNum
+    const hunkNewLineStartLine = newLineNum
 
     const hunkLines: string[] = []
-    let oldHunkCount = 0
-    let newHunkCount = 0
+    let oldCount = 0
+    let newCount = 0
 
-    for (let p = start; p < end; p++) {
-      const item = diff[p]
-      if (item.type === 'same') {
-        hunkLines.push(` ${item.line}`)
-        oldHunkCount++
-        newHunkCount++
-      } else if (item.type === 'del') {
-        hunkLines.push(`-${item.line}`)
-        oldHunkCount++
-      } else if (item.type === 'add') {
-        hunkLines.push(`+${item.line}`)
-        newHunkCount++
+    // Group consecutive edits into del and add blocks so all deletions come before additions
+    let p = start
+    while (p < end) {
+      if (diff[p].type === 'same') {
+        hunkLines.push(` ${diff[p].line}`)
+        oldCount++
+        newCount++
+        if (diff[p].noNewline) {
+          hunkLines.push('\\ No newline at end of file')
+        }
+        p++
+      } else {
+        // Collect consecutive diff edits
+        const delItems: DiffChange[] = []
+        const addItems: DiffChange[] = []
+        while (p < end && diff[p].type !== 'same') {
+          if (diff[p].type === 'del') {
+            delItems.push(diff[p])
+          } else if (diff[p].type === 'add') {
+            addItems.push(diff[p])
+          }
+          p++
+        }
+        // Output deletions first
+        for (const item of delItems) {
+          hunkLines.push(`-${item.line}`)
+          oldCount++
+        }
+        if (delItems.length > 0 && delItems[delItems.length - 1].noNewline) {
+          hunkLines.push('\\ No newline at end of file')
+        }
+        // Output additions next
+        for (const item of addItems) {
+          hunkLines.push(`+${item.line}`)
+          newCount++
+        }
+        if (addItems.length > 0 && addItems[addItems.length - 1].noNewline) {
+          hunkLines.push('\\ No newline at end of file')
+        }
       }
     }
 
-    hunks.push(`@@ -${oldLineNum},${oldHunkCount} +${newLineNum},${newHunkCount} @@\n${hunkLines.join('\n')}`)
+    // Advance line numbers across this hunk (start to end)
+    while (curPos < end) {
+      const t = diff[curPos].type
+      if (t !== 'add') oldLineNum++
+      if (t !== 'del') newLineNum++
+      curPos++
+    }
+
+    // Standard patch convention: if count is 0, start is line before, or 0 if start was line 1
+    const oldStart = oldCount === 0 ? (hunkOldStartLine === 1 ? 0 : hunkOldStartLine - 1) : hunkOldStartLine
+    const newStart = newCount === 0 ? (hunkNewLineStartLine === 1 ? 0 : hunkNewLineStartLine - 1) : hunkNewLineStartLine
+
+    hunks.push({
+      oldStart,
+      oldCount,
+      newStart,
+      newCount,
+      lines: hunkLines,
+    })
+
     k = end
   }
 
   if (hunks.length === 0) return ''
-  return `--- a/${path}\n+++ b/${path}\n${hunks.join('\n')}`
+
+  const formattedHunks = hunks.map((hunk) => {
+    const oldPart = hunk.oldCount === 1 ? `${hunk.oldStart}` : `${hunk.oldStart},${hunk.oldCount}`
+    const newPart = hunk.newCount === 1 ? `${hunk.newStart}` : `${hunk.newStart},${hunk.newCount}`
+    return `@@ -${oldPart} +${newPart} @@\n${hunk.lines.join('\n')}`
+  })
+
+  return `--- a/${path}\n+++ b/${path}\n${formattedHunks.join('\n')}\n`
 }

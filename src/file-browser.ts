@@ -626,12 +626,6 @@ export class FileBrowser {
       onCodeBlockComment: (target) => this.comments.startCodeBlockComment(editorHost, file, target),
     })
     const hasBlocks = Boolean(file.blocks?.length)
-    if (file.content.startsWith('<div align="center">') && hasBlocks && file.blocks?.[0]?.type === 'centeredBlock') {
-      const match = file.content.match(/^<div align="center">[\s\S]*?<\/div>/)
-      if (match && !file.blocks[0].html.includes('data-taco-raw-html')) {
-        file.blocks[0].html = file.blocks[0].html.replace(/^<div\b/, `<div data-taco-raw-html="${encodeURIComponent(match[0])}"`)
-      }
-    }
     let mounting = true
     let editor: Editor | undefined
     try {
@@ -884,7 +878,7 @@ export class FileBrowser {
       this.applyingRemoteEditor = true
       try {
         this.markdownEditor.commands.setContent(blockHtml(this.selected.blocks) || '<p></p>', { emitUpdate: false, parseOptions: { preserveWhitespace: 'full' } })
-        this.selected.content = this.markdownEditor.getMarkdown()
+        this.selected.content = this.markdownReconstructor.reconstruct(this.markdownEditor)
         const title = frontmatterTitle(this.selected.content)
         if (title) this.selected.title = title
         else if (parseFrontmatter(this.selected.content).kind === 'valid') delete this.selected.title
@@ -1078,18 +1072,24 @@ export class FileBrowser {
 
   private async copyReviewFull(): Promise<void> {
     const changedFiles = this.getModifiedReviewFiles()
-    const comments = (this.bundle.comments ?? []).map((c) => {
+    const comments = (this.bundle.comments ?? []).filter((c) => c.status === 'open').map((c) => {
       let location = c.anchor.path
+      let quote = c.anchor.quote.exact
       if (c.anchor.block) {
         const b = c.anchor.block
         if (b.language === 'mermaid') {
           if (b.nodeId || b.nodeLabel) {
-            const label = `${b.nodeLabel || ''}${b.nodeId && b.nodeId !== b.nodeLabel ? ` [${b.nodeId}]` : ''}`
+            const label = b.nodeLabel && b.nodeId && b.nodeLabel !== b.nodeId
+              ? `${b.nodeLabel} [${b.nodeId}]`
+              : b.nodeLabel || b.nodeId!
+            quote = label
             location += ` (${this.t.handoffMermaidNode(label)})`
           } else if (b.lineNumber) {
             location += ` (${this.t.handoffMermaidLine(b.lineNumber)})`
+            quote = b.lineText ?? this.t.handoffMermaidLine(b.lineNumber)
           } else {
             location += ` (${this.t.handoffMermaidDiagram})`
+            quote = this.t.handoffMermaidDiagram
           }
         } else if (b.language) {
           location += ` (${this.t.handoffCodeBlock(b.language)})`
@@ -1099,11 +1099,11 @@ export class FileBrowser {
         id: c.id,
         path: c.anchor.path,
         location,
-        quote: c.anchor.quote.exact,
+        quote,
         status: c.status,
-        messages: c.messages.filter((m) => !m.deletedAt).map((m) => ({
+        messages: c.messages.map((m) => ({
           author: m.author,
-          body: m.body,
+          body: m.deletedAt ? this.t.messageDeleted : m.body,
           createdAt: m.createdAt,
         })),
       }
@@ -1130,7 +1130,8 @@ export class FileBrowser {
     ].filter(Boolean).join('\n')
     const text = prompt
     try {
-      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text)
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable')
+      await navigator.clipboard.writeText(text)
       this.toast(this.t.reviewCopied)
       setButtonIcon(this.copyButton, 'check')
       if (this.copyFeedbackTimer !== null) window.clearTimeout(this.copyFeedbackTimer)
@@ -1155,7 +1156,8 @@ export class FileBrowser {
     ].filter(Boolean).join('\n')
 
     try {
-      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(prompt)
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable')
+      await navigator.clipboard.writeText(prompt)
       this.toast(this.t.reviewCopied)
       setButtonIcon(this.copyButton, 'check')
       if (this.copyFeedbackTimer !== null) window.clearTimeout(this.copyFeedbackTimer)

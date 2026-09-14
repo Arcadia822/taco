@@ -1,68 +1,124 @@
-import { type Editor } from '@tiptap/core'
+import type { Editor } from '@tiptap/core'
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { partitionMarkdownBlocks } from './markdown-block-partitioner.ts'
 
-export interface BlockBaseline {
-  id: string
+interface BlockBaseline {
+  nodes: ProseMirrorNode[]
+  index: number
   raw: string
   spaceAfter: string
-  initialJson: string
+  nextId: string | undefined
 }
 
 export class MarkdownBlockReconstructor {
   private baselines = new Map<string, BlockBaseline>()
+  private definitions: Array<{ raw: string; index: number }> = []
+  private original = ''
+  private initialDoc: ProseMirrorNode | null = null
+  private eol = '\n'
 
-  /**
-   * Initializes block baselines from the file's original text and the mounted editor.
-   */
   init(content: string, editor: Editor): void {
-    const partitioned = partitionMarkdownBlocks(content)
+    this.original = content
+    this.initialDoc = editor.state.doc
+    this.eol = content.match(/\r\n|\r|\n/)?.[0] ?? '\n'
     this.baselines.clear()
+    this.definitions = []
+    const partitioned = partitionMarkdownBlocks(content)
+    const nodes: ProseMirrorNode[] = []
+    editor.state.doc.forEach((node) => { nodes.push(node) })
+    let index = 0
 
-    const doc = editor.state.doc
-    if (doc.childCount === partitioned.length) {
-      doc.forEach((node, _offset, index) => {
-        const id = String(node.attrs.tacoBlockId ?? `block-${index}`)
-        const p = partitioned[index]
-        this.baselines.set(id, {
-          id,
-          raw: p.raw,
-          spaceAfter: p.spaceAfter,
-          initialJson: JSON.stringify(node.toJSON()),
-        })
-      })
-    }
-  }
-
-  /**
-   * Reconstructs the full markdown document by preserving the EXACT original raw text of
-   * unchanged blocks, and only reserializing blocks that were actually modified or added.
-   */
-  reconstruct(editor: Editor): string {
-    const doc = editor.state.doc
-    const manager = (editor.storage as unknown as { markdown?: { manager?: { renderNodes: (nodes: unknown[]) => string } } })?.markdown?.manager
-
-    if (!this.baselines.size || !manager) {
-      return editor.getMarkdown()
-    }
-
-    const pieces: string[] = []
-    doc.forEach((node, _offset, index) => {
-      const id = String(node.attrs.tacoBlockId ?? '')
-      const baseline = id ? this.baselines.get(id) : undefined
-      const currentJson = JSON.stringify(node.toJSON())
-
-      if (baseline && baseline.initialJson === currentJson) {
-        // This block is 100% untouched by the user: use its exact original raw bytes!
-        pieces.push(baseline.raw + baseline.spaceAfter)
+    for (const block of partitioned) {
+      if (block.type === 'def') {
+        this.definitions.push({ raw: block.raw + block.spaceAfter, index })
+        continue
+      }
+      if (block.type === 'unmapped') { this.baselines.clear(); return }
+      // HTML and implicit blank paragraphs may produce more than one editor node.
+      const parsed = editor.storage.markdown.manager.parse(block.raw.replace(/(?:\r\n|\r|\n)+$/, '')).content ?? []
+      let count = parsed.length
+      const group = nodes.slice(index, index + count)
+      if (!count || group.length !== count || group.some((node, i) => node.type.name !== parsed[i].type)) {
+        this.baselines.clear()
         return
       }
+      while (nodes[index + count]?.type.name === 'paragraph' && nodes[index + count].childCount === 0) {
+        group.push(nodes[index + count])
+        count++
+      }
+      const baseline = { nodes: group, index, raw: block.raw, spaceAfter: block.spaceAfter, nextId: nodes[index + count]?.attrs.tacoBlockId as string | undefined }
+      for (const node of group) {
+        const id = node.attrs.tacoBlockId
+        if (id) this.baselines.set(String(id), baseline)
+      }
+      index += count
+    }
+    if (index !== nodes.length) this.baselines.clear()
+  }
 
-      // Block was modified by user or is newly inserted:
-      const rendered = manager.renderNodes([node.toJSON()])
-      const separator = index < doc.childCount - 1 ? '\n\n' : ''
-      pieces.push(rendered.trim() + separator)
-    })
+  reconstruct(editor: Editor): string {
+    const doc = editor.state.doc
+    // Even an unsupported block mapping must not create a diff on no-op or undo.
+    if (this.initialDoc?.eq(doc)) return this.original
+    if (!this.baselines.size) {
+      const markdown = editor.getMarkdown()
+      return this.definitions.length
+        ? markdown.replace(/(?:\r\n|\r|\n)+$/, '') + this.eol.repeat(2) + this.definitions.map((definition) => definition.raw).join('')
+        : markdown
+    }
 
+    const nodes: ProseMirrorNode[] = []
+    doc.forEach((node) => { nodes.push(node) })
+    const pieces: string[] = []
+    let index = 0
+    let definitionIndex = 0
+    let previousBaseline: BlockBaseline | undefined
+    let previousShapeChanged = false
+    const separate = (): void => {
+      if (!pieces.length) return
+      const last = pieces.length - 1
+      const endings = pieces[last].match(/(?:\r\n|\r|\n)+$/)?.[0] ?? ''
+      const count = endings.match(/\r\n|\r|\n/g)?.length ?? 0
+      if (count < 2) pieces[last] += this.eol.repeat(2 - count)
+    }
+    while (index < nodes.length) {
+      const baseline = this.baselines.get(String(nodes[index].attrs.tacoBlockId ?? ''))
+      const group = [nodes[index++]]
+      if (baseline) {
+        while (index < nodes.length && this.baselines.get(String(nodes[index].attrs.tacoBlockId ?? '')) === baseline) {
+          group.push(nodes[index++])
+        }
+      }
+      // Reference definitions have no editor node and must outlive adjacent deletions.
+      while (definitionIndex < this.definitions.length && baseline
+        && this.definitions[definitionIndex].index <= baseline.index) {
+        separate()
+        pieces.push(this.definitions[definitionIndex++].raw)
+      }
+      const shapeChanged = !baseline || baseline.nodes.length !== group.length
+        || group.some((node, i) => node.type !== baseline.nodes[i].type)
+      if (pieces.length && (shapeChanged || previousShapeChanged
+        || previousBaseline?.nextId !== group[0].attrs.tacoBlockId)) separate()
+      const unchanged = baseline && baseline.nodes.length === group.length
+        && group.every((node, i) => node.eq(baseline.nodes[i]))
+      let piece: string
+      if (unchanged) {
+        piece = baseline.raw + baseline.spaceAfter
+      } else {
+        const rendered = editor.storage.markdown.manager.serialize({ type: 'doc', content: group.map((node) => node.toJSON()) })
+        const prefix = baseline?.raw.match(/^(?:[ \t]*(?:\r\n|\r|\n))+/)?.[0] ?? ''
+        const trailing = baseline?.raw.match(/(?:\r\n|\r|\n)+$/)?.[0] ?? ''
+        piece = prefix + rendered.replace(/\n+$/, '').replace(/\r\n|\r|\n/g, this.eol)
+          + trailing + (baseline?.spaceAfter ?? '')
+      }
+      previousBaseline = baseline
+      previousShapeChanged = shapeChanged
+      pieces.push(piece)
+    }
+    while (definitionIndex < this.definitions.length) {
+      separate()
+      pieces.push(this.definitions[definitionIndex++].raw)
+    }
     return pieces.join('')
   }
 }

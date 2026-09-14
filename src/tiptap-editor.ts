@@ -120,7 +120,7 @@ const SafeImage = Image.extend({
 })
 
 export const createTacoEditorExtensions = (labels: MermaidPluginLabels, options: TacoEditorExtensionOptions = {}) => [
-  StarterKit.configure({ codeBlock: false, code: false, paragraph: false, link: false }),
+  StarterKit.configure({ codeBlock: false, code: false, paragraph: false, link: false, trailingNode: false }),
   Code.extend({ excludes: 'bold italic strike underline code' }),
   ImageParagraph,
   ImageLink,
@@ -139,26 +139,7 @@ export const createTacoEditorExtensions = (labels: MermaidPluginLabels, options:
   TableCell,
   TaskList,
   TaskItem.configure({ nested: true }),
-  Markdown.extend({
-    onCreate() {
-      const storage = this.editor.storage as unknown as { markdown?: { manager?: Record<string, unknown> } }
-      const manager = storage?.markdown?.manager
-      if (manager && !manager._patchedEncode) {
-        manager._patchedEncode = true
-        const origEncode = manager.encodeTextForMarkdown as (text: string, node: unknown, parentNode?: unknown) => string
-        manager.encodeTextForMarkdown = function (this: unknown, text: string, node: unknown, parentNode?: unknown) {
-          const encoded = origEncode.call(this, text, node, parentNode)
-          return encoded.replace(/&amp;/g, '&')
-        }
-        const origRenderNodes = manager.renderNodesWithMarkBoundaries as (...args: unknown[]) => string
-        manager.renderNodesWithMarkBoundaries = function (this: unknown, nodes: unknown[], parentNode?: unknown, separator?: string, level?: number) {
-          let rendered = origRenderNodes.call(this, nodes, parentNode, separator, level)
-          rendered = rendered.replace(/(?<!`)`(\*\*Key\*\*: value)`(?!`)/g, '``$1``')
-          return rendered
-        }
-      }
-    },
-  }).configure({ markedOptions: { gfm: true } }),
+  Markdown.configure({ markedOptions: { gfm: true } }),
 ]
 
 export const ensureTacoBlockIds = (editor: Editor, fileId: string, deterministic: boolean): boolean => {
@@ -237,13 +218,6 @@ export const migrateTacoBundleBlocks = (bundle: TacoBundle, labels: MermaidPlugi
       editor = new Editor({ extensions, content: file.content, contentType: 'markdown' })
       editor.state.doc.check()
       ensureTacoBlockIds(editor, file.id ?? file.path, true)
-      if (file.content.startsWith('<div align="center">')) {
-        const firstNode = editor.state.doc.firstChild
-        const match = file.content.match(/^<div align="center">[\s\S]*?<\/div>/)
-        if (firstNode && firstNode.type.name === 'centeredBlock' && match) {
-          editor.view.dispatch(editor.state.tr.setNodeMarkup(0, undefined, { ...firstNode.attrs, rawHtml: match[0] }))
-        }
-      }
       file.blocks = blocksFromEditor(editor, extensions)
     } catch (error) {
       failures.push({ path: file.path, message: error instanceof Error ? error.message : String(error) })

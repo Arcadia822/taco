@@ -7,47 +7,37 @@ export interface PartitionedBlock {
   spaceAfter: string
 }
 
-/**
- * Losslessly partitions a markdown document into top-level blocks.
- * `blocks.map(b => b.raw + b.spaceAfter).join('') === content` is strictly guaranteed.
- */
+/** Partition source bytes, not marked's newline-normalized token strings. */
 export function partitionMarkdownBlocks(content: string): PartitionedBlock[] {
-  let frontmatter = ''
-  let body = content
-  const fm = splitFrontmatter(content)
-  if (fm) {
-    frontmatter = fm.raw
-    body = content.slice(frontmatter.length)
-  }
+  const frontmatter = splitFrontmatter(content)?.raw ?? ''
+  const body = content.slice(frontmatter.length)
+  const blocks: PartitionedBlock[] = frontmatter
+    ? [{ type: 'documentProperties', raw: frontmatter, spaceAfter: '' }]
+    : []
+  let offset = 0
+  let leading = ''
 
-  const allTokens = marked.lexer(body)
-  const blocks: PartitionedBlock[] = []
-
-  if (frontmatter) {
-    blocks.push({
-      type: 'documentProperties',
-      raw: frontmatter,
-      spaceAfter: '',
-    })
-  }
-
-  for (let i = 0; i < allTokens.length; i++) {
-    const t = allTokens[i]
-    if (t.type === 'space') {
-      if (blocks.length > 0) {
-        blocks[blocks.length - 1].spaceAfter += t.raw
-      } else if (frontmatter) {
-        // leading space before first token
-        blocks[0].spaceAfter += t.raw
+  for (const token of marked.lexer(body)) {
+    const start = offset
+    for (const character of token.raw) {
+      if (character === '\n' && body[offset] === '\r') {
+        offset += body[offset + 1] === '\n' ? 2 : 1
+      } else {
+        // A lexer transformation other than newline normalization cannot be mapped safely.
+        if (!body.startsWith(character, offset)) return [{ type: 'unmapped', raw: content, spaceAfter: '' }]
+        offset += character.length
       }
-      continue
     }
-    blocks.push({
-      type: t.type,
-      raw: t.raw,
-      spaceAfter: '',
-    })
+    const raw = body.slice(start, offset)
+    if (token.type === 'space') {
+      if (blocks.length) blocks[blocks.length - 1].spaceAfter += raw
+      else leading += raw
+    } else {
+      blocks.push({ type: token.type, raw: leading + raw, spaceAfter: '' })
+      leading = ''
+    }
   }
-
+  if (offset !== body.length) return [{ type: 'unmapped', raw: content, spaceAfter: '' }]
+  if (leading) blocks.push({ type: 'space', raw: leading, spaceAfter: '' })
   return blocks
 }
