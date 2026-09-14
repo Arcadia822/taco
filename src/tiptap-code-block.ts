@@ -16,7 +16,6 @@ import {
   createMermaidPreview,
   defaultMermaidTheme,
   mermaidThemeForAppearance,
-  ensureMermaidConfig,
   extractMermaidDirectionFromCode,
   extractMermaidThemeFromCode,
   isMermaidDarkTheme,
@@ -171,6 +170,7 @@ export interface MermaidSplitViewController {
   setDirection: (direction: MermaidDirection) => void
   toggleCodePanel: (force?: boolean) => boolean
   isCodePanelOpen: () => boolean
+  setAllowCodePanel: (allowed: boolean) => void
   sourceEditor: SourceEditorController
   updateCode: (code: string) => void
 }
@@ -234,6 +234,7 @@ export const createMermaidSplitView = (
     runtime?: MermaidRuntime
     initialTheme?: MermaidTheme
     initialPanelOpen?: boolean
+    allowCodePanel?: boolean
     sourceEditor?: SourceEditorController
     readOnly?: boolean
     onChange?: (code: string) => void
@@ -245,6 +246,7 @@ export const createMermaidSplitView = (
     onComment?: (target: { nodeId?: string; nodeLabel?: string; lineNumber?: number; lineText?: string; selection?: SourceCommentRange; selectionEvent?: MouseEvent; sourceEditor?: SourceEditorController }) => void
   } = {},
 ): MermaidSplitViewController => {
+  let allowPanel = options.allowCodePanel ?? true
   let isPanelOpen = options.initialPanelOpen ?? false
   let liveUpdate = true
   let renderedCode = code
@@ -259,6 +261,12 @@ export const createMermaidSplitView = (
   codePanel.className = 'mermaid-floating-code-panel'
   codePanel.setAttribute('aria-label', labels.codePanel || labels.source)
   const toggleCodePanel = (force = !isPanelOpen): boolean => {
+    if (!allowPanel) {
+      isPanelOpen = false
+      codePanel.hidden = true
+      options.onPanelToggle?.(false)
+      return false
+    }
     isPanelOpen = force
     codePanel.hidden = !force
     options.onPanelToggle?.(force)
@@ -386,7 +394,9 @@ export const createMermaidSplitView = (
       previewHost.focusEdge(null)
       selected = { nodeId, nodeLabel }
       selectedElement = event.currentTarget as Element
-      toggleCodePanel(true)
+      if (allowPanel) {
+        toggleCodePanel(true)
+      }
       previewHost.focusNode(nodeId)
       const line = code === renderedCode ? lineMap.nodeToLines.get(nodeId)?.[0] : undefined
       sourceEditor.activateRange(line ? lineRange(line) : null)
@@ -481,6 +491,12 @@ export const createMermaidSplitView = (
     },
     toggleCodePanel,
     isCodePanelOpen: () => isPanelOpen,
+    setAllowCodePanel: (allowed: boolean) => {
+      allowPanel = allowed
+      if (!allowed && isPanelOpen) {
+        toggleCodePanel(false)
+      }
+    },
   }
 }
 
@@ -502,7 +518,6 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
       let mermaidUnavailable = false
       let feedbackTimer: number | undefined
       let destroyed = false
-      let configPrepared = false
 
       const dom = document.createElement('div')
       dom.className = 'tiptap-code-block'
@@ -664,6 +679,7 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
 
         const zoomSplit = splitController ?? createMermaidSplitView(currentNode.textContent, labels, {
           readOnly: !editor.isEditable,
+          allowCodePanel: true,
           onChange: (value) => {
             updateSource(value)
             zoomDirectionSelect.value = extractMermaidDirectionFromCode(value)
@@ -698,6 +714,7 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
           splitController = zoomSplit
           preview.replaceChildren(zoomSplit.element)
         }
+        zoomSplit.setAllowCodePanel(true)
         const syncZoomControls = (): void => {
           const value = zoomSplit.sourceEditor.input.value
           zoomThemeSelect.value = extractMermaidThemeFromCode(value) ?? defaultTheme
@@ -714,7 +731,7 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
         const inlineTranslation = diagram.style.translate
         diagram.style.scale = ''
         diagram.style.translate = ''
-        diagram.parentElement!.append(canvas)
+        stage.append(canvas)
         canvas.append(diagram)
 
         zoomThemeSelect.addEventListener('change', () => {
@@ -733,7 +750,6 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
           panelButton.classList.toggle('is-active', next)
           panelButton.setAttribute('aria-pressed', String(next))
         })
-
         controls.append(zoomThemeSelect, zoomDirectionSelect, zoomPanelButton, zoomOut, zoomLevel, zoomIn, reset, close)
         header.append(title, controls)
         dialog.append(header, zoomSplit.element)
@@ -797,6 +813,7 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
           stage.append(diagram)
           canvas.remove()
           preview.append(zoomSplit.element)
+          zoomSplit.setAllowCodePanel(false)
           zoomSplit.element.removeEventListener('input', syncZoomControls)
           zoomSplit.element.removeEventListener('click', syncZoomControls)
         }
@@ -845,7 +862,7 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
         const showMermaidTools = isMermaid && !mermaidUnavailable
         themeSelect.hidden = !showMermaidTools
         directionSelect.hidden = !showMermaidTools || !isMermaidDirectionSupported(code)
-        panelButton.hidden = !showMermaidTools
+        panelButton.hidden = true
         themeSelect.disabled = !editor.isEditable
         directionSelect.disabled = !editor.isEditable
         const codeDir = isMermaid ? extractMermaidDirectionFromCode(code) : undefined
@@ -863,27 +880,17 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
         paintLineNumbers(code)
 
         if (renderMermaid && isMermaid && !mermaidUnavailable && (code !== renderedMermaid || !splitController)) {
-          let renderCode = code
-          if (!configPrepared && editor.isEditable) {
-            configPrepared = true
-            renderCode = ensureMermaidConfig(code, currentTheme)
-            if (renderCode !== code) {
-              queueMicrotask(() => {
-                if (!destroyed && !editor.isDestroyed && currentNode.textContent === code) updateSource(renderCode)
-              })
-            }
-          }
-          renderedMermaid = renderCode
+          renderedMermaid = code
           if (splitController) {
-            splitController.updateCode(renderCode)
+            splitController.updateCode(code)
             return
           }
-          splitController = createMermaidSplitView(renderCode, labels, {
+          splitController = createMermaidSplitView(code, labels, {
             readOnly: !editor.isEditable,
             onChange: updateSource,
             runtime: mermaidRuntime,
+            allowCodePanel: false,
             initialTheme: currentTheme,
-            initialPanelOpen: codePanelVisible,
             onUnavailable: () => {
               if (destroyed || String(currentNode.attrs.language).toLowerCase() !== 'mermaid') return
               mermaidUnavailable = true

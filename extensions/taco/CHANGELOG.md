@@ -2,10 +2,16 @@
 
 ## Unreleased
 
+- Preserve reference definitions when adjacent Markdown blocks are deleted, and retain paragraph boundaries when changing block types.
+- Include only open requests in copied handoffs, retaining deleted-message placeholders as history. Report unavailable or denied clipboard writes as failures.
+- Preserve untouched Markdown blocks, original line endings, and source spacing during review edits and undo; persist edits inside centered HTML rather than restoring stale source.
+- Generate applicable unified diffs for empty files, missing final newlines, and large documents without a quadratic-memory matrix. Saving resets the handoff diff baseline.
+- Keep enlarged Mermaid source-panel visibility and theme controls synchronized; opening or closing the panel does not edit source. Restore language badge styles outside animation-only rules.
+- Scope handoff comment quotes to the selected Mermaid node, source line, or diagram label without altering stored anchors. Direction-only edits preserve raw source and do not persist renderer-default configuration.
 - Upgrade Mermaid to 12.0.0 with ELK layout and native theme paint preserved by a scoped SVG/CSS sanitizer.
 - Unify standalone Mermaid into a full-width diagram view with an editable, syntax-highlighted floating source card in normal and enlarged views.
 - Focus diagram nodes and matching source without opening a composer; an anchored node toolbar and the existing source-selection action create comments explicitly.
-- Store Mermaid configuration in YAML frontmatter; default to `redux` in Taco light mode and `redux-dark` in dark mode when opening unconfigured diagrams. Preserve explicit themes and migrate valid init directives without losing custom settings. Theme and outer direction controls preserve nested directions and explicit layout choices.
+- Render unconfigured Mermaid diagrams with `redux` in Taco light mode and `redux-dark` in dark mode without rewriting source merely by opening them. Explicit theme and direction changes preserve custom settings, nested directions, and layout choices.
 - Highlight diagram edges with both endpoints, preserve native theme colors, and add subtle node shadows. Ordinary wheel input scrolls; Command-wheel zooms diagrams; left-drag pans without clearing selection.
 - Restore Redux Color and Redux Dark Color node fills from Mermaid's palettes, strengthen hover/selection paint, and replace rectangular focus outlines with shape-following feedback.
 - Add a live-update switch and manual refresh to the source header. Pausing retains source edits, and fullscreen reuses the same editor and paused preview.

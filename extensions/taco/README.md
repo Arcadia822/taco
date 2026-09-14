@@ -63,6 +63,8 @@ speckit.taco.review [path-to-file.taco.html]
 
 `review` previews a saved Taco import, imports conflict-free direct edits, gives every open comment and its complete history to the Agent, and requires the Agent to edit canonical files before invoking `update` on the same Taco. The refreshed Taco is then exposed through the same native clickable-file presentation step.
 
+The browser's Handoff action copies text diffs since the latest save and open comment threads, retaining deleted-message placeholders as history. Resolved threads are not replayed as requests. If clipboard access is unavailable or denied, either handoff action reports failure rather than claiming the text was copied. Saving resets the handoff diff baseline; canonical import still uses the conflict-safe `review` flow above.
+
 ## Installed CLI
 
 The same deterministic operations are available without an Agent:

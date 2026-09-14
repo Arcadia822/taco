@@ -120,7 +120,7 @@ const SafeImage = Image.extend({
 })
 
 export const createTacoEditorExtensions = (labels: MermaidPluginLabels, options: TacoEditorExtensionOptions = {}) => [
-  StarterKit.configure({ codeBlock: false, code: false, paragraph: false, link: false }),
+  StarterKit.configure({ codeBlock: false, code: false, paragraph: false, link: false, trailingNode: false }),
   Code.extend({ excludes: 'bold italic strike underline code' }),
   ImageParagraph,
   ImageLink,

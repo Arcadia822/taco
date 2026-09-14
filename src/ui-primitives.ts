@@ -2,8 +2,10 @@ import { fileKind, fileName, type TacoFile } from './model.ts'
 
 export type IconName =
   | 'braces'
+  | 'check'
   | 'chevron-down'
   | 'chevron-right'
+  | 'copy'
   | 'file'
   | 'file-code'
   | 'file-text'
@@ -11,6 +13,7 @@ export type IconName =
   | 'folder-open'
   | 'globe'
   | 'external-link'
+  | 'monitor'
   | 'eye'
   | 'message-square'
   | 'moon'
@@ -29,7 +32,9 @@ export type IconName =
 
 const iconPaths: Record<IconName, string> = {
   braces: '<path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/>',
+  check: '<path d="m20 6-11 11-5-5"/>',
   'chevron-down': '<path d="m6 9 6 6 6-6"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
   'chevron-right': '<path d="m9 18 6-6-6-6"/>',
   file: '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z"/><polyline points="14 2 14 8 20 8"/>',
   'file-code': '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z"/><polyline points="14 2 14 8 20 8"/><path d="m10 13-2 2 2 2"/><path d="m14 17 2-2-2-2"/>',
@@ -38,6 +43,7 @@ const iconPaths: Record<IconName, string> = {
   eye: '<path d="M2.1 12a10.6 10.6 0 0 1 19.8 0 10.6 10.6 0 0 1-19.8 0"/><circle cx="12" cy="12" r="3"/>',
   folder: '<path d="M20 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2Z"/>',
   'folder-open': '<path d="m6 14 1.5-3h12.2a2 2 0 0 1 1.8 2.9l-2 4A2 2 0 0 1 17.7 19H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v2"/>',
+  monitor: '<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a15 15 0 0 1 0 18"/><path d="M12 3a15 15 0 0 0 0 18"/>',
   'message-square': '<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/>',
   moon: '<path d="M20.9 13a9 9 0 0 1-9.9-9.9A9 9 0 1 0 20.9 13Z"/>',

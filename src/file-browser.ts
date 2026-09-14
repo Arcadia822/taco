@@ -39,6 +39,8 @@ import type { MermaidRuntime } from './mermaid.ts'
 import { CommentsController } from './comments-controller.ts'
 import { joinFromDoc } from './sync/online.ts'
 import { LOCALE_CHOICES, copy, resolveLocale, type Locale } from './i18n.ts'
+import { createUnifiedDiff } from './kernel/diff.ts'
+import { MarkdownBlockReconstructor } from './markdown-block-reconstructor.ts'
 import { OutlineController } from './outline-controller.ts'
 import { PresenceController } from './presence-controller.ts'
 import { ShareController } from './share-controller.ts'
@@ -87,6 +89,7 @@ export class FileBrowser {
   private workspacePath!: HTMLElement
   private readonly markdownMigrationErrors = new Map<string, string>()
   private markdownEditor: Editor | null = null
+  private readonly markdownReconstructor = new MarkdownBlockReconstructor()
   private sourceEditor: SourceEditorController | null = null
   private htmlPreviewUrl: string | null = null
   private editorMountSerial = 0
@@ -97,9 +100,12 @@ export class FileBrowser {
   private readonly outline: OutlineController
   private readonly presence: PresenceController
   private readonly share: ShareController
+  private copyFeedbackTimer: number | null = null
   private readonly dirtyTracker: BundleDirtyTracker
   private readonly cleanups: Array<() => void> = []
   private readonly narrowLayout: MediaQueryList
+  private copyButton!: HTMLButtonElement
+  private copyReviewGroup!: HTMLElement
   private readonly systemAppearance = window.matchMedia('(prefers-color-scheme: dark)')
   private themePreference: 'system' | 'light' | 'dark' = 'system'
   private readonly handleSystemAppearanceChange = (): void => {
@@ -125,6 +131,23 @@ export class FileBrowser {
     this.sidebarClosed = event.matches
     this.commentPanelOpen = !event.matches
     this.syncPanelToggles()
+  }
+
+  getModifiedReviewFiles(): Array<{ path: string; mediaType: string; content: string; diff?: string }> {
+    const dirtyIds = this.dirtyTracker.getDirtyFileIds()
+    return this.bundle.files
+      .filter((file) => dirtyIds.has(file.id ?? file.path))
+      .map((file) => {
+        const rel = relativePath(this.bundle, file)
+        const baseline = this.dirtyTracker.getBaselineContent(file.id ?? file.path) ?? ''
+        const diff = file.mediaType !== 'image/png' ? createUnifiedDiff(baseline, file.content, rel) : undefined
+        return {
+          path: rel,
+          mediaType: file.mediaType,
+          content: file.content,
+          ...(diff ? { diff } : {}),
+        }
+      })
   }
 
   constructor(private root: HTMLElement, private bundle: TacoBundle, private readonly options: FileBrowserOptions = {}) {
@@ -205,6 +228,8 @@ export class FileBrowser {
     }
     this.build()
     window.addEventListener('hashchange', this.handleHashChange)
+    this.dirtyTracker.markSaved()
+    this.syncDirtyState()
     document.addEventListener('keydown', this.handleDocumentKeyDown)
     window.addEventListener('resize', this.handleWindowResize)
     this.narrowLayout.addEventListener('change', this.handleNarrowLayoutChange)
@@ -290,25 +315,44 @@ export class FileBrowser {
     this.share.mount(share)
     const presenceStrip = el('div', 'presence-strip')
     this.presence.mount(presenceStrip)
+    this.copyButton = createControlButton('copy', this.t.copyReview, () => { void this.copyReviewFull() }, 'copy-review-main', false, false)
+    this.copyButton.classList.remove('control-button-icon')
+    this.copyButton.classList.add('control-button-with-label')
+    this.copyButton.setAttribute('aria-label', this.t.copyReview)
+    this.copyButton.title = this.t.copyReview
+    const copyLabel = el('span', 'button-label', this.t.copyReviewLabel)
+    this.copyButton.append(copyLabel)
+
+    const copyMore = createControlButton('chevron-down', this.t.copyReview, () => this.openCopyReviewMenu(copyMore), 'copy-review-more', false, true)
+    copyMore.setAttribute('aria-label', this.t.copyReview)
+    copyMore.title = this.t.copyReview
+    this.copyReviewGroup = el('div', 'copy-review-group v2-button-group')
+    this.copyReviewGroup.append(this.copyButton, copyMore)
+
     this.saveButton = createControlButton('save', this.t.save, () => { void this.handleSave('save') }, 'save-button', true, true)
     const saveMore = createControlButton('chevron-down', this.t.saveCopy, () => this.openSaveMenu(saveMore), 'save-more', false, true)
     const saveGroup = el('div', 'save-group v2-button-group')
     saveGroup.append(this.saveButton, saveMore)
     const language = createControlButton('globe', this.t.language, () => this.openLanguageMenu(language))
     const theme = createControlButton(
-      this.themePreference === 'system' ? 'presentation' : this.themePreference === 'dark' ? 'moon' : 'sun',
+      this.themePreference === 'system' ? 'monitor' : this.themePreference === 'dark' ? 'moon' : 'sun',
       this.t.mermaidTheme,
       () => {
         const menu = this.openPopover(theme, 'theme-menu')
+        const themeIcons: Record<'system' | 'light' | 'dark', Parameters<typeof svgIcon>[0]> = {
+          system: 'monitor',
+          light: 'sun',
+          dark: 'moon',
+        }
         for (const preference of ['system', 'light', 'dark'] as const) {
           const label = preference === 'system' ? this.t.systemTheme : preference === 'light' ? this.t.lightTheme : this.t.darkTheme
           menu.append(this.menuButton(label, () => {
             this.themePreference = preference
             storageSet('taco-theme', preference)
-            setButtonIcon(theme, preference === 'system' ? 'presentation' : preference === 'dark' ? 'moon' : 'sun')
+            setButtonIcon(theme, preference === 'system' ? 'monitor' : preference === 'dark' ? 'moon' : 'sun')
             this.applyAppearance()
             menu.remove()
-          }, { active: preference === this.themePreference }))
+          }, { active: preference === this.themePreference, icon: themeIcons[preference] }))
         }
       },
       'theme-toggle',
@@ -326,6 +370,7 @@ export class FileBrowser {
       presenceStrip,
       this.commentToggle,
       share,
+      this.copyReviewGroup,
       saveGroup,
       theme,
       language,
@@ -576,12 +621,12 @@ export class FileBrowser {
     const editorHost = el('div', 'tiptap-editor-host')
     shell.append(titleRow, editorHost)
     this.viewer.append(shell)
-
     const extensions = createTacoEditorExtensions(this.mermaidLabels(), {
       mermaidRuntime: this.options.mermaidRuntime,
       onCodeBlockComment: (target) => this.comments.startCodeBlockComment(editorHost, file, target),
     })
     const hasBlocks = Boolean(file.blocks?.length)
+    let mounting = true
     let editor: Editor | undefined
     try {
       editor = new Editor({
@@ -597,11 +642,14 @@ export class FileBrowser {
           },
         },
         onUpdate: ({ editor: activeEditor, transaction }) => {
+          if (mounting) return
           if (this.markdownEditor !== activeEditor || mountSerial !== this.editorMountSerial) return
           if (!transaction.docChanged) return
           if (this.applyingRemoteEditor) return
           if (ensureTacoBlockIds(activeEditor, file.id ?? file.path, false)) return
-          this.updateFileContent(file.path, activeEditor.getMarkdown(), blocksFromEditor(activeEditor, extensions))
+          const nextMarkdown = this.markdownReconstructor.reconstruct(activeEditor)
+          if (nextMarkdown === file.content) return
+          this.updateFileContent(file.path, nextMarkdown, blocksFromEditor(activeEditor, extensions))
           requestAnimationFrame(() => {
             resolveEmbeddedMarkdownAssets(editorHost, this.bundle, file)
             this.comments.refreshHighlights(editorHost)
@@ -613,17 +661,17 @@ export class FileBrowser {
         onFocus: ({ editor: activeEditor }) => this.presence.publish(activeEditor, true),
         onBlur: ({ editor: activeEditor }) => this.presence.publish(activeEditor, false),
       })
-      editor.state.doc.check()
       ensureTacoBlockIds(editor, file.id ?? file.path, !hasBlocks)
+      this.markdownEditor = editor
+      this.markdownReconstructor.init(file.content, editor)
+      if (!file.blocks?.length) {
+        file.blocks = blocksFromEditor(editor, extensions)
+      }
+      mounting = false
     } catch (error) {
       editor?.destroy()
       this.mountMarkdownFallback(editorHost, file, error instanceof Error ? error.message : String(error))
       return
-    }
-    this.markdownEditor = editor
-    if (!file.blocks?.length) {
-      file.blocks = blocksFromEditor(editor, extensions)
-      this.store.changed({ kind: 'file', fileId: file.id! })
     }
     requestAnimationFrame(() => {
       if (this.markdownEditor !== editor || mountSerial !== this.editorMountSerial) return
@@ -830,7 +878,7 @@ export class FileBrowser {
       this.applyingRemoteEditor = true
       try {
         this.markdownEditor.commands.setContent(blockHtml(this.selected.blocks) || '<p></p>', { emitUpdate: false, parseOptions: { preserveWhitespace: 'full' } })
-        this.selected.content = this.markdownEditor.getMarkdown()
+        this.selected.content = this.markdownReconstructor.reconstruct(this.markdownEditor)
         const title = frontmatterTitle(this.selected.content)
         if (title) this.selected.title = title
         else if (parseFrontmatter(this.selected.content).kind === 'valid') delete this.selected.title
@@ -926,6 +974,7 @@ export class FileBrowser {
     this.saveButton.classList.toggle('is-dirty', dirty)
     this.saveButton.title = dirty ? this.t.unsaved : this.t.save
     this.saveButton.setAttribute('aria-label', this.saveButton.title)
+    this.copyButton.classList.toggle('is-dirty', dirty)
   }
 
   private openPopover(anchor: HTMLElement, className: string): HTMLElement {
@@ -953,12 +1002,12 @@ export class FileBrowser {
   private menuButton(
     label: string,
     action: () => void | Promise<void>,
-    options: { active?: boolean; icon?: Parameters<typeof svgIcon>[0]; menuitem?: boolean } = {},
+    options: { active?: boolean; icon?: Parameters<typeof svgIcon>[0]; leading?: Element; menuitem?: boolean } = {},
   ): HTMLButtonElement {
     const check = options.active ? el('span', 'popover-check', '✓') : undefined
     const button = sidebarRow('button', {
       className: 'popover-action',
-      leading: options.icon ? svgIcon(options.icon) : undefined,
+      leading: options.leading ?? (options.icon ? svgIcon(options.icon) : undefined),
       label,
       labelClass: 'popover-action-label',
       trailing: check,
@@ -983,24 +1032,150 @@ export class FileBrowser {
 
   private openLanguageMenu(anchor: HTMLElement): void {
     const menu = this.openPopover(anchor, 'language-menu')
+    const langBadges: Record<string, string> = {
+      'zh-Hans': '简',
+      en: 'EN',
+      'zh-Hant': '繁',
+      ja: 'JA',
+      es: 'ES',
+      fr: 'FR',
+      de: 'DE',
+      it: 'IT',
+      pt: 'PT',
+    }
     for (const { code: locale, label } of LOCALE_CHOICES) {
+      const badge = el('span', 'lang-badge', langBadges[locale] || locale.slice(0, 2).toUpperCase())
       const button = this.menuButton(label, () => {
         this.locale = locale
         storageSet('taco-locale', locale)
         document.documentElement.lang = locale
         this.build()
         menu.remove()
-      }, { active: locale === this.locale })
+      }, { active: locale === this.locale, leading: badge })
       menu.append(button)
+    }
+  }
+
+  private openCopyReviewMenu(anchor: HTMLElement): void {
+    const menu = this.openPopover(anchor, 'copy-review-menu')
+    menu.append(
+      this.menuButton(this.t.copyAllChanges, () => {
+        menu.remove()
+        void this.copyReviewFull()
+      }, { icon: 'copy', menuitem: false }),
+      this.menuButton(this.t.copyTabInspect, () => {
+        menu.remove()
+        void this.copyReviewInspectPrompt()
+      }, { icon: 'eye', menuitem: false }),
+    )
+  }
+
+  private async copyReviewFull(): Promise<void> {
+    const changedFiles = this.getModifiedReviewFiles()
+    const comments = (this.bundle.comments ?? []).filter((c) => c.status === 'open').map((c) => {
+      let location = c.anchor.path
+      let quote = c.anchor.quote.exact
+      if (c.anchor.block) {
+        const b = c.anchor.block
+        if (b.language === 'mermaid') {
+          if (b.nodeId || b.nodeLabel) {
+            const label = b.nodeLabel && b.nodeId && b.nodeLabel !== b.nodeId
+              ? `${b.nodeLabel} [${b.nodeId}]`
+              : b.nodeLabel || b.nodeId!
+            quote = label
+            location += ` (${this.t.handoffMermaidNode(label)})`
+          } else if (b.lineNumber) {
+            location += ` (${this.t.handoffMermaidLine(b.lineNumber)})`
+            quote = b.lineText ?? this.t.handoffMermaidLine(b.lineNumber)
+          } else {
+            location += ` (${this.t.handoffMermaidDiagram})`
+            quote = this.t.handoffMermaidDiagram
+          }
+        } else if (b.language) {
+          location += ` (${this.t.handoffCodeBlock(b.language)})`
+        }
+      }
+      return {
+        id: c.id,
+        path: c.anchor.path,
+        location,
+        quote,
+        status: c.status,
+        messages: c.messages.map((m) => ({
+          author: m.author,
+          body: m.deletedAt ? this.t.messageDeleted : m.body,
+          createdAt: m.createdAt,
+        })),
+      }
+    })
+    if (changedFiles.length === 0 && comments.length === 0 && !this.dirtyTracker.isDirty()) {
+      this.toast(this.t.noReviewChanges)
+      return
+    }
+    const originPath = new URLSearchParams(location.search).get('origin_path')
+    const diffSections = changedFiles.map((f) => {
+      if (f.diff) return `\n### \`${f.path}\`\n\`\`\`diff\n${f.diff}\n\`\`\``
+      return `\n### \`${f.path}\`\n*${this.t.handoffBinaryNotice}*\n`
+    }).join('\n')
+    const commentSections = comments.map((c) => {
+      const msgs = c.messages.map((m) => `  - **${m.author}**: ${m.body}`).join('\n')
+      return `- [${c.location}] ${this.t.handoffQuoteLabel}: "${c.quote}"\n${msgs}`
+    }).join('\n\n')
+    const prompt = [
+      this.t.handoffIntro,
+      `- ${this.t.handoffDocTitle}: "${this.bundle.title}"`,
+      originPath ? `- ${this.t.handoffLocalPath}: ${originPath}` : '',
+      diffSections ? `\n## ${this.t.handoffDiffHeader}${diffSections}` : '',
+      commentSections ? `\n## ${this.t.handoffCommentsHeader}\n${commentSections}` : '',
+    ].filter(Boolean).join('\n')
+    const text = prompt
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable')
+      await navigator.clipboard.writeText(text)
+      this.toast(this.t.reviewCopied)
+      setButtonIcon(this.copyButton, 'check')
+      if (this.copyFeedbackTimer !== null) window.clearTimeout(this.copyFeedbackTimer)
+      this.copyFeedbackTimer = window.setTimeout(() => {
+        setButtonIcon(this.copyButton, 'copy')
+        this.copyFeedbackTimer = null
+      }, 1500)
+    } catch {
+      this.toast(this.t.copyFailed)
+    }
+  }
+  private async copyReviewInspectPrompt(): Promise<void> {
+    const title = document.title
+    const url = location.href
+    const originPath = new URLSearchParams(location.search).get('origin_path')
+    const prompt = [
+      this.t.handoffInspectIntro,
+      `- ${this.t.handoffPageTitle}: "${title}"`,
+      `- ${this.t.handoffTabUrl}: ${url}`,
+      originPath ? `- ${this.t.handoffLocalPath}: ${originPath}` : '',
+      this.t.handoffInspectAction,
+    ].filter(Boolean).join('\n')
+
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable')
+      await navigator.clipboard.writeText(prompt)
+      this.toast(this.t.reviewCopied)
+      setButtonIcon(this.copyButton, 'check')
+      if (this.copyFeedbackTimer !== null) window.clearTimeout(this.copyFeedbackTimer)
+      this.copyFeedbackTimer = window.setTimeout(() => {
+        setButtonIcon(this.copyButton, 'copy')
+        this.copyFeedbackTimer = null
+      }, 1500)
+    } catch {
+      this.toast(this.t.copyFailed)
     }
   }
 
   private openSaveMenu(anchor: HTMLElement): void {
     const menu = this.openPopover(anchor, 'save-menu')
     menu.append(
-      this.menuButton(this.t.save, () => { menu.remove(); void this.handleSave('save') }),
-      this.menuButton(this.t.saveCopy, () => { menu.remove(); void this.handleSave('copy') }),
-      this.menuButton(this.t.saveAndUnpack, () => { menu.remove(); void this.handleSave('unpack') }),
+      this.menuButton(this.t.save, () => { menu.remove(); void this.handleSave('save') }, { icon: 'save' }),
+      this.menuButton(this.t.saveCopy, () => { menu.remove(); void this.handleSave('copy') }, { icon: 'template' }),
+      this.menuButton(this.t.saveAndUnpack, () => { menu.remove(); void this.handleSave('unpack') }, { icon: 'folder-open' }),
     )
   }
 

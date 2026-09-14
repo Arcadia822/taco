@@ -4,7 +4,7 @@ import { FileBrowser } from '../src/file-browser.ts'
 import { configureApp } from '../src/kernel/app.ts'
 import { capturePristine } from '../src/kernel/save.ts'
 import { extractMermaidThemeFromCode, MermaidRuntime, type MermaidApi } from '../src/mermaid.ts'
-import type { TacoBundle } from '../src/model.ts'
+import type { TacoBundle, TacoTextAnchor } from '../src/model.ts'
 
 let mermaidLoader: ReturnType<typeof vi.fn>
 let mermaidInitialize: ReturnType<typeof vi.fn>
@@ -80,6 +80,137 @@ describe('FileBrowser', () => {
       configurable: true,
       value: vi.fn().mockReturnValue(document.body),
     })
+  })
+
+  it.each(['inline', 'zoom'] as const)('writes only the requested Mermaid direction from the %s control', async (surface) => {
+    const bundle = structuredClone(testBundle)
+    const source = 'flowchart LR\n  F["Save .taco.html"] --> G'
+    const original = `# Review\n\n\`\`\`mermaid\n${source}\n\`\`\``
+    bundle.files[0].content = original
+    const browser = new FileBrowser(document.getElementById('app')!, bundle, { mermaidRuntime })
+    await waitForEditor()
+    await vi.waitFor(() => expect(document.querySelector('.taco-mermaid-render svg')).not.toBeNull())
+    if (surface === 'zoom') document.querySelector<HTMLButtonElement>('.tiptap-code-block-zoom')!.click()
+    const host = document.querySelector(surface === 'zoom' ? '.mermaid-zoom-dialog' : '.tiptap-code-block')!
+    expect(host.querySelector<HTMLTextAreaElement>('.mermaid-floating-code-panel textarea')!.value).toBe(source)
+    const direction = host.querySelector<HTMLSelectElement>('.tiptap-code-block-direction-select')!
+    direction.value = 'TB'
+    direction.dispatchEvent(new Event('change', { bubbles: true }))
+    expect(bundle.files[0].content).toBe(original.replace('flowchart LR', 'flowchart TB'))
+    const diff = browser.getModifiedReviewFiles()[0].diff!
+    expect(diff).toContain('-flowchart LR\n+flowchart TB')
+    expect(diff).not.toContain('config:')
+    expect(diff).not.toContain('theme:')
+    const editor = (browser as unknown as { markdownEditor: { commands: { undo: () => boolean } } }).markdownEditor
+    editor.commands.undo()
+    expect(bundle.files[0].content).toBe(original)
+    expect(browser.getModifiedReviewFiles()).toEqual([])
+    browser.destroy()
+  })
+
+  it('copies scoped Mermaid comment references without rewriting stored anchors or document content', async () => {
+    const bundle = structuredClone(testBundle)
+    const source = '---\nconfig:\n  layout: elk\n  theme: redux-color\n---\nflowchart TB\n  E --> F["Save .taco.html"]\n  F --> G["Agent review"]'
+    const original = `# Review\n\n\`\`\`mermaid\n${source}\n\`\`\`\n\nReadable Markdown.`
+    bundle.files[0].content = original
+    const timestamp = '2026-09-14T00:00:00.000Z'
+    const targets: Array<{ block?: TacoTextAnchor['block']; quote: string }> = [
+      { block: { id: 'diagram', type: 'codeBlock', language: 'mermaid', nodeId: 'F', nodeLabel: 'Save .taco.html' }, quote: source },
+      { block: { id: 'diagram', type: 'codeBlock', language: 'mermaid', nodeId: 'G' }, quote: source },
+      { block: { id: 'diagram', type: 'codeBlock', language: 'mermaid', lineNumber: 9, lineText: '  F --> G["Agent review"]' }, quote: source },
+      { block: { id: 'diagram', type: 'codeBlock', language: 'mermaid' }, quote: source },
+      { block: undefined, quote: 'Readable Markdown.' },
+    ]
+    bundle.comments = targets.map((target, index) => ({
+      id: `thread-${index}`,
+      anchor: { path: bundle.files[0].path, quote: { exact: target.quote, prefix: '', suffix: '' }, position: { start: 0, end: target.quote.length }, ...(target.block ? { block: target.block } : {}) },
+      status: 'open',
+      messages: [{ id: `message-${index}`, author: 'Arcadia', body: '修改下文件名，改成x', createdAt: timestamp }],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }))
+    const anchors = structuredClone(bundle.comments.map((comment) => comment.anchor))
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    const browser = new FileBrowser(document.getElementById('app')!, bundle, { mermaidRuntime })
+    await waitForEditor()
+    document.querySelector<HTMLButtonElement>('.copy-review-main')!.click()
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    const prompt = writeText.mock.calls[0][0] as string
+    expect(prompt).toContain('引用: "Save .taco.html [F]"')
+    expect(prompt).toContain('引用: "G"')
+    expect(prompt).toContain('引用: "  F --> G["Agent review"]"')
+    expect(prompt).toContain('引用: "Mermaid 图表"')
+    expect(prompt).toContain('引用: "Readable Markdown."')
+    expect(prompt).toContain('**Arcadia**: 修改下文件名，改成x')
+    expect(prompt).not.toContain('flowchart TB')
+    expect(prompt).not.toContain('layout: elk')
+    expect(bundle.comments.map((comment) => comment.anchor)).toEqual(anchors)
+    expect(bundle.files[0].content).toBe(original)
+    expect(browser.getModifiedReviewFiles()).toEqual([])
+    browser.destroy()
+  })
+
+  it('hands off only open requests and preserves deleted-message history', async () => {
+    const bundle = structuredClone(testBundle)
+    const timestamp = '2026-09-14T00:00:00.000Z'
+    bundle.comments = ['open', 'resolved'].map((status, index) => ({
+      id: `thread-${index}`,
+      status: status as 'open' | 'resolved',
+      anchor: { path: bundle.files[0].path, quote: { exact: 'Product', prefix: '', suffix: '' }, position: { start: 0, end: 7 } },
+      messages: [{ id: `message-${index}`, author: 'Reviewer', body: index ? 'Already handled request' : 'Pending request', createdAt: timestamp }],
+      createdAt: timestamp, updatedAt: timestamp,
+    }))
+    bundle.comments[0].messages.unshift({ id: 'deleted', author: 'Reviewer', body: 'Withdrawn request', createdAt: timestamp, deletedAt: timestamp })
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    await waitForEditor()
+    document.querySelector<HTMLButtonElement>('.copy-review-main')!.click()
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    const prompt = writeText.mock.calls[0][0] as string
+    expect(prompt).toContain('Pending request')
+    expect(prompt).toContain('消息已删除')
+    expect(prompt).not.toContain('Already handled request')
+    expect(prompt).not.toContain('Withdrawn request')
+    expect(bundle.comments[1].status).toBe('resolved')
+    bundle.comments = [bundle.comments[1]]
+    document.querySelector<HTMLButtonElement>('.copy-review-main')!.click()
+    expect(writeText).toHaveBeenCalledTimes(1)
+    expect(document.querySelector('.taco-toast')?.textContent).toBe('暂无改动可复制')
+    browser.destroy()
+  })
+
+  it.each(['full', 'inspect'] as const)('reports unavailable or rejected clipboard writes for %s handoff', async (mode) => {
+    const bundle = structuredClone(testBundle)
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    await waitForEditor()
+    const title = document.querySelector<HTMLInputElement>('.bundle-title')!
+    title.value = 'Changed title'
+    title.dispatchEvent(new Event('input', { bubbles: true }))
+    const clickHandoff = () => {
+      if (mode === 'full') document.querySelector<HTMLButtonElement>('.copy-review-main')!.click()
+      else {
+        document.querySelector<HTMLButtonElement>('.copy-review-more')!.click()
+        document.querySelectorAll<HTMLButtonElement>('.copy-review-menu .popover-action')[1].click()
+      }
+    }
+    clickHandoff()
+    expect(document.querySelector('.taco-toast')?.textContent).toBe('无法复制链接')
+    expect(document.querySelector('.copy-review-main [data-icon="check"]')).toBeNull()
+    const writeText = vi.fn().mockRejectedValue(new Error('NotAllowedError'))
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    clickHandoff()
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    await Promise.resolve()
+    expect(document.querySelector('.taco-toast')?.textContent).toBe('无法复制链接')
+    expect(document.querySelector('.copy-review-main [data-icon="check"]')).toBeNull()
+    writeText.mockResolvedValue(undefined)
+    clickHandoff()
+    await vi.waitFor(() => expect(document.querySelector('.taco-toast')?.textContent).toBe('已复制给 Agent'))
+    expect(writeText).toHaveBeenCalledTimes(2)
+    expect(document.querySelector('.copy-review-main [data-icon="check"]')).not.toBeNull()
+    browser.destroy()
   })
 
   it('starts with linked README badges and inline images in another document', async () => {
@@ -487,6 +618,46 @@ describe('FileBrowser', () => {
     expect(Array.from(document.querySelectorAll('.outline-link')).map((node) => node.textContent)).toEqual(['Outcome'])
   })
 
+  it('keeps zoom source visibility and theme controls synchronized without opening-time edits', async () => {
+    const bundle = structuredClone(testBundle)
+    const original = '# Architecture\n\n```mermaid\nflowchart LR\n  A --> B\n```'
+    bundle.files[0].content = original
+    const browser = new FileBrowser(document.getElementById('app')!, bundle, { mermaidRuntime })
+    await waitForEditor()
+    await vi.waitFor(() => expect(document.querySelector('.taco-mermaid-render svg')).not.toBeNull())
+    expect(browser.getModifiedReviewFiles()).toEqual([])
+    document.querySelector<HTMLButtonElement>('.tiptap-code-block-zoom')!.click()
+    const toggle = document.querySelector<HTMLButtonElement>('.mermaid-zoom-panel')!
+    const panel = document.querySelector<HTMLElement>('.mermaid-zoom-dialog .mermaid-floating-code-panel')!
+    toggle.click()
+    expect(panel.hidden).toBe(false)
+    panel.click()
+    expect(toggle.getAttribute('aria-pressed')).toBe('true')
+    toggle.click()
+    expect(panel.hidden).toBe(true)
+    toggle.click()
+    panel.querySelector<HTMLButtonElement>('.mermaid-code-panel-close')!.click()
+    expect(panel.hidden).toBe(true)
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    expect(bundle.files[0].content).toBe(original)
+    expect(browser.getModifiedReviewFiles()).toEqual([])
+
+    const theme = document.querySelector<HTMLSelectElement>('.mermaid-zoom-theme-select')!
+    theme.value = 'neo'
+    theme.dispatchEvent(new Event('change', { bubbles: true }))
+    await vi.waitFor(() => expect(mermaidInitialize.mock.calls.some((call) => call[0]?.theme === 'neo')).toBe(true))
+    expect(browser.getModifiedReviewFiles()[0].diff).toContain('+  theme: neo')
+    const changed = bundle.files[0].content
+    toggle.click()
+    document.querySelector<HTMLButtonElement>('.mermaid-zoom-close')!.click()
+    await vi.waitFor(() => expect(document.querySelector('.mermaid-zoom-dialog')).toBeNull())
+    expect(document.querySelector<HTMLElement>('.mermaid-floating-code-panel')?.hidden).toBe(true)
+    document.querySelector<HTMLButtonElement>('.tiptap-code-block-zoom')!.click()
+    expect(document.querySelector<HTMLElement>('.mermaid-zoom-dialog .mermaid-floating-code-panel')?.hidden).toBe(true)
+    expect(bundle.files[0].content).toBe(changed)
+    browser.destroy()
+  })
+
   it('renders Mermaid fences as diagrams while preserving editable source', async () => {
     document.documentElement.style.setProperty('--accent', '#00875a')
     document.documentElement.style.setProperty('--doc-soft', '#f1f5f3')
@@ -535,12 +706,15 @@ describe('FileBrowser', () => {
 
     const panelToggle = activeBlock.querySelector<HTMLButtonElement>('.tiptap-code-block-panel')!
     expect(panelToggle).not.toBeNull()
+    expect(panelToggle.hidden).toBe(true)
     expect(activeBlock.querySelector<HTMLElement>('.mermaid-floating-code-panel')?.hidden).toBe(true)
-    panelToggle.click()
-    expect(activeBlock.querySelector<HTMLElement>('.mermaid-floating-code-panel')?.hidden).toBe(false)
-    expect(panelToggle.classList.contains('is-active')).toBe(true)
-
-    const floatingSource = activeBlock.querySelector<HTMLTextAreaElement>('.mermaid-floating-code-panel textarea')!
+    zoom.click()
+    expect(document.querySelector('.mermaid-zoom-dialog[open]')).not.toBeNull()
+    const zoomPanelToggle = document.querySelector<HTMLButtonElement>('.mermaid-zoom-panel')!
+    expect(zoomPanelToggle).not.toBeNull()
+    zoomPanelToggle.click()
+    expect(document.querySelector<HTMLElement>('.mermaid-zoom-dialog .mermaid-floating-code-panel')?.hidden).toBe(false)
+    const floatingSource = document.querySelector<HTMLTextAreaElement>('.mermaid-zoom-dialog .mermaid-floating-code-panel textarea')!
     const lineStart = floatingSource.value.indexOf('  Brief --> Plan')
     floatingSource.focus()
     floatingSource.setSelectionRange(lineStart, floatingSource.value.indexOf('\n', lineStart) === -1 ? floatingSource.value.length : floatingSource.value.indexOf('\n', lineStart))
@@ -552,7 +726,6 @@ describe('FileBrowser', () => {
     lineCommentInput.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     const expectedLine = floatingSource.value.slice(0, lineStart).split('\n').length
     expect(mermaidBundle.comments?.some((c) => c.anchor.block?.lineNumber === expectedLine)).toBe(true)
-    zoom.click()
     expect(document.querySelector('.mermaid-zoom-dialog[open]')).not.toBeNull()
     const zoomedDiagram = document.querySelector<HTMLElement>('.mermaid-zoom-canvas .taco-mermaid-render')!
     const zoomIn = document.querySelector<HTMLButtonElement>('.mermaid-zoom-in')!
@@ -630,7 +803,12 @@ describe('FileBrowser', () => {
     if (surface === 'standalone') document.querySelector<HTMLButtonElement>('[data-path$="diagram.mmd"]')!.click()
     else await waitForEditor()
     await vi.waitFor(() => expect(document.querySelector('.taco-mermaid-render svg')?.textContent).toBe('Old'))
-    document.querySelector<HTMLButtonElement>(surface === 'embedded' ? '.tiptap-code-block-panel' : '.standalone-mermaid-source')!.click()
+    if (surface === 'embedded') {
+      document.querySelector<HTMLButtonElement>('.tiptap-code-block-zoom')!.click()
+      document.querySelector<HTMLButtonElement>('.mermaid-zoom-panel')!.click()
+    } else {
+      document.querySelector<HTMLButtonElement>('.standalone-mermaid-source')!.click()
+    }
     const toggle = document.querySelector<HTMLInputElement>('.mermaid-live-update input')!
     toggle.click()
     const editor = document.querySelector<HTMLTextAreaElement>('.mermaid-floating-code-panel textarea')!
@@ -644,7 +822,9 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.taco-mermaid-render svg')?.textContent).toBe('Old')
     expect(editor.value).toContain('New --> End')
     expect(toggle.checked).toBe(false)
-    document.querySelector<HTMLButtonElement>(surface === 'embedded' ? '.tiptap-code-block-zoom' : '.standalone-mermaid-zoom')!.click()
+    if (surface === 'standalone') {
+      document.querySelector<HTMLButtonElement>('.standalone-mermaid-zoom')!.click()
+    }
     expect(document.querySelector<HTMLInputElement>('.mermaid-zoom-dialog .mermaid-live-update input')?.checked).toBe(false)
     expect(document.querySelector('.mermaid-zoom-canvas svg')?.textContent).toBe('Old')
     document.querySelector<HTMLButtonElement>('.mermaid-zoom-dialog .mermaid-refresh-preview')!.click()
@@ -814,6 +994,22 @@ describe('FileBrowser', () => {
     expect(editableBundle.files[0].content).toContain('title: Title from properties')
   })
 
+  it('preserves untouched Markdown while applying remote block updates', async () => {
+    const bundle = structuredClone(testBundle)
+    const original = '# Product\r\n\r\nReadable Markdown.\r\n\r\nUntouched & plain.\r\n'
+    bundle.files[0].content = original
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    await waitForEditor()
+    const remote = browser as unknown as { applyRemoteState: () => void }
+    remote.applyRemoteState()
+    expect(bundle.files[0].content).toBe(original)
+    const block = bundle.files[0].blocks!.find((item) => item.html.includes('Readable'))!
+    block.html = block.html.replace('Readable', 'Remote')
+    remote.applyRemoteState()
+    expect(bundle.files[0].content).toBe(original.replace('Readable', 'Remote'))
+    browser.destroy()
+  })
+
   it('clears the modified marker after an editor change is undone', async () => {
     const editableBundle = structuredClone(testBundle)
     const browser = new FileBrowser(document.getElementById('app')!, editableBundle)
@@ -823,11 +1019,13 @@ describe('FileBrowser', () => {
     }).markdownEditor
 
     expect(editor.commands.insertContent('Changed ')).toBe(true)
+    expect(browser.getModifiedReviewFiles()[0].diff).toContain('+')
     expect(editableBundle.files[0].content).not.toBe(testBundle.files[0].content)
     expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(true)
 
     expect(editor.commands.undo()).toBe(true)
     expect(editableBundle.files[0].content).toBe(testBundle.files[0].content)
+    expect(browser.getModifiedReviewFiles()).toEqual([])
     expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(false)
     expect(document.querySelector('.save-button')?.getAttribute('aria-label')).toBe('保存')
   })
@@ -841,7 +1039,11 @@ describe('FileBrowser', () => {
     capturePristine()
 
     const editableBundle = structuredClone(testBundle)
-    new FileBrowser(document.getElementById('app')!, editableBundle)
+    const browser = new FileBrowser(document.getElementById('app')!, editableBundle)
+    await waitForEditor()
+    const editor = (browser as unknown as { markdownEditor: { commands: { insertContent: (content: string) => boolean } } }).markdownEditor
+    editor.commands.insertContent('Review edit ')
+    expect(browser.getModifiedReviewFiles()[0].content).toContain('Review edit ')
     const title = document.querySelector<HTMLInputElement>('.workspace-header .bundle-title')!
     title.value = 'Download fallback'
     title.dispatchEvent(new Event('input', { bubbles: true }))
@@ -868,6 +1070,7 @@ describe('FileBrowser', () => {
     expect(downloadClick).toHaveBeenCalledTimes(1)
     expect(document.querySelector('.save-button .button-label')?.textContent).toBe('保存')
     expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(false)
+    expect(browser.getModifiedReviewFiles()).toEqual([])
   })
 
   it('keeps file collapse separate and makes the right panel permanent', () => {
@@ -919,7 +1122,7 @@ describe('FileBrowser', () => {
     expect(app.classList.contains('sidebar-closed')).toBe(true)
     document.querySelector<HTMLButtonElement>('.workspace-header [aria-label="语言"]')!.click()
     const english = Array.from(document.querySelectorAll<HTMLButtonElement>('.language-menu .popover-action'))
-      .find((button) => button.textContent === 'English')!
+      .find((button) => button.textContent?.includes('English'))!
     english.click()
 
     expect(app.classList.contains('sidebar-closed')).toBe(true)
@@ -955,6 +1158,7 @@ describe('FileBrowser', () => {
     new FileBrowser(document.getElementById('app')!, structuredClone(testBundle))
     expect(document.querySelector('.workspace-header .share-button')).not.toBeNull()
     expect(document.querySelector('.workspace-header .save-group.v2-button-group')).not.toBeNull()
+    expect(document.querySelector('.workspace-header .copy-review-group.v2-button-group')).not.toBeNull()
     expect(document.querySelector('.workspace-header .save-button')?.textContent).toContain('保存')
     expect(document.querySelector('.workspace-header [data-icon="globe"]')).not.toBeNull()
     expect(document.querySelector('.workspace-header [aria-label="帮助"]')).toBeNull()
@@ -963,7 +1167,7 @@ describe('FileBrowser', () => {
     expect(Array.from(document.querySelectorAll('.save-menu .popover-action')).map((node) => node.textContent)).toEqual([
       '保存',
       '保存副本…',
-      '保存并解包到文件夹…',
+      '解包到文件夹…',
     ])
     expect(document.querySelectorAll('.save-menu .popover-action.sidebar-row')).toHaveLength(3)
     expect(document.querySelectorAll('.save-menu .popover-action-label.sidebar-row-label')).toHaveLength(3)
