@@ -114,6 +114,7 @@ export class FileBrowser {
   private applyingRemoteEditor = false
   private sidebarClosed: boolean
   private commentPanelOpen: boolean
+  private desktopCommentPanelOpen: boolean
   private auxiliaryTab: AuxiliaryTab
   private sidebarScrollTop = 0
   private readonly stageOpenState = new Map<string, boolean>()
@@ -128,8 +129,9 @@ export class FileBrowser {
   private readonly handleDocumentKeyDown = (event: KeyboardEvent): void => this.onKey(event)
   private readonly handleWindowResize = (): void => this.presence.paintRemoteCursors()
   private readonly handleNarrowLayoutChange = (event: MediaQueryListEvent): void => {
+    this.root.classList.add('panel-motion-disabled')
     this.sidebarClosed = event.matches
-    this.commentPanelOpen = !event.matches
+    this.commentPanelOpen = !event.matches && this.desktopCommentPanelOpen
     this.syncPanelToggles()
   }
 
@@ -166,7 +168,8 @@ export class FileBrowser {
     this.dirtyTracker = new BundleDirtyTracker(bundle)
     this.narrowLayout = matchMedia('(max-width: 820px)')
     this.sidebarClosed = this.narrowLayout.matches
-    this.commentPanelOpen = !this.narrowLayout.matches
+    this.desktopCommentPanelOpen = storageGet(`taco-right-panel:${bundle.docId}`, 'session') !== 'closed'
+    this.commentPanelOpen = !this.narrowLayout.matches && this.desktopCommentPanelOpen
     const selectionKey = fileSelectionSessionKey(bundle.docId)
     const initialPath = selectedPathForLoad(location.protocol, location.hash, storageGet(selectionKey, 'session'))
     this.selected = fileByPath(bundle, initialPath) ?? defaultFile(bundle)
@@ -264,7 +267,7 @@ export class FileBrowser {
     this.markdownEditor?.destroy()
     this.markdownEditor = null
     this.root.innerHTML = ''
-    this.root.className = 'taco-shell'
+    this.root.className = 'taco-shell panel-motion-disabled'
     this.root.classList.toggle('sidebar-closed', this.sidebarClosed)
     this.root.classList.toggle('is-readonly', !bundleCanWrite(this.bundle))
 
@@ -292,7 +295,7 @@ export class FileBrowser {
     const workspaceHeader = el('header', 'panel-header workspace-header')
     const collapsedBrandMark = createBrandMarkContainer('collapsed-brand-mark brand-mark')
     const collapsedBrandName = el('strong', 'collapsed-brand-name', 'Taco')
-    const leftHeaderToggle = createControlButton('panel-left-open', this.t.expandFiles, () => this.toggleSidebar(), 'header-panel-toggle workspace-left-toggle')
+    const leftHeaderToggle = createControlButton('panel-left', this.t.expandFiles, () => this.toggleSidebar(), 'header-panel-toggle workspace-left-toggle')
     const title = el('input', 'bundle-title')
     title.type = 'text'
     title.value = this.bundle.title
@@ -357,9 +360,12 @@ export class FileBrowser {
       },
       'theme-toggle',
     )
-    this.commentToggle = createControlButton('message-square', this.t.openComments, () => this.toggleCommentPanel())
+    this.commentToggle = createControlButton('panel-right', this.t.expandRightPanel, () => this.toggleCommentPanel())
     this.commentToggle.classList.add('comment-toggle')
     this.commentToggle.setAttribute('aria-controls', 'taco-comments')
+    this.commentToggle.addEventListener('click', (event) => {
+      this.root.classList.toggle('panel-motion-disabled', event.detail === 0)
+    }, { capture: true })
     workspaceHeader.append(
       collapsedBrandMark,
       collapsedBrandName,
@@ -368,17 +374,24 @@ export class FileBrowser {
       this.workspacePath,
       workspaceHeaderSpacer,
       presenceStrip,
-      this.commentToggle,
       share,
       this.copyReviewGroup,
       saveGroup,
       theme,
       language,
+      this.commentToggle,
     )
 
     const workspaceBody = el('div', 'workspace-body')
+    workspaceBody.addEventListener('transitionend', (event) => {
+      if (event.target !== workspaceBody || event.propertyName !== 'grid-template-columns') return
+      this.comments.refreshHighlights()
+      this.presence.paintRemoteCursors()
+      this.outline.scheduleActive()
+    })
     this.viewer = el('main', 'file-viewer')
     this.viewer.id = 'taco-main'
+    this.viewer.addEventListener('click', (event) => this.comments.openHighlightedComment(event))
     this.viewer.addEventListener('scroll', () => {
       this.presence.paintRemoteCursors()
       this.outline.scheduleActive()
@@ -388,8 +401,12 @@ export class FileBrowser {
     this.outline.mount(this.outlineList)
     const commentScrim = el('button', 'comment-scrim') as HTMLButtonElement
     commentScrim.type = 'button'
+    commentScrim.tabIndex = -1
     commentScrim.setAttribute('aria-label', this.t.close)
-    commentScrim.addEventListener('click', () => this.closeCommentPanel())
+    commentScrim.addEventListener('click', () => {
+      this.root.classList.remove('panel-motion-disabled')
+      this.closeCommentPanel()
+    })
     workspaceBody.append(this.viewer, commentScrim, this.commentPanel)
     workspacePanel.append(workspaceHeader, workspaceBody)
     layout.append(this.sidebar, workspacePanel)
@@ -739,7 +756,6 @@ export class FileBrowser {
     panel.id = 'taco-comments'
     panel.setAttribute('aria-label', this.t.rightPanel)
     const header = el('header', 'panel-header comment-panel-header')
-    const close = createControlButton('x', this.t.close, () => this.closeCommentPanel(), 'comment-panel-close')
     const tabs = createSegmentedControl<AuxiliaryTab>({
       label: this.t.rightPanel,
       value: this.auxiliaryTab,
@@ -753,7 +769,7 @@ export class FileBrowser {
     })
     this.outlineTab = tabs.buttonFor('outline')!
     this.commentsTab = tabs.buttonFor('comments')!
-    header.append(tabs.element, close)
+    header.append(tabs.element)
     this.outlineList = el('nav', 'document-outline')
     this.outlineList.id = 'taco-outline'
     this.outlineList.setAttribute('aria-label', this.t.outline)
@@ -793,30 +809,28 @@ export class FileBrowser {
   }
 
   private toggleCommentPanel(): void {
-    const wasShowingComments = this.auxiliaryTab === 'comments'
-    this.auxiliaryTab = 'comments'
-    if (this.narrowLayout.matches) {
-      this.commentPanelOpen = wasShowingComments ? !this.commentPanelOpen : true
-    }
-    this.syncPanelToggles()
-    this.comments.paint()
-    this.syncAuxiliaryTabs()
-    this.commentList.scrollTop = 0
-    if (!wasShowingComments) this.animateSurfaceEntrance(this.commentList)
+    if (this.commentPanelOpen) this.closeCommentPanel()
+    else this.setCommentPanelOpen(true)
   }
 
   private closeCommentPanel(): void {
-    if (!this.narrowLayout.matches) return
-    this.commentPanelOpen = false
-    this.syncPanelToggles()
-    this.commentToggle.focus()
+    this.setCommentPanelOpen(false)
+    this.commentToggle.focus({ preventScroll: true })
   }
 
   private showComments(): void {
+    this.root.classList.remove('panel-motion-disabled')
     this.auxiliaryTab = 'comments'
-    this.commentPanelOpen = true
+    this.setCommentPanelOpen(true)
+  }
+
+  private setCommentPanelOpen(open: boolean): void {
+    this.commentPanelOpen = open
+    if (!this.narrowLayout.matches) {
+      this.desktopCommentPanelOpen = open
+      storageSet(`taco-right-panel:${this.bundle.docId}`, open ? 'open' : 'closed', 'session')
+    }
     this.syncPanelToggles()
-    this.syncAuxiliaryTabs()
   }
 
   private openSearch(): void {
@@ -914,25 +928,34 @@ export class FileBrowser {
   }
 
   private syncPanelToggles(): void {
+    const layoutChanged = this.root.classList.contains('comment-panel-open') !== this.commentPanelOpen
     const sidebarClosed = this.sidebarClosed
     this.root.classList.toggle('sidebar-closed', sidebarClosed)
     this.sidebar.toggleAttribute('inert', sidebarClosed)
     this.sidebar.setAttribute('aria-hidden', String(sidebarClosed))
-    setButtonIcon(this.leftToggle, sidebarClosed ? 'panel-left-open' : 'panel-left-close')
     this.leftToggle.title = sidebarClosed ? this.t.expandFiles : this.t.collapseFiles
     this.leftToggle.setAttribute('aria-label', this.leftToggle.title)
     for (const toggle of this.root.querySelectorAll<HTMLButtonElement>('.panel-toggle')) {
       toggle.setAttribute('aria-expanded', String(!sidebarClosed))
     }
-    const commentsOpen = !this.narrowLayout.matches || this.commentPanelOpen
+    const commentsOpen = this.commentPanelOpen
+    if (!commentsOpen && this.commentPanel.contains(document.activeElement)) {
+      this.commentToggle.focus({ preventScroll: true })
+    }
     this.root.classList.toggle('comment-panel-open', commentsOpen)
     this.commentPanel.toggleAttribute('inert', !commentsOpen)
     this.commentPanel.setAttribute('aria-hidden', String(!commentsOpen))
-    this.commentToggle.title = commentsOpen && this.narrowLayout.matches ? this.t.close : this.t.openComments
+    this.commentToggle.title = commentsOpen ? this.t.collapseRightPanel : this.t.expandRightPanel
     this.commentToggle.setAttribute('aria-label', this.commentToggle.title)
-    this.commentToggle.setAttribute('aria-pressed', String(commentsOpen && this.auxiliaryTab === 'comments'))
+    this.commentToggle.setAttribute('aria-pressed', String(commentsOpen))
     this.commentToggle.setAttribute('aria-expanded', String(commentsOpen))
     this.syncAuxiliaryTabs()
+    if (layoutChanged) requestAnimationFrame(() => {
+      if (!this.root.isConnected) return
+      this.comments.refreshHighlights()
+      this.presence.paintRemoteCursors()
+      this.outline.scheduleActive()
+    })
   }
 
   private updateFileContent(path: string, content: string, blocks: TacoFile['blocks']): void {
@@ -1245,8 +1268,11 @@ export class FileBrowser {
   }
 
   private onKey(event: KeyboardEvent): void {
-    if (event.key === 'Escape' && this.narrowLayout.matches && this.commentPanelOpen) {
+    if (event.defaultPrevented || event.isComposing || !this.root.isConnected) return
+    if (event.key === 'Escape' && this.commentPanelOpen) {
+      if (document.querySelector('dialog[open], .topbar-popover')) return
       event.preventDefault()
+      this.root.classList.add('panel-motion-disabled')
       this.closeCommentPanel()
       return
     }

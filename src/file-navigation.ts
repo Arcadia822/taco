@@ -73,7 +73,7 @@ export class FileNavigation {
       labelClass: 'brand-name',
     })
     this.toggle = createControlButton(
-      'panel-left-close',
+      'panel-left',
       options.labels.collapseFiles,
       options.onToggleSidebar,
       'panel-toggle left-panel-toggle',

@@ -32,7 +32,7 @@ Install the published extension archive into the exact initialized Spec Kit proj
 
 ```bash
 specify extension add taco --from \
-  https://github.com/Arcadia822/taco/archive/refs/tags/v0.5.0.zip
+  https://github.com/Arcadia822/taco/releases/download/v0.6.0/taco-extension-v0.6.0.zip
 node .specify/extensions/taco/bin/taco.mjs prepare-template \
   --project-root "$PWD" \
   --json
@@ -42,7 +42,7 @@ node .specify/extensions/taco/bin/taco.mjs prepare-policy \
 specify extension list
 ```
 
-Release tags are generated from the `extensions/taco/` subtree, so the tagged archive contains `extension.yml` at its root. The source repository keeps the extension under `extensions/taco/` for development.
+Release tags identify the complete source repository. Install the attached `taco-extension-v0.6.0.zip` asset, which contains `extension.yml` at its root; GitHub's automatically generated source archives are not extension packages. The source repository keeps the extension under `extensions/taco/` for development.
 
 The installing Agent must run `prepare-policy` to install the complete [`policies/taco-agent-policy.md`](policies/taco-agent-policy.md) in project-owned process documentation. For a declared 5xP context, it follows the project's Process link, including `context/PROCESS.md`; otherwise it uses `docs/taco-process.md`. A generically named file alone does not declare 5xP. `AGENTS.md` retains unrelated instructions and receives only one imperative reference requiring the Agent to read the workflow before any Spec Kit or Taco work. Plugin installation is incomplete until this routing is present.
 
@@ -64,6 +64,8 @@ speckit.taco.review [path-to-file.taco.html]
 `review` previews a saved Taco import, imports conflict-free direct edits, gives every open comment and its complete history to the Agent, and requires the Agent to edit canonical files before invoking `update` on the same Taco. The refreshed Taco is then exposed through the same native clickable-file presentation step.
 
 The browser's Handoff action copies text diffs since the latest save and open comment threads, retaining deleted-message placeholders as history. Resolved threads are not replayed as requests. If clipboard access is unavailable or denied, either handoff action reports failure rather than claiming the text was copied. Saving resets the handoff diff baseline; canonical import still uses the conflict-safe `review` flow above.
+
+The rightmost header button uses a fixed, arrowless sidebar icon to toggle the outline/comment panel without changing its active tab or discarding an unsubmitted draft. Its selected state stays on while the panel is open. On desktop, pointer toggles animate the panel width; closing releases its reading-space width and remembers the choice per document for the current browser session. Keyboard toggles and reduced-motion preferences skip the transition. Narrow screens start with a closed drawer and do not overwrite the desktop preference. Use the header toggle or Escape to close the panel, or click outside the drawer on narrow screens; active dialogs, menus, and editor key handlers take precedence over Escape. Starting a comment opens its composer, and clicking an existing inline comment highlight opens and focuses the matching thread. These panel preferences are local UI state, not saved document edits.
 
 ## Installed CLI
 

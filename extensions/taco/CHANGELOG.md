@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.6.0 - 2026-09-15
+
+- Allow independent desktop outline/comment-panel collapse, restoring each document's desktop preference within the browser session without letting narrow-screen drawers overwrite it. Preserve tabs and comment drafts across toggles, restore focus on close, and leave Escape to active dialogs, menus, and editor handlers.
+- Animate desktop right-panel pointer toggles while respecting reduced motion and immediate keyboard interaction. Use one arrowless header icon with a persistent selected state, and remove the redundant in-panel close button.
+- Use the same fixed, arrowless left-sidebar icon in its header and collapsed-header controls, without a selected background.
+- Open the comments panel and focus the matching thread when an existing inline highlight is clicked, including in read-only copies.
 - Preserve reference definitions when adjacent Markdown blocks are deleted, and retain paragraph boundaries when changing block types.
 - Include only open requests in copied handoffs, retaining deleted-message placeholders as history. Report unavailable or denied clipboard writes as failures.
 - Preserve untouched Markdown blocks, original line endings, and source spacing during review edits and undo; persist edits inside centered HTML rather than restoring stale source.

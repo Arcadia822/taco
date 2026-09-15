@@ -1073,29 +1073,114 @@ describe('FileBrowser', () => {
     expect(browser.getModifiedReviewFiles()).toEqual([])
   })
 
-  it('keeps file collapse separate and makes the right panel permanent', () => {
-    new FileBrowser(document.getElementById('app')!, structuredClone(testBundle))
+  it('collapses the desktop right panel independently and preserves its active tab', () => {
+    const browser = new FileBrowser(document.getElementById('app')!, structuredClone(testBundle))
     const left = document.querySelector<HTMLButtonElement>('.file-sidebar .left-panel-toggle')!
-    expect(left).not.toBeNull()
-    expect(document.querySelector('.comment-panel')).not.toBeNull()
-    expect(document.getElementById('app')?.classList.contains('right-panel-closed')).toBe(false)
-    expect(document.querySelector('[aria-label="关闭右侧面板"]')).toBeNull()
-    expect(document.querySelector('.right-panel-tabs')).not.toBeNull()
-    expect(document.querySelector<HTMLElement>('.document-outline')?.hidden).toBe(false)
-    expect(document.querySelector<HTMLElement>('.comment-list')?.hidden).toBe(true)
-    const comments = document.querySelector<HTMLButtonElement>('.workspace-header .comment-toggle')!
-    comments.click()
-    expect(document.querySelector('.comment-panel')?.getAttribute('aria-hidden')).toBe('false')
-    expect(comments.getAttribute('aria-pressed')).toBe('true')
-    expect(document.querySelector<HTMLButtonElement>('.right-panel-tabs [aria-selected="true"]')?.textContent).toBe('评论')
-    expect(document.querySelector<HTMLElement>('.comment-list')?.hidden).toBe(false)
-    expect(document.querySelector('.comment-empty-banner')?.textContent).toContain('选中正文内容')
-    expect(document.querySelector('.comment-empty')).toBeNull()
+    const toggle = document.querySelector<HTMLButtonElement>('.comment-toggle')!
+    const panel = document.querySelector<HTMLElement>('.comment-panel')!
+    toggle.click()
+    expect(panel.getAttribute('aria-hidden')).toBe('true')
+    expect(panel.hasAttribute('inert')).toBe(true)
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    expect(left.getAttribute('aria-expanded')).toBe('true')
     left.click()
-    expect(document.getElementById('app')?.classList.contains('sidebar-closed')).toBe(true)
+    toggle.click()
+    expect(panel.getAttribute('aria-hidden')).toBe('false')
+    expect(panel.hasAttribute('inert')).toBe(false)
+    expect(toggle.getAttribute('aria-pressed')).toBe('true')
     expect(left.getAttribute('aria-expanded')).toBe('false')
-    expect(document.querySelector('.workspace-left-toggle')).not.toBeNull()
-    expect(document.querySelector('.file-sidebar')?.hasAttribute('inert')).toBe(true)
+    expect(document.querySelector<HTMLElement>('.document-outline')?.hidden).toBe(false)
+    const commentsTab = Array.from(panel.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((tab) => tab.textContent === '评论')!
+    commentsTab.click()
+    commentsTab.focus()
+    commentsTab.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    expect(panel.getAttribute('aria-hidden')).toBe('true')
+    expect(document.activeElement).toBe(toggle)
+    toggle.click()
+    expect(document.querySelector<HTMLElement>('.comment-list')?.hidden).toBe(false)
+    expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(false)
+    browser.destroy()
+  })
+
+  it('opens an existing inline highlight without creating a comment or changing the document', async () => {
+    const bundle = structuredClone(testBundle)
+    const timestamp = '2026-09-15T00:00:00.000Z'
+    bundle.access = 'reader'
+    bundle.comments = [{
+      id: 'inline-request',
+      anchor: { path: bundle.files[0].path, position: { start: 14, end: 22 }, quote: { exact: 'Readable', prefix: '', suffix: ' Markdown.' } },
+      status: 'open',
+      messages: [{ id: 'request-message', author: 'Reviewer', body: 'Clarify this outcome.', createdAt: timestamp }],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }]
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    const editor = await waitForEditor()
+    const paragraph = Array.from(editor.querySelectorAll('p')).find((node) => node.textContent === 'Readable Markdown.')!
+    const toggle = document.querySelector<HTMLButtonElement>('.comment-toggle')!
+    const rects = vi.spyOn(Range.prototype, 'getClientRects').mockReturnValue([
+      { left: 10, right: 90, top: 10, bottom: 30 },
+    ] as unknown as DOMRectList)
+    try {
+      window.getSelection()?.removeAllRanges()
+      toggle.click()
+      paragraph.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 120, clientY: 20 }))
+      expect(toggle.getAttribute('aria-expanded')).toBe('false')
+      paragraph.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 30, clientY: 20 }))
+      expect(toggle.getAttribute('aria-expanded')).toBe('true')
+      expect(document.querySelector<HTMLElement>('.comment-list')?.hidden).toBe(false)
+      expect(document.activeElement?.closest<HTMLElement>('.comment-thread')?.dataset.threadId).toBe('inline-request')
+      expect(document.querySelector('.comment-composer')).toBeNull()
+      expect(browser.getModifiedReviewFiles()).toEqual([])
+      expect(bundle.comments).toHaveLength(1)
+    } finally {
+      rects.mockRestore()
+      browser.destroy()
+    }
+  })
+
+  it('restores the desktop preference across narrow layouts and session reloads', () => {
+    const media = Object.assign(new EventTarget(), { matches: false })
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(media))
+    const app = document.getElementById('app')!
+    let browser = new FileBrowser(app, structuredClone(testBundle))
+    const toggle = document.querySelector<HTMLButtonElement>('.comment-toggle')!
+    toggle.click()
+    media.matches = true
+    media.dispatchEvent(Object.assign(new Event('change'), { matches: true }))
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    toggle.click()
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    media.matches = false
+    media.dispatchEvent(Object.assign(new Event('change'), { matches: false }))
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    browser.destroy()
+    browser = new FileBrowser(app, structuredClone(testBundle))
+    expect(document.querySelector('.comment-toggle')?.getAttribute('aria-expanded')).toBe('false')
+    browser.destroy()
+    browser = new FileBrowser(app, { ...structuredClone(testBundle), docId: 'another-document' })
+    expect(document.querySelector('.comment-toggle')?.getAttribute('aria-expanded')).toBe('true')
+    browser.destroy()
+  })
+
+  it('leaves Escape to overlays and consumed editor events before closing the panel', () => {
+    const browser = new FileBrowser(document.getElementById('app')!, structuredClone(testBundle))
+    const toggle = document.querySelector<HTMLButtonElement>('.comment-toggle')!
+    const dialog = document.createElement('dialog')
+    dialog.setAttribute('open', '')
+    document.body.append(dialog)
+    dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    dialog.remove()
+    const consumed = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    consumed.preventDefault()
+    document.dispatchEvent(consumed)
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(document.activeElement).toBe(toggle)
+    browser.destroy()
   })
 
   it('keeps sidebar UI state independent from language and file selection', () => {
@@ -1292,6 +1377,7 @@ describe('FileBrowser', () => {
     const editableBundle = structuredClone(testBundle)
     new FileBrowser(document.getElementById('app')!, editableBundle)
     await waitForEditor()
+    document.querySelector<HTMLButtonElement>('.comment-toggle')!.click()
     const paragraph = Array.from(document.querySelectorAll('.tiptap-editor-host .tiptap p'))
       .find((node) => node.textContent?.includes('Readable Markdown.'))!
     const text = paragraph.firstChild!
@@ -1313,6 +1399,10 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.comment-empty-banner')).toBeNull()
     const input = document.querySelector<HTMLTextAreaElement>('.comment-composer .comment-input')!
     input.value = 'Make this measurable.'
+    const toggle = document.querySelector<HTMLButtonElement>('.comment-toggle')!
+    toggle.click()
+    toggle.click()
+    expect(document.querySelector<HTMLTextAreaElement>('.comment-composer .comment-input')?.value).toBe('Make this measurable.')
     input.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     expect(editableBundle.comments).toHaveLength(1)
     expect(editableBundle.comments?.[0]).toMatchObject({
