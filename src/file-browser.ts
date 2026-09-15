@@ -359,7 +359,7 @@ export class FileBrowser {
       },
       'theme-toggle',
     )
-    this.commentToggle = createControlButton('message-square', this.t.expandRightPanel, () => this.toggleCommentPanel())
+    this.commentToggle = createControlButton('panel-right-open', this.t.expandRightPanel, () => this.toggleCommentPanel())
     this.commentToggle.classList.add('comment-toggle')
     this.commentToggle.setAttribute('aria-controls', 'taco-comments')
     workspaceHeader.append(
@@ -370,12 +370,12 @@ export class FileBrowser {
       this.workspacePath,
       workspaceHeaderSpacer,
       presenceStrip,
-      this.commentToggle,
       share,
       this.copyReviewGroup,
       saveGroup,
       theme,
       language,
+      this.commentToggle,
     )
 
     const workspaceBody = el('div', 'workspace-body')
@@ -934,6 +934,7 @@ export class FileBrowser {
     this.root.classList.toggle('comment-panel-open', commentsOpen)
     this.commentPanel.toggleAttribute('inert', !commentsOpen)
     this.commentPanel.setAttribute('aria-hidden', String(!commentsOpen))
+    setButtonIcon(this.commentToggle, commentsOpen ? 'panel-right-close' : 'panel-right-open')
     this.commentToggle.title = commentsOpen ? this.t.collapseRightPanel : this.t.expandRightPanel
     this.commentToggle.setAttribute('aria-label', this.commentToggle.title)
     this.commentToggle.setAttribute('aria-pressed', String(commentsOpen))
