@@ -129,6 +129,7 @@ export class FileBrowser {
   private readonly handleDocumentKeyDown = (event: KeyboardEvent): void => this.onKey(event)
   private readonly handleWindowResize = (): void => this.presence.paintRemoteCursors()
   private readonly handleNarrowLayoutChange = (event: MediaQueryListEvent): void => {
+    this.root.classList.add('panel-motion-disabled')
     this.sidebarClosed = event.matches
     this.commentPanelOpen = !event.matches && this.desktopCommentPanelOpen
     this.syncPanelToggles()
@@ -266,7 +267,7 @@ export class FileBrowser {
     this.markdownEditor?.destroy()
     this.markdownEditor = null
     this.root.innerHTML = ''
-    this.root.className = 'taco-shell'
+    this.root.className = 'taco-shell panel-motion-disabled'
     this.root.classList.toggle('sidebar-closed', this.sidebarClosed)
     this.root.classList.toggle('is-readonly', !bundleCanWrite(this.bundle))
 
@@ -359,9 +360,12 @@ export class FileBrowser {
       },
       'theme-toggle',
     )
-    this.commentToggle = createControlButton('panel-right-open', this.t.expandRightPanel, () => this.toggleCommentPanel())
+    this.commentToggle = createControlButton('panel-right', this.t.expandRightPanel, () => this.toggleCommentPanel())
     this.commentToggle.classList.add('comment-toggle')
     this.commentToggle.setAttribute('aria-controls', 'taco-comments')
+    this.commentToggle.addEventListener('click', (event) => {
+      this.root.classList.toggle('panel-motion-disabled', event.detail === 0)
+    }, { capture: true })
     workspaceHeader.append(
       collapsedBrandMark,
       collapsedBrandName,
@@ -379,6 +383,12 @@ export class FileBrowser {
     )
 
     const workspaceBody = el('div', 'workspace-body')
+    workspaceBody.addEventListener('transitionend', (event) => {
+      if (event.target !== workspaceBody || event.propertyName !== 'grid-template-columns') return
+      this.comments.refreshHighlights()
+      this.presence.paintRemoteCursors()
+      this.outline.scheduleActive()
+    })
     this.viewer = el('main', 'file-viewer')
     this.viewer.id = 'taco-main'
     this.viewer.addEventListener('click', (event) => this.comments.openHighlightedComment(event))
@@ -393,7 +403,10 @@ export class FileBrowser {
     commentScrim.type = 'button'
     commentScrim.tabIndex = -1
     commentScrim.setAttribute('aria-label', this.t.close)
-    commentScrim.addEventListener('click', () => this.closeCommentPanel())
+    commentScrim.addEventListener('click', () => {
+      this.root.classList.remove('panel-motion-disabled')
+      this.closeCommentPanel()
+    })
     workspaceBody.append(this.viewer, commentScrim, this.commentPanel)
     workspacePanel.append(workspaceHeader, workspaceBody)
     layout.append(this.sidebar, workspacePanel)
@@ -743,8 +756,6 @@ export class FileBrowser {
     panel.id = 'taco-comments'
     panel.setAttribute('aria-label', this.t.rightPanel)
     const header = el('header', 'panel-header comment-panel-header')
-    const close = createControlButton('x', this.t.collapseRightPanel, () => this.closeCommentPanel(), 'comment-panel-close')
-    close.setAttribute('aria-keyshortcuts', 'Escape')
     const tabs = createSegmentedControl<AuxiliaryTab>({
       label: this.t.rightPanel,
       value: this.auxiliaryTab,
@@ -758,7 +769,7 @@ export class FileBrowser {
     })
     this.outlineTab = tabs.buttonFor('outline')!
     this.commentsTab = tabs.buttonFor('comments')!
-    header.append(tabs.element, close)
+    header.append(tabs.element)
     this.outlineList = el('nav', 'document-outline')
     this.outlineList.id = 'taco-outline'
     this.outlineList.setAttribute('aria-label', this.t.outline)
@@ -808,6 +819,7 @@ export class FileBrowser {
   }
 
   private showComments(): void {
+    this.root.classList.remove('panel-motion-disabled')
     this.auxiliaryTab = 'comments'
     this.setCommentPanelOpen(true)
   }
@@ -934,7 +946,6 @@ export class FileBrowser {
     this.root.classList.toggle('comment-panel-open', commentsOpen)
     this.commentPanel.toggleAttribute('inert', !commentsOpen)
     this.commentPanel.setAttribute('aria-hidden', String(!commentsOpen))
-    setButtonIcon(this.commentToggle, commentsOpen ? 'panel-right-close' : 'panel-right-open')
     this.commentToggle.title = commentsOpen ? this.t.collapseRightPanel : this.t.expandRightPanel
     this.commentToggle.setAttribute('aria-label', this.commentToggle.title)
     this.commentToggle.setAttribute('aria-pressed', String(commentsOpen))
@@ -1262,6 +1273,7 @@ export class FileBrowser {
     if (event.key === 'Escape' && this.commentPanelOpen) {
       if (document.querySelector('dialog[open], .topbar-popover')) return
       event.preventDefault()
+      this.root.classList.add('panel-motion-disabled')
       this.closeCommentPanel()
       return
     }

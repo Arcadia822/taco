@@ -1082,18 +1082,19 @@ describe('FileBrowser', () => {
     expect(panel.getAttribute('aria-hidden')).toBe('true')
     expect(panel.hasAttribute('inert')).toBe(true)
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
     expect(left.getAttribute('aria-expanded')).toBe('true')
     left.click()
     toggle.click()
     expect(panel.getAttribute('aria-hidden')).toBe('false')
     expect(panel.hasAttribute('inert')).toBe(false)
+    expect(toggle.getAttribute('aria-pressed')).toBe('true')
     expect(left.getAttribute('aria-expanded')).toBe('false')
     expect(document.querySelector<HTMLElement>('.document-outline')?.hidden).toBe(false)
     const commentsTab = Array.from(panel.querySelectorAll<HTMLButtonElement>('[role="tab"]')).find((tab) => tab.textContent === '评论')!
     commentsTab.click()
-    const close = panel.querySelector<HTMLButtonElement>('.comment-panel-close')!
-    close.focus()
-    close.click()
+    commentsTab.focus()
+    commentsTab.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
     expect(panel.getAttribute('aria-hidden')).toBe('true')
     expect(document.activeElement).toBe(toggle)
     toggle.click()
@@ -1376,7 +1377,7 @@ describe('FileBrowser', () => {
     const editableBundle = structuredClone(testBundle)
     new FileBrowser(document.getElementById('app')!, editableBundle)
     await waitForEditor()
-    document.querySelector<HTMLButtonElement>('.comment-panel-close')!.click()
+    document.querySelector<HTMLButtonElement>('.comment-toggle')!.click()
     const paragraph = Array.from(document.querySelectorAll('.tiptap-editor-host .tiptap p'))
       .find((node) => node.textContent?.includes('Readable Markdown.'))!
     const text = paragraph.firstChild!

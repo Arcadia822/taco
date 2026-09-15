@@ -146,6 +146,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .sidebar-closed .collapsed-brand-name { display: block; }
 .sidebar-closed .left-panel-toggle { visibility: hidden; pointer-events: none; }
 .comment-toggle { position: relative; }
+.control-button.comment-toggle[aria-pressed="true"] { background: color-mix(in srgb, var(--ink) 15%, var(--surface)); color: var(--ink); }
 .presence-strip { display: flex; align-items: center; min-width: 0; margin-right: 2px; }
 .presence-avatar { display: grid; place-items: center; width: 23px; height: 23px; margin-left: -5px; border: 2px solid var(--surface); border-radius: 50%; color: #fff; font-size: 9px; font-weight: 800; line-height: 1; box-shadow: 0 1px 3px rgba(32, 28, 23, .12); }
 .presence-avatar:first-child { margin-left: 0; }
@@ -1028,8 +1029,11 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 }
 
 @media (width > 820px) {
+  .workspace-body { transition: grid-template-columns 240ms var(--ease-drawer); }
+  .comment-panel { width: auto; visibility: visible; transition: visibility 0s; }
+  .comment-panel > * { width: var(--right-panel); }
   .taco-shell:not(.comment-panel-open) .workspace-body { grid-template-columns: minmax(0, 1fr) 0; }
-  .taco-shell:not(.comment-panel-open) .comment-panel { width: 0; visibility: hidden; }
+  .taco-shell:not(.comment-panel-open) .comment-panel { visibility: hidden; transition-delay: 240ms; }
 }
 
 @media (max-width: 820px) {
@@ -1081,8 +1085,11 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
   .file-viewer { padding: 0; }
 }
 
+.panel-motion-disabled :is(.workspace-body, .comment-panel, .comment-scrim) { transition: none !important; }
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
+  .workspace-body, .comment-panel, .comment-scrim { transition: none !important; }
   *, *::before, *::after { transition-duration: .001ms !important; animation-duration: .001ms !important; }
 }
 
