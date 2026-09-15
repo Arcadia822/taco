@@ -137,6 +137,41 @@ export class CommentsController {
     this.showSelectionCommentButton(anchor, left, top)
   }
 
+  openHighlightedComment(event: MouseEvent): void {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+    const file = this.options.getSelected()
+    const target = event.target
+    if (!file || !(target instanceof Element)) return
+    const source = this.options.getSourceEditor()
+    const article = this.options.getViewer().querySelector<HTMLElement>('.tiptap')
+    const inSource = source && target === source.input
+    if (inSource) {
+      if (source.input.selectionStart !== source.input.selectionEnd) return
+    } else {
+      if (!article?.contains(target) || target.closest('a, button, input, textarea, select')) return
+      if (window.getSelection()?.isCollapsed === false) return
+    }
+    const text = inSource ? source.input.value : article!.textContent ?? ''
+    const thread = commentsForPath(this.options.bundle.comments, file.path).find((candidate) => {
+      if (candidate.status !== 'open') return false
+      const position = resolveTextAnchor(text, candidate.anchor)
+      if (!position) return false
+      if (inSource) return source.input.selectionStart >= position.start && source.input.selectionStart < position.end
+      if (candidate.anchor.block) return this.findCommentBlock(candidate.anchor)?.contains(target) ?? false
+      const range = domRange(article!, position.start, position.end)
+      return range && Array.from(range.getClientRects()).some((rect) =>
+        event.clientX >= rect.left && event.clientX <= rect.right
+        && event.clientY >= rect.top && event.clientY <= rect.bottom)
+    })
+    if (!thread) return
+    this.removeSelectionButton()
+    this.options.openComments()
+    const card = Array.from(this.commentList?.querySelectorAll<HTMLElement>('.comment-thread') ?? [])
+      .find((node) => node.dataset.threadId === thread.id)
+    card?.querySelector<HTMLButtonElement>('.comment-quote-button')?.focus({ preventScroll: true })
+    card?.scrollIntoView?.({ block: 'nearest', behavior: 'instant' })
+  }
+
   refreshHighlights(editorHost = this.options.getViewer().querySelector<HTMLElement>('.tiptap-editor-host')): void {
     this.clearHighlights()
     const path = this.options.getSelected()?.path
