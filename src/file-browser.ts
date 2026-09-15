@@ -295,7 +295,7 @@ export class FileBrowser {
     const workspaceHeader = el('header', 'panel-header workspace-header')
     const collapsedBrandMark = createBrandMarkContainer('collapsed-brand-mark brand-mark')
     const collapsedBrandName = el('strong', 'collapsed-brand-name', 'Taco')
-    const leftHeaderToggle = createControlButton('panel-left-open', this.t.expandFiles, () => this.toggleSidebar(), 'header-panel-toggle workspace-left-toggle')
+    const leftHeaderToggle = createControlButton('panel-left', this.t.expandFiles, () => this.toggleSidebar(), 'header-panel-toggle workspace-left-toggle')
     const title = el('input', 'bundle-title')
     title.type = 'text'
     title.value = this.bundle.title
@@ -933,7 +933,6 @@ export class FileBrowser {
     this.root.classList.toggle('sidebar-closed', sidebarClosed)
     this.sidebar.toggleAttribute('inert', sidebarClosed)
     this.sidebar.setAttribute('aria-hidden', String(sidebarClosed))
-    setButtonIcon(this.leftToggle, sidebarClosed ? 'panel-left-open' : 'panel-left-close')
     this.leftToggle.title = sidebarClosed ? this.t.expandFiles : this.t.collapseFiles
     this.leftToggle.setAttribute('aria-label', this.leftToggle.title)
     for (const toggle of this.root.querySelectorAll<HTMLButtonElement>('.panel-toggle')) {

@@ -32,7 +32,7 @@ Install the published extension archive into the exact initialized Spec Kit proj
 
 ```bash
 specify extension add taco --from \
-  https://github.com/Arcadia822/taco/archive/refs/tags/v0.5.0.zip
+  https://github.com/Arcadia822/taco/releases/download/v0.6.0/taco-extension-v0.6.0.zip
 node .specify/extensions/taco/bin/taco.mjs prepare-template \
   --project-root "$PWD" \
   --json
@@ -42,7 +42,7 @@ node .specify/extensions/taco/bin/taco.mjs prepare-policy \
 specify extension list
 ```
 
-Release tags are generated from the `extensions/taco/` subtree, so the tagged archive contains `extension.yml` at its root. The source repository keeps the extension under `extensions/taco/` for development.
+Release tags identify the complete source repository. Install the attached `taco-extension-v0.6.0.zip` asset, which contains `extension.yml` at its root; GitHub's automatically generated source archives are not extension packages. The source repository keeps the extension under `extensions/taco/` for development.
 
 The installing Agent must run `prepare-policy` to install the complete [`policies/taco-agent-policy.md`](policies/taco-agent-policy.md) in project-owned process documentation. For a declared 5xP context, it follows the project's Process link, including `context/PROCESS.md`; otherwise it uses `docs/taco-process.md`. A generically named file alone does not declare 5xP. `AGENTS.md` retains unrelated instructions and receives only one imperative reference requiring the Agent to read the workflow before any Spec Kit or Taco work. Plugin installation is incomplete until this routing is present.
 
