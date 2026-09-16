@@ -296,7 +296,7 @@ describe('FileBrowser', () => {
     const editor = await waitForEditor()
     await new Promise((resolve) => requestAnimationFrame(resolve))
     expect(document.querySelectorAll('.file-row')).toHaveLength(7)
-    expect(Array.from(document.querySelectorAll('.stage-name')).map((node) => node.textContent)).toEqual(['需求定义', '技术规划', '任务拆解'])
+    expect(Array.from(document.querySelectorAll('.stage-name')).map((node) => node.textContent)).toEqual(['spec', 'plan', 'tasks'])
     const specRows = document.querySelectorAll('[data-stage="spec"] .file-row')
     expect(Array.from(specRows).map((node) => node.getAttribute('data-role'))).toEqual([null, null])
     expect(document.querySelector('[data-stage="spec"] [data-path$="spec.md"]')).not.toBeNull()
