@@ -13,8 +13,14 @@ export const LOCALE_CHOICES = [
 export type Locale = typeof LOCALE_CHOICES[number]['code']
 
 const en = {
-  files: 'Spec files', otherFiles: 'Other files', search: 'Search', searchTitle: 'Search this spec',
-  stages: { spec: 'Specify', plan: 'Plan', tasks: 'Tasks' },
+  files: 'Files', otherFiles: 'Unassigned files', search: 'Search', searchTitle: 'Search documents',
+  ungrouped: 'Ungrouped', newGroup: 'New group...', newGroupTitle: 'New group', groupTitlePlaceholder: 'Group name', create: 'Create',
+  addGroup: 'Add group', renameGroup: 'Rename group', deleteGroup: 'Delete group',
+  addFile: 'Add file', renameFile: 'Rename file', deleteFile: 'Delete file',
+  setEntry: 'Set as entry document', entryBadge: 'Entry', newGroupPrompt: 'Group title:',
+  newFilePrompt: 'File name (e.g. overview.md):', renameFilePrompt: 'New file name:',
+  deleteGroupConfirm: 'Delete this group? Its files will be moved to Unassigned.',
+  deleteFileConfirm: 'Delete this file permanently?',
   searchPlaceholder: 'Search file names and contents…', noMatches: 'No matching files.',
   collapseFiles: 'Collapse file sidebar', expandFiles: 'Expand file sidebar',
   collapseRightPanel: 'Collapse outline and comments', expandRightPanel: 'Expand outline and comments',
@@ -78,12 +84,18 @@ const en = {
 export type Copy = typeof en
 
 const zhHans: Copy = {
-  files: '规格文件', otherFiles: '其他文件', search: '搜索', searchTitle: '搜索此规格',
-  stages: { spec: '需求定义', plan: '技术规划', tasks: '任务拆解' },
+  files: '文件', otherFiles: '未分配文件', search: '搜索', searchTitle: '搜索文档',
+  ungrouped: '未分组', newGroup: '新建分组...', newGroupTitle: '新建分组', groupTitlePlaceholder: '分组名称', create: '创建',
+  addGroup: '添加分组', renameGroup: '重命名分组', deleteGroup: '删除分组',
+  setEntry: '设为主入口', entryBadge: '入口', newGroupPrompt: '分组标题：',
+  addFile: '新建文件', renameFile: '重命名文件', deleteFile: '删除文件',
+  newFilePrompt: '文件名（如 overview.md）：', renameFilePrompt: '新文件名：',
+  deleteGroupConfirm: '确定删除该分组吗？组内文件将移至未分配区。',
+  deleteFileConfirm: '确定永久删除此文件吗？',
   searchPlaceholder: '搜索文件名与内容…', noMatches: '没有匹配的文件。',
   collapseFiles: '收起文件侧栏', expandFiles: '展开文件侧栏',
   collapseRightPanel: '收起大纲与评论', expandRightPanel: '展开大纲与评论',
-  language: '语言', share: '分享', save: '保存', saved: '已保存', saveCopy: '保存副本…', saveAndUnpack: '解包到文件夹…', copyReview: '交接给 Agent', copyReviewLabel: '交接改动', copyAllChanges: '完整改动', copyTabInspect: '提示去浏览器查看', reviewCopied: '已复制给 Agent', noReviewChanges: '暂无改动可复制',
+  language: '语言', share: '分享', save: '保存', saved: '已保存', saveCopy: '保存副本…', saveAndUnpack: '解包到文件夹…', copyReview: '交接改动', copyReviewLabel: '交接改动', copyAllChanges: '交接改动', copyTabInspect: '交接改动（不含数据）', reviewCopied: '已复制给 Agent', noReviewChanges: '暂无改动可复制',
   handoffIntro: '我已在 Taco 评审页面完成了修改与评论，请同步以下变更：',
   handoffDocTitle: '文档标题',
   handoffLocalPath: '本地物理路径',
@@ -141,12 +153,18 @@ const zhHans: Copy = {
 }
 
 const zhHant: Copy = {
-  files: '規格檔案', otherFiles: '其他檔案', search: '搜尋', searchTitle: '搜尋此規格',
-  stages: { spec: '需求定義', plan: '技術規劃', tasks: '任務拆解' },
+  files: '檔案', otherFiles: '未分配檔案', search: '搜尋', searchTitle: '搜尋文件',
+  ungrouped: '未分組', newGroup: '新建分組...', newGroupTitle: '新建分組', groupTitlePlaceholder: '分組名稱', create: '建立',
+  addGroup: '新增分組', renameGroup: '重新命名分組', deleteGroup: '刪除分組',
+  setEntry: '設為主入口', entryBadge: '入口', newGroupPrompt: '分組標題：',
+  addFile: '新增檔案', renameFile: '重新命名檔案', deleteFile: '刪除檔案',
+  newFilePrompt: '檔名（例如 overview.md）：', renameFilePrompt: '新檔名：',
+  deleteGroupConfirm: '確定刪除該分組嗎？組內檔案將移至未分配區。',
+  deleteFileConfirm: '確定永久刪除此檔案嗎？',
   searchPlaceholder: '搜尋檔名與內容…', noMatches: '沒有相符的檔案。',
   collapseFiles: '收合檔案側邊欄', expandFiles: '展開檔案側邊欄',
   collapseRightPanel: '收合大綱與留言', expandRightPanel: '展開大綱與留言',
-  language: '語言', share: '分享', save: '儲存', saved: '已儲存', saveCopy: '儲存副本…', saveAndUnpack: '解壓縮至資料夾…', copyReview: '交接給 Agent', copyReviewLabel: '交接變更', copyAllChanges: '完整變更', copyTabInspect: '提示去瀏覽器檢視', reviewCopied: '已複製給 Agent', noReviewChanges: '暫無變更可複製',
+  language: '語言', share: '分享', save: '儲存', saved: '已儲存', saveCopy: '儲存副本…', saveAndUnpack: '解壓縮至資料夾…', copyReview: '交接變更', copyReviewLabel: '交接變更', copyAllChanges: '交接變更', copyTabInspect: '交接變更（不含資料）', reviewCopied: '已複製給 Agent', noReviewChanges: '暫無變更可複製',
   handoffIntro: '我已在 Taco 審閱頁面完成了修改與評論，請同步以下變更：',
   handoffDocTitle: '文件標題',
   handoffLocalPath: '本機實體路徑',
@@ -204,8 +222,14 @@ const zhHant: Copy = {
 }
 
 const ja: Copy = {
-  files: '仕様ファイル', otherFiles: 'その他のファイル', search: '検索', searchTitle: 'この仕様を検索',
-  stages: { spec: '要件定義', plan: '技術計画', tasks: 'タスク' },
+  files: 'ファイル', otherFiles: '未割り当てファイル', search: '検索', searchTitle: 'ドキュメントを検索',
+  ungrouped: '未分類', newGroup: '新しいグループ...', newGroupTitle: '新しいグループ', groupTitlePlaceholder: 'グループ名', create: '作成',
+  addGroup: 'グループを追加', renameGroup: 'グループ名を変更', deleteGroup: 'グループを削除',
+  setEntry: 'エントリーに設定', entryBadge: 'エントリー', newGroupPrompt: 'グループ名：',
+  addFile: 'ファイルを新規作成', renameFile: 'ファイル名を変更', deleteFile: 'ファイルを削除',
+  newFilePrompt: 'ファイル名（例: overview.md）：', renameFilePrompt: '新しいファイル名：',
+  deleteGroupConfirm: 'このグループを削除しますか？ファイルは未割り当てに移動します。',
+  deleteFileConfirm: 'このファイルを完全に削除しますか？',
   searchPlaceholder: 'ファイル名と内容を検索…', noMatches: '一致するファイルはありません。',
   collapseFiles: 'ファイルサイドバーを閉じる', expandFiles: 'ファイルサイドバーを開く',
   collapseRightPanel: 'アウトラインとコメントを閉じる', expandRightPanel: 'アウトラインとコメントを開く',
@@ -267,8 +291,14 @@ const ja: Copy = {
 }
 
 const es: Copy = {
-  files: 'Archivos de especificación', otherFiles: 'Otros archivos', search: 'Buscar', searchTitle: 'Buscar en esta especificación',
-  stages: { spec: 'Especificar', plan: 'Plan', tasks: 'Tareas' },
+  files: 'Archivos', otherFiles: 'Archivos no asignados', search: 'Buscar', searchTitle: 'Buscar documentos',
+  ungrouped: 'Sin grupo', newGroup: 'Nuevo grupo...', newGroupTitle: 'Nuevo grupo', groupTitlePlaceholder: 'Nombre del grupo', create: 'Crear',
+  addGroup: 'Añadir grupo', renameGroup: 'Renombrar grupo', deleteGroup: 'Eliminar grupo',
+  setEntry: 'Establecer como entrada principal', entryBadge: 'Entrada', newGroupPrompt: 'Título del grupo:',
+  addFile: 'Añadir archivo', renameFile: 'Renombrar archivo', deleteFile: 'Eliminar archivo',
+  newFilePrompt: 'Nombre del archivo (ej. overview.md):', renameFilePrompt: 'Nuevo nombre del archivo:',
+  deleteGroupConfirm: '¿Eliminar este grupo? Sus archivos se moverán a No asignados.',
+  deleteFileConfirm: '¿Eliminar este archivo permanentemente?',
   searchPlaceholder: 'Buscar nombres y contenido…', noMatches: 'No hay archivos coincidentes.',
   collapseFiles: 'Contraer la barra de archivos', expandFiles: 'Expandir la barra de archivos',
   collapseRightPanel: 'Contraer esquema y comentarios', expandRightPanel: 'Expandir esquema y comentarios',
@@ -330,8 +360,14 @@ const es: Copy = {
 }
 
 const fr: Copy = {
-  files: 'Fichiers de spécification', otherFiles: 'Autres fichiers', search: 'Rechercher', searchTitle: 'Rechercher dans cette spécification',
-  stages: { spec: 'Spécifier', plan: 'Plan', tasks: 'Tâches' },
+  files: 'Fichiers', otherFiles: 'Fichiers non assignés', search: 'Rechercher', searchTitle: 'Rechercher des documents',
+  ungrouped: 'Non groupé', newGroup: 'Nouveau groupe...', newGroupTitle: 'Nouveau groupe', groupTitlePlaceholder: 'Nom du groupe', create: 'Créer',
+  addGroup: 'Ajouter un groupe', renameGroup: 'Renommer le groupe', deleteGroup: 'Supprimer le groupe',
+  setEntry: 'Définir comme entrée principale', entryBadge: 'Entrée', newGroupPrompt: 'Titre du groupe :',
+  addFile: 'Ajouter un fichier', renameFile: 'Renommer le fichier', deleteFile: 'Supprimer le fichier',
+  newFilePrompt: 'Nom du fichier (ex. overview.md) :', renameFilePrompt: 'Nouveau nom du fichier :',
+  deleteGroupConfirm: 'Supprimer ce groupe ? Ses fichiers seront déplacés vers Non assignés.',
+  deleteFileConfirm: 'Supprimer définitivement ce fichier ?',
   searchPlaceholder: 'Rechercher dans les noms et le contenu…', noMatches: 'Aucun fichier correspondant.',
   collapseFiles: 'Réduire la barre des fichiers', expandFiles: 'Développer la barre des fichiers',
   collapseRightPanel: 'Réduire le plan et les commentaires', expandRightPanel: 'Développer le plan et les commentaires',
@@ -393,8 +429,14 @@ const fr: Copy = {
 }
 
 const de: Copy = {
-  files: 'Spezifikationsdateien', otherFiles: 'Weitere Dateien', search: 'Suchen', searchTitle: 'Diese Spezifikation durchsuchen',
-  stages: { spec: 'Spezifikation', plan: 'Plan', tasks: 'Aufgaben' },
+  files: 'Dateien', otherFiles: 'Nicht zugewiesene Dateien', search: 'Suchen', searchTitle: 'Dokumente durchsuchen',
+  ungrouped: 'Ungruppiert', newGroup: 'Neue Gruppe...', newGroupTitle: 'Neue Gruppe', groupTitlePlaceholder: 'Gruppenname', create: 'Erstellen',
+  addGroup: 'Gruppe hinzufügen', renameGroup: 'Gruppe umbenennen', deleteGroup: 'Gruppe löschen',
+  setEntry: 'Als Haupteinstieg festlegen', entryBadge: 'Einstieg', newGroupPrompt: 'Gruppentitel:',
+  addFile: 'Datei hinzufügen', renameFile: 'Datei umbenennen', deleteFile: 'Datei löschen',
+  newFilePrompt: 'Dateiname (z. B. overview.md):', renameFilePrompt: 'Neuer Dateiname:',
+  deleteGroupConfirm: 'Diese Gruppe löschen? Ihre Dateien werden zu Nicht zugewiesen verschoben.',
+  deleteFileConfirm: 'Diese Datei dauerhaft löschen?',
   searchPlaceholder: 'Dateinamen und Inhalte durchsuchen…', noMatches: 'Keine passenden Dateien.',
   collapseFiles: 'Dateiseitenleiste einklappen', expandFiles: 'Dateiseitenleiste ausklappen',
   collapseRightPanel: 'Gliederung und Kommentare einklappen', expandRightPanel: 'Gliederung und Kommentare ausklappen',
@@ -456,8 +498,14 @@ const de: Copy = {
 }
 
 const it: Copy = {
-  files: 'File di specifica', otherFiles: 'Altri file', search: 'Cerca', searchTitle: 'Cerca in questa specifica',
-  stages: { spec: 'Specifica', plan: 'Piano', tasks: 'Attività' },
+  files: 'File', otherFiles: 'File non assegnati', search: 'Cerca', searchTitle: 'Cerca nei documenti',
+  ungrouped: 'Non raggruppato', newGroup: 'Nuovo gruppo...', newGroupTitle: 'Nuovo gruppo', groupTitlePlaceholder: 'Nome del gruppo', create: 'Crea',
+  addGroup: 'Aggiungi gruppo', renameGroup: 'Rinomina gruppo', deleteGroup: 'Elimina gruppo',
+  setEntry: 'Imposta come voce principale', entryBadge: 'Principale', newGroupPrompt: 'Titolo del gruppo:',
+  addFile: 'Aggiungi file', renameFile: 'Rinomina file', deleteFile: 'Elimina file',
+  newFilePrompt: 'Nome file (es. overview.md):', renameFilePrompt: 'Nuovo nome file:',
+  deleteGroupConfirm: 'Eliminare questo gruppo? I suoi file verranno spostati in Non assegnati.',
+  deleteFileConfirm: 'Eliminare definitivamente questo file?',
   searchPlaceholder: 'Cerca nomi e contenuti…', noMatches: 'Nessun file corrispondente.',
   collapseFiles: 'Comprimi la barra dei file', expandFiles: 'Espandi la barra dei file',
   collapseRightPanel: 'Comprimi struttura e commenti', expandRightPanel: 'Espandi struttura e commenti',
@@ -519,8 +567,14 @@ const it: Copy = {
 }
 
 const pt: Copy = {
-  files: 'Arquivos da especificação', otherFiles: 'Outros arquivos', search: 'Pesquisar', searchTitle: 'Pesquisar nesta especificação',
-  stages: { spec: 'Especificar', plan: 'Plano', tasks: 'Tarefas' },
+  files: 'Arquivos', otherFiles: 'Arquivos não atribuídos', search: 'Pesquisar', searchTitle: 'Pesquisar documentos',
+  ungrouped: 'Sem grupo', newGroup: 'Novo grupo...', newGroupTitle: 'Novo grupo', groupTitlePlaceholder: 'Nome do grupo', create: 'Criar',
+  addGroup: 'Adicionar grupo', renameGroup: 'Renomear grupo', deleteGroup: 'Excluir grupo',
+  setEntry: 'Definir como entrada principal', entryBadge: 'Principal', newGroupPrompt: 'Título do grupo:',
+  addFile: 'Adicionar arquivo', renameFile: 'Renomear arquivo', deleteFile: 'Excluir arquivo',
+  newFilePrompt: 'Nome do arquivo (ex. overview.md):', renameFilePrompt: 'Novo nome do arquivo:',
+  deleteGroupConfirm: 'Excluir este grupo? Seus arquivos serão movidos para Não atribuídos.',
+  deleteFileConfirm: 'Excluir este arquivo permanentemente?',
   searchPlaceholder: 'Pesquisar nomes e conteúdo…', noMatches: 'Nenhum arquivo correspondente.',
   collapseFiles: 'Recolher a barra de arquivos', expandFiles: 'Expandir a barra de arquivos',
   collapseRightPanel: 'Recolher estrutura e comentários', expandRightPanel: 'Expandir estrutura e comentários',

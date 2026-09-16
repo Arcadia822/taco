@@ -28,7 +28,18 @@ It contains the Taco runtime and a single bundle block:
       "content": "**Feature Directory**: specs/001-taco-bento-product\n",
       "sourceHash": "<sha256-of-content-at-pack-time>"
     }
-  ]
+  ],
+  "navigation": {
+    "version": 1,
+    "entry": "specs/001-taco-bento-product/spec.md",
+    "groups": [
+      {
+        "id": "spec-group",
+        "title": "Specification",
+        "paths": ["specs/001-taco-bento-product/spec.md"]
+      }
+    ]
+  }
 }
 </script>
 ```

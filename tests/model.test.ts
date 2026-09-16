@@ -39,6 +39,19 @@ describe('file-first Taco bundle', () => {
     withoutReadme.files = withoutReadme.files.filter(({ path }) => !path.endsWith('/README.md'))
     expect(defaultFile(withoutReadme)?.path).toBe('specs/001-test/spec.md')
   })
+  it('prioritizes navigation.entry over README.md and falls back when entry is missing', () => {
+    const b = bundle()
+    b.navigation = {
+      version: 1,
+      entry: 'contracts/openapi.yaml',
+      groups: [],
+    }
+    expect(defaultFile(b)?.path).toBe('specs/001-test/contracts/openapi.yaml')
+
+    // 悬空 entry 安全回退至正常 README.md 流程
+    b.navigation!.entry = 'non-existent.md'
+  })
+
 
   it('classifies formats without parsing their contents', () => {
     const files = bundle().files

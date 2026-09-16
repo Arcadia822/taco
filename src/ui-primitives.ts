@@ -29,7 +29,10 @@ export type IconName =
   | 'key'
   | 'zoom-in'
   | 'x'
-
+  | 'plus'
+  | 'edit'
+  | 'trash'
+  | 'more-horizontal'
 const iconPaths: Record<IconName, string> = {
   braces: '<path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/>',
   check: '<path d="m20 6-11 11-5-5"/>',
@@ -59,8 +62,11 @@ const iconPaths: Record<IconName, string> = {
   key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L21 8"/>',
   'zoom-in': '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/><path d="M11 8v6M8 11h6"/>',
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
+  trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  'more-horizontal': '<circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/><circle cx="5" cy="12" r="1.5"/>',
 }
-
 export const el = <K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className = '',
@@ -150,6 +156,7 @@ export interface ConfirmDialogOptions {
   messages: readonly string[]
   confirmLabel: string
   cancelLabel: string
+  destructive?: boolean
 }
 
 export const showConfirmDialog = (options: ConfirmDialogOptions): Promise<boolean> =>
@@ -165,7 +172,7 @@ export const showConfirmDialog = (options: ConfirmDialogOptions): Promise<boolea
     const actions = el('div', 'confirmation-dialog-actions')
     const cancel = el('button', 'confirmation-dialog-cancel', options.cancelLabel) as HTMLButtonElement
     cancel.type = 'button'
-    const confirm = el('button', 'confirmation-dialog-confirm', options.confirmLabel) as HTMLButtonElement
+    const confirm = el('button', `confirmation-dialog-confirm${options.destructive ? ' is-destructive' : ''}`, options.confirmLabel) as HTMLButtonElement
     confirm.type = 'button'
     actions.append(cancel, confirm)
     dialog.append(title, body, actions)
@@ -197,6 +204,74 @@ export const showConfirmDialog = (options: ConfirmDialogOptions): Promise<boolea
     else dialog.setAttribute('open', '')
     cancel.focus()
   })
+export interface PromptDialogOptions {
+  title: string
+  placeholder?: string
+  initialValue?: string
+  confirmLabel: string
+  cancelLabel: string
+}
+
+export const showPromptDialog = (options: PromptDialogOptions): Promise<string | null> =>
+  new Promise((resolve) => {
+    const dialog = el('dialog', 'confirmation-dialog prompt-dialog') as HTMLDialogElement
+  dialog.setAttribute('aria-labelledby', 'taco-prompt-title')
+
+  const title = el('h2', 'confirmation-dialog-title', options.title)
+  title.id = 'taco-prompt-title'
+  const body = el('div', 'confirmation-dialog-body')
+  const input = el('input', 'prompt-dialog-input') as HTMLInputElement
+  input.type = 'text'
+  input.value = options.initialValue ?? ''
+  if (options.placeholder) input.placeholder = options.placeholder
+  body.append(input)
+
+  const actions = el('div', 'confirmation-dialog-actions')
+  const cancel = el('button', 'confirmation-dialog-cancel', options.cancelLabel) as HTMLButtonElement
+  cancel.type = 'button'
+  const confirm = el('button', 'confirmation-dialog-confirm', options.confirmLabel) as HTMLButtonElement
+  confirm.type = 'button'
+  actions.append(cancel, confirm)
+  dialog.append(title, body, actions)
+
+  let settled = false
+  const finish = (value: string | null): void => {
+    if (settled) return
+    settled = true
+    try {
+      if (dialog.open && typeof dialog.close === 'function') dialog.close()
+    } finally {
+      dialog.remove()
+      resolve(value)
+    }
+  }
+
+  cancel.addEventListener('click', () => finish(null))
+  confirm.addEventListener('click', () => finish(input.value.trim() || null))
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      finish(input.value.trim() || null)
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      finish(null)
+    }
+  })
+  dialog.addEventListener('cancel', (event) => {
+    event.preventDefault()
+    finish(null)
+  })
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) finish(null)
+  })
+
+  document.body.append(dialog)
+  if (typeof dialog.showModal === 'function') dialog.showModal()
+  else dialog.setAttribute('open', '')
+  input.focus()
+  input.select()
+  })
+
 
 const extensionLabel = (file: TacoFile): string => {
   const name = fileName(file.path)

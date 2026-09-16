@@ -125,9 +125,9 @@ vite.config.ts                        默认 bundle 注入与构建配置
 
 默认规格目录同时是项目的可执行示例。其中的 `README.md` 与项目 README 内容一致，并作为概览首先打开。产品行为写在 `spec.md`，技术方案写在 `plan.md`，任务状态写在 `tasks.md`，容器协议位于 `contracts/taco-document.md`。
 
-## 文档路由
+## 文档路由与侧栏导航
 
-功能目录根部的 `README.md` 会进入 Specify 并默认打开；没有 README 时回退到 `spec.md`。`spec.md`、`plan.md` 和 `tasks.md` 仍是三个阶段的核心文件。已知 Spec Kit 文件和目录按内置约定路由；其他 Markdown 可以用 YAML `taco_scope` 属性显式路由：
+默认情况下，功能目录根部的 `README.md` 会进入 Specify 并默认打开；没有 README 时回退到 `spec.md`。当 Taco 包含顶层 `navigation` 清单时，侧栏直接根据声明展示自定义分组与排序，未声明的文件自动归入未分配区；在评审页面中还可直接增删分组、拖拽移动文件以及设定主入口。在无配置的 Spec Kit 目录中，`spec.md`、`plan.md` 和 `tasks.md` 仍是核心阶段文件，其他 Markdown 可通过 YAML 的 `taco_scope` 属性显式路由：
 
 ```md
 ---

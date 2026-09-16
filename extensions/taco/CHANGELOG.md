@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add runtime-editable sidebar navigation and declarative grouping: create, rename, delete groups, drag files between groups, and declare entry documents.
+- Persist navigation declarations to the top-level `navigation` bundle field on save without modifying `files[]` or source hashes.
+- Preserve backward compatibility with standard Spec Kit three-stage derivers and default README entry precedence when `navigation` is omitted.
+- Sync navigation structure across same-machine collaborative windows via document-level CRDT propagation without protocol migration.
+
 ## 0.6.0 - 2026-09-15
 
 - Allow independent desktop outline/comment-panel collapse, restoring each document's desktop preference within the browser session without letting narrow-screen drawers overwrite it. Preserve tabs and comment drafts across toggles, restore focus on close, and leave Escape to active dialogs, menus, and editor handlers.

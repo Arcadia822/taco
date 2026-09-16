@@ -3,6 +3,7 @@ import {
   bundleCanWrite,
   fileByPath,
   fileKind,
+  fileName,
   relativePath,
   type TacoBundle,
   type TacoFile,
@@ -24,6 +25,9 @@ import {
 import { createBrandMarkContainer } from './brand.ts'
 import { createSourceEditor, type SourceEditorController } from './source-editor.ts'
 import { FileNavigation } from './file-navigation.ts'
+import { getFileCurrentGroup, openGroupSelectorPopover } from './group-selector.ts'
+import { addNavigationGroup, createInitialManifest, moveFileToGroup } from './navigation-editor.ts'
+import { showNewFileDialog } from './new-file-dialog.ts'
 import {
   createControlButton,
   createFileTypeIcon as fileTypeIcon,
@@ -31,6 +35,7 @@ import {
   fallbackFileTitle,
   setButtonIcon,
   showConfirmDialog,
+  showPromptDialog,
   sidebarRow,
   svgIcon,
 } from './ui-primitives.ts'
@@ -86,6 +91,7 @@ export class FileBrowser {
   private outlineList!: HTMLElement
   private outlineTab!: HTMLButtonElement
   private commentsTab!: HTMLButtonElement
+  private categoryBadge!: HTMLButtonElement
   private workspacePath!: HTMLElement
   private readonly markdownMigrationErrors = new Map<string, string>()
   private markdownEditor: Editor | null = null
@@ -280,8 +286,26 @@ export class FileBrowser {
         files: this.t.files,
         collapseFiles: this.t.collapseFiles,
         otherFiles: this.t.otherFiles,
-        stages: this.t.stages,
+        addGroup: this.t.addGroup,
+        renameGroup: this.t.renameGroup,
+        deleteGroup: this.t.deleteGroup,
+        addFile: this.t.addFile,
+        renameFile: this.t.renameFile,
+        deleteFile: this.t.deleteFile,
+        setEntry: this.t.setEntry,
+        entryBadge: this.t.entryBadge,
+        newGroupPrompt: this.t.newGroupPrompt,
+        newFilePrompt: this.t.newFilePrompt,
+        renameFilePrompt: this.t.renameFilePrompt,
       },
+      editable: bundleCanWrite(this.bundle),
+      onUpdateNavigation: (navigation) => {
+        this.store.updateNavigation(navigation)
+        this.fileNavigation?.refresh(this.selected)
+      },
+      onCreateFile: (targetGroupId) => this.handleCreateFile(targetGroupId),
+      onRenameFile: (file) => this.handleRenameFile(file),
+      onDeleteFile: (file) => this.handleDeleteFile(file),
       stageOpenState: this.stageOpenState,
       folderOpenState: this.folderOpenState,
       scrollTop: this.sidebarScrollTop,
@@ -312,7 +336,11 @@ export class FileBrowser {
     title.addEventListener('change', () => {
       title.value = this.bundle.title
     })
+    this.categoryBadge = el('button', 'workspace-category-badge') as HTMLButtonElement
+    this.categoryBadge.type = 'button'
+    this.categoryBadge.addEventListener('click', () => { void this.promptChangeCategory() })
     this.workspacePath = el('div', 'workspace-path', this.selected ? relativePath(this.bundle, this.selected) : '')
+    this.syncWorkspaceHeader()
     const workspaceHeaderSpacer = el('span', 'workspace-header-spacer')
     const share = createControlButton('share', this.t.share, () => this.share.open(share), 'share-button')
     this.share.mount(share)
@@ -371,6 +399,7 @@ export class FileBrowser {
       collapsedBrandName,
       leftHeaderToggle,
       title,
+      this.categoryBadge,
       this.workspacePath,
       workspaceHeaderSpacer,
       presenceStrip,
@@ -427,7 +456,7 @@ export class FileBrowser {
     this.updateSelectionLocation(file, writeHash)
     this.syncWorkspaceHeader()
     this.fileNavigation?.paint(file)
-    this.paintViewer(true)
+    this.paintViewer(false)
     this.comments.paint()
     this.syncAuxiliaryTabs()
     this.viewer.scrollTop = 0
@@ -665,7 +694,7 @@ export class FileBrowser {
           if (this.applyingRemoteEditor) return
           if (ensureTacoBlockIds(activeEditor, file.id ?? file.path, false)) return
           const nextMarkdown = this.markdownReconstructor.reconstruct(activeEditor)
-          if (nextMarkdown === file.content) return
+          if (nextMarkdown === file.content || nextMarkdown.trim() === file.content.trim()) return
           this.updateFileContent(file.path, nextMarkdown, blocksFromEditor(activeEditor, extensions))
           requestAnimationFrame(() => {
             resolveEmbeddedMarkdownAssets(editorHost, this.bundle, file)
@@ -873,11 +902,57 @@ export class FileBrowser {
   }
 
   private get t() { return copy[this.locale] }
-
   private syncWorkspaceHeader(): void {
     this.workspacePath.textContent = this.selected ? relativePath(this.bundle, this.selected) : ''
+    if (!this.selected) {
+      this.categoryBadge.style.display = 'none'
+      return
+    }
+
+    this.categoryBadge.style.display = 'inline-flex'
+    const groupInfo = getFileCurrentGroup(this.bundle, this.selected, this.t.ungrouped)
+    this.categoryBadge.textContent = groupInfo.groupTitle
+    this.categoryBadge.title = bundleCanWrite(this.bundle)
+      ? `Group: ${groupInfo.groupTitle} (Click to change)`
+      : `Group: ${groupInfo.groupTitle}`
+    this.categoryBadge.classList.toggle('is-editable', bundleCanWrite(this.bundle))
   }
 
+  private promptChangeCategory(): void {
+    if (!this.selected || !bundleCanWrite(this.bundle)) return
+    const groupInfo = getFileCurrentGroup(this.bundle, this.selected, this.t.ungrouped)
+
+    openGroupSelectorPopover({
+      anchor: this.categoryBadge,
+      bundle: this.bundle,
+      file: this.selected,
+      currentGroupId: groupInfo.groupId,
+      labels: {
+        ungrouped: this.t.ungrouped,
+        newGroup: this.t.newGroup,
+        newGroupTitle: this.t.newGroupTitle,
+        groupTitlePlaceholder: this.t.groupTitlePlaceholder,
+        create: this.t.create,
+        cancel: this.t.cancel,
+      },
+      onSelectGroup: (targetGroupId) => {
+        const current = createInitialManifest(this.bundle)
+        const next = moveFileToGroup(current, this.selected!.path, targetGroupId, this.bundle.root)
+        this.store.updateNavigation(next)
+        this.syncWorkspaceHeader()
+        this.fileNavigation?.refresh(this.selected)
+      },
+      onCreateNewGroup: (newTitle) => {
+        const current = createInitialManifest(this.bundle)
+        const withNewGroup = addNavigationGroup(current, newTitle)
+        const newGroupId = withNewGroup.groups[withNewGroup.groups.length - 1]?.id
+        const next = moveFileToGroup(withNewGroup, this.selected!.path, newGroupId, this.bundle.root)
+        this.store.updateNavigation(next)
+        this.syncWorkspaceHeader()
+        this.fileNavigation?.refresh(this.selected)
+      },
+    })
+  }
   private applyRemoteState(): void {
     const selectedId = this.selected?.id
     this.selected = this.bundle.files.find((file) => file.id === selectedId)
@@ -993,11 +1068,17 @@ export class FileBrowser {
   }
 
   private syncDirtyState(): void {
-    const dirty = this.dirtyTracker.isDirty()
-    this.saveButton.classList.toggle('is-dirty', dirty)
-    this.saveButton.title = dirty ? this.t.unsaved : this.t.save
+    const saveDirty = this.dirtyTracker.isDirty()
+    this.saveButton.classList.toggle('is-dirty', saveDirty)
+    this.saveButton.title = saveDirty ? this.t.unsaved : this.t.save
     this.saveButton.setAttribute('aria-label', this.saveButton.title)
-    this.copyButton.classList.toggle('is-dirty', dirty)
+
+    // handoff 与 save 分开判定：仅实际有文件改动、增删文件或有评论时才给 copyButton 加 dot
+    const hasFileChanges = this.dirtyTracker.getDirtyFileIds().size > 0
+    const hasCommentChanges = this.dirtyTracker.isCommentsDirty()
+    const hasOpenComments = (this.bundle.comments ?? []).some((c) => c.status === 'open')
+    const handoffDirty = hasFileChanges || hasCommentChanges || (hasOpenComments && saveDirty)
+    this.copyButton.classList.toggle('is-dirty', handoffDirty)
   }
 
   private openPopover(anchor: HTMLElement, className: string): HTMLElement {
@@ -1131,7 +1212,9 @@ export class FileBrowser {
         })),
       }
     })
-    if (changedFiles.length === 0 && comments.length === 0 && !this.dirtyTracker.isDirty()) {
+    const hasDocTitleChange = this.dirtyTracker.isDocumentDirty() && !this.bundle.navigation
+    const hasFileOrCommentChanges = changedFiles.length > 0 || comments.length > 0 || this.dirtyTracker.isCommentsDirty() || this.dirtyTracker.getDirtyFileIds().size > 0
+    if (!hasDocTitleChange && !hasFileOrCommentChanges) {
       this.toast(this.t.noReviewChanges)
       return
     }
@@ -1266,6 +1349,122 @@ export class FileBrowser {
     setTimeout(() => toast.classList.add('is-leaving'), 2200)
     setTimeout(() => toast.remove(), 2360)
   }
+  private async handleCreateFile(targetGroupId: string | null): Promise<void> {
+    const result = await showNewFileDialog({
+      title: this.t.addFile ?? 'Add file',
+      typeLabel: 'File type:',
+      nameLabel: 'File name:',
+      namePlaceholder: 'overview',
+      confirmLabel: this.t.save ?? 'Create',
+      cancelLabel: this.t.cancel ?? 'Cancel',
+    })
+    if (!result) return
+
+    const fileNameClean = result.fileName.trim().replaceAll('\\', '/').split('/').filter(Boolean).join('/')
+    const fullPath = `${this.bundle.root}/${fileNameClean}`
+    if (fileByPath(this.bundle, fullPath)) return
+
+    const newFile: TacoFile = {
+      id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      path: fullPath,
+      mediaType: result.mediaType,
+      content: result.content,
+    }
+
+    this.store.commit({ kind: 'document' }, () => {
+      this.bundle.files.push(newFile)
+      if (this.bundle.navigation) {
+        const rel = fileNameClean
+        if (targetGroupId) {
+          const group = this.bundle.navigation.groups.find((g) => g.id === targetGroupId)
+          if (group) group.paths.push(rel)
+        }
+      }
+    })
+
+    this.selectFile(newFile)
+    this.fileNavigation?.refresh(this.selected)
+  }
+
+  private async handleRenameFile(file: TacoFile): Promise<void> {
+    const fullName = fileName(file.path)
+    const dotIndex = fullName.lastIndexOf('.')
+    const baseName = dotIndex > 0 ? fullName.slice(0, dotIndex) : fullName
+    const extension = dotIndex > 0 ? fullName.slice(dotIndex) : ''
+
+    const promptText = this.t.renameFilePrompt ?? 'New file name:'
+    const newName = await showPromptDialog({
+      title: this.t.renameFile ?? 'Rename file',
+      placeholder: promptText,
+      initialValue: baseName, // 仅允许编辑纯主名称
+      confirmLabel: this.t.save ?? 'Rename',
+      cancelLabel: this.t.cancel ?? 'Cancel',
+    })
+    if (!newName || !newName.trim()) return
+
+    // 清理并剥除可能误输的相同后缀，严格强制追加原有后缀名
+    let cleanBase = newName.trim().replaceAll('\\', '/').split('/').filter(Boolean).pop() ?? ''
+    if (extension && cleanBase.toLowerCase().endsWith(extension.toLowerCase())) {
+      cleanBase = cleanBase.slice(0, -extension.length).trim()
+    }
+    if (!cleanBase || cleanBase === baseName) return
+
+    const finalName = `${cleanBase}${extension}`
+    const dir = file.path.slice(0, file.path.lastIndexOf('/'))
+    const newPath = `${dir}/${finalName}`
+    if (fileByPath(this.bundle, newPath)) return
+
+    const oldPath = file.path
+    this.store.commit({ kind: 'document' }, () => {
+      file.path = newPath
+      if (this.bundle.navigation) {
+        const oldRel = oldPath.slice(this.bundle.root.length + 1)
+        const newRel = newPath.slice(this.bundle.root.length + 1)
+        for (const group of this.bundle.navigation.groups) {
+          group.paths = group.paths.map((p) => (p === oldRel ? newRel : p))
+        }
+        if (this.bundle.navigation.entry === oldRel) {
+          this.bundle.navigation.entry = newRel
+        }
+      }
+    })
+
+    this.selectFile(file)
+    this.fileNavigation?.refresh(this.selected)
+  }
+
+  private async handleDeleteFile(file: TacoFile): Promise<void> {
+    const confirmText = this.t.deleteFileConfirm ?? 'Delete this file permanently?'
+    const confirmed = await showConfirmDialog({
+      title: this.t.deleteFile ?? 'Delete file',
+      messages: [confirmText],
+      confirmLabel: this.t.deleteFile ?? 'Delete',
+      cancelLabel: this.t.cancel ?? 'Cancel',
+      destructive: true,
+    })
+    if (!confirmed) return
+    const filePath = file.path
+    this.store.commit({ kind: 'document' }, () => {
+      this.bundle.files = this.bundle.files.filter((f) => f.path !== filePath)
+      if (this.bundle.navigation) {
+        const rel = filePath.slice(this.bundle.root.length + 1)
+        for (const group of this.bundle.navigation.groups) {
+          group.paths = group.paths.filter((p) => p !== rel)
+        }
+        if (this.bundle.navigation.entry === rel) {
+          delete this.bundle.navigation.entry
+        }
+      }
+    })
+
+    if (this.selected?.path === filePath) {
+      this.selected = defaultFile(this.bundle)
+      if (this.selected) this.selectFile(this.selected)
+    }
+    this.fileNavigation?.refresh(this.selected)
+  }
+
+
 
   private onKey(event: KeyboardEvent): void {
     if (event.defaultPrevented || event.isComposing || !this.root.isConnected) return

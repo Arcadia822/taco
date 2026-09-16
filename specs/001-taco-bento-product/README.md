@@ -125,9 +125,9 @@ vite.config.ts                        Default bundle injection and build configu
 
 The default specification directory is also the project's executable example. Its `README.md` mirrors this project README and opens first as the overview. Product behavior is in `spec.md`, technical design is in `plan.md`, task state is in `tasks.md`, and the container protocol is in `contracts/taco-document.md`.
 
-## Document routing
+## Document routing and navigation
 
-A feature-root `README.md` routes to Specify and opens by default; `spec.md` is the fallback when no README exists. `spec.md`, `plan.md`, and `tasks.md` remain the three core stage files. Known Spec Kit files and directories follow Taco's built-in conventions. Every other Markdown document may use the YAML `taco_scope` property for explicit routing:
+By default, a feature-root `README.md` routes to Specify and opens first; `spec.md` is the fallback when no README exists. When a Taco contains a top-level `navigation` manifest, files are grouped and ordered directly according to its declarations, and undeclared files appear under Unassigned. You can also organize groups, drag files, and set entry documents directly in the sidebar during review. In unconfigured Spec Kit trees, `spec.md`, `plan.md`, and `tasks.md` remain the core stage files, and other Markdown documents may route explicitly using `taco_scope`:
 
 ```md
 ---

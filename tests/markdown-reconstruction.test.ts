@@ -152,4 +152,15 @@ describe('lossless Markdown reconstruction', () => {
     replaceText(editor, 'Taco turns', 'Taco now turns')
     expect(reconstructor.reconstruct(editor)).toBe(content.replace('Taco turns', 'Taco now turns'))
   })
+  it('does not produce unexpected empty lines when visual-system.md is loaded or re-rendered', () => {
+    const content = readFileSync('specs/001-taco-bento-product/visual-system.md', 'utf8')
+    const { editor, reconstructor } = mount(content)
+    expect(reconstructor.reconstruct(editor)).toBe(content)
+
+    // 模拟任何 docChanged 或再次触发 reconstruct
+    editor.commands.insertContentAt({ from: editor.state.doc.content.size - 1, to: editor.state.doc.content.size - 1 }, ' ')
+    editor.commands.undo()
+    const afterUndo = reconstructor.reconstruct(editor)
+    expect(afterUndo).toBe(content)
+  })
 })

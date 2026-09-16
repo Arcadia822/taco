@@ -44,18 +44,19 @@ describe('stage navigation', () => {
 
   it('places every assigned file directly in one of the three stages', () => {
     const navigation = buildStageNavigation(bundle())
-    expect(navigation.stages.map((stage) => stage.core?.path.split('/').at(-1))).toEqual(['spec.md', 'plan.md', 'tasks.md'])
-    expect(navigation.stages[0].files.map((item) => item.path)).toEqual([
+    expect(navigation.stages[0].files.map((item) => item.path)).toEqual(expect.arrayContaining([
+      'specs/001-stage/spec.md',
       'specs/001-stage/README.md',
       'specs/001-stage/prototypes/checkout.html',
-    ])
+    ]))
     expect(navigation.stages[1].files.map((item) => item.path)).toEqual(expect.arrayContaining([
+      'specs/001-stage/plan.md',
       'specs/001-stage/checklists/requirements.md',
       'specs/001-stage/checklists/implementation.md',
       'specs/001-stage/contracts/api.md',
       'specs/001-stage/interaction-design.md',
     ]))
-    expect(navigation.stages[2].files).toHaveLength(0)
+    expect(navigation.stages[2].files.map((item) => item.path)).toEqual(['specs/001-stage/tasks.md'])
     expect(navigation.unassigned.map((item) => item.path)).toEqual(['specs/001-stage/notes.md'])
   })
 
