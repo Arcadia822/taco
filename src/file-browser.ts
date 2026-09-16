@@ -286,7 +286,6 @@ export class FileBrowser {
         files: this.t.files,
         collapseFiles: this.t.collapseFiles,
         otherFiles: this.t.otherFiles,
-        stages: this.t.stages,
         addGroup: this.t.addGroup,
         renameGroup: this.t.renameGroup,
         deleteGroup: this.t.deleteGroup,
@@ -911,7 +910,7 @@ export class FileBrowser {
     }
 
     this.categoryBadge.style.display = 'inline-flex'
-    const groupInfo = getFileCurrentGroup(this.bundle, this.selected, this.t.stages)
+    const groupInfo = getFileCurrentGroup(this.bundle, this.selected, this.t.ungrouped)
     this.categoryBadge.textContent = groupInfo.groupTitle
     this.categoryBadge.title = bundleCanWrite(this.bundle)
       ? `Group: ${groupInfo.groupTitle} (Click to change)`
@@ -921,14 +920,21 @@ export class FileBrowser {
 
   private promptChangeCategory(): void {
     if (!this.selected || !bundleCanWrite(this.bundle)) return
-    const groupInfo = getFileCurrentGroup(this.bundle, this.selected, this.t.stages)
+    const groupInfo = getFileCurrentGroup(this.bundle, this.selected, this.t.ungrouped)
 
     openGroupSelectorPopover({
       anchor: this.categoryBadge,
       bundle: this.bundle,
       file: this.selected,
       currentGroupId: groupInfo.groupId,
-      stageLabels: this.t.stages,
+      labels: {
+        ungrouped: this.t.ungrouped,
+        newGroup: this.t.newGroup,
+        newGroupTitle: this.t.newGroupTitle,
+        groupTitlePlaceholder: this.t.groupTitlePlaceholder,
+        create: this.t.create,
+        cancel: this.t.cancel,
+      },
       onSelectGroup: (targetGroupId) => {
         const current = createInitialManifest(this.bundle)
         const next = moveFileToGroup(current, this.selected!.path, targetGroupId, this.bundle.root)

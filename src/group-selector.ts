@@ -2,7 +2,6 @@ import { type TacoBundle, type TacoFile } from './model.ts'
 import { resolveDocumentNavigation } from './navigation.ts'
 import { el, sidebarRow, svgIcon } from './ui-primitives.ts'
 import { showPromptDialog } from './ui-primitives.ts'
-import { type StageId } from './stage-navigation.ts'
 
 export interface GroupSelectOption {
   id: string
@@ -20,7 +19,7 @@ export interface FileGroupResolution {
 export function getFileCurrentGroup(
   bundle: TacoBundle,
   file: TacoFile,
-  stageLabels?: Record<StageId, string>,
+  ungroupedTitle?: string,
 ): FileGroupResolution {
   const resolved = resolveDocumentNavigation(bundle)
 
@@ -40,10 +39,9 @@ export function getFileCurrentGroup(
         const inCore = group.stage.core?.path === file.path
         const inFiles = group.stage.files.some((f) => f.path === file.path)
         if (inCore || inFiles) {
-          const displayTitle = stageLabels?.[group.id as StageId] ?? group.title
           return {
             groupId: group.id,
-            groupTitle: displayTitle,
+            groupTitle: group.title,
           }
         }
       }
@@ -52,7 +50,7 @@ export function getFileCurrentGroup(
 
   return {
     groupId: null,
-    groupTitle: '未分组',
+    groupTitle: ungroupedTitle ?? 'Ungrouped',
   }
 }
 
@@ -61,12 +59,11 @@ export function getFileCurrentGroup(
  */
 export function getAvailableGroups(
   bundle: TacoBundle,
-  stageLabels?: Record<StageId, string>,
 ): GroupSelectOption[] {
   const resolved = resolveDocumentNavigation(bundle)
   return resolved.groups.map((g) => ({
     id: g.id,
-    title: g.isCustom ? g.title : (stageLabels?.[g.id as StageId] ?? g.title),
+    title: g.title,
   }))
 }
 
@@ -75,7 +72,14 @@ export interface OpenGroupSelectorOptions {
   bundle: TacoBundle
   file: TacoFile
   currentGroupId: string | null
-  stageLabels?: Record<StageId, string>
+  labels?: {
+    ungrouped: string
+    newGroup: string
+    newGroupTitle: string
+    groupTitlePlaceholder: string
+    create: string
+    cancel: string
+  }
   onSelectGroup: (groupId: string | null) => void
   onCreateNewGroup: (newTitle: string) => void
 }
@@ -89,7 +93,7 @@ export function openGroupSelectorPopover(options: OpenGroupSelectorOptions): voi
   const popover = el('div', 'topbar-popover group-selector-popover')
   popover.setAttribute('role', 'menu')
 
-  const groups = getAvailableGroups(options.bundle, options.stageLabels)
+  const groups = getAvailableGroups(options.bundle)
 
   // 1. 已有分组列表
   for (const group of groups) {
@@ -111,7 +115,7 @@ export function openGroupSelectorPopover(options: OpenGroupSelectorOptions): voi
   const unassignedRow = sidebarRow('button', {
     className: `popover-action${options.currentGroupId === null ? ' is-active' : ''}`,
     leading: options.currentGroupId === null ? svgIcon('check') : undefined,
-    label: '未分组',
+    label: options.labels?.ungrouped ?? 'Ungrouped',
   }) as HTMLButtonElement
   unassignedRow.type = 'button'
   unassignedRow.addEventListener('click', () => {
@@ -128,16 +132,16 @@ export function openGroupSelectorPopover(options: OpenGroupSelectorOptions): voi
   const newGroupRow = sidebarRow('button', {
     className: 'popover-action',
     leading: svgIcon('plus'),
-    label: '新建分组...',
+    label: options.labels?.newGroup ?? 'New group...',
   }) as HTMLButtonElement
   newGroupRow.type = 'button'
   newGroupRow.addEventListener('click', async () => {
     popover.remove()
     const newTitle = await showPromptDialog({
-      title: '新建分组',
-      placeholder: '分组名称',
-      confirmLabel: '创建',
-      cancelLabel: '取消',
+      title: options.labels?.newGroupTitle ?? 'New group',
+      placeholder: options.labels?.groupTitlePlaceholder ?? 'Group name',
+      confirmLabel: options.labels?.create ?? 'Create',
+      cancelLabel: options.labels?.cancel ?? 'Cancel',
     })
     if (newTitle && newTitle.trim()) {
       options.onCreateNewGroup(newTitle.trim())

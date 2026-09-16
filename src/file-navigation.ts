@@ -1,5 +1,4 @@
 import { createBrandMarkContainer } from './brand.ts'
-import { type StageId } from './stage-navigation.ts'
 import { defaultFile, fileName, relativePath, type NavigationManifest, type TacoBundle, type TacoFile } from './model.ts'
 import { createControlButton, createFileTypeIcon, el, showConfirmDialog, showPromptDialog, sidebarRow, svgIcon } from './ui-primitives.ts'
 import { resolveDocumentNavigation } from './navigation.ts'
@@ -23,7 +22,6 @@ export interface FileNavigationLabels {
   files: string
   collapseFiles: string
   otherFiles: string
-  stages: Record<StageId, string>
   addGroup?: string
   renameGroup?: string
   deleteGroup?: string
@@ -156,7 +154,7 @@ export class FileNavigation {
 
       const summary = el('summary', 'stage-summary sidebar-row')
       const head = el('span', 'stage-head')
-      const summaryText = group.isCustom ? group.title : (this.options.labels.stages[group.id as StageId] ?? group.title)
+      const summaryText = group.title
       const label = el('span', 'stage-name', summaryText)
       const caret = this.disclosureIcon('stage-caret')
       head.append(label, caret)

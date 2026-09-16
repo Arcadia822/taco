@@ -14,7 +14,7 @@ export type Locale = typeof LOCALE_CHOICES[number]['code']
 
 const en = {
   files: 'Files', otherFiles: 'Unassigned files', search: 'Search', searchTitle: 'Search documents',
-  stages: { spec: 'Specify', plan: 'Plan', tasks: 'Tasks' },
+  ungrouped: 'Ungrouped', newGroup: 'New group...', newGroupTitle: 'New group', groupTitlePlaceholder: 'Group name', create: 'Create',
   addGroup: 'Add group', renameGroup: 'Rename group', deleteGroup: 'Delete group',
   addFile: 'Add file', renameFile: 'Rename file', deleteFile: 'Delete file',
   setEntry: 'Set as entry document', entryBadge: 'Entry', newGroupPrompt: 'Group title:',
@@ -85,7 +85,7 @@ export type Copy = typeof en
 
 const zhHans: Copy = {
   files: '文件', otherFiles: '未分配文件', search: '搜索', searchTitle: '搜索文档',
-  stages: { spec: '需求定义', plan: '技术规划', tasks: '任务拆解' },
+  ungrouped: '未分组', newGroup: '新建分组...', newGroupTitle: '新建分组', groupTitlePlaceholder: '分组名称', create: '创建',
   addGroup: '添加分组', renameGroup: '重命名分组', deleteGroup: '删除分组',
   setEntry: '设为主入口', entryBadge: '入口', newGroupPrompt: '分组标题：',
   addFile: '新建文件', renameFile: '重命名文件', deleteFile: '删除文件',
@@ -154,7 +154,7 @@ const zhHans: Copy = {
 
 const zhHant: Copy = {
   files: '檔案', otherFiles: '未分配檔案', search: '搜尋', searchTitle: '搜尋文件',
-  stages: { spec: '需求定義', plan: '技術規劃', tasks: '任務拆解' },
+  ungrouped: '未分組', newGroup: '新建分組...', newGroupTitle: '新建分組', groupTitlePlaceholder: '分組名稱', create: '建立',
   addGroup: '新增分組', renameGroup: '重新命名分組', deleteGroup: '刪除分組',
   setEntry: '設為主入口', entryBadge: '入口', newGroupPrompt: '分組標題：',
   addFile: '新增檔案', renameFile: '重新命名檔案', deleteFile: '刪除檔案',
@@ -223,7 +223,7 @@ const zhHant: Copy = {
 
 const ja: Copy = {
   files: 'ファイル', otherFiles: '未割り当てファイル', search: '検索', searchTitle: 'ドキュメントを検索',
-  stages: { spec: '要件定義', plan: '技術計画', tasks: 'タスク' },
+  ungrouped: '未分類', newGroup: '新しいグループ...', newGroupTitle: '新しいグループ', groupTitlePlaceholder: 'グループ名', create: '作成',
   addGroup: 'グループを追加', renameGroup: 'グループ名を変更', deleteGroup: 'グループを削除',
   setEntry: 'エントリーに設定', entryBadge: 'エントリー', newGroupPrompt: 'グループ名：',
   addFile: 'ファイルを新規作成', renameFile: 'ファイル名を変更', deleteFile: 'ファイルを削除',
@@ -292,7 +292,7 @@ const ja: Copy = {
 
 const es: Copy = {
   files: 'Archivos', otherFiles: 'Archivos no asignados', search: 'Buscar', searchTitle: 'Buscar documentos',
-  stages: { spec: 'Especificar', plan: 'Plan', tasks: 'Tareas' },
+  ungrouped: 'Sin grupo', newGroup: 'Nuevo grupo...', newGroupTitle: 'Nuevo grupo', groupTitlePlaceholder: 'Nombre del grupo', create: 'Crear',
   addGroup: 'Añadir grupo', renameGroup: 'Renombrar grupo', deleteGroup: 'Eliminar grupo',
   setEntry: 'Establecer como entrada principal', entryBadge: 'Entrada', newGroupPrompt: 'Título del grupo:',
   addFile: 'Añadir archivo', renameFile: 'Renombrar archivo', deleteFile: 'Eliminar archivo',
@@ -361,7 +361,7 @@ const es: Copy = {
 
 const fr: Copy = {
   files: 'Fichiers', otherFiles: 'Fichiers non assignés', search: 'Rechercher', searchTitle: 'Rechercher des documents',
-  stages: { spec: 'Spécifier', plan: 'Plan', tasks: 'Tâches' },
+  ungrouped: 'Non groupé', newGroup: 'Nouveau groupe...', newGroupTitle: 'Nouveau groupe', groupTitlePlaceholder: 'Nom du groupe', create: 'Créer',
   addGroup: 'Ajouter un groupe', renameGroup: 'Renommer le groupe', deleteGroup: 'Supprimer le groupe',
   setEntry: 'Définir comme entrée principale', entryBadge: 'Entrée', newGroupPrompt: 'Titre du groupe :',
   addFile: 'Ajouter un fichier', renameFile: 'Renommer le fichier', deleteFile: 'Supprimer le fichier',
@@ -430,7 +430,7 @@ const fr: Copy = {
 
 const de: Copy = {
   files: 'Dateien', otherFiles: 'Nicht zugewiesene Dateien', search: 'Suchen', searchTitle: 'Dokumente durchsuchen',
-  stages: { spec: 'Spezifikation', plan: 'Plan', tasks: 'Aufgaben' },
+  ungrouped: 'Ungruppiert', newGroup: 'Neue Gruppe...', newGroupTitle: 'Neue Gruppe', groupTitlePlaceholder: 'Gruppenname', create: 'Erstellen',
   addGroup: 'Gruppe hinzufügen', renameGroup: 'Gruppe umbenennen', deleteGroup: 'Gruppe löschen',
   setEntry: 'Als Haupteinstieg festlegen', entryBadge: 'Einstieg', newGroupPrompt: 'Gruppentitel:',
   addFile: 'Datei hinzufügen', renameFile: 'Datei umbenennen', deleteFile: 'Datei löschen',
@@ -499,7 +499,7 @@ const de: Copy = {
 
 const it: Copy = {
   files: 'File', otherFiles: 'File non assegnati', search: 'Cerca', searchTitle: 'Cerca nei documenti',
-  stages: { spec: 'Specifica', plan: 'Piano', tasks: 'Attività' },
+  ungrouped: 'Non raggruppato', newGroup: 'Nuovo gruppo...', newGroupTitle: 'Nuovo gruppo', groupTitlePlaceholder: 'Nome del gruppo', create: 'Crea',
   addGroup: 'Aggiungi gruppo', renameGroup: 'Rinomina gruppo', deleteGroup: 'Elimina gruppo',
   setEntry: 'Imposta come voce principale', entryBadge: 'Principale', newGroupPrompt: 'Titolo del gruppo:',
   addFile: 'Aggiungi file', renameFile: 'Rinomina file', deleteFile: 'Elimina file',
@@ -568,7 +568,7 @@ const it: Copy = {
 
 const pt: Copy = {
   files: 'Arquivos', otherFiles: 'Arquivos não atribuídos', search: 'Pesquisar', searchTitle: 'Pesquisar documentos',
-  stages: { spec: 'Especificar', plan: 'Plano', tasks: 'Tarefas' },
+  ungrouped: 'Sem grupo', newGroup: 'Novo grupo...', newGroupTitle: 'Novo grupo', groupTitlePlaceholder: 'Nome do grupo', create: 'Criar',
   addGroup: 'Adicionar grupo', renameGroup: 'Renomear grupo', deleteGroup: 'Excluir grupo',
   setEntry: 'Definir como entrada principal', entryBadge: 'Principal', newGroupPrompt: 'Título do grupo:',
   addFile: 'Adicionar arquivo', renameFile: 'Renomear arquivo', deleteFile: 'Excluir arquivo',
