@@ -77,9 +77,11 @@ export class MarkdownBlockReconstructor {
     const separate = (): void => {
       if (!pieces.length) return
       const last = pieces.length - 1
+      // 如果上一块的末尾已有换行（例如 baseline.spaceAfter），则不再多加
       const endings = pieces[last].match(/(?:\r\n|\r|\n)+$/)?.[0] ?? ''
       const count = endings.match(/\r\n|\r|\n/g)?.length ?? 0
-      if (count < 2) pieces[last] += this.eol.repeat(2 - count)
+      if (count === 0) pieces[last] += this.eol.repeat(2)
+      else if (count === 1) pieces[last] += this.eol
     }
     while (index < nodes.length) {
       const baseline = this.baselines.get(String(nodes[index].attrs.tacoBlockId ?? ''))

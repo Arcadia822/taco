@@ -29,7 +29,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && SINGLEFILE=1 vite build --outDir dist-single && mv dist-single/index.html dist-single/Taco_Spec.taco.html && node scripts/postbuild-compress.mjs dist-single/Taco_Spec.taco.html && node scripts/shell-gate.mjs dist-single/Taco_Spec.taco.html && node scripts/sync-extension-shell.mjs",
+    "build": "tsc -b && SINGLEFILE=1 vite build --outDir dist-single && mv dist-single/index.html dist-single/Taco_Spec.taco.html && node scripts/postbuild-compress.mjs dist-single/Taco_Spec.taco.html && node scripts/shell-gate.mjs dist-single/Taco_Spec.taco.html && node scripts/sync-extension-shell.mjs && node scripts/build-template-htmls.mjs",
     "build:single": "npm run build",
     "relay:dev": "wrangler dev --config server/sync-worker/wrangler.toml --port 8787",
     "relay:deploy": "wrangler deploy --config server/sync-worker/wrangler.toml",

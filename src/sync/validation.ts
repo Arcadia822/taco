@@ -21,7 +21,7 @@ const timestamp = (value: unknown): value is string => string(value, 128) && !Nu
 const reg = (value: unknown): value is [number, string] => Array.isArray(value) && value.length === 2 && integer(value[0]) && boundedString(value[1], 256)
 const ord = (value: unknown): value is string => string(value, 512) && /^[0-9A-Za-z]+$/.test(value)
 
-const DOC_SET_KEYS = new Set(['title'])
+const DOC_SET_KEYS = new Set(['title', 'navigation'])
 const FILE_SET_KEYS = new Set(['path', 'mediaType', 'title', 'sourceHash'])
 const NODE_SET_KEYS = new Set([
   'type', 'html', 'anchor', 'status', 'createdAt', 'updatedAt', 'threadId', 'author',
@@ -131,6 +131,20 @@ export const rebuildSyncDoc = (
       nodes,
     }
   })
+  let navigation: unknown = undefined
+  if (isRecord(value.navigation) && value.navigation.version === 1 && Array.isArray(value.navigation.groups)) {
+    const validGroups = value.navigation.groups.every((g) => isRecord(g)
+      && string(g.id, 256)
+      && typeof g.title === 'string'
+      && g.title.length <= 4096
+      && Array.isArray(g.paths)
+      && g.paths.every((p) => typeof p === 'string' && p.length <= 4096))
+    const validEntry = value.navigation.entry === undefined || (typeof value.navigation.entry === 'string' && value.navigation.entry.length <= 4096)
+    if (validGroups && validEntry) {
+      navigation = value.navigation
+    }
+  }
+
   return {
     format: 'taco/files',
     version: Number(value.version),
@@ -138,6 +152,7 @@ export const rebuildSyncDoc = (
     title: value.title,
     root: expected.root,
     ...(expected.access === 'reader' ? { access: 'reader' } : {}),
+    ...(navigation ? { navigation } : {}),
     files,
   }
 }

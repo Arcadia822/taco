@@ -85,6 +85,17 @@ export interface TacoCollab {
   role?: 'writer' | 'reader'
   sync?: unknown
 }
+export interface NavigationGroup {
+  id: string
+  title: string
+  paths: string[]
+}
+
+export interface NavigationManifest {
+  version: 1
+  entry?: string
+  groups: NavigationGroup[]
+}
 
 export interface TacoBundle {
   format: typeof FORMAT
@@ -94,11 +105,11 @@ export interface TacoBundle {
   root: string
   files: TacoFile[]
   comments?: TacoCommentThread[]
+  navigation?: NavigationManifest
   access?: 'reader'
   collab?: TacoCollab
   [extra: string]: unknown
 }
-
 export type ParseResult =
   | { ok: true; bundle: TacoBundle; frozen?: 'version' }
   | { ok: false; err: 'empty' }
@@ -187,6 +198,9 @@ export function parseBundle(json: string): ParseResult {
     return { ok: false, err: 'shape', detail: 'collab contains invalid sharing credentials' }
   }
 
+  if (raw.navigation !== undefined && !isNavigationManifest(raw.navigation)) {
+    delete raw.navigation
+  }
   const bundle = raw as unknown as TacoBundle
   for (const thread of bundle.comments ?? []) {
     thread.messages = sortCommentMessages(thread.messages.map(normalizeCommentMessage))
@@ -199,6 +213,20 @@ const isTimestamp = (value: unknown): value is string => typeof value === 'strin
   && value.length > 0
   && value.length <= 128
   && !Number.isNaN(Date.parse(value))
+
+const isNavigationGroup = (value: unknown): value is NavigationGroup =>
+  isRecord(value)
+  && isNonEmptyString(value.id)
+  && typeof value.title === 'string'
+  && Array.isArray(value.paths)
+  && value.paths.every((p) => typeof p === 'string')
+
+const isNavigationManifest = (value: unknown): value is NavigationManifest =>
+  isRecord(value)
+  && value.version === 1
+  && (value.entry === undefined || typeof value.entry === 'string')
+  && Array.isArray(value.groups)
+  && value.groups.every(isNavigationGroup)
 
 const isCollabInvite = (value: unknown): value is TacoCollabInvite => isRecord(value)
   && isNonEmptyString(value.pub)
@@ -313,6 +341,13 @@ export function fileKind(file: TacoFile): FileKind {
 }
 
 export function defaultFile(bundle: TacoBundle): TacoFile | null {
+  const entry = bundle.navigation?.entry
+  if (entry) {
+    const entryPath = entry.startsWith(`${bundle.root}/`) ? entry : `${bundle.root}/${entry}`
+    const declared = fileByPath(bundle, entryPath) ?? fileByPath(bundle, entry)
+    if (declared) return declared
+  }
+
   return fileByPath(bundle, `${bundle.root}/README.md`)
     ?? fileByPath(bundle, `${bundle.root}/spec.md`)
     ?? bundle.files.find((file) => fileKind(file) === 'markdown')

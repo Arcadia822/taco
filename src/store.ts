@@ -1,4 +1,4 @@
-import { bundleCanWrite, ensureFileIds, type TacoBlock, type TacoBundle, type TacoCommentMessage, type TacoCommentThread, type TacoFile, type TacoTextAnchor } from './model.ts'
+import { bundleCanWrite, ensureFileIds, type NavigationManifest, type TacoBlock, type TacoBundle, type TacoCommentMessage, type TacoCommentThread, type TacoFile, type TacoTextAnchor } from './model.ts'
 import { rebuildSyncDoc } from './sync/validation.ts'
 import { normalizeCommentMessage, sortCommentMessages } from './comments.ts'
 
@@ -142,6 +142,11 @@ export const applySyncDoc = (bundle: TacoBundle, sync: TacoSyncDoc): void => {
   bundle.files = files
   if (comments.length) bundle.comments = comments
   else delete bundle.comments
+  if (sync.navigation && typeof sync.navigation === 'object' && !Array.isArray(sync.navigation)) {
+    bundle.navigation = clone(sync.navigation as NavigationManifest)
+  } else {
+    delete bundle.navigation
+  }
 }
 
 export type StoreChangeSource = 'local' | 'remote'
@@ -168,6 +173,13 @@ export class TacoStore {
     this.emit('local', change)
     return true
   }
+  updateNavigation(navigation: NavigationManifest | undefined): boolean {
+    return this.commit({ kind: 'document' }, () => {
+      if (navigation) this.bundle.navigation = clone(navigation)
+      else delete this.bundle.navigation
+    })
+  }
+
 
   changed(change: StoreChange = { kind: 'all' }): void {
     this.emit('local', change)

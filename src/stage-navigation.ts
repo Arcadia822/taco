@@ -10,12 +10,11 @@ const tacoScopePrefix = '**Taco scope**:'
 
 export interface StageDefinition {
   id: StageId
-  corePath: `${StageId}.md`
 }
 
 export interface StageGroup {
   definition: StageDefinition
-  core: TacoFile | null
+  core?: TacoFile | null
   files: TacoFile[]
 }
 
@@ -25,13 +24,15 @@ export interface StageNavigation {
 }
 
 export const STAGES: readonly StageDefinition[] = [
-  { id: 'spec', corePath: 'spec.md' },
-  { id: 'plan', corePath: 'plan.md' },
-  { id: 'tasks', corePath: 'tasks.md' },
+  { id: 'spec' },
+  { id: 'plan' },
+  { id: 'tasks' },
 ]
 
 const conventionStage = (path: string): StageId | null => {
-  if (path.toLowerCase() === 'readme.md') return 'spec'
+  if (path.toLowerCase() === 'readme.md' || path === 'spec.md') return 'spec'
+  if (path === 'plan.md') return 'plan'
+  if (path === 'tasks.md') return 'tasks'
   if (path.startsWith('checklists/')) return 'plan'
   if (path === 'research.md' || path === 'data-model.md' || path === 'quickstart.md' || path.startsWith('contracts/')) return 'plan'
   if (/\.html?$/i.test(path)) return 'spec'
@@ -64,25 +65,12 @@ export const tacoScope = (file: TacoFile): StageId | null => {
 }
 
 export const buildStageNavigation = (bundle: TacoBundle): StageNavigation => {
-  const groups = new Map<StageId, StageGroup>(STAGES.map((definition) => [
-    definition.id,
-    { definition, core: null, files: [] },
-  ]))
   const conventions = new Map<StageId, TacoFile[]>(STAGES.map(({ id }) => [id, []]))
   const scoped = new Map<StageId, TacoFile[]>(STAGES.map(({ id }) => [id, []]))
   const unassigned: TacoFile[] = []
 
   for (const file of bundle.files) {
     const path = relativePath(bundle, file)
-    const core = STAGES.find((stage) => stage.corePath === path)
-    if (core) groups.get(core.id)!.core = file
-  }
-
-  for (const file of bundle.files) {
-    const path = relativePath(bundle, file)
-    const core = STAGES.find((stage) => stage.corePath === path)
-    if (core) continue
-
     const convention = conventionStage(path)
     if (convention) {
       conventions.get(convention)!.push(file)
@@ -94,10 +82,10 @@ export const buildStageNavigation = (bundle: TacoBundle): StageNavigation => {
     else unassigned.push(file)
   }
 
-  const stages = STAGES.map(({ id }) => {
-    const group = groups.get(id)!
-    group.files = [...conventions.get(id)!, ...scoped.get(id)!]
-    return group
-  })
+  const stages = STAGES.map((definition) => ({
+    definition,
+    core: null,
+    files: [...conventions.get(definition.id)!, ...scoped.get(definition.id)!],
+  }))
   return { stages, unassigned }
 }

@@ -299,7 +299,7 @@ describe('FileBrowser', () => {
     expect(Array.from(document.querySelectorAll('.stage-name')).map((node) => node.textContent)).toEqual(['需求定义', '技术规划', '任务拆解'])
     const specRows = document.querySelectorAll('[data-stage="spec"] .file-row')
     expect(Array.from(specRows).map((node) => node.getAttribute('data-role'))).toEqual([null, null])
-    expect(specRows[0].getAttribute('data-path')).toMatch(/spec\.md$/)
+    expect(document.querySelector('[data-stage="spec"] [data-path$="spec.md"]')).not.toBeNull()
     expect(document.querySelector('[data-stage="plan"] [data-path$="checklists/requirements.md"]')).not.toBeNull()
     expect(Array.from(document.querySelectorAll('[data-stage="plan"] .tree-folder .folder-name')).map((node) => node.textContent)).toEqual(['checklists', 'contracts'])
     expect(document.querySelector('[data-stage="spec"] [data-path$="README.md"]')).not.toBeNull()
