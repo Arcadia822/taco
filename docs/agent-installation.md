@@ -73,7 +73,7 @@ The process policy must retain YAML `title`, logical `feature_id`, verified-only
 
 ## Update a feature Taco
 
-The feature directory is canonical. Require its exact path and `spec.md`; never guess by modification time.
+The feature directory is canonical. Require its exact path; never guess by modification time.
 
 Using only the installed extension:
 

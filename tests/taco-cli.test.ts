@@ -1,6 +1,14 @@
 import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, mkdirSync, readFileSync, realpathSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -16,7 +24,14 @@ interface CliBundle {
   docId: string
   title: string
   root: string
-  files: Array<{ path: string; mediaType: string; title?: string; content: string; sourceUrl?: string; sourceHash?: string }>
+  files: Array<{
+    path: string
+    mediaType: string
+    title?: string
+    content: string
+    sourceUrl?: string
+    sourceHash?: string
+  }>
   packOptions?: { ignore: string[] }
   comments?: Array<Record<string, unknown>>
 }
@@ -99,17 +114,14 @@ describe('Taco extension CLI', () => {
     const project = mkdtempSync(join(tmpdir(), 'taco-replacement-title-'))
     const feature = join(project, 'specs/000-replacement-title')
     const title = ['Add', '$&', '$`', "$'", '$1', '$$', 'pricing'].join(' ')
-    const escapedTitle = 'Add $&amp; $` $\' $1 $$ pricing — Taco'
+    const escapedTitle = "Add $&amp; $` $' $1 $$ pricing — Taco"
     const output = join(feature, 'Add_1_pricing.taco.html')
     mkdirSync(feature, { recursive: true })
     writeFileSync(join(feature, 'spec.md'), '---\ntitle: "Fallback"\n---\n\n## Test\n')
 
     const shellWithTitle = readFileSync(shell, 'utf8')
     const shellWithoutTitle = join(project, 'shell-without-title.html')
-    writeFileSync(
-      shellWithoutTitle,
-      shellWithTitle.replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, ''),
-    )
+    writeFileSync(shellWithoutTitle, shellWithTitle.replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, ''))
 
     for (const shellPath of [shell, shellWithoutTitle]) {
       runJson(
@@ -137,7 +149,10 @@ describe('Taco extension CLI', () => {
     const output = join(feature, '001-demo.taco.html')
     mkdirSync(join(feature, 'contracts'), { recursive: true })
     mkdirSync(join(feature, 'diagrams'), { recursive: true })
-    writeFileSync(join(feature, 'spec.md'), '---\ntitle: "Demo from YAML"\n---\n\n## Outcome\n\nOriginal text.\n')
+    writeFileSync(
+      join(feature, 'spec.md'),
+      '---\ntitle: "Demo from YAML"\n---\n\n## Outcome\n\nOriginal text.\n',
+    )
     writeFileSync(join(feature, 'contracts/api.json'), '{"ok":true}\n')
     writeFileSync(join(feature, 'diagrams/flow.mmd'), 'flowchart LR\n  A --> B\n')
     writeFileSync(join(feature, 'prototype.html'), '<!doctype html><title>Prototype</title>\n')
@@ -156,21 +171,38 @@ describe('Taco extension CLI', () => {
       'specs/001-demo/prototype.html',
       'specs/001-demo/spec.md',
     ])
-    expect(bundle.files.find((file) => file.path.endsWith('/flow.mmd'))?.mediaType).toBe('text/plain')
+    expect(bundle.files.find((file) => file.path.endsWith('/flow.mmd'))?.mediaType).toBe(
+      'text/plain',
+    )
     expect(bundle.files.every((file) => /^[a-f0-9]{64}$/.test(file.sourceHash ?? ''))).toBe(true)
-    expect(bundle.files.find((file) => file.path.endsWith('/spec.md'))?.title).toBe('Demo from YAML')
-    expect(bundle.files.find((file) => file.path.endsWith('/prototype.html'))?.sourceUrl)
-      .toBe(pathToFileURL(realpathSync(join(feature, 'prototype.html'))).href)
+    expect(bundle.files.find((file) => file.path.endsWith('/spec.md'))?.title).toBe(
+      'Demo from YAML',
+    )
+    expect(bundle.files.find((file) => file.path.endsWith('/prototype.html'))?.sourceUrl).toBe(
+      pathToFileURL(realpathSync(join(feature, 'prototype.html'))).href,
+    )
 
     const legacy = structuredClone(bundle)
     delete legacy.files.find((file) => file.path.endsWith('/prototype.html'))?.sourceUrl
     writeBundle(output, legacy)
     runJson(
-      ['pack', feature, '--project-root', project, '--output', output, '--from', output, '--shell', shell],
+      [
+        'pack',
+        feature,
+        '--project-root',
+        project,
+        '--output',
+        output,
+        '--from',
+        output,
+        '--shell',
+        shell,
+      ],
       project,
     )
-    expect(readBundle(output).files.find((file) => file.path.endsWith('/prototype.html'))?.sourceUrl)
-      .toBe(pathToFileURL(realpathSync(join(feature, 'prototype.html'))).href)
+    expect(
+      readBundle(output).files.find((file) => file.path.endsWith('/prototype.html'))?.sourceUrl,
+    ).toBe(pathToFileURL(realpathSync(join(feature, 'prototype.html'))).href)
   })
 
   it('refreshes an existing Taco with the latest shell while preserving its bundle state', () => {
@@ -463,13 +495,64 @@ describe('Taco extension CLI', () => {
     ])
   })
 
-  it('rejects unsafe ignore patterns and excluding spec.md', () => {
+  it('packs a generic documentation directory without spec.md', () => {
+    const project = mkdtempSync(join(tmpdir(), 'taco-generic-docs-'))
+    const docs = join(project, 'docs/architecture')
+    const output = join(docs, 'architecture.taco.html')
+    mkdirSync(docs, { recursive: true })
+    writeFileSync(
+      join(docs, 'adr-001-storage.md'),
+      '---\ntitle: "ADR 001: Storage"\n---\n\n## Decision\n',
+    )
+    writeFileSync(join(docs, 'topology.json'), '{"nodes":[]}\n')
+
+    const result = runJson<{ output: string; files: number }>(
+      ['pack', docs, '--project-root', project, '--output', output, '--shell', shell],
+      project,
+    )
+    expect(result.files).toBe(2)
+    const bundle = readBundle(output)
+    // Title stays filename-aligned unless explicitly overridden with --title.
+    expect(bundle.title).toBe('architecture')
+    expect(bundle.files.map((file) => file.path)).toEqual([
+      'docs/architecture/adr-001-storage.md',
+      'docs/architecture/topology.json',
+    ])
+
+    const sync = runJson<{ applied: boolean; files: Array<{ path: string; state: string }> }>(
+      ['sync', output, '--project-root', project],
+      project,
+    )
+    expect(sync.applied).toBe(true)
+    expect(sync.files.every((file) => file.state === 'unchanged')).toBe(true)
+  })
+
+  it('infers the bundle title from README.md over the first Markdown file', () => {
+    const project = mkdtempSync(join(tmpdir(), 'taco-readme-entry-'))
+    const docs = join(project, 'docs/rfc')
+    const output = join(docs, 'RFC_Overview.taco.html')
+    mkdirSync(docs, { recursive: true })
+    writeFileSync(join(docs, 'README.md'), '---\ntitle: "RFC Overview"\n---\n\n## Index\n')
+    writeFileSync(join(docs, 'details.md'), '---\ntitle: "Details"\n---\n\n## Detail\n')
+
+    runJson(
+      ['pack', docs, '--project-root', project, '--output', output, '--shell', shell],
+      project,
+    )
+    // No --title: inference resolves through headingEntry. README.md wins over
+    // details.md, yielding "RFC Overview" (matches the RFC_Overview output base, so
+    // the human-form title is kept). Without the README fallback the dir-name path
+    // would instead surface the output base "RFC_Overview".
+    expect(readBundle(output).title).toBe('RFC Overview')
+  })
+
+  it('rejects unsafe ignore patterns', () => {
     const project = mkdtempSync(join(tmpdir(), 'taco-ignore-safety-'))
     const feature = join(project, 'specs/006-ignore-safety')
     mkdirSync(feature, { recursive: true })
     writeFileSync(join(feature, 'spec.md'), '# Ignore safety\n')
 
-    for (const pattern of ['../outside', '/absolute', 'spec.md']) {
+    for (const pattern of ['../outside', '/absolute']) {
       const result = spawnSync(
         process.execPath,
         [
@@ -556,24 +639,45 @@ describe('Taco extension CLI', () => {
     const project = mkdtempSync(join(tmpdir(), 'taco-validate-'))
     const taco = join(project, 'security.taco.html')
     const bundle = {
-      format: 'taco/files', version: 1, docId: 'security', title: 'Security', root: 'specs/security',
-      files: [{ path: 'specs/security/spec.md', mediaType: 'text/markdown', content: '# Security' }],
+      format: 'taco/files',
+      version: 1,
+      docId: 'security',
+      title: 'Security',
+      root: 'specs/security',
+      files: [
+        { path: 'specs/security/spec.md', mediaType: 'text/markdown', content: '# Security' },
+      ],
       collab: { room: 'wss://relay.test/d/room', key: 'room-secret', ownerPriv: 'owner-secret' },
     }
-    writeFileSync(taco, `<!doctype html><meta name="taco-security-version" content="1"><script id="taco-document" type="application/taco+json">${JSON.stringify(bundle)}</script>`)
+    writeFileSync(
+      taco,
+      `<!doctype html><meta name="taco-security-version" content="1"><script id="taco-document" type="application/taco+json">${JSON.stringify(bundle)}</script>`,
+    )
 
-    const output = execFileSync(process.execPath, [cli, 'validate', taco, '--json'], { cwd: project, encoding: 'utf8' })
-    const result = JSON.parse(output) as { securityVersion: string; issues: string[]; files: number }
+    const output = execFileSync(process.execPath, [cli, 'validate', taco, '--json'], {
+      cwd: project,
+      encoding: 'utf8',
+    })
+    const result = JSON.parse(output) as {
+      securityVersion: string
+      issues: string[]
+      files: number
+    }
 
-    expect(result).toEqual(expect.objectContaining({
-      securityVersion: '1',
-      issues: ['collab-secrets-present'],
-      files: 1,
-    }))
+    expect(result).toEqual(
+      expect.objectContaining({
+        securityVersion: '1',
+        issues: ['collab-secrets-present'],
+        files: 1,
+      }),
+    )
     expect(output).not.toContain('room-secret')
     expect(output).not.toContain('owner-secret')
 
-    writeFileSync(taco, readFileSync(taco, 'utf8').replace('<meta name="taco-security-version" content="1">', ''))
+    writeFileSync(
+      taco,
+      readFileSync(taco, 'utf8').replace('<meta name="taco-security-version" content="1">', ''),
+    )
     expect(runJson<{ issues: string[] }>(['validate', taco], project).issues).toEqual([
       'collab-secrets-present',
       'runtime-security-outdated',
@@ -586,28 +690,81 @@ describe('Taco extension CLI', () => {
     const output = join(feature, '005-message-comments.taco.html')
     mkdirSync(feature, { recursive: true })
     writeFileSync(join(feature, 'spec.md'), '# Message comments\n')
-    runJson(['pack', feature, '--project-root', project, '--output', output, '--shell', shell], project)
+    runJson(
+      ['pack', feature, '--project-root', project, '--output', output, '--shell', shell],
+      project,
+    )
     const bundle = readBundle(output)
-    bundle.comments = [{
-      id: 'thread-1',
-      anchor: { path: 'specs/005-message-comments/spec.md', position: { start: 0, end: 1 }, quote: { exact: '#', prefix: '', suffix: '' } },
-      status: 'open',
-      messages: [
-        { id: 'message-active', author: 'Ada', body: 'Corrected request', createdAt: '2026-08-10T00:00:00.000Z', updatedAt: '2026-08-11T00:00:00.000Z' },
-        { id: 'message-deleted', author: 'Grace', body: '[Deleted message]', createdAt: '2026-08-10T00:00:01.000Z', updatedAt: '2026-08-12T00:00:00.000Z', deletedAt: '2026-08-12T00:00:00.000Z' },
-      ],
-      createdAt: '2026-08-10T00:00:00.000Z', updatedAt: '2026-08-12T00:00:00.000Z',
-    }]
+    bundle.comments = [
+      {
+        id: 'thread-1',
+        anchor: {
+          path: 'specs/005-message-comments/spec.md',
+          position: { start: 0, end: 1 },
+          quote: { exact: '#', prefix: '', suffix: '' },
+        },
+        status: 'open',
+        messages: [
+          {
+            id: 'message-active',
+            author: 'Ada',
+            body: 'Corrected request',
+            createdAt: '2026-08-10T00:00:00.000Z',
+            updatedAt: '2026-08-11T00:00:00.000Z',
+          },
+          {
+            id: 'message-deleted',
+            author: 'Grace',
+            body: '[Deleted message]',
+            createdAt: '2026-08-10T00:00:01.000Z',
+            updatedAt: '2026-08-12T00:00:00.000Z',
+            deletedAt: '2026-08-12T00:00:00.000Z',
+          },
+        ],
+        createdAt: '2026-08-10T00:00:00.000Z',
+        updatedAt: '2026-08-12T00:00:00.000Z',
+      },
+    ]
     writeBundle(output, bundle)
-    runJson(['pack', feature, '--project-root', project, '--output', output, '--from', output, '--shell', shell], project)
+    runJson(
+      [
+        'pack',
+        feature,
+        '--project-root',
+        project,
+        '--output',
+        output,
+        '--from',
+        output,
+        '--shell',
+        shell,
+      ],
+      project,
+    )
     expect(readBundle(output).comments).toEqual(bundle.comments)
 
-    const result = runJson<{ comments: Array<{ messages: Array<Record<string, unknown>> }> }>(['comments', output], project)
+    const result = runJson<{ comments: Array<{ messages: Array<Record<string, unknown>> }> }>(
+      ['comments', output],
+      project,
+    )
     expect(result.comments[0].messages).toEqual([
-      expect.objectContaining({ id: 'message-active', body: 'Corrected request', updatedAt: '2026-08-11T00:00:00.000Z', deleted: false }),
-      expect.objectContaining({ id: 'message-deleted', body: null, deletedAt: '2026-08-12T00:00:00.000Z', deleted: true }),
+      expect.objectContaining({
+        id: 'message-active',
+        body: 'Corrected request',
+        updatedAt: '2026-08-11T00:00:00.000Z',
+        deleted: false,
+      }),
+      expect.objectContaining({
+        id: 'message-deleted',
+        body: null,
+        deletedAt: '2026-08-12T00:00:00.000Z',
+        deleted: true,
+      }),
     ])
-    const human = execFileSync(process.execPath, [cli, 'comments', output], { cwd: project, encoding: 'utf8' })
+    const human = execFileSync(process.execPath, [cli, 'comments', output], {
+      cwd: project,
+      encoding: 'utf8',
+    })
     expect(human).toContain('Ada: Corrected request')
     expect(human).toContain('Grace: [message deleted]')
     expect(human).not.toContain('Grace: [Deleted message]')
@@ -668,7 +825,8 @@ describe('Taco extension CLI', () => {
     // 4. Edit markdown text in bundle and sync back
     const specFile = bundle.files.find((f) => f.path.endsWith('/spec.md'))
     if (specFile) {
-      specFile.content = '---\ntitle: "PNG Feature"\n---\n\n## Overview\n\n![UI](design/screen.png)\n\nAdded notes.\n'
+      specFile.content =
+        '---\ntitle: "PNG Feature"\n---\n\n## Overview\n\n![UI](design/screen.png)\n\nAdded notes.\n'
     }
     writeBundle(output, bundle)
 
@@ -718,7 +876,9 @@ describe('Taco extension CLI', () => {
       { cwd: project, encoding: 'utf8' },
     )
     expect(corruptFailure.status).toBe(1)
-    expect(JSON.parse(corruptFailure.stderr).error).toContain('Corrupt or invalid PNG image: design/corrupt.png')
+    expect(JSON.parse(corruptFailure.stderr).error).toContain(
+      'Corrupt or invalid PNG image: design/corrupt.png',
+    )
     unlinkSync(join(feature, 'design/corrupt.png'))
 
     // Oversized PNG (>10MB)
@@ -732,6 +892,8 @@ describe('Taco extension CLI', () => {
       { cwd: project, encoding: 'utf8' },
     )
     expect(largeFailure.status).toBe(1)
-    expect(JSON.parse(largeFailure.stderr).error).toContain('PNG image exceeds 10 MiB limit: design/large.png')
+    expect(JSON.parse(largeFailure.stderr).error).toContain(
+      'PNG image exceeds 10 MiB limit: design/large.png',
+    )
   })
 })
