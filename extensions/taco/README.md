@@ -118,7 +118,13 @@ bin/taco.mjs
 bin/png.mjs
 assets/taco-shell.html
 templates/spec-template.md
+templates/spec/
+templates/architecture/
+templates/api-reference/
+templates/adr/
 policies/taco-agent-policy.md
 ```
+
+The `skills/taco-speckit/` skill directory ships in the repository for source-based consumers; the Spec Kit installation itself registers only the two `speckit.taco.*` commands as agent skills.
 
 The shell and CLI are local. Creating, updating, opening, and reviewing a Taco requires no network connection. A collaboration-enabled Taco can contain access credentials; follow the [Agent installation guide](https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md) before sending its content to any external model, service, log, or ticket.

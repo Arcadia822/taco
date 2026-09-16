@@ -156,6 +156,15 @@ const tacoFileBase = (path) =>
     .replace(/\.taco\.html$/i, '')
     .replace(/\.html$/i, '')
 
+// Mirror of the runtime's defaultFile fallback order (README.md, spec.md,
+// first Markdown, first file) so pack infers the bundle title from the
+// document the shell will open by default.
+const headingEntry = (files, rootPath) => {
+  const byPath = (name) => files.find((file) => file.path === `${rootPath}/${name}`)
+  const firstMarkdown = () => files.find((file) => /\.md$/i.test(file.path))
+  return byPath('README.md') ?? byPath('spec.md') ?? firstMarkdown() ?? files[0] ?? null
+}
+
 const parseOptions = (argv) => {
   const positional = []
   const options = new Map()
@@ -430,8 +439,6 @@ export const pack = async ({
   if (!isWithin(rootDirectory, featureDir) || featureDir === rootDirectory) {
     throw new Error('Feature directory must be a child of the project root')
   }
-  if (!(await pathExists(join(featureDir, 'spec.md'))))
-    throw new Error(`No spec.md found in ${featureDir}`)
 
   const rootPath = posix(relative(rootDirectory, featureDir))
   if (!isSafeRelativePath(rootPath))
@@ -473,8 +480,6 @@ export const pack = async ({
   const ignorePatterns = (ignore.length ? ignore : (priorBundle?.packOptions?.ignore ?? [])).map(
     normalizeIgnorePattern,
   )
-  if (ignoreMatcher(ignorePatterns)('spec.md'))
-    throw new Error('spec.md cannot be excluded with --ignore')
   const existingByPath = new Map((priorBundle?.files ?? []).map((file) => [file.path, file]))
   const { files, defaultIgnored, explicitIgnored } = await collectFiles(
     featureDir,
@@ -484,10 +489,10 @@ export const pack = async ({
   )
   if (!files.length) throw new Error(`No UTF-8 text files found in ${featureDir}`)
 
-  const spec = files.find((file) => file.path === `${rootPath}/spec.md`)
   const outputBase = tacoFileBase(outputPath)
-  const inheritedTitle =
-    priorBundle?.title || titleFrom(spec?.content ?? '', featureDir.split(sep).at(-1))
+  const fallbackTitle =
+    titleFrom(headingEntry(files, rootPath)?.content ?? '', featureDir.split(sep).at(-1))
+  const inheritedTitle = priorBundle?.title || fallbackTitle
   if (title && portableTitleBase(title) !== outputBase) {
     throw new Error(
       `Taco title requires filename ${portableTitleBase(title)}.taco.html, not ${basename(outputPath)}`,
