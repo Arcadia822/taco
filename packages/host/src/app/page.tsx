@@ -14,8 +14,9 @@ const I18N = {
     openHint: '输入或粘贴 Taco ID 或完整 URL，直接进入阅读与在线协作：',
     openPlaceholder: '输入 Taco ID (例如: 9d9528b6... 或完整 URL)',
     openButton: '进入',
-    agentHeader: 'AI Coding Agent 接入指令',
-    agentHint: '在 Claude Code、Codex、Cursor、Windsurf 中发送此指令，让 Agent 自动化交付 Taco：',
+    agentHeader: '安装 / Installation',
+    agentHint:
+      '复制以下指令给 Claude Code、Codex、Cursor 或 Windsurf，让 Agent 从 Taco 官方仓库完成安装：',
     copyPrompt: 'COPY PROMPT',
     copied: 'COPIED ✓',
     themeLabel: '切换主题',
@@ -24,12 +25,10 @@ const I18N = {
     systemTheme: '跟随系统',
     lightTheme: '明亮模式',
     darkTheme: '暗黑模式',
-    agentSnippet: `你是工作在当前项目的 AI Agent。请遵循 Tacobin 协同与交付协议：
-1. 本项目的成果与上下文统一沉淀为 Taco 单文件容器 (*.taco.html)。
-2. 使用 taco-cli 独立命令行进行发布与审查，详细命令、帮助及离线技能可直接读取：taco-cli skills read taco
-3. 发布到共享空间：taco-cli publish <path.taco.html> --host https://tacobin.arcadia-han.com
-4. 实时订阅事件流：taco-cli subscribe <tacoId> --host https://tacobin.arcadia-han.com
-5. 更多规范背景与自动化集成规则请参考仓库根目录核心文档：docs/agent-installation.md`,
+    agentSnippet: `请在当前项目中安装并配置 Taco。先读取官方安装说明，再严格按文档执行：
+https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md
+
+不要假设当前项目已包含 Taco 源码或 docs/agent-installation.md。安装完成后，运行 taco-cli help 和 taco-cli skills read taco 获取内置命令契约与使用指南，并验证安装结果。`,
   },
   en: {
     title: 'Tacobin',
@@ -38,8 +37,9 @@ const I18N = {
     openHint: 'Enter or paste a Taco ID or URL to view and collaborate:',
     openPlaceholder: 'Enter Taco ID (e.g. 9d9528b6... or full URL)',
     openButton: 'Open',
-    agentHeader: 'AI Coding Agent Integration',
-    agentHint: 'Send this instruction to Claude Code, Codex, Cursor or Windsurf to follow the Tacobin protocol:',
+    agentHeader: 'Installation',
+    agentHint:
+      'Copy this instruction into Claude Code, Codex, Cursor, or Windsurf so the Agent installs Taco from its official repository:',
     copyPrompt: 'COPY PROMPT',
     copied: 'COPIED ✓',
     themeLabel: 'Theme',
@@ -48,12 +48,10 @@ const I18N = {
     systemTheme: 'System',
     lightTheme: 'Light',
     darkTheme: 'Dark',
-    agentSnippet: `You are an AI Agent working in this repository. Follow the Tacobin delivery protocol:
-1. Deliverables and context in this project are encapsulated in Taco containers (*.taco.html).
-2. Use taco-cli to publish and review workspaces. For offline guidance and command reference, read: taco-cli skills read taco
-3. Publish to shared space: taco-cli publish <path.taco.html> --host https://tacobin.arcadia-han.com
-4. Subscribe to live events: taco-cli subscribe <tacoId> --host https://tacobin.arcadia-han.com
-5. For installation and agent rules refer to: docs/agent-installation.md`,
+    agentSnippet: `Install and configure Taco in the current project. First read the official installation guide, then follow it exactly:
+https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md
+
+Do not assume the current project contains the Taco source repository or docs/agent-installation.md. After installation, run taco-cli help and taco-cli skills read taco for the embedded command contract and usage guide, then verify the installation.`,
   },
 }
 
@@ -160,7 +158,9 @@ export default function HomePage() {
             <circle cx="7.2" cy="14.4" r="3.2" fill="var(--brand-bubble-secondary, #3b82f6)" />
             <circle cx="14.8" cy="18" r="2" fill="var(--brand-bubble-tertiary, #f97316)" />
           </svg>
-          <strong style={{ fontSize: '13px', fontWeight: 700, letterSpacing: '-0.01em' }}>Tacobin</strong>
+          <strong style={{ fontSize: '13px', fontWeight: 700, letterSpacing: '-0.01em' }}>
+            Tacobin
+          </strong>
         </div>
 
         <div style={{ flex: 1 }} />
@@ -176,7 +176,11 @@ export default function HomePage() {
           style={{ textDecoration: 'none' }}
         >
           <svg className="ui-icon" viewBox="0 0 24 24" fill="currentColor">
-            <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+            <path
+              fillRule="evenodd"
+              clipRule="evenodd"
+              d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+            />
           </svg>
         </a>
 
@@ -192,13 +196,27 @@ export default function HomePage() {
               setThemeMenuOpen(false)
             }}
           >
-            <svg className="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3a15 15 0 0 1 0 18" /><path d="M12 3a15 15 0 0 0 0 18" />
+            <svg
+              className="ui-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M3 12h18" />
+              <path d="M12 3a15 15 0 0 1 0 18" />
+              <path d="M12 3a15 15 0 0 0 0 18" />
             </svg>
           </button>
 
           {langMenuOpen && (
-            <div className="topbar-popover language-menu" style={{ right: 0, top: '34px', position: 'absolute' }}>
+            <div
+              className="topbar-popover language-menu"
+              style={{ right: 0, top: '34px', position: 'absolute' }}
+            >
               <button
                 type="button"
                 className={`popover-action sidebar-row ${locale === 'zh-Hans' ? 'is-active' : ''}`}
@@ -232,29 +250,69 @@ export default function HomePage() {
             }}
           >
             {themePreference === 'dark' ? (
-              <svg className="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                className="ui-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M20.9 13a9 9 0 0 1-9.9-9.9A9 9 0 1 0 20.9 13Z" />
               </svg>
             ) : themePreference === 'light' ? (
-              <svg className="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+              <svg
+                className="ui-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
               </svg>
             ) : (
-              <svg className="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                <rect width="20" height="14" x="2" y="3" rx="2" /><line x1="8" x2="16" y1="21" y2="21" /><line x1="12" x2="12" y1="17" y2="21" />
+              <svg
+                className="ui-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect width="20" height="14" x="2" y="3" rx="2" />
+                <line x1="8" x2="16" y1="21" y2="21" />
+                <line x1="12" x2="12" y1="17" y2="21" />
               </svg>
             )}
           </button>
 
           {themeMenuOpen && (
-            <div className="topbar-popover theme-menu" style={{ right: 0, top: '34px', position: 'absolute' }}>
+            <div
+              className="topbar-popover theme-menu"
+              style={{ right: 0, top: '34px', position: 'absolute' }}
+            >
               <button
                 type="button"
                 className={`popover-action sidebar-row ${themePreference === 'system' ? 'is-active' : ''}`}
                 onClick={() => switchTheme('system')}
               >
                 <span className="sidebar-row-icon">
-                  <svg className="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"><rect width="20" height="14" x="2" y="3" rx="2" /><line x1="8" x2="16" y1="21" y2="21" /><line x1="12" x2="12" y1="17" y2="21" /></svg>
+                  <svg
+                    className="ui-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.75"
+                  >
+                    <rect width="20" height="14" x="2" y="3" rx="2" />
+                    <line x1="8" x2="16" y1="21" y2="21" />
+                    <line x1="12" x2="12" y1="17" y2="21" />
+                  </svg>
                 </span>
                 <span className="sidebar-row-label">{t.systemTheme}</span>
               </button>
@@ -264,7 +322,16 @@ export default function HomePage() {
                 onClick={() => switchTheme('light')}
               >
                 <span className="sidebar-row-icon">
-                  <svg className="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2" /></svg>
+                  <svg
+                    className="ui-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.75"
+                  >
+                    <circle cx="12" cy="12" r="4" />
+                    <path d="M12 2v2m0 16v2M2 12h2m16 0h2" />
+                  </svg>
                 </span>
                 <span className="sidebar-row-label">{t.lightTheme}</span>
               </button>
@@ -274,7 +341,15 @@ export default function HomePage() {
                 onClick={() => switchTheme('dark')}
               >
                 <span className="sidebar-row-icon">
-                  <svg className="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"><path d="M20.9 13a9 9 0 0 1-9.9-9.9A9 9 0 1 0 20.9 13Z" /></svg>
+                  <svg
+                    className="ui-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.75"
+                  >
+                    <path d="M20.9 13a9 9 0 0 1-9.9-9.9A9 9 0 1 0 20.9 13Z" />
+                  </svg>
                 </span>
                 <span className="sidebar-row-label">{t.darkTheme}</span>
               </button>
@@ -302,7 +377,11 @@ export default function HomePage() {
         <div style={{ marginBottom: '20px', display: 'grid', placeItems: 'center' }}>
           <svg
             viewBox="0 0 24 24"
-            style={{ width: '56px', height: '56px', filter: 'drop-shadow(0 12px 24px rgba(62,207,142,0.18))' }}
+            style={{
+              width: '56px',
+              height: '56px',
+              filter: 'drop-shadow(0 12px 24px rgba(62,207,142,0.18))',
+            }}
           >
             <circle cx="15.2" cy="8.8" r="4.8" fill="#3ecf8e" />
             <circle cx="7.2" cy="14.4" r="3.2" fill="#3b82f6" />
@@ -393,7 +472,8 @@ export default function HomePage() {
           style={{
             width: '100%',
             position: 'relative',
-            background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%)',
+            background:
+              'linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%)',
             border: '1px solid var(--line-strong)',
             borderRadius: '12px',
             padding: '20px',
@@ -466,7 +546,13 @@ export default function HomePage() {
             >
               <svg
                 viewBox="0 0 24 24"
-                style={{ width: '12px', height: '12px', stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}
+                style={{
+                  width: '12px',
+                  height: '12px',
+                  stroke: 'currentColor',
+                  fill: 'none',
+                  strokeWidth: 2,
+                }}
               >
                 {copiedAgent ? (
                   <path d="M20 6L9 17l-5-5" />
@@ -490,7 +576,7 @@ export default function HomePage() {
               fontFamily: 'var(--sans)',
             }}
           >
-            将 <code>docs/agent-installation.md</code> 挂载给 AI Agent 即可自动化生成、发布与协作 Taco 单文件工作区。
+            {t.agentHint}
           </p>
         </div>
       </main>

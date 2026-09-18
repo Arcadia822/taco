@@ -14,6 +14,17 @@ describe('taco-cli (Phase 1)', () => {
     const json1 = JSON.parse(res1.stdout!)
     expect(json1.schema).toBe('taco-cli-help/1')
     expect(json1.summary).toContain('Taco CLI')
+    expect(
+      json1.commands.some(
+        (command: { name: string; summary: string }) =>
+          command.name === 'skills read' && command.summary.includes('installation'),
+      ),
+    ).toBe(true)
+    expect(
+      json1.examples.some(
+        (example: { invocation: string }) => example.invocation === 'taco-cli skills read taco',
+      ),
+    ).toBe(true)
 
     const res2 = await runCli(['help'])
     expect(res2.exitCode).toBe(0)
@@ -59,6 +70,9 @@ describe('taco-cli (Phase 1)', () => {
     expect(readJson.id).toBe('taco')
     expect(readJson.path).toBe('SKILL.md')
     expect(readJson.content).toContain('# Taco Agent Guide')
+    expect(readJson.version).toBe('1.1.0')
+    expect(readJson.content).toContain('## Start Here')
+    expect(readJson.content).toContain('references/publishing.md')
 
     const readRefRes = await runCli(['skills', 'read', 'taco', 'references/publishing.md'])
     expect(readRefRes.exitCode).toBe(0)

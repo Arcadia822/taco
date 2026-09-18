@@ -13,6 +13,41 @@ There are two distinct requested outcomes:
 
 Do not require the standalone artifact as a second installation step for a target Spec Kit project. The extension already carries the same production shell.
 
+## Install taco-cli
+
+Install the standalone `taco-cli` binary before configuring a target project. It does not require Node.js, npm, Spec Kit, or a Taco source checkout. Download the archive for the target operating system and architecture from the latest GitHub Release:
+
+```text
+https://github.com/Arcadia822/taco/releases/latest
+```
+
+Supported artifacts:
+
+| Platform            | Artifact                       |
+| ------------------- | ------------------------------ |
+| macOS Apple Silicon | `taco-cli-darwin-arm64.tar.gz` |
+| macOS Intel         | `taco-cli-darwin-x64.tar.gz`   |
+| Linux arm64         | `taco-cli-linux-arm64.tar.gz`  |
+| Linux x64           | `taco-cli-linux-x64.tar.gz`    |
+
+Download the matching archive and `SHA256SUMS` from the same release. Verify the archive before extracting it:
+
+```bash
+shasum -a 256 -c SHA256SUMS --ignore-missing
+tar -xzf taco-cli-<platform>-<arch>.tar.gz
+install -m 0755 taco-cli "$HOME/.local/bin/taco-cli"
+```
+
+On Linux, use `sha256sum -c SHA256SUMS --ignore-missing`. Ensure `$HOME/.local/bin` is on `PATH`, then verify the executable and read its embedded Agent guide without accessing the network:
+
+```bash
+taco-cli help
+taco-cli skills list
+taco-cli skills read taco
+```
+
+The JSON returned by `skills read taco` is the post-install usage contract. Read its `content` field and follow its routes to `references/publishing.md` and `references/reviewing.md` as needed. Do not search the target repository for Taco documentation; the binary carries these guides.
+
 ## Verify the Taco source checkout
 
 From the Taco repository root, preserve unrelated changes and run:

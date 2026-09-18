@@ -19,13 +19,20 @@ export interface SkillFileReadResult {
 
 const TACO_SKILL_MD = `# Taco Agent Guide
 
-Taco is a single-file, local-first review artifact and workspace for humans and AI agents.
+Use this guide after installing the standalone \`taco-cli\` binary. The target project does not need a Taco source checkout, Node.js, npm, or Spec Kit for Host publication and review.
 
-## Core Rules
-1. **Local canonical files are primary**: Editing or commenting in a Taco does not modify disk files until \`sync\` or local edits are applied.
-2. **All shared data is public**: Taco Host spaces, revisions, comments, and uploaded images are public by default.
-3. **Always use JSON output**: \`taco-cli\` outputs single JSON objects for one-off commands and NDJSON for event streams.
-4. **Subscribe before waiting for review**: Stream events using \`taco-cli subscribe <tacoId>\` to react in real time.
+## Start Here
+1. Run \`taco-cli help\` and parse the returned \`taco-cli-help/1\` JSON before constructing a command.
+2. Run \`taco-cli skills read taco references/publishing.md\` before publishing or updating a shared Taco.
+3. Run \`taco-cli skills read taco references/reviewing.md\` before waiting for or processing review events.
+4. Treat local canonical files as primary. Editing or commenting in a Taco does not modify disk files until the relevant local sync workflow applies those changes.
+
+## Host Rules
+- Published Taco spaces, revisions, comments, and uploaded assets are public by default.
+- One-off commands emit one compact JSON object; event streams emit NDJSON. Parse output instead of scraping prose.
+- Run \`taco-cli publish <file.taco.html> --dry-run\` before the first network publication.
+- Subscribe with \`taco-cli subscribe <tacoId>\` before waiting for review; reconnect with the last confirmed sequence after interruption.
+- Use \`--host https://tacobin.arcadia-han.com\` for the public Tacobin service unless the project specifies another Host.
 `
 
 const PUBLISHING_GUIDE_MD = `# Publishing Guide
@@ -50,8 +57,8 @@ const EMBEDDED_SKILLS: Record<
   { version: string; description: string; files: Record<string, string> }
 > = {
   taco: {
-    version: '1.0.0',
-    description: 'Guidelines and procedures for AI agents using Taco and Taco Host',
+    version: '1.1.0',
+    description: 'Post-install workflow for AI agents publishing and reviewing Taco workspaces',
     files: {
       'SKILL.md': TACO_SKILL_MD,
       'references/publishing.md': PUBLISHING_GUIDE_MD,

@@ -122,6 +122,10 @@ export const ROOT_HELP: CommandHelpOutput = {
       purpose: 'Publish new Taco with automatic anonymous bootstrap',
     },
     { invocation: 'taco-cli subscribe <tacoId>', purpose: 'Stream realtime events from Taco' },
+    {
+      invocation: 'taco-cli skills read taco',
+      purpose: 'Read the embedded post-install Agent workflow without network access',
+    },
   ],
   commands: [
     { name: 'publish', summary: 'Publish new Taco and initial revision' },
@@ -131,8 +135,8 @@ export const ROOT_HELP: CommandHelpOutput = {
     { name: 'close', summary: 'Close Taco into read-only archived state' },
     { name: 'export', summary: 'Export complete Taco archive bundle' },
     { name: 'delete', summary: 'Mark Taco deleted' },
-    { name: 'skills list', summary: 'List embedded guides' },
-    { name: 'skills read', summary: 'Read embedded guide markdown content' },
+    { name: 'skills list', summary: 'List offline Agent guides embedded in this binary' },
+    { name: 'skills read', summary: 'Read embedded installation, publishing, and review guidance' },
   ],
   publicNotice:
     'All published tacos, revisions, comments, and assets are public by default. No private or ACL switches.',

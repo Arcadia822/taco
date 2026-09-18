@@ -45,7 +45,11 @@ export const parseCliArgs = (argv: string[]): ParsedArgs => {
     } else {
       if (command.length === 0) {
         command.push(arg)
-      } else if (command[0] === 'skills' && command.length === 1 && (arg === 'list' || arg === 'read')) {
+      } else if (
+        command[0] === 'skills' &&
+        command.length === 1 &&
+        (arg === 'list' || arg === 'read')
+      ) {
         command.push(arg)
       } else {
         positionals.push(arg)
@@ -143,8 +147,17 @@ export const runCli = async (
 
   const { command, positionals, options } = parsed
   const primaryCmd = command[0]
-  const host = typeof options['host'] === 'string' ? options['host'] : (process.env.TACO_HOST_URL || DEFAULT_HOST)
+  const host =
+    typeof options['host'] === 'string'
+      ? options['host']
+      : process.env.TACO_HOST_URL || DEFAULT_HOST
   const client = injectedClient || new TacoClient(host)
+
+  const forbiddenOption = ['json', 'ndjson', 'public'].find((name) => name in options)
+  if (forbiddenOption) {
+    const error = makeCliError('VALIDATION_ERROR', `Unsupported option: --${forbiddenOption}`)
+    return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+  }
 
   // Handle Help requests
   if (primaryCmd === undefined || primaryCmd === 'help' || options['help'] === true) {
@@ -174,7 +187,10 @@ export const runCli = async (
       }
       const readRes = readSkillFile(skillId, positionals[1] || 'SKILL.md')
       if (!readRes.ok) {
-        return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', readRes.err)) }
+        return {
+          exitCode: EXIT_CODES.VALIDATION_ERROR,
+          stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', readRes.err)),
+        }
       }
       return { exitCode: EXIT_CODES.OK, stdout: JSON.stringify(readRes.result, null, 2) }
     }
@@ -184,7 +200,10 @@ export const runCli = async (
   if (primaryCmd === 'publish') {
     const filePath = positionals[0]
     if (!filePath) {
-      return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', 'Missing file path')) }
+      return {
+        exitCode: EXIT_CODES.VALIDATION_ERROR,
+        stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', 'Missing file path')),
+      }
     }
 
     if (options['dry-run'] === true) {
@@ -192,7 +211,10 @@ export const runCli = async (
         const summary = await executeLocalDryRun({ command: 'publish', filePath, host })
         return { exitCode: EXIT_CODES.OK, stdout: JSON.stringify(summary, null, 2) }
       } catch (err) {
-        return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', (err as Error).message)) }
+        return {
+          exitCode: EXIT_CODES.VALIDATION_ERROR,
+          stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', (err as Error).message)),
+        }
       }
     }
 
@@ -201,15 +223,48 @@ export const runCli = async (
       const result = await client.publish({ rawHtml })
       return { exitCode: EXIT_CODES.OK, stdout: JSON.stringify(result, null, 2) }
     } catch (err) {
-      return { exitCode: EXIT_CODES.LOCAL_IO_ERROR, stderr: JSON.stringify(makeCliError('LOCAL_IO_ERROR', (err as Error).message)) }
+      return {
+        exitCode: EXIT_CODES.LOCAL_IO_ERROR,
+        stderr: JSON.stringify(makeCliError('LOCAL_IO_ERROR', (err as Error).message)),
+      }
     }
   }
 
+  if (primaryCmd === 'update') {
+    const [tacoId, filePath] = positionals
+    const baseRevisionId = options['base']
+    if (!tacoId || !filePath || typeof baseRevisionId !== 'string') {
+      const error = makeCliError(
+        'VALIDATION_ERROR',
+        'update requires <tacoId> <file> --base <revisionId>',
+      )
+      return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+    }
+    if (options['dry-run'] !== true) {
+      const error = makeCliError('VALIDATION_ERROR', 'Network update is not implemented')
+      return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+    }
+    try {
+      const summary = await executeLocalDryRun({
+        command: 'update',
+        filePath,
+        host,
+        baseRevisionId,
+      })
+      return { exitCode: EXIT_CODES.OK, stdout: JSON.stringify(summary, null, 2) }
+    } catch (err) {
+      const error = makeCliError('VALIDATION_ERROR', (err as Error).message)
+      return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+    }
+  }
   // Handle subscribe
   if (primaryCmd === 'subscribe') {
     const tacoId = positionals[0]
     if (!tacoId) {
-      return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', 'Missing tacoId')) }
+      return {
+        exitCode: EXIT_CODES.VALIDATION_ERROR,
+        stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', 'Missing tacoId')),
+      }
     }
 
     const subscriber = new TacoSubscriber(
@@ -217,8 +272,10 @@ export const runCli = async (
       tacoId,
       {
         onFrame: (frame) => process.stdout.write(`${frame}\n`),
-        onDiagnostic: (diag) => process.stderr.write(`${JSON.stringify({ kind: 'diagnostic', ...diag })}\n`),
-        onError: (err) => process.stderr.write(`${JSON.stringify({ kind: 'error', error: err })}\n`),
+        onDiagnostic: (diag) =>
+          process.stderr.write(`${JSON.stringify({ kind: 'diagnostic', ...diag })}\n`),
+        onError: (err) =>
+          process.stderr.write(`${JSON.stringify({ kind: 'error', error: err })}\n`),
       },
       () => new SseSessionAdapter(),
       { initialAfter: typeof options['after'] === 'string' ? options['after'] : null },
@@ -228,5 +285,8 @@ export const runCli = async (
     return { exitCode: subRes.exitCode }
   }
 
-  return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', `Unknown command: ${primaryCmd}`)) }
+  return {
+    exitCode: EXIT_CODES.VALIDATION_ERROR,
+    stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', `Unknown command: ${primaryCmd}`)),
+  }
 }
