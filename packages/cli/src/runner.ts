@@ -284,6 +284,27 @@ export const runCli = async (
     const subRes = await subscriber.start()
     return { exitCode: subRes.exitCode }
   }
+  // Handle events
+  if (primaryCmd === 'events') {
+    const tacoId = positionals[0]
+    if (!tacoId) {
+      return {
+        exitCode: EXIT_CODES.VALIDATION_ERROR,
+        stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', 'Missing tacoId')),
+      }
+    }
+    try {
+      const data = await client.getEvents(tacoId, {
+        after: typeof options['after'] === 'string' ? options['after'] : undefined,
+      })
+      return { exitCode: EXIT_CODES.OK, stdout: JSON.stringify(data, null, 2) }
+    } catch (err) {
+      return {
+        exitCode: EXIT_CODES.LOCAL_IO_ERROR,
+        stderr: JSON.stringify(makeCliError('LOCAL_IO_ERROR', (err as Error).message)),
+      }
+    }
+  }
 
   return {
     exitCode: EXIT_CODES.VALIDATION_ERROR,

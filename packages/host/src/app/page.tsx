@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 
 type ThemeMode = 'system' | 'light' | 'dark'
 type LocaleCode = 'zh-Hans' | 'en'
+type InfoTab = 'installation' | 'skill'
 
 const I18N = {
   'zh-Hans': {
@@ -14,16 +15,23 @@ const I18N = {
     openHint: '输入或粘贴 Taco ID 或完整 URL，直接进入阅读与在线协作：',
     openPlaceholder: '输入 Taco ID (例如: 9d9528b6... 或完整 URL)',
     openButton: '进入',
-    agentHeader: '安装 / Installation',
-    copyPrompt: 'COPY',
-    copied: 'COPIED',
+    tabInstallation: '安装',
+    tabSkill: 'Skill',
+    copyTooltip: '复制',
+    copiedTooltip: '已复制！',
     themeLabel: '切换主题',
     langLabel: '切换语言',
     githubLabel: '查看 Taco GitHub 源码仓库',
     systemTheme: '跟随系统',
     lightTheme: '明亮模式',
     darkTheme: '暗黑模式',
-    agentSnippet: '请安装 https://github.com/Arcadia822/taco',
+    agentSnippet: `你是工作在当前项目的 AI Agent。请遵循 Tacobin 协同与交付协议：
+1. 本项目的成果与上下文统一沉淀为 Taco 单文件容器 (*.taco.html)。
+2. 使用 taco-cli 独立命令行进行发布与审查，详细命令、帮助及离线技能可直接读取：taco-cli skills read taco
+3. 发布到共享空间：taco-cli publish <path.taco.html> --host https://tacobin.arcadia-han.com
+4. 实时订阅事件流：taco-cli subscribe <tacoId> --host https://tacobin.arcadia-han.com
+5. 更多规范背景与自动化集成规则请参考仓库根目录核心文档：docs/agent-installation.md`,
+    skillCommand: 'npx skills@latest add arcadia822/taco --skill=taco',
   },
   en: {
     title: 'Tacobin',
@@ -32,23 +40,31 @@ const I18N = {
     openHint: 'Enter or paste a Taco ID or URL to view and collaborate:',
     openPlaceholder: 'Enter Taco ID (e.g. 9d9528b6... or full URL)',
     openButton: 'Open',
-    agentHeader: 'Installation',
-    copyPrompt: 'COPY',
-    copied: 'COPIED',
+    tabInstallation: 'Installation',
+    tabSkill: 'Skill',
+    copyTooltip: 'Copy',
+    copiedTooltip: 'Copied!',
     themeLabel: 'Theme',
     langLabel: 'Language',
     githubLabel: 'View Taco on GitHub',
     systemTheme: 'System',
     lightTheme: 'Light',
     darkTheme: 'Dark',
-    agentSnippet: '请安装 https://github.com/Arcadia822/taco',
+    agentSnippet: `You are an AI Agent working in this repository. Follow the Tacobin delivery protocol:
+1. Deliverables and context in this project are encapsulated in Taco containers (*.taco.html).
+2. Use taco-cli to publish and review workspaces. For offline guidance and command reference, read: taco-cli skills read taco
+3. Publish to shared space: taco-cli publish <path.taco.html> --host https://tacobin.arcadia-han.com
+4. Subscribe to live events: taco-cli subscribe <tacoId> --host https://tacobin.arcadia-han.com
+5. For installation and agent rules refer to: docs/agent-installation.md`,
+    skillCommand: 'npx skills@latest add arcadia822/taco --skill=taco',
   },
 }
 
 export default function HomePage() {
   const router = useRouter()
   const [tacoIdInput, setTacoIdInput] = useState('')
-  const [copiedAgent, setCopiedAgent] = useState(false)
+  const [activeTab, setActiveTab] = useState<InfoTab>('installation')
+  const [copiedText, setCopiedText] = useState(false)
   const [locale, setLocale] = useState<LocaleCode>('zh-Hans')
   const [themePreference, setThemePreference] = useState<ThemeMode>('system')
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
@@ -106,10 +122,10 @@ export default function HomePage() {
     setLangMenuOpen(false)
   }
 
-  const copyAgentPrompt = () => {
-    navigator.clipboard.writeText(t.agentSnippet).then(() => {
-      setCopiedAgent(true)
-      setTimeout(() => setCopiedAgent(false), 2000)
+  const copyPayload = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedText(true)
+      setTimeout(() => setCopiedText(false), 2000)
     })
   }
 
@@ -124,7 +140,7 @@ export default function HomePage() {
         color: 'var(--ink)',
       }}
     >
-      {/* 顶部 Header：完全一致的尺寸、间距，并集成 GitHub 源码链接 */}
+      {/* 顶部 Header：与 Taco 内容页 1:1 一致，包含 GitHub 链接 */}
       <header
         className="workspace-header"
         style={{
@@ -148,9 +164,7 @@ export default function HomePage() {
             <circle cx="7.2" cy="14.4" r="3.2" fill="var(--brand-bubble-secondary, #3b82f6)" />
             <circle cx="14.8" cy="18" r="2" fill="var(--brand-bubble-tertiary, #f97316)" />
           </svg>
-          <strong style={{ fontSize: '13px', fontWeight: 700, letterSpacing: '-0.01em' }}>
-            Tacobin
-          </strong>
+          <strong style={{ fontSize: '13px', fontWeight: 700, letterSpacing: '-0.01em' }}>Tacobin</strong>
         </div>
 
         <div style={{ flex: 1 }} />
@@ -203,10 +217,7 @@ export default function HomePage() {
           </button>
 
           {langMenuOpen && (
-            <div
-              className="topbar-popover language-menu"
-              style={{ right: 0, top: '34px', position: 'absolute' }}
-            >
+            <div className="topbar-popover language-menu" style={{ right: 0, top: '34px', position: 'absolute' }}>
               <button
                 type="button"
                 className={`popover-action sidebar-row ${locale === 'zh-Hans' ? 'is-active' : ''}`}
@@ -282,23 +293,14 @@ export default function HomePage() {
           </button>
 
           {themeMenuOpen && (
-            <div
-              className="topbar-popover theme-menu"
-              style={{ right: 0, top: '34px', position: 'absolute' }}
-            >
+            <div className="topbar-popover theme-menu" style={{ right: 0, top: '34px', position: 'absolute' }}>
               <button
                 type="button"
                 className={`popover-action sidebar-row ${themePreference === 'system' ? 'is-active' : ''}`}
                 onClick={() => switchTheme('system')}
               >
                 <span className="sidebar-row-icon">
-                  <svg
-                    className="ui-icon"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.75"
-                  >
+                  <svg className="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
                     <rect width="20" height="14" x="2" y="3" rx="2" />
                     <line x1="8" x2="16" y1="21" y2="21" />
                     <line x1="12" x2="12" y1="17" y2="21" />
@@ -312,13 +314,7 @@ export default function HomePage() {
                 onClick={() => switchTheme('light')}
               >
                 <span className="sidebar-row-icon">
-                  <svg
-                    className="ui-icon"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.75"
-                  >
+                  <svg className="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
                     <circle cx="12" cy="12" r="4" />
                     <path d="M12 2v2m0 16v2M2 12h2m16 0h2" />
                   </svg>
@@ -331,13 +327,7 @@ export default function HomePage() {
                 onClick={() => switchTheme('dark')}
               >
                 <span className="sidebar-row-icon">
-                  <svg
-                    className="ui-icon"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.75"
-                  >
+                  <svg className="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
                     <path d="M20.9 13a9 9 0 0 1-9.9-9.9A9 9 0 1 0 20.9 13Z" />
                   </svg>
                 </span>
@@ -367,11 +357,7 @@ export default function HomePage() {
         <div style={{ marginBottom: '20px', display: 'grid', placeItems: 'center' }}>
           <svg
             viewBox="0 0 24 24"
-            style={{
-              width: '56px',
-              height: '56px',
-              filter: 'drop-shadow(0 12px 24px rgba(62,207,142,0.18))',
-            }}
+            style={{ width: '56px', height: '56px', filter: 'drop-shadow(0 12px 24px rgba(62,207,142,0.18))' }}
           >
             <circle cx="15.2" cy="8.8" r="4.8" fill="#3ecf8e" />
             <circle cx="7.2" cy="14.4" r="3.2" fill="#3b82f6" />
@@ -457,119 +443,132 @@ export default function HomePage() {
           </div>
         </form>
 
-        {/* 前卫科技感 Agent 指令模块 */}
+        {/* 外部独立选项卡 (Segmented Tab: 安装 vs Skill) */}
+        <div style={{ width: '100%', marginBottom: '8px', paddingLeft: '2px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('installation')
+              setCopiedText(false)
+            }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: '2px 0',
+              fontSize: '12px',
+              fontWeight: activeTab === 'installation' ? 700 : 500,
+              color: activeTab === 'installation' ? 'var(--ink)' : 'var(--muted)',
+              borderBottom: activeTab === 'installation' ? '2px solid var(--accent)' : '2px solid transparent',
+              cursor: 'pointer',
+              transition: 'color 140ms ease, border-color 140ms ease',
+            }}
+          >
+            {t.tabInstallation}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('skill')
+              setCopiedText(false)
+            }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: '2px 0',
+              fontSize: '12px',
+              fontWeight: activeTab === 'skill' ? 700 : 500,
+              color: activeTab === 'skill' ? 'var(--ink)' : 'var(--muted)',
+              borderBottom: activeTab === 'skill' ? '2px solid var(--accent)' : '2px solid transparent',
+              cursor: 'pointer',
+              transition: 'color 140ms ease, border-color 140ms ease',
+            }}
+          >
+            {t.tabSkill}
+          </button>
+        </div>
+
+        {/* Soft 风格卡片内容 */}
         <div
           style={{
             width: '100%',
-            position: 'relative',
-            background:
-              'linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%)',
-            border: '1px solid var(--line-strong)',
-            borderRadius: '12px',
-            padding: '20px',
+            background: 'var(--surface)',
+            border: '1px solid var(--line)',
+            borderRadius: '8px',
+            padding: '10px 14px',
             boxSizing: 'border-box',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.24)',
-            backdropFilter: 'blur(12px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
           }}
         >
-          {/* 顶部微发光标签与前卫科技感 Copy 按钮 */}
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '12px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span
-                style={{
-                  display: 'inline-block',
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: '50%',
-                  background: 'var(--accent)',
-                  boxShadow: '0 0 10px var(--accent)',
-                }}
-              />
-              <span
-                style={{
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  letterSpacing: '0.08em',
-                  textTransform: 'uppercase',
-                  color: 'var(--muted)',
-                  fontFamily: 'var(--mono)',
-                }}
-              >
-                {t.agentHeader}
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={copyAgentPrompt}
+          {activeTab === 'installation' ? (
+            <p
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '11px',
-                fontWeight: 700,
-                fontFamily: 'var(--mono)',
-                letterSpacing: '0.06em',
-                padding: '6px 14px',
-                borderRadius: '6px',
-                border: copiedAgent
-                  ? '1px solid rgba(62, 207, 142, 0.6)'
-                  : '1px solid color-mix(in srgb, var(--accent) 35%, var(--line-strong))',
-                background: copiedAgent
-                  ? 'rgba(62, 207, 142, 0.15)'
-                  : 'linear-gradient(135deg, rgba(62, 207, 142, 0.08) 0%, rgba(59, 130, 246, 0.06) 100%)',
-                color: copiedAgent ? 'var(--accent)' : 'var(--ink)',
-                cursor: 'pointer',
-                boxShadow: copiedAgent
-                  ? '0 0 16px rgba(62, 207, 142, 0.35)'
-                  : '0 2px 10px rgba(0, 0, 0, 0.2)',
-                transition: 'all 200ms cubic-bezier(0.16, 1, 0.3, 1)',
-                transform: copiedAgent ? 'scale(1.02)' : 'scale(1)',
+                margin: 0,
+                fontSize: '12px',
+                color: 'var(--muted)',
+                lineHeight: 1.5,
+                fontFamily: 'var(--sans)',
+                flex: 1,
               }}
             >
-              <svg
-                viewBox="0 0 24 24"
+              将 <code style={{ color: 'var(--ink)', background: 'var(--surface-2)', padding: '2px 4px', borderRadius: '4px' }}>docs/agent-installation.md</code> 挂载给 AI Agent 即可自动化生成、发布与协作 Taco 单文件工作区。
+            </p>
+          ) : (
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <code
                 style={{
-                  width: '12px',
-                  height: '12px',
-                  stroke: 'currentColor',
-                  fill: 'none',
-                  strokeWidth: 2,
+                  display: 'block',
+                  margin: 0,
+                  fontSize: '12px',
+                  color: 'var(--ink)',
+                  fontFamily: 'var(--mono)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
                 }}
               >
-                {copiedAgent ? (
-                  <path d="M20 6L9 17l-5-5" />
-                ) : (
-                  <>
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                  </>
-                )}
-              </svg>
-              <span>{copiedAgent ? t.copied : t.copyPrompt}</span>
-            </button>
-          </div>
+                {t.skillCommand}
+              </code>
+            </div>
+          )}
 
-          <pre
+          {/* 结尾单行 ghost icon 复制按钮 */}
+          <button
+            type="button"
+            onClick={() => copyPayload(activeTab === 'installation' ? t.agentSnippet : t.skillCommand)}
+            title={copiedText ? t.copiedTooltip : t.copyTooltip}
+            aria-label={copiedText ? t.copiedTooltip : t.copyTooltip}
+            className="control-button control-button-icon"
             style={{
-              margin: 0,
-              fontSize: '12px',
-              color: 'var(--muted)',
-              lineHeight: 1.6,
-              fontFamily: 'var(--mono)',
-              whiteSpace: 'pre-wrap',
-              overflowWrap: 'anywhere',
+              width: '24px',
+              height: '24px',
+              minWidth: '24px',
+              minHeight: '24px',
+              borderRadius: '4px',
+              border: 'none',
+              background: copiedText ? 'var(--accent-soft)' : 'transparent',
+              color: copiedText ? 'var(--accent-dark)' : 'var(--muted)',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              transition: 'background-color 140ms ease, color 140ms ease',
             }}
           >
-            {t.agentSnippet}
-          </pre>
+            {copiedText ? (
+              <svg viewBox="0 0 24 24" style={{ width: '14px', height: '14px', stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" style={{ width: '14px', height: '14px', stroke: 'currentColor', fill: 'none', strokeWidth: 1.75 }}>
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            )}
+          </button>
         </div>
       </main>
     </div>
