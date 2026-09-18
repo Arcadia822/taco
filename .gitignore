@@ -10,3 +10,5 @@ artifacts/
 dist-single/*.taco.html
 tests/fixtures/**/*.taco.html
 .vercel
+# npm pack artifacts
+*.tgz
