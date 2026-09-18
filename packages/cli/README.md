@@ -1,4 +1,4 @@
-# @taco/cli
+# @tacobin/cli
 
 Official CLI client for Taco / TacoHub review publication, event subscription, and local inspection.
 
@@ -12,9 +12,9 @@ Official CLI client for Taco / TacoHub review publication, event subscription, a
 ### Via npm (Global)
 
 ```bash
-npm install -g @taco/cli
+npm install -g @tacobin/cli
 # Or run on demand without global install:
-npx @taco/cli help
+npx @tacobin/cli help
 ```
 
 ### Via Standalone Binary

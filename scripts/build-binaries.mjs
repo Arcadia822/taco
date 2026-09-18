@@ -10,7 +10,7 @@ if (!existsSync(distDir)) {
   mkdirSync(distDir, { recursive: true })
 }
 
-console.log('Compiling @taco/cli standalone binary with Bun...')
+console.log('Compiling @tacobin/cli standalone binary with Bun...')
 
 try {
   // Use bun build --compile to generate native standalone binary

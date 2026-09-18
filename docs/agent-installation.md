@@ -22,12 +22,12 @@ Do not require the standalone artifact as a second installation step for a targe
 
 ### Option A: Install via npm
 
-Install `@taco/cli` globally or use it on demand with `npx`:
+Install `@tacobin/cli` globally or use it on demand with `npx`:
 
 ```bash
-npm install -g @taco/cli
+npm install -g @tacobin/cli
 # Or invoke directly:
-npx @taco/cli help
+npx @tacobin/cli help
 ```
 
 ### Option B: Install standalone binary

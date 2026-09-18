@@ -1,5 +1,5 @@
 {
-  "name": "@taco/cli",
+  "name": "@tacobin/cli",
   "version": "0.1.1",
   "type": "module",
   "description": "Standalone taco-cli client for review publication, subscription, and local inspection",
