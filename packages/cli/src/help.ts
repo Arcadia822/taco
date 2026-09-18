@@ -1,6 +1,6 @@
 export const CLI_SCHEMA_HELP = 'taco-cli-help/1'
 export const CLI_SCHEMA_SKILLS = 'taco-cli-skills/1'
-export const CLI_BINARY_VERSION = '0.1.1'
+export const CLI_BINARY_VERSION = '0.1.2'
 export const DEFAULT_HOST = 'http://localhost:32167'
 
 export interface HelpPositional {
