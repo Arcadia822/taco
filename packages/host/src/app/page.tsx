@@ -15,8 +15,6 @@ const I18N = {
     openPlaceholder: '输入 Taco ID (例如: 9d9528b6... 或完整 URL)',
     openButton: '进入',
     agentHeader: '安装 / Installation',
-    agentHint:
-      '复制以下指令给 Claude Code、Codex、Cursor 或 Windsurf，让 Agent 从 Taco 官方仓库完成安装：',
     copyPrompt: 'COPY PROMPT',
     copied: 'COPIED ✓',
     themeLabel: '切换主题',
@@ -25,10 +23,8 @@ const I18N = {
     systemTheme: '跟随系统',
     lightTheme: '明亮模式',
     darkTheme: '暗黑模式',
-    agentSnippet: `请在当前项目中安装并配置 Taco。先读取官方安装说明，再严格按文档执行：
-https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md
-
-不要假设当前项目已包含 Taco 源码或 docs/agent-installation.md。安装完成后，运行 taco-cli help 和 taco-cli skills read taco 获取内置命令契约与使用指南，并验证安装结果。`,
+    agentSnippet:
+      '请在当前项目中安装并配置 Taco。先读取官方安装说明，再严格按文档执行：https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md。安装完成后，运行 taco-cli help 和 taco-cli skills read taco 获取内置命令契约与使用指南，并验证安装结果。',
   },
   en: {
     title: 'Tacobin',
@@ -38,8 +34,6 @@ https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md
     openPlaceholder: 'Enter Taco ID (e.g. 9d9528b6... or full URL)',
     openButton: 'Open',
     agentHeader: 'Installation',
-    agentHint:
-      'Copy this instruction into Claude Code, Codex, Cursor, or Windsurf so the Agent installs Taco from its official repository:',
     copyPrompt: 'COPY PROMPT',
     copied: 'COPIED ✓',
     themeLabel: 'Theme',
@@ -48,10 +42,8 @@ https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md
     systemTheme: 'System',
     lightTheme: 'Light',
     darkTheme: 'Dark',
-    agentSnippet: `Install and configure Taco in the current project. First read the official installation guide, then follow it exactly:
-https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md
-
-Do not assume the current project contains the Taco source repository or docs/agent-installation.md. After installation, run taco-cli help and taco-cli skills read taco for the embedded command contract and usage guide, then verify the installation.`,
+    agentSnippet:
+      'Install and configure Taco in the current project. First read the official installation guide, then follow it exactly: https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md. After installation, run taco-cli help and taco-cli skills read taco to read the embedded command contract and usage guide, then verify the installation.',
   },
 }
 
@@ -567,17 +559,19 @@ export default function HomePage() {
             </button>
           </div>
 
-          <p
+          <pre
             style={{
               margin: 0,
               fontSize: '12px',
               color: 'var(--muted)',
               lineHeight: 1.6,
-              fontFamily: 'var(--sans)',
+              fontFamily: 'var(--mono)',
+              whiteSpace: 'pre-wrap',
+              overflowWrap: 'anywhere',
             }}
           >
-            {t.agentHint}
-          </p>
+            {t.agentSnippet}
+          </pre>
         </div>
       </main>
     </div>
