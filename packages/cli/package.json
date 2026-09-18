@@ -1,6 +1,6 @@
 {
   "name": "@tacobin/cli",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "description": "Standalone taco-cli client for review publication, subscription, and local inspection",
   "license": "MIT",
@@ -18,17 +18,15 @@
     "README.md"
   ],
   "bin": {
-    "taco-cli": "./dist/main.js"
+    "taco-cli": "dist/main.js"
   },
   "scripts": {
     "build": "bun build src/main.ts --outfile dist/main.js --target node",
     "prepack": "npm run build",
     "test": "vitest run"
   },
-  "dependencies": {
-    "@taco/protocol": "*"
-  },
   "devDependencies": {
+    "@taco/protocol": "*",
     "@types/node": "^24.13.2",
     "typescript": "~5.8.3"
   }

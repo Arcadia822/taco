@@ -69,11 +69,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: 'https://registry.npmjs.org'
 
-      - name: Publish to npm
+      - name: Upgrade npm for trusted publishing
+        run: npm install --global npm@^11.5.1
+
+      - name: Publish to npm via OIDC trusted publishing
         shell: bash
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           npm --workspace=@tacobin/cli publish --provenance
