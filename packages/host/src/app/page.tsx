@@ -23,8 +23,7 @@ const I18N = {
     systemTheme: '跟随系统',
     lightTheme: '明亮模式',
     darkTheme: '暗黑模式',
-    agentSnippet:
-      '请在当前项目中安装并配置 Taco。先读取官方安装说明，再严格按文档执行：https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md。安装完成后，运行 taco-cli help 和 taco-cli skills read taco 获取内置命令契约与使用指南，并验证安装结果。',
+    agentSnippet: '请安装 https://github.com/Arcadia822/taco',
   },
   en: {
     title: 'Tacobin',
@@ -42,8 +41,7 @@ const I18N = {
     systemTheme: 'System',
     lightTheme: 'Light',
     darkTheme: 'Dark',
-    agentSnippet:
-      'Install and configure Taco in the current project. First read the official installation guide, then follow it exactly: https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md. After installation, run taco-cli help and taco-cli skills read taco to read the embedded command contract and usage guide, then verify the installation.',
+    agentSnippet: '请安装 https://github.com/Arcadia822/taco',
   },
 }
 
