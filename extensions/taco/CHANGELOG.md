@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Proactively open generated or refreshed Taco files in the browser when the host supports and permits local HTML navigation; preserve unsaved reviews, report observed verification separately, and retain clickable-file fallback and Codex's user-click boundary (#31).
 - Add runtime-editable sidebar navigation and declarative grouping: create, rename, delete groups, drag files between groups, and declare entry documents.
 - Persist navigation declarations to the top-level `navigation` bundle field on save without modifying `files[]` or source hashes.
 - Preserve backward compatibility with standard Spec Kit three-stage derivers and default README entry precedence when `navigation` is omitted.

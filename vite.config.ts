@@ -83,6 +83,11 @@ const bundle = JSON.stringify({
 
 export default defineConfig({
   base: './',
+  resolve: {
+    alias: {
+      '@taco/protocol': resolve(projectRoot, 'packages/protocol/src/index.ts'),
+    },
+  },
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __DEFAULT_LOCALE__: JSON.stringify(process.env.TACO_DEFAULT_LOCALE ?? ''),

@@ -26,8 +26,13 @@
 - After a successful update, present the exact generated Taco through the Agent
   GUI's native clickable file or artifact surface. In Codex, return a clickable
   absolute file link and let the user's click open it in Browser; do not attempt
-  autonomous `file://` navigation. Other GUIs may open and verify it directly
-  only when they explicitly support local HTML navigation.
+  autonomous `file://` navigation. In other GUIs, proactively open and verify
+  the exact file when local HTML navigation is explicitly supported and permitted.
+  Use a separate tab to preserve an existing unsaved review. If browser tools are
+  unavailable, opening is prohibited, or navigation fails, keep the clickable-file
+  handoff and state the reason. Claim verification only after observing the expected
+  title and document content; never bypass restrictions with data/Blob URLs,
+  external uploads, a development server, or weakened browser security.
 - Before complete-file inspection, run the installed CLI `validate --json`
   locally to check credential and runtime warnings without executing the Taco.
 - Import a saved human review through `speckit.taco.review` (in Codex,

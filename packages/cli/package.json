@@ -1,0 +1,21 @@
+{
+  "name": "@taco/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone taco-cli client for review publication, subscription, and local inspection",
+  "bin": {
+    "taco-cli": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@taco/protocol": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "typescript": "~5.8.3"
+  }
+}

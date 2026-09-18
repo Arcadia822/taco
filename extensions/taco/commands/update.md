@@ -35,9 +35,9 @@ The user input may contain one feature-directory path followed by repeatable `--
 5. Present the generated Taco to the user:
    - Always use the active Agent GUI's native clickable local-file or artifact presentation for the exact absolute output path.
    - In Codex, emit a clickable absolute file link and do not attempt to navigate Browser directly to `file://`; the user's click hands the file to Browser, like opening a local note attachment.
-   - In another Agent GUI, open and verify the Taco directly only if that GUI explicitly supports autonomous local HTML navigation. Otherwise keep the same clickable-file handoff and state that it was not opened automatically.
-   - Never substitute a `data:` URL, development application, different Taco, external upload, or weakened browser security setting for the local file.
-6. Report the absolute Taco path, embedded file count, default exclusions, explicit exclusions, preserved comment count, and presentation status. Distinguish `presented as a clickable file` from `opened and verified`; in Codex the expected state before user interaction is the former. State that the reviewer must save the Taco after editing or commenting before `__SPECKIT_COMMAND_TACO_REVIEW__` can import it.
+   - In another Agent GUI, when local HTML navigation is explicitly supported and permitted, proactively open the exact generated file and verify its expected title and document content are visible; do not ask again merely to open it. Use a separate tab rather than reloading an existing review with unsaved edits or comments. If browser tools are unavailable, navigation is prohibited, or opening fails, keep the clickable-file handoff and report the reason without bypassing the restriction.
+   - Never substitute a `data:` or Blob URL, development application, different Taco, external upload, or weakened browser security setting for the local file. Keep credential-bearing files within the authorized local environment.
+6. Report the absolute Taco path, embedded file count, default exclusions, explicit exclusions, preserved comment count, and presentation status. Distinguish `presented as a clickable file`, `opened`, and `opened and verified`; claim verification only after observing the expected title and content. In Codex the expected state before user interaction is clickable-file presentation. State that the reviewer must save the Taco after editing or commenting before `__SPECKIT_COMMAND_TACO_REVIEW__` can import it.
 
 ## Agent invariant
 
@@ -56,5 +56,5 @@ Whenever you modify any canonical artifact inside a Spec Kit feature directory o
 - The in-directory Taco exists at the reported path.
 - Its result identifies the same feature root as the active Spec Kit feature.
 - Its embedded file count is nonzero and all exclusions are reported.
-- The Taco is exposed through the Agent GUI's native clickable local-file presentation. A direct-open result is reported separately and only when the GUI supports autonomous local HTML navigation.
+- The Taco is exposed through the Agent GUI's native clickable local-file presentation. Where supported and permitted, it was proactively opened and its title and document content checked; otherwise the unavailable, prohibited, or failed browser step is reported separately.
 - The reviewer has the explicit next command: `__SPECKIT_COMMAND_TACO_REVIEW__ <path-to-file.taco.html>`.

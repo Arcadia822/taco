@@ -1,0 +1,1706 @@
+openapi: 3.1.0
+info:
+  title: Taco Host API
+  version: 1.0.0-draft
+  description: >-
+    Taco Host 服务端 HTTP 契约 (草案)。
+    提供 Taco 设计与需求评审发布、版本追踪、公开评审、持久事件日志回放与导出能力。
+    默认全公开访问，管理操作基于 Bearer ApiKey (由 User 持有，包含匿名自举 User) 进行 Owner 鉴权。
+    网页评审支持基于同源 Guest Cookie 的受控匿名互动。
+    所有内容响应均需检查生命周期并设置 Cache-Control:no-store。
+    版本、评审、事件和导出等可能超出普通响应上限的 JSON 必须流式输出；开始输出后失败则中断，不能追加假成功结尾。
+    Key/guest 凭据及上传签名响应同样禁止缓存；公开主体 ID 与 Cookie secret 分离。
+servers:
+  - url: http://localhost:32167
+    description: 本地开发与回环测试默认地址
+paths:
+  /v1/capabilities:
+    get:
+      summary: 获取 Host 服务端能力与约束配置
+      description: >-
+        公开接口，返回协议版本、请求与评论大小上限、文件数上限、幂等保持时长以及数据保留策略。
+        不包含任何密钥配置或内部环境变量。
+      operationId: getCapabilities
+      responses:
+        '200':
+          description: 成功返回服务端能力配置
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - protocol
+                  - limits
+                  - idempotency
+                  - retention
+                properties:
+                  protocol:
+                    type: string
+                    example: taco-host/1
+                    description: 支持的 Host 通信协议版本
+                  limits:
+                    type: object
+                    required:
+                      - maxPayloadBytes
+                      - maxControlRequestBytes
+                      - maxCommentBytes
+                      - maxFilesPerSnapshot
+                      - maxImageBytes
+                    properties:
+                      maxPayloadBytes:
+                        type: integer
+                        example: 33554432
+                        description: 暂存上传内容最大字节数 (UTF-8 JSON，包含 base64 资源，默认 32 MiB)
+                      maxControlRequestBytes:
+                        type: integer
+                        example: 65536
+                        description: 控制请求最大字节数 (用于预签名上传申请与轻量提交等控制端点，默认 64 KiB)
+                      maxCommentBytes:
+                        type: integer
+                        example: 16384
+                        description: 单条评论正文最大字节数 (默认 16 KiB)
+                      maxFilesPerSnapshot:
+                        type: integer
+                        example: 2000
+                        description: 单个快照最大文件数 (默认 2000)
+                      maxImageBytes:
+                        type: integer
+                        example: 10485760
+                        description: 单张图片二进制数据上限 (默认 10 MiB)
+                  idempotency:
+                    type: object
+                    required:
+                      - retentionSeconds
+                    properties:
+                      retentionSeconds:
+                        type: integer
+                        example: 86400
+                        description: 幂等键持久保存期 (默认 24 小时)
+                  retention:
+                    type: object
+                    required:
+                      - policy
+                      - defaultTtlSeconds
+                    properties:
+                      policy:
+                        type: string
+                        enum: [ttl, manual_only]
+                        example: manual_only
+                        description: 数据保留策略；未配置自动清理时为 manual_only (需手动删除)，配置存活期时为 ttl
+                      defaultTtlSeconds:
+                        type: [integer, 'null']
+                        example: null
+                        description: 默认存活秒数；无自动到期时为 null
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /v1/me:
+    get:
+      summary: 获取当前凭据对应的用户身份
+      description: >-
+        需要 Bearer ApiKey。返回持有该 ApiKey 的 User 基本信息 (含匿名用户和注册用户)。
+        不暴露密钥散列、OAuth 内部令牌或私有标识。
+      operationId: getMe
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: 成功返回当前用户信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /v1/anonymous-credentials:
+    post:
+      summary: 自动自举匿名 User 并签发 ApiKey
+      description: >-
+        用于 CLI 首次无凭据发布时的自动引导流程。
+        服务端在单次事务中创建 anonymous 类型的 User 并签发新 ApiKey。
+        明文 secret 仅在本次响应中返回一次，客户端必须安全落地存储；服务端仅存储 SHA-256 摘要用于鉴权。
+        该接口受严格 IP/频次限流，不接受客户端指定用户 ID；禁止跨域浏览器发起调用 (无 Cookie 浏览器来源校验)。
+      operationId: createAnonymousCredentials
+      responses:
+        '201':
+          description: 成功创建匿名身份与 ApiKey
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - user
+                  - apiKey
+                properties:
+                  user:
+                    $ref: '#/components/schemas/User'
+                  apiKey:
+                    $ref: '#/components/schemas/ApiKeyBootstrap'
+        '429':
+          $ref: '#/components/responses/RateLimitedError'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /v1/api-keys:
+    get:
+      summary: 列出当前用户拥有的 API Key 元数据
+      description: >-
+        需要 Bearer ApiKey。列出当前 User 拥有的所有 API Key 元信息。
+        绝不返回明文 secret 或 keyHash 密文。
+      operationId: listApiKeys
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: 成功返回 API Key 列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - apiKeys
+                properties:
+                  apiKeys:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApiKeyMetadata'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /v1/api-keys/{keyId}:
+    delete:
+      summary: 撤销指定的 API Key
+      description: >-
+        需要 Bearer ApiKey。仅能撤销属于当前用户的 Key。
+        最终提交事务重验 Key 并持共享行锁；撤销持排他锁。撤销先提交则业务事务失败，业务先持锁则撤销等待其提交。
+      operationId: revokeApiKey
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: keyId
+          in: path
+          required: true
+          description: 待撤销的 API Key 标识
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 成功撤销 API Key，无响应正文
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /v1/guest-session:
+    post:
+      summary: 为网页访客创建同源会话 Cookie
+      description: >-
+        用于网页端匿名评审者在提交反馈前建立或重用会话。
+        服务端验证 Origin/Referer，颁发或复用名为 taco_guest 的 HttpOnly、SameSite 凭据 Cookie
+        (生产环境启用 Secure；本地开发支持回环 HTTP)。若请求中已携带合法有效 Cookie，服务端重用现有会话身份，
+        请求体传入的 displayName 不能冒领他人或覆盖身份。
+        响应体返回用于防御 CSRF 的 X-Taco-CSRF 令牌以及当前访客的 Actor 信息 (kind 固定为 guest)。
+        受 IP/会话频次限制，访客凭据不可用于管理或更新 Taco。
+      operationId: createGuestSession
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GuestSessionPayload'
+      responses:
+        '200':
+          description: 创建或复用同源访客身份
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: taco_guest=gs_1234567890; Path=/; HttpOnly; SameSite=Lax
+              description: 访客安全凭据 Cookie
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - csrfToken
+                  - actor
+                  - expiresAt
+                properties:
+                  csrfToken:
+                    type: string
+                    description: 配合写入请求 Header X-Taco-CSRF 使用的防跨站令牌
+                  actor:
+                    $ref: '#/components/schemas/GuestActor'
+                  expiresAt:
+                    type: string
+                    format: date-time
+                    description: 访客会话到期时间 (RFC3339 UTC)
+        '429':
+          $ref: '#/components/responses/RateLimitedError'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /v1/uploads:
+    post:
+      summary: 预分配上传预约并获取私有直传签名 URL
+      description: >-
+        需要 Bearer ApiKey。必须提供 Idempotency-Key Header (UUID)。
+        为发布 (publish) 或更新 (update) 预分配唯一的 uploadId、固定目标 tacoId/revisionId，并生成具备时效性的私有 Blob 直传 PUT 预签名 URL。
+        受控制请求大小上限限制 (maxControlRequestBytes，默认 64 KiB)。
+        请求体经 JCS 规范校验，严格区分发布 (tacoId 与 baseRevisionId 均为 null) 与更新 (tacoId 与 baseRevisionId 均为合法 UUID)。
+        服务端以 (user_id, purpose, target_scope, idempotency_key) 保证预约唯一；publish 的 target_scope 是非空固定值，update 使用 Taco UUID：
+        - 若相同幂等键再次请求且处于 pending 状态，允许刷新并返回新的有效 PUT URL (不重置 24 小时预约生命周期)；
+        - 若相同幂等键再次请求且已处于 committed 状态，返回 status=committed 与原 uploadId，但绝不返回新的 PUT 直传能力 (防止已提交状态被覆盖写)；
+        - 若预约已处于 abandoned 状态，拒绝并返回 409 错误；
+        - 若相同幂等键但请求摘要不匹配，拒绝并返回 409 IDEMPOTENCY_MISMATCH 冲突错误。
+        生成的 uploadUrl 包含私有签名凭证，必须安全传输，严禁在日志中记录完整 URL。
+        签名限制单一路径、PUT、application/json、声明大小且至多 32 MiB、短有效期、不可覆盖。
+        更新必须验证 owner；deleted/expired 返回 410；closed 仅允许已 committed 的同键恢复。
+      operationId: prepareUpload
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadPreparePayload'
+      responses:
+        '201':
+          description: 返回新建/复用的上传预约；pending 可含续签 URL，committed 只返回原 uploadId/status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadPrepareResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '410':
+          $ref: '#/components/responses/GoneError'
+        '413':
+          $ref: '#/components/responses/PayloadTooLargeError'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntityError'
+        '429':
+          $ref: '#/components/responses/RateLimitedError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailableError'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /v1/tacos:
+    post:
+      summary: 首次发布新 Taco 及其初始 Revision (轻量级原子提交)
+      description: >-
+        需要 Bearer ApiKey (包含匿名 User 持有的 Key)。
+        必须提供与此前调用 POST /v1/uploads 时完全相同的 Idempotency-Key Header (UUID)。
+        所有发布内容默认全网公开，不提供公开/私有开关。
+        为突破网关体积限制并支撑 32 MiB 快照，本接口采用轻量控制提交：客户端先通过 POST /v1/uploads 获得预签名 uploadUrl 并直接 PUT 上传完整快照，
+        随后调用本接口传入 uploadId 触发服务端原子验证与提交。
+        服务端从内部私有 Blob 加载快照流，实测字节大小与 SHA-256 哈希值，必须与预约中锁定的 payloadHash/payloadBytes 严格一致；
+        绝不信任客户端未经验证的声明。
+        Blob 校验在数据库事务外完成；最终事务按 Key、reservation、Taco 锁序重验身份与 uploadId 归属，
+        匹配 purpose/目标/base/原幂等键；先拒绝 deleted/expired，再读取成功收据，再处理新提交。
+        原子写 Taco、Revision、导入评论、revision.published、投影与收据，reservation 标记 committed。
+        同键已提交返回原 201 结果，不要求重新上传；closed 不阻止先前成功结果重放。
+      operationId: publishTaco
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommitPublishPayload'
+      responses:
+        '201':
+          description: 成功发布 Taco 与初始版本
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '410':
+          $ref: '#/components/responses/GoneError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '413':
+          $ref: '#/components/responses/PayloadTooLargeError'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntityError'
+        '429':
+          $ref: '#/components/responses/RateLimitedError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailableError'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /v1/tacos/{id}:
+    get:
+      summary: 获取 Taco 公开元数据
+      description: >-
+        公开接口，无需凭据。返回 Taco 当前状态、标题、当前 revisionId、创建与更新时间、最后事件序号 lastSequence。
+        ownerId 是公开的不透明主体标识；不返回凭据、providerSubject 或其他身份系统内部字段。
+      operationId: getTaco
+      parameters:
+        - $ref: '#/components/parameters/TacoId'
+      responses:
+        '200':
+          description: 成功返回 Taco 元数据
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Taco'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '410':
+          $ref: '#/components/responses/GoneError'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+    delete:
+      summary: 标记删除 Taco
+      description: >-
+        需要 Owner ApiKey。标记删除后新读取/更新/写入返回 410；订阅在下一轮生命周期检查终止，已传输字节不可撤回。
+        该操作不可逆，成功返回 204 无响应正文。
+      operationId: deleteTaco
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TacoId'
+      responses:
+        '204':
+          description: 成功删除 Taco，无响应正文
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '410':
+          $ref: '#/components/responses/GoneError'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /v1/tacos/{id}/revisions:
+    get:
+      summary: 分页列出 Taco 下的所有版本元数据
+      description: >-
+        公开接口。支持基于游标 after 与 limit 的版本元数据分页查询。
+        采用高水位不透明游标 nextCursor 进行分页，返回版本列表、parentRevisionId 及 contentHash。
+      operationId: listRevisions
+      parameters:
+        - $ref: '#/components/parameters/TacoId'
+        - $ref: '#/components/parameters/AfterCursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 成功返回版本列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - revisions
+                  - throughSequence
+                  - nextCursor
+                  - hasMore
+                properties:
+                  revisions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RevisionMetadata'
+                  throughSequence:
+                    $ref: './protocol.schema.json#/$defs/Sequence'
+                    description: 冻结当前分页视图的高水位 sequence
+                  nextCursor:
+                    type: [string, 'null']
+                    description: 获取下一页的不透明游标；无更多时为 null
+                  hasMore:
+                    type: boolean
+                    description: 是否还有更多版本
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '410':
+          $ref: '#/components/responses/GoneError'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      summary: 为 Taco 发布新 Revision (轻量级原子提交)
+      description: >-
+        需要 Owner ApiKey。必须提供与此前调用 POST /v1/uploads 时完全相同的 Idempotency-Key Header。
+        所有发布内容默认全网公开，不提供公开/私有开关。
+        为突破网关体积限制并支撑 32 MiB 快照，本接口采用轻量控制提交：客户端先通过 POST /v1/uploads (purpose=update) 获得预签名 uploadUrl 并直接 PUT 上传完整快照，
+        随后调用本接口传入 uploadId 与 baseRevisionId 触发服务端原子验证与提交。
+        服务端从内部私有 Blob 加载快照流，校验原始字节 SHA-256 哈希值与大小必须严格等于预约锁定的 payloadHash/payloadBytes。
+        Blob 校验在数据库事务外完成；最终事务按 Key、reservation、Taco 锁序重验身份、uploadId 归属与目标/base/幂等键。
+        先拒绝 deleted/expired (410)，再重放已提交收据；只有新写入才检查 open 与 baseRevisionId=currentRevisionId。
+        新写入遇到 closed 返回 409 TACO_CLOSED，base 变化返回 409 REVISION_CONFLICT。
+        原子写 Revision、current 指针、导入投影、递增 sequence、revision.published、幂等收据和 committed 状态。
+        相同幂等键重放原 201 结果，不受后来 closed/base 变化影响。
+      operationId: createRevision
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TacoId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommitRevisionPayload'
+      responses:
+        '201':
+          description: 成功发布新 Revision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublishResponse'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '410':
+          $ref: '#/components/responses/GoneError'
+        '413':
+          $ref: '#/components/responses/PayloadTooLargeError'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntityError'
+        '429':
+          $ref: '#/components/responses/RateLimitedError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailableError'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /v1/tacos/{id}/revisions/{rev}:
+    get:
+      summary: 获取指定版本的完整快照及元数据 (大响应体流式传输)
+      description: >-
+        公开接口。返回指定 revisionId 的不可变 Snapshot 及版本元信息。
+        由于完整快照包含内联 base64 图片资源 (最高可达 32 MiB)，超过常规函数 4.5 MB 限制，
+        服务端通过函数私有流式读取私有 Blob 并以 application/json 流式响应 (Streaming Response) 直接向客户端管道输出，
+        不生成直接暴露给客户端的公开 GET 预签名 URL。
+        校验 rev 必须属于指定的 tacoId，否则返回 404；若 Taco 已删除或过期返回 410。
+        若传输期间因网络中断或函数寿命到期发生截断，连接明确异常中止，客户端必须丢弃不完整数据并重试。
+      operationId: getRevision
+      parameters:
+        - $ref: '#/components/parameters/TacoId'
+        - name: rev
+          in: path
+          required: true
+          description: Revision 的 UUID
+          schema:
+            $ref: './protocol.schema.json#/$defs/Uuid'
+      responses:
+        '200':
+          description: 成功返回版本完整快照
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevisionDetail'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '410':
+          $ref: '#/components/responses/GoneError'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /v1/tacos/{id}/reviews:
+    get:
+      summary: 获取指定版本的聚合评审数据与状态投影
+      description: >-
+        公开接口。必须指定查询参数 revisionId (UUID)。
+        返回该版本聚合投影后的讨论线程 threads、参与者确认与完成状态 reviewerStates、
+        锚点失效标记 (stale) 以及导入来源 (imported/unverified) 标记。
+        由于讨论线程与参与者状态均可能持续增长，评审投影对 threads 与 reviewerStates
+        分别进行独立有界数组分页，各自受传入 limit 限制 (最大 500，默认 100)。
+        不透明分页游标 after 冻结高水位 sequence H 并跟踪两者的偏移量；只要任一集合存在更多数据，hasMore 即为 true。
+        响应必须包含通过其冻结投影视图的 throughSequence。
+      operationId: getReviews
+      parameters:
+        - $ref: '#/components/parameters/TacoId'
+        - name: revisionId
+          in: query
+          required: true
+          description: 目标 Revision 的 UUID
+          schema:
+            $ref: './protocol.schema.json#/$defs/Uuid'
+        - $ref: '#/components/parameters/AfterCursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 成功返回评审状态投影
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewsProjection'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '410':
+          $ref: '#/components/responses/GoneError'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      summary: 提交评审操作或状态变更
+      description: >-
+        支持 ApiKey (User) 或同源 Guest Session (Cookie + X-Taco-CSRF)。
+        必须提供 Idempotency-Key Header。
+        操作通过 ReviewMutation 可辨别联合类型定义：
+        - comment.created: 发起新讨论线程，需 revisionId, body, anchor (可 null)
+        - comment.replied: 追加回复，需 revisionId, threadId, body
+        - thread.resolved / thread.reopened: 解决/重开线程，仅允许线程发起者或 Taco 所有者调用，需 revisionId, threadId
+        - review.completed: 当前参与者反馈完成，需 revisionId
+        - revision.approved: 当前参与者确认版本，需 revisionId
+        - revision.approval_withdrawn: 撤回认可/批准，需 revisionId
+        deleted/expired 先返回 410；同键成功收据先于 closed 检查重放。新写入遇到 closed 返回 409 TACO_CLOSED。
+        评审操作具有幂等与空操作语义：
+        - 若产生实际状态变化 (例如创建新评论、状态真实翻转)，返回 201 Created 且 {changed: true, event: <Event>}，递增 sequence 并广播；
+        - 若请求为无操作变更 (例如重复标记已解决、已完成，或撤回从未确认过的版本)，且使用不同幂等键，不产生新事件，返回 200 OK 且 {changed: false, event: null}；
+        - 若使用完全相同的 Idempotency-Key 重放，则重放原响应内容与原状态码 (200 或 201)。
+      operationId: postReview
+      security:
+        - ApiKeyAuth: []
+        - GuestAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TacoId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './protocol.schema.json#/$defs/ReviewMutation'
+      responses:
+        '200':
+          description: 评审操作为无变化空操作 (无新事件生成)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewMutationResponse'
+        '201':
+          description: 成功应用评审变更并生成新事件
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewMutationResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '413':
+          $ref: '#/components/responses/PayloadTooLargeError'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntityError'
+        '429':
+          $ref: '#/components/responses/RateLimitedError'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /v1/tacos/{id}/events:
+    get:
+      summary: 分页读取 Taco 的持久事件日志
+      description: >-
+        公开接口。按同一 Taco 内严格单调递增 sequence 分页获取事件历史。
+        初次请求不传 throughSequence，服务端捕获当前高水位 H 并作为响应的 throughSequence 返回；
+        后续分页续读必须传入上一页返回的 throughSequence 以固定高水位窗口。
+        若 after > throughSequence 或传入的 throughSequence 超过当前服务端高水位，拒绝并返回 400 错误。
+        响应返回事件数组、高水位 throughSequence、下一页游标 nextCursor (可为 null 的 sequence 字符串) 及 hasMore。
+      operationId: getEvents
+      parameters:
+        - $ref: '#/components/parameters/TacoId'
+        - name: after
+          in: query
+          required: false
+          description: 排他 sequence 游标 (十进制字符串)。返回序号大于此值的事件
+          schema:
+            $ref: './protocol.schema.json#/$defs/Sequence'
+        - name: throughSequence
+          in: query
+          required: false
+          description: 分页延续请求提供的高水位 sequence；初次请求省略由服务端捕获并返回
+          schema:
+            $ref: './protocol.schema.json#/$defs/Sequence'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 成功返回事件列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - events
+                  - throughSequence
+                  - nextCursor
+                  - hasMore
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: './protocol.schema.json#/$defs/Event'
+                    description: 按 sequence 递增排序的事件数组
+                  throughSequence:
+                    $ref: './protocol.schema.json#/$defs/Sequence'
+                  nextCursor:
+                    type: [string, 'null']
+                    pattern: '^(0|[1-9][0-9]*)$'
+                    description: 下一页起始 sequence 游标；无新事件时为 null
+                  hasMore:
+                    type: boolean
+                    description: 是否还有更多事件
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '410':
+          $ref: '#/components/responses/GoneError'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /v1/tacos/{id}/subscribe:
+    get:
+      summary: WebSocket 实时事件订阅连接端点
+      description: >-
+        公开端点，通过 HTTP 101 Switching Protocols 升级为原生 WebSocket 双向连接 (连接固定至具体函数实例)。
+        客户端连接后必须在 10 秒内发送订阅首帧 ClientFrame (type=subscribe, protocol=taco-host/1, after)。
+        服务端连接建立后，从 Postgres 捕获当前高水位 H，随后以有界批量 (~1s) 轮询 Postgres 持久化事件日志尾部并派发事件：
+        - 服务端不维持任何跨实例内存广播总线假设，实例上无连接时立即停止数据库轮询，绝不持有跨全生命周期的数据库长事务或长连接；
+        - 若 Taco 处于 open 状态：
+          - 若 after 为 null：发送 ready(cursor=H, mode=live)，随后实时广播 H 之后的事件；
+          - 若 after 为合法 sequence：发送 ready(cursor=after, mode=replay, replayThrough=H)，按序补发 (after, H] 事件，
+            发出 checkpoint(H) 帧后平滑进入实时流。
+        - 优雅轮换 (Graceful Lifecycle Rotation)：
+          - 受函数执行最大时长限制 (maxDuration，默认 300s，建议 240s 安全阈值)，服务端在寿命到达前主动向客户端发送关闭帧 1012 (Service Restart)；
+          - 1012 属于预期的正常实例轮换，绝非 taco.closed，客户端必须自动携带最新消费游标发起重连，不可触发进程退出；
+        - Taco 正常关闭与终止 (1000 Normal Closure)：
+          - 当 Taco 进入 closed 状态且 taco.closed 事件已在 Postgres 确权落盘：
+            - 服务端依序发送到最终关闭边界和 checkpoint(H)，再以 1000 正常关闭，reason 严格为 'taco.closed'；不声称 checkpoint 确认了客户端实际处理。
+            - 若新连接以 after 为 null 连接已关闭 Taco，直接报错拒绝并返回 TACO_CLOSED 错误帧；
+            - 若携带合法 after < H 连接已关闭 Taco，服务端允许连接并补读历史直至包含 taco.closed 的 checkpoint(H)，随后以 1000 reason='taco.closed' 优雅关闭。
+            - after 等于最终 H 时，发送 replay ready 和 checkpoint(H) 后以 1000 reason='taco.closed' 结束；after > H 拒绝。
+        应用级保活通过纯文本 'ping' / 'pong' 帧处理，不生成事件日志。
+        详细帧结构定义请参见 protocol.schema.json 中 ClientFrame 与 ServerFrame 定义。
+      operationId: subscribeTaco
+      parameters:
+        - $ref: '#/components/parameters/TacoId'
+        - name: Upgrade
+          in: header
+          required: true
+          schema:
+            type: string
+            enum: [websocket]
+          description: 协议升级标识
+        - name: Connection
+          in: header
+          required: true
+          schema:
+            type: string
+            enum: [Upgrade]
+          description: HTTP 连接升级标头
+        - name: Sec-WebSocket-Key
+          in: header
+          required: true
+          schema:
+            type: string
+          description: 标准 WebSocket 随机握手密钥
+        - name: Sec-WebSocket-Version
+          in: header
+          required: true
+          schema:
+            type: string
+            enum: ['13']
+          description: WebSocket 协议版本
+      responses:
+        '101':
+          description: 成功升级为 WebSocket 实时协议流
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '410':
+          $ref: '#/components/responses/GoneError'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /v1/tacos/{id}/close:
+    post:
+      summary: 将 Taco 关闭为只读归档状态
+      description: >-
+        需要 Owner ApiKey。关闭后 Taco 进入只读状态：
+        禁止发布新 Revision、禁止所有评论与评审写入；已连接的实时订阅在派发 taco.closed 事件后正常关闭。
+        该操作为不可逆生命周期操作；若已经是 closed 状态，幂等调用返回 200 且不重复产生关闭事件。
+        关闭后数据依然公开可读，并允许完整调用 export。
+      operationId: closeTaco
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TacoId'
+      responses:
+        '200':
+          description: 成功关闭 Taco 为只读
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - tacoId
+                  - status
+                  - closedAt
+                properties:
+                  tacoId:
+                    $ref: './protocol.schema.json#/$defs/Uuid'
+                  status:
+                    type: string
+                    enum: [closed]
+                  closedAt:
+                    type: string
+                    format: date-time
+                    description: 关闭生效时间 (RFC3339 UTC)
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '410':
+          $ref: '#/components/responses/GoneError'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+  /v1/tacos/{id}/export:
+    get:
+      summary: 导出 Taco 完整归档数据包 (大响应体流式导出)
+      description: >-
+        公开接口，开放中或已关闭的 Taco 均可完整导出。
+        导出采用一致性快照截断机制：服务端先确定导出事务的高水位 throughSequence，
+        导出包含该边界之前已提交的 Taco 公开元数据、全部 Revision 完整快照 (包含图片 base64)、
+        按版本归属的原始导入线程 importedThreads (每一项包含 revisionId 与 thread) 以及事件日志 events。
+        大体积 JSON 响应通过函数流式响应 (application/json) 直接从私有 Blob 与 Postgres 边读边输出给客户端，
+        绝不绕过安全生命周期向公网分发直接 GET 预签名链接。
+        若导出因数据库异常、网络中断或函数寿命到期超出 maxDuration，连接立即明确异常中止 (Partial Failure)，
+        客户端必须丢弃不完整的残缺归档文件并明确报错，严禁静默假成功；服务端不额外实现复杂的后台异步导出系统。
+        绝不导出 ApiKey、Session、密钥散列或内部用户字段。
+      operationId: exportTaco
+      parameters:
+        - $ref: '#/components/parameters/TacoId'
+      responses:
+        '200':
+          description: 成功返回完整归档数据包
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportBundle'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '410':
+          $ref: '#/components/responses/GoneError'
+        default:
+          $ref: '#/components/responses/ErrorResponse'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      description: >-
+        Bearer ApiKey 认证。用于 CLI 及自动化客户端管理操作。
+        在 Header 中传入: Authorization: Bearer <ApiKeySecret>
+    GuestAuth:
+      type: apiKey
+      in: cookie
+      name: taco_guest
+      description: >-
+        网页访客认证 Cookie (taco_guest)。
+        提交评审写入等变更操作时，必须同时在 Header 中携带 X-Taco-CSRF 令牌。
+
+  parameters:
+    TacoId:
+      name: id
+      in: path
+      required: true
+      description: Taco 的全局唯一 UUID
+      schema:
+        $ref: './protocol.schema.json#/$defs/Uuid'
+
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        客户端生成的 UUID v4 幂等键。在 24 小时保留期内，同身份相同请求重复提交将重放原结果；
+        同键不同内容将返回 409 IDEMPOTENCY_MISMATCH 冲突错误。
+      schema:
+        $ref: './protocol.schema.json#/$defs/Uuid'
+
+    CsrfTokenHeader:
+      name: X-Taco-CSRF
+      in: header
+      required: false
+      description: 网页端访客使用 Cookie 进行写入时必须携带的防 CSRF 令牌
+      schema:
+        type: string
+
+    AfterCursor:
+      name: after
+      in: query
+      required: false
+      description: 分页不透明游标，从上一页响应的 nextCursor 获取
+      schema:
+        type: string
+
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: 分页大小，默认 100，最大 500
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 100
+
+  schemas:
+    GuestSessionPayload:
+      type: object
+      description: 建立或重用访客会话的可选请求体
+      additionalProperties: false
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: 访客建议的显示昵称 (最大 128 字符)。不能用于覆盖身份；若携带有效 Cookie 则重用原身份且不可冒领他人
+
+    GuestActor:
+      type: object
+      description: 网页访客会话身份模型
+      required:
+        - kind
+        - id
+        - displayName
+        - verified
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum: [guest]
+          description: 身份类型固定为 guest
+        id:
+          type: string
+          minLength: 1
+          description: 访客会话标识符
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: 访客显示名称
+        verified:
+          type: boolean
+          enum: [false]
+          description: 访客固定未认证 (false)
+
+    ContentHash:
+      type: string
+      pattern: '^sha256:[a-f0-9]{64}$'
+      example: sha256:7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069
+      description: '快照规范化 JCS(snapshot) 的 SHA-256 摘要，sha256: 后为 64 位小写十六进制'
+
+    User:
+      type: object
+      description: 用户公开主体信息 (含匿名用户与注册用户)
+      required:
+        - id
+        - kind
+        - displayName
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: 用户唯一标识符 (不透明 ID，例如 usr_01h8...)
+        kind:
+          type: string
+          enum: [anonymous, registered]
+          description: 用户类别：anonymous (匿名自举用户) 或 registered (注册用户)
+        displayName:
+          type: string
+          description: 用户公开展示名称
+        createdAt:
+          type: string
+          format: date-time
+          description: 创建时间 (RFC3339 UTC)
+
+    ApiKeyBootstrap:
+      type: object
+      description: 匿名自举时仅返回一次的完整 ApiKey 凭据 (包含明文 Secret)
+      required:
+        - id
+        - prefix
+        - secret
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: API Key 唯一标识 ID
+        prefix:
+          type: string
+          example: taco_live_
+          description: API Key 前缀 (用于快速识别)
+        secret:
+          type: string
+          description: 高熵 API Key 明文秘钥 (仅返回一次，客户端必须安全存储，服务端仅保留 SHA-256 摘要)
+        createdAt:
+          type: string
+          format: date-time
+          description: 签发时间 (RFC3339 UTC)
+        expiresAt:
+          type: [string, 'null']
+          format: date-time
+          description: 过期时间 (未设置时为 null)
+
+    ApiKeyMetadata:
+      type: object
+      description: API Key 元信息 (不含明文 Secret 或密文 Hash)
+      required:
+        - id
+        - prefix
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: API Key 唯一标识 ID
+        name:
+          type: [string, 'null']
+          description: Key 自定义名称/用途标注
+        prefix:
+          type: string
+          description: API Key 前缀
+        createdAt:
+          type: string
+          format: date-time
+          description: 创建时间 (RFC3339 UTC)
+        expiresAt:
+          type: [string, 'null']
+          format: date-time
+          description: 过期时间
+        revokedAt:
+          type: [string, 'null']
+          format: date-time
+          description: 撤销时间 (未撤销时为 null)
+
+    Taco:
+      type: object
+      description: Taco 公开核心元数据
+      required:
+        - id
+        - ownerId
+        - title
+        - currentRevisionId
+        - status
+        - createdAt
+        - updatedAt
+        - lastSequence
+      properties:
+        id:
+          $ref: './protocol.schema.json#/$defs/Uuid'
+        ownerId:
+          type: string
+          description: 所有者用户 ID (对应 User.id)
+        title:
+          type: string
+          description: 当前 Taco 标题 (随最新发布版本更新)
+        currentRevisionId:
+          $ref: './protocol.schema.json#/$defs/Uuid'
+        status:
+          type: string
+          enum: [open, closed, expired, deleted]
+          description: Taco 生命周期状态：open (评审中), closed (只读关闭), expired (过期清理), deleted (已删除)
+        createdAt:
+          type: string
+          format: date-time
+          description: 创建时间 (RFC3339 UTC)
+        updatedAt:
+          type: string
+          format: date-time
+          description: 最近更新时间 (RFC3339 UTC)
+        expiresAt:
+          type: [string, 'null']
+          format: date-time
+          description: 计划到期时间；无自动到期策略时为 null
+        lastSequence:
+          $ref: './protocol.schema.json#/$defs/Sequence'
+
+    UploadPreparePayload:
+      type: object
+      description: 预签名上传申请控制请求体 (控制请求大小上限 64 KiB)
+      additionalProperties: false
+      required:
+        - protocol
+        - purpose
+        - tacoId
+        - baseRevisionId
+        - payloadHash
+        - payloadBytes
+      properties:
+        protocol:
+          type: string
+          enum: [taco-host/1]
+          description: 传输协议版本
+        purpose:
+          type: string
+          enum: [publish, update]
+          description: 上传用途：publish (首发新 Taco) 或 update (更新已存在 Taco 的 Revision)
+        tacoId:
+          oneOf:
+            - $ref: './protocol.schema.json#/$defs/Uuid'
+            - type: 'null'
+          description: 目标 Taco UUID；当 purpose 为 publish 时必须为 null，为 update 时必须为有效 UUID
+        baseRevisionId:
+          oneOf:
+            - $ref: './protocol.schema.json#/$defs/Uuid'
+            - type: 'null'
+          description: 基准版本 UUID；当 purpose 为 publish 时必须为 null，为 update 时必须为有效 UUID
+        payloadHash:
+          type: string
+          pattern: '^sha256:[a-f0-9]{64}$'
+          example: sha256:7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069
+          description: '完整暂存包原始 UTF-8 字节的 SHA-256 摘要，sha256: 后为 64 位小写十六进制'
+        payloadBytes:
+          type: integer
+          minimum: 1
+          maximum: 33554432
+          example: 1048576
+          description: 待上传暂存内容的完整 UTF-8 字节数 (1 到 33554432 字节 / 32 MiB)
+      allOf:
+        - if:
+            properties:
+              purpose:
+                const: publish
+          then:
+            properties:
+              tacoId:
+                type: 'null'
+              baseRevisionId:
+                type: 'null'
+        - if:
+            properties:
+              purpose:
+                const: update
+          then:
+            properties:
+              tacoId:
+                type: string
+                format: uuid
+              baseRevisionId:
+                type: string
+                format: uuid
+
+    UploadPreparePendingResponse:
+      type: object
+      description: 处于 pending 状态的上传预约响应 (包含具备有效期的私有 PUT 直传签名 URL)
+      additionalProperties: false
+      required:
+        - uploadId
+        - status
+        - method
+        - uploadUrl
+        - headers
+        - expiresAt
+        - maxBytes
+      properties:
+        uploadId:
+          $ref: './protocol.schema.json#/$defs/Uuid'
+          description: 服务端分配的上传预约唯一 UUID
+        status:
+          type: string
+          const: pending
+          description: 预约状态：pending (等待客户端 PUT 上传正文)
+        method:
+          type: string
+          const: PUT
+          description: 客户端直传正文所使用的 HTTP 方法
+        uploadUrl:
+          type: string
+          format: uri
+          pattern: '^https://'
+          description: 私有存储预签名 PUT URL (包含短期有效凭证，绝不可记录于普通日志)
+        headers:
+          type: object
+          additionalProperties: false
+          required:
+            - Content-Type
+          properties:
+            Content-Type:
+              type: string
+              const: application/json
+          description: 客户端直传 PUT 请求必须携带的 HTTP 标头
+        expiresAt:
+          type: string
+          format: date-time
+          description: 预签名直传 URL 的过期失效时间 (RFC3339 UTC)
+        maxBytes:
+          type: integer
+          minimum: 1
+          maximum: 33554432
+          example: 33554432
+          description: 本次直传允许的最大字节数 (32 MiB)
+
+    UploadPrepareCommittedResponse:
+      type: object
+      description: 处于 committed 状态的上传预约响应 (相同幂等键重试且已提交成功，仅返回原 uploadId 与 committed 状态，绝不重新颁发 PUT 直传能力)
+      additionalProperties: false
+      required:
+        - uploadId
+        - status
+      properties:
+        uploadId:
+          $ref: './protocol.schema.json#/$defs/Uuid'
+          description: 服务端原分配的上传预约唯一 UUID
+        status:
+          type: string
+          const: committed
+          description: 预约状态：committed (该预约已被成功消费并提交)
+
+    UploadPrepareResponse:
+      description: 预签名上传申请响应模型 (基于 status 字段的区分联合体)
+      oneOf:
+        - $ref: '#/components/schemas/UploadPreparePendingResponse'
+        - $ref: '#/components/schemas/UploadPrepareCommittedResponse'
+      discriminator:
+        propertyName: status
+        mapping:
+          pending: '#/components/schemas/UploadPreparePendingResponse'
+          committed: '#/components/schemas/UploadPrepareCommittedResponse'
+
+    CommitPublishPayload:
+      type: object
+      description: 首次发布轻量级原子提交请求体 (控制请求大小上限 64 KiB)
+      additionalProperties: false
+      required:
+        - protocol
+        - uploadId
+      properties:
+        protocol:
+          type: string
+          enum: [taco-host/1]
+          description: 传输协议版本
+        uploadId:
+          $ref: './protocol.schema.json#/$defs/Uuid'
+          description: 预约成功的上传凭证 UUID
+
+    CommitRevisionPayload:
+      type: object
+      description: 发布新版本轻量级原子提交请求体 (控制请求大小上限 64 KiB)
+      additionalProperties: false
+      required:
+        - protocol
+        - uploadId
+        - baseRevisionId
+      properties:
+        protocol:
+          type: string
+          enum: [taco-host/1]
+          description: 传输协议版本
+        uploadId:
+          $ref: './protocol.schema.json#/$defs/Uuid'
+          description: 预约成功的上传凭证 UUID
+        baseRevisionId:
+          $ref: './protocol.schema.json#/$defs/Uuid'
+          description: 并发检查基准版本 UUID (必须与当前 Taco 的 currentRevisionId 严格匹配)
+
+    UploadContent:
+      type: object
+      description: >-
+        客户端通过 HTTP PUT 直传至私有 Blob 存储的完整暂存内容结构。
+        服务端从私有 Blob 边流式读取边严格校验本结构与内联 base64 图片资源，严禁通过业务 API 直接内联提交。
+      additionalProperties: false
+      required:
+        - protocol
+        - snapshot
+      properties:
+        protocol:
+          type: string
+          enum: [taco-host/1]
+          description: 传输协议版本
+        snapshot:
+          $ref: './protocol.schema.json#/$defs/Snapshot'
+        importedComments:
+          type: array
+          items:
+            $ref: './protocol.schema.json#/$defs/ImportedThread'
+          default: []
+          description: 本地现有评审讨论导入列表
+
+    PublishResponse:
+      type: object
+      description: 发布或版本更新成功响应
+      required:
+        - command
+        - host
+        - tacoId
+        - revisionId
+        - contentHash
+        - url
+        - revisionUrl
+      properties:
+        command:
+          type: string
+          enum: [publish, update]
+          description: 执行的命令类型
+        host:
+          type: string
+          description: 目标 Host 的基础 URL
+        tacoId:
+          $ref: './protocol.schema.json#/$defs/Uuid'
+        revisionId:
+          $ref: './protocol.schema.json#/$defs/Uuid'
+        contentHash:
+          $ref: '#/components/schemas/ContentHash'
+        url:
+          type: string
+          description: 打开最新版本的公开访问 URL (/t/{tacoId})
+        revisionUrl:
+          type: string
+          description: 打开该固定版本的公开访问 URL (/t/{tacoId}/r/{revisionId})
+        expiresAt:
+          type: [string, 'null']
+          format: date-time
+          description: Taco 到期清理时间
+
+    RevisionMetadata:
+      type: object
+      description: Revision 元信息
+      required:
+        - id
+        - tacoId
+        - publisherId
+        - contentHash
+        - createdAt
+      properties:
+        id:
+          $ref: './protocol.schema.json#/$defs/Uuid'
+        tacoId:
+          $ref: './protocol.schema.json#/$defs/Uuid'
+        parentRevisionId:
+          oneOf:
+            - $ref: './protocol.schema.json#/$defs/Uuid'
+            - type: 'null'
+          description: 父版本 UUID (初始版本为 null)
+        publisherId:
+          type: string
+          description: 发布者的 User ID
+        sourceDocId:
+          type: [string, 'null']
+          description: 原始文件 docId (保留输入值)
+        contentHash:
+          $ref: '#/components/schemas/ContentHash'
+        createdAt:
+          type: string
+          format: date-time
+          description: 发布时间 (RFC3339 UTC)
+
+    RevisionDetail:
+      type: object
+      description: 包含快照正文的 Revision 完整详情
+      required:
+        - id
+        - tacoId
+        - publisherId
+        - contentHash
+        - createdAt
+        - snapshot
+      properties:
+        id:
+          $ref: './protocol.schema.json#/$defs/Uuid'
+        tacoId:
+          $ref: './protocol.schema.json#/$defs/Uuid'
+        parentRevisionId:
+          oneOf:
+            - $ref: './protocol.schema.json#/$defs/Uuid'
+            - type: 'null'
+          description: 父版本 UUID
+        publisherId:
+          type: string
+          description: 发布者的 User ID
+        sourceDocId:
+          type: [string, 'null']
+          description: 原始文件 docId
+        contentHash:
+          $ref: '#/components/schemas/ContentHash'
+        createdAt:
+          type: string
+          format: date-time
+          description: 发布时间 (RFC3339 UTC)
+        snapshot:
+          $ref: './protocol.schema.json#/$defs/Snapshot'
+
+    ReviewMutationResponse:
+      type: object
+      description: 实际变更与无变化响应；相同幂等键重放原结果
+      required: [changed, event]
+      additionalProperties: false
+      oneOf:
+        - properties:
+            changed:
+              const: true
+            event:
+              $ref: './protocol.schema.json#/$defs/Event'
+        - properties:
+            changed:
+              const: false
+            event:
+              type: 'null'
+      properties:
+        changed:
+          type: boolean
+        event:
+          oneOf:
+            - $ref: './protocol.schema.json#/$defs/Event'
+            - type: 'null'
+    ReviewsProjection:
+      type: object
+      description: 指定版本的聚合评审数据与状态投影
+      required:
+        - revisionId
+        - throughSequence
+        - threads
+        - reviewerStates
+        - nextCursor
+        - hasMore
+      properties:
+        revisionId:
+          $ref: './protocol.schema.json#/$defs/Uuid'
+        throughSequence:
+          $ref: './protocol.schema.json#/$defs/Sequence'
+          description: 冻结当前评审投影视图的高水位 sequence
+        threads:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/ProjectedThread'
+          description: 讨论线程独立分页数组 (受 limit 限制，最大 500)
+        reviewerStates:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/ReviewerState'
+          description: 参与者完成与认可状态独立分页数组 (受 limit 限制，最大 500)
+        nextCursor:
+          type: [string, 'null']
+          description: 跟踪 threads 与 reviewerStates 偏移量及高水位 H 的下一页不透明分页游标；无更多时为 null
+        hasMore:
+          type: boolean
+          description: 任一集合 (threads 或 reviewerStates) 是否还有更多未返回数据
+    ProjectedThread:
+      type: object
+      description: 投影计算后的讨论线程模型
+      required:
+        - id
+        - revisionId
+        - status
+        - anchor
+        - isAnchorStale
+        - isImported
+        - messages
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: 线程唯一 ID
+        revisionId:
+          $ref: './protocol.schema.json#/$defs/Uuid'
+        status:
+          type: string
+          enum: [open, resolved]
+          description: 线程状态 (open 为开放讨论，resolved 为已解决)
+        anchor:
+          oneOf:
+            - $ref: './protocol.schema.json#/$defs/Anchor'
+            - type: 'null'
+          description: 评论锚点。文件行/选区引用或全局讨论 (null)
+        isAnchorStale:
+          type: boolean
+          description: 锚点是否已失效 (在当前版本文本中无法对齐精确引文 quote 时标记为 true)
+        isImported:
+          type: boolean
+          description: 是否来自本地离线文件导入 (导入的作者标记为 unverified)
+        resolvedBy:
+          type: [string, 'null']
+          description: 解决该线程的 Actor ID
+        resolvedAt:
+          type: [string, 'null']
+          format: date-time
+          description: 解决时间
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectedMessage'
+          description: 线程内部按时间正序排列的消息列表
+        createdAt:
+          type: string
+          format: date-time
+          description: 线程创建时间
+
+    ImportedAuthor:
+      type: object
+      description: 本地离线导入消息的未验证作者模型。不能冒充 Host 实名 User 或 Guest Cookie 凭据
+      required:
+        - kind
+        - id
+        - displayName
+        - verified
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum: [imported]
+          description: 身份类型固定为 imported
+        id:
+          type: string
+          minLength: 1
+          description: 服务端添加 revision 与本地标识命名空间的稳定 ID (例如 imp:<rev>:<localId>)，绝非 Guest 凭据
+        displayName:
+          type: string
+          minLength: 1
+          description: 本地导入记录的显示名称
+        verified:
+          type: boolean
+          enum: [false]
+          description: 导入身份固定为未认证 (false)
+
+    ProjectedAuthor:
+      description: 评审消息作者联合模型 (在线 Actor 或导入未认证作者)
+      oneOf:
+        - $ref: './protocol.schema.json#/$defs/Actor'
+        - $ref: '#/components/schemas/ImportedAuthor'
+
+    ProjectedMessage:
+      type: object
+      description: 线程中的单条评审消息。若消息已被删除，body 必须为 '[Deleted message]' 且 deletedAt 必填
+      required:
+        - id
+        - author
+        - body
+        - createdAt
+      properties:
+        id:
+          type: string
+          description: 消息唯一标识
+        author:
+          $ref: '#/components/schemas/ProjectedAuthor'
+        body:
+          type: string
+          description: 消息 Markdown/文本内容。当处于已删除状态时固定为 '[Deleted message]'
+        createdAt:
+          type: string
+          format: date-time
+          description: 消息提交时间
+        deletedAt:
+          type: string
+          format: date-time
+          description: 消息删除时间标记 (墓碑)
+      dependentRequired:
+        deletedAt: [body]
+      allOf:
+        - if:
+            properties:
+              deletedAt:
+                type: string
+            required: [deletedAt]
+          then:
+            properties:
+              body:
+                const: '[Deleted message]'
+    ReviewerState:
+      type: object
+      description: 参与者针对特定 Revision 的完成与认可状态
+      required:
+        - actor
+        - completed
+        - approved
+      properties:
+        actor:
+          $ref: './protocol.schema.json#/$defs/Actor'
+        completed:
+          type: boolean
+          description: 是否已标记“反馈完成” (review.completed)；若之后同一参与者追加新发言则重置为 false
+        completedAtSequence:
+          type: [string, 'null']
+          description: 提交反馈完成时的事件 sequence
+        approved:
+          type: boolean
+          description: 是否已确认/批准该版本 (revision.approved)；若撤回则为 false
+        approvedAt:
+          type: [string, 'null']
+          format: date-time
+          description: 确认/批准生效时间
+
+    ExportBundle:
+      type: object
+      description: 'Taco 完整归档导出包模型，协议 taco-host-export/1'
+      required:
+        - protocol
+        - exportedAt
+        - throughSequence
+        - taco
+        - revisions
+        - importedThreads
+        - events
+      properties:
+        protocol:
+          type: string
+          enum: [taco-host-export/1]
+          description: 导出文件格式版本标识
+        exportedAt:
+          type: string
+          format: date-time
+          description: 导出生成的 RFC3339 UTC 时间戳
+        throughSequence:
+          $ref: './protocol.schema.json#/$defs/Sequence'
+        taco:
+          $ref: '#/components/schemas/Taco'
+        revisions:
+          type: array
+          items:
+            $ref: '#/components/schemas/RevisionDetail'
+          description: 截止到 throughSequence 已提交的全部版本完整快照列表
+        importedThreads:
+          type: array
+          items:
+            type: object
+            description: 归属到特定版本的本地导入线程项
+            required:
+              - revisionId
+              - thread
+            additionalProperties: false
+            properties:
+              revisionId:
+                $ref: './protocol.schema.json#/$defs/Uuid'
+                description: 该导入线程归属的 Revision UUID
+              thread:
+                $ref: './protocol.schema.json#/$defs/ImportedThread'
+                description: 导入的评审线程详情
+          description: 按版本归属的原始导入本地评审线程集合
+        events:
+          type: array
+          items:
+            $ref: './protocol.schema.json#/$defs/Event'
+          description: 截止到 throughSequence 提交的全部历史事件日志 (已剥离敏感认证信息)
+
+  responses:
+    BadRequestError:
+      description: 请求参数错误或缺少必填项 (400)
+      content:
+        application/json:
+          schema:
+            $ref: './protocol.schema.json#/$defs/ErrorResponse'
+    UnauthorizedError:
+      description: 未提供有效凭据或凭据已失效/撤销 (401)
+      content:
+        application/json:
+          schema:
+            $ref: './protocol.schema.json#/$defs/ErrorResponse'
+    ForbiddenError:
+      description: 权限不足，非资源所有者或无权管理目标 (403)
+      content:
+        application/json:
+          schema:
+            $ref: './protocol.schema.json#/$defs/ErrorResponse'
+    NotFoundError:
+      description: 目标 Taco 或 Revision 不存在，或跨资源不匹配 (404)
+      content:
+        application/json:
+          schema:
+            $ref: './protocol.schema.json#/$defs/ErrorResponse'
+    ConflictError:
+      description: 版本并发冲突、幂等内容不匹配或 Taco 状态冲突 (409)
+      content:
+        application/json:
+          schema:
+            $ref: './protocol.schema.json#/$defs/ErrorResponse'
+    GoneError:
+      description: Taco 已被永久删除、过期清理或游标已超出保留窗口 (410)
+      content:
+        application/json:
+          schema:
+            $ref: './protocol.schema.json#/$defs/ErrorResponse'
+    PayloadTooLargeError:
+      description: 请求正文超限 (暂存内容超过 32 MiB、控制请求超过 64 KiB 或单条评论超限) (413)
+      content:
+        application/json:
+          schema:
+            $ref: './protocol.schema.json#/$defs/ErrorResponse'
+    UnprocessableEntityError:
+      description: 快照内容、文件结构或锚点业务校验失败 (422)
+      content:
+        application/json:
+          schema:
+            $ref: './protocol.schema.json#/$defs/ErrorResponse'
+    RateLimitedError:
+      description: 请求过于频繁，触发限流保护 (429)
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: 建议客户端重试的等待秒数
+      content:
+        application/json:
+          schema:
+            $ref: './protocol.schema.json#/$defs/ErrorResponse'
+    ServiceUnavailableError:
+      description: 服务暂时不可用 (数据库连接故障、私有存储直传暂时受阻或底层依赖过载) (503)
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: 建议客户端重试的等待秒数
+      content:
+        application/json:
+          schema:
+            $ref: './protocol.schema.json#/$defs/ErrorResponse'
+    ErrorResponse:
+      description: 标准结构化错误响应
+      content:
+        application/json:
+          schema:
+            $ref: './protocol.schema.json#/$defs/ErrorResponse'

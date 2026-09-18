@@ -12,7 +12,7 @@ describe('Taco Agent instructions', () => {
     expect(update).toContain("In Codex")
     expect(update).toContain("the user's click hands the file to Browser")
     expect(update).toContain("do not attempt to navigate Browser directly to `file://`")
-    expect(update).toContain("Never substitute a `data:` URL")
+    expect(update).toContain("Never substitute a `data:` or Blob URL")
   })
 
   it('routes a complete durable authoring and review prompt through process documentation', () => {

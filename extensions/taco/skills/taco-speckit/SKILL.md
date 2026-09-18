@@ -17,6 +17,8 @@ speckit.taco.review [path-to-file.taco.html]
 - `update` creates or refreshes `<FEATURE_DIR>/<feature-name>.taco.html`. Mandatory hooks invoke it after `specify`, `clarify`, `plan`, `checklist`, `tasks`, `analyze`, `implement`, and `converge`; the Agent invariant also requires it after any canonical feature-artifact change made outside those commands.
 - `review` validates, previews, and imports the saved Taco, gives every open comment thread to the Agent, requires canonical-file edits before re-running `update`, and re-presents the refreshed Taco.
 
+After creating or refreshing a Taco, always present its exact absolute path as a native clickable file. When the host explicitly supports and permits autonomous local HTML navigation, proactively open that file in its browser and verify the expected title and document content are visible; do not ask again just to open it. Preserve any existing unsaved review by using a separate tab instead of reloading it. If opening is unavailable, prohibited, or fails, keep the clickable-file handoff and report why it was not opened or verified. In Codex, retain the user-click handoff: do not autonomously navigate to `file://`. Never bypass restrictions with `data:`/Blob URLs, a development server, external uploads, or weakened browser security; keep credential-bearing files local.
+
 Full procedures, presentation policy (native clickable-file handoff, no `data:` URLs), conflict rules (`--dry-run` first, never `--force` without explicit authorization), and done-criteria live in the installed command definitions:
 
 - `.specify/extensions/taco/commands/update.md`

@@ -58,12 +58,18 @@ export function resolveDocumentNavigation(bundle: TacoBundle): ResolvedDocumentN
     }
   }
 
-  // 2. 检查是否有文件或一级目录声明了 category
+  // 2. 检查是否有文件或一级目录显式声明了非 stage 的通用自定义 category
+  // 注意：若声明的值本身就是 Spec Kit 阶段关键字 ('spec', 'plan', 'tasks')，
+  // 则优先保持原生的 stage 导航体系，避免将规范阶段割裂降级为未分类目录
   const hasCategoryDeclaration = bundle.files.some((file) => {
     const res = resolveFileCategory(bundle, file)
-    return res.category !== UNCLASSIFIED_CATEGORY
+    return (
+      res.category !== UNCLASSIFIED_CATEGORY &&
+      res.category !== 'spec' &&
+      res.category !== 'plan' &&
+      res.category !== 'tasks'
+    )
   })
-
   if (hasCategoryDeclaration) {
     const categoryMap = new Map<string, TacoFile[]>()
     const unassigned: TacoFile[] = []
