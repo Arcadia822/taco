@@ -39,7 +39,7 @@
     "format": "prettier --write README.md README.zh-CN.md AGENTS.md docs/agent-installation.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md package.json .github",
     "format:check": "prettier --check README.md README.zh-CN.md AGENTS.md docs/agent-installation.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md package.json .github",
     "check": "npm run format:check && npm test && npm run build",
-    "test": "vitest run",
+    "test": "NODE_OPTIONS=\"${NODE_OPTIONS:-} --no-experimental-webstorage\" vitest run",
     "test:relay": "TACO_RELAY_TEST=1 vitest run tests/relay.integration.test.ts",
     "test:watch": "vitest"
   },

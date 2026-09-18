@@ -19,8 +19,9 @@ export interface SkillFileReadResult {
 
 const TACO_SKILL_MD = `# Taco Agent Guide
 
-Use this guide after installing the standalone \`taco-cli\` binary. The target project does not need a Taco source checkout, Node.js, npm, or Spec Kit for Host publication and review.
-
+Taco is local-first by design:
+- The core \`taco\` skill operates completely offline on local \`.taco.html\` files and source Markdown directories. A single skill is fully capable of driving local document reviews without \`taco-cli\` or cloud accounts.
+- \`taco-cli\` is the client dedicated to cloud/remote workflows (TacoHub / Tacobin): publishing shared specs, streaming live WebSocket review events, and coordinating remote review revisions.
 ## Start Here
 1. Run \`taco-cli help\` and parse the returned \`taco-cli-help/1\` JSON before constructing a command.
 2. Run \`taco-cli skills read taco references/publishing.md\` before publishing or updating a shared Taco.

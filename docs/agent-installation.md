@@ -4,7 +4,10 @@ This is the machine-facing installation and review guide for an Agent adding Tac
 
 ## Installation boundary
 
-Taco currently ships from this repository, not npm. Do not run `npm install -g taco`, `npx taco`, publish the private package, or substitute a development-server URL.
+Taco is local-first by design:
+
+- **Core review works standalone via a single Skill**: The `taco` skill (`skills/taco/SKILL.md`) operates entirely offline. It packages local technical documentation into a self-contained `.taco.html` review file and synchronizes human review edits/comments back into source files. It does **not** require any cloud service, remote server, or `taco-cli`.
+- **taco-cli serves cloud publication & real-time review**: `taco-cli` is the dedicated client for cloud/remote workflows (TacoHub / Tacobin). It is used when you need to publish a Taco to the cloud, share a public review link, stream reviewer comments over WebSockets, or manage remote review lifecycles.
 
 There are two distinct requested outcomes:
 
@@ -15,7 +18,21 @@ Do not require the standalone artifact as a second installation step for a targe
 
 ## Install taco-cli
 
-Install the standalone `taco-cli` binary before configuring a target project. It does not require Node.js, npm, Spec Kit, or a Taco source checkout. Download the archive for the target operating system and architecture from the latest GitHub Release:
+`taco-cli` is required only when interacting with cloud Taco hosts (e.g. publishing, streaming live events). You can install it via **npm** or download the **standalone binary**.
+
+### Option A: Install via npm
+
+Install `@taco/cli` globally or use it on demand with `npx`:
+
+```bash
+npm install -g @taco/cli
+# Or invoke directly:
+npx @taco/cli help
+```
+
+### Option B: Install standalone binary
+
+The standalone `taco-cli` binary does not require Node.js, npm, Spec Kit, or a Taco source checkout. Download the archive for the target operating system and architecture from the latest GitHub Release:
 
 ```text
 https://github.com/Arcadia822/taco/releases/latest

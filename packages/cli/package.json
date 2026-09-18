@@ -1,14 +1,28 @@
 {
   "name": "@taco/cli",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.1.1",
   "type": "module",
   "description": "Standalone taco-cli client for review publication, subscription, and local inspection",
+  "license": "MIT",
+  "author": "Arcadia",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Arcadia822/taco.git",
+    "directory": "packages/cli"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist/main.js",
+    "README.md"
+  ],
   "bin": {
     "taco-cli": "./dist/main.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "bun build src/main.ts --outfile dist/main.js --target node",
+    "prepack": "npm run build",
     "test": "vitest run"
   },
   "dependencies": {
