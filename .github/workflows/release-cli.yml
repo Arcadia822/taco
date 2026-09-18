@@ -22,6 +22,9 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Install workspace dependencies
+        run: npm ci
+
       - name: Verify release version
         shell: bash
         run: |
