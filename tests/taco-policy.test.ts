@@ -54,7 +54,7 @@ describe('Taco process policy preparation', () => {
     const root = project()
     expect(run(root)).toMatchObject({ status: 0, model: 'dedicated', processPath: join(root, 'docs/taco-process.md'), process: { status: 'created' }, agents: { status: 'created' } })
     expect(read(root, 'AGENTS.md')).toMatch(/^---\ntitle:/)
-    expect(read(root, 'docs/taco-process.md')).toMatch(/^---\ntitle: "Taco workflow"\ntaco_scope: plan\n---/)
+    expect(read(root, 'docs/taco-process.md')).toMatch(/^---\ntitle: "Taco workflow"\ncategory: plan\n---/)
     expect(existsSync(join(root, 'PROCESS.md'))).toBe(false)
     expect(run(root)).toMatchObject({ process: { status: 'unchanged' }, agents: { status: 'unchanged' } })
   })

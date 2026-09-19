@@ -91,13 +91,13 @@ describe('YAML frontmatter', () => {
     expect(added).toBe('---\ntitle: Document\n---\n' + body)
     expect(frontmatterString(added, 'title')).toBe('Document')
 
-    const scoped = replaceFrontmatterProperty(added, 'taco_scope', 'plan')
-    expect(scoped).toContain('taco_scope: plan')
-    expect(scoped.endsWith(body)).toBe(true)
+    const categorized = replaceFrontmatterProperty(added, 'category', 'plan')
+    expect(categorized).toContain('category: plan')
+    expect(categorized.endsWith(body)).toBe(true)
 
-    const withoutTitle = replaceFrontmatterProperty(scoped, 'title', undefined)
+    const withoutTitle = replaceFrontmatterProperty(categorized, 'title', undefined)
     expect(withoutTitle).not.toContain('title:')
-    const empty = replaceFrontmatterProperty(withoutTitle, 'taco_scope', undefined)
+    const empty = replaceFrontmatterProperty(withoutTitle, 'category', undefined)
     expect(empty).toBe(body)
   })
 

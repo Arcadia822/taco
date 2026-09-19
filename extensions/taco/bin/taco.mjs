@@ -774,6 +774,8 @@ const POLICY_HEADING = '## Taco Spec Kit authoring and review'
 const LEGACY_POLICY_HASHES = new Set([
   'a96f7e2283c26e20dfe28f876cccfe0412d68f53eeff18cf329cd216f58dd651',
   '316f0dcb802eeb05f880af44eff53eb116facd3bdfed3642feaf4ddd48d63ea6',
+  // v0.7.0 policy, which still routed explicit stages through `taco_scope`.
+  'bb9369b605f7df2ba9da5fd26f0133b486ea745a209e503c16f333034e03a4bb',
 ])
 const ROUTE_PREFIX = 'Before any Spec Kit or Taco work, read and follow the Taco workflow in '
 
@@ -942,7 +944,7 @@ export const prepareProjectPolicy = async (options = {}) => {
     if (existingRoutes.length > 1 || (existingRoutes.length === 1 && existingRoutes[0] !== route))
       throw new Error('Customized or duplicate Taco routing instruction in AGENTS.md; merge manually')
     if (!existingRoutes.length) nextAgents = appendPolicyText(nextAgents, route)
-    let nextProcess = destination.content ?? '---\ntitle: "Taco workflow"\ntaco_scope: plan\n---\n'
+    let nextProcess = destination.content ?? '---\ntitle: "Taco workflow"\ncategory: plan\n---\n'
     const starts = nextProcess.split(POLICY_START).length - 1
     const ends = nextProcess.split(POLICY_END).length - 1
     if (starts || ends) {

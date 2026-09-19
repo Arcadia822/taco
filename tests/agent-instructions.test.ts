@@ -26,7 +26,7 @@ describe('Taco Agent instructions', () => {
     expect(policy).toMatch(/do not\s+add an ATX or Setext H1/)
     expect(policy).toContain('Begin the Markdown body at')
     expect(policy).toContain('H2 (`##`) or lower')
-    expect(policy).toContain('`taco_scope`')
+    expect(policy).toContain('`category`')
     expect(policy).toContain('Do not generate the legacy `**Taco scope**: ...` form')
     expect(installation).toContain('.specify/extensions/taco/policies/taco-agent-policy.md')
     expect(installation).toContain('a post-generation Taco hook cannot prevent malformed Markdown')
@@ -71,7 +71,7 @@ describe('Taco Agent instructions', () => {
   it('keeps the repository routing prompt on YAML metadata', () => {
     const agents = read('AGENTS.md')
 
-    expect(agents).toContain('taco_scope: spec')
+    expect(agents).toContain('category: spec')
     expect(agents).toContain('title')
     expect(agents).toContain('do not add an H1 solely to repeat that title')
     expect(agents).toContain('Do not generate the legacy `**Taco scope**: ...` form')

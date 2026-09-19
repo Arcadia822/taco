@@ -822,11 +822,13 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
   height: auto !important;
 }
 
-::highlight(taco-comments) { background: color-mix(in srgb, var(--accent) 22%, transparent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent-dark) 55%, transparent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
-::highlight(taco-active-comment) { background: color-mix(in srgb, var(--accent) 38%, transparent); }
+::highlight(taco-comments) { background-color: transparent; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent-dark) 62%, transparent); text-decoration-thickness: 2px; text-underline-offset: 3px; text-decoration-skip-ink: none; }
+::highlight(taco-hover-comment) { background-color: transparent; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent-dark) 78%, transparent); text-decoration-thickness: 2px; text-underline-offset: 3px; text-decoration-skip-ink: none; }
+::highlight(taco-active-comment) { background-color: transparent; text-decoration: underline; text-decoration-color: var(--accent-dark); text-decoration-thickness: 3px; text-underline-offset: 3px; text-decoration-skip-ink: none; }
 .comment-highlight-layer { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
-.comment-highlight-mark { position: absolute; border-radius: 2px; background: color-mix(in srgb, var(--accent) 22%, transparent); box-shadow: inset 0 -1px color-mix(in srgb, var(--accent-dark) 55%, transparent); }
-.comment-highlight-layer.is-active .comment-highlight-mark { background: color-mix(in srgb, var(--accent) 38%, transparent); box-shadow: none; }
+.comment-highlight-mark { position: absolute; border-radius: 2px; background-color: transparent; background-image: linear-gradient(color-mix(in srgb, var(--accent-dark) 62%, transparent), color-mix(in srgb, var(--accent-dark) 62%, transparent)); background-repeat: no-repeat; background-size: 100% 2px; background-position: 0 calc(100% - 3px); }
+.comment-highlight-layer.is-hover .comment-highlight-mark { background-image: linear-gradient(color-mix(in srgb, var(--accent-dark) 78%, transparent), color-mix(in srgb, var(--accent-dark) 78%, transparent)); }
+.comment-highlight-layer.is-active .comment-highlight-mark { background-image: linear-gradient(var(--accent-dark), var(--accent-dark)); background-size: 100% 3px; }
 .selection-comment-button { position: fixed; z-index: 120; min-height: 30px; padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--ink); color: var(--surface); box-shadow: var(--shadow); font-size: 12px; font-weight: 650; opacity: 1; transform: translateY(0) scale(1); transform-origin: top left; transition: opacity 140ms var(--ease-out), transform 140ms var(--ease-out); }
 
 .comment-panel-header { justify-content: space-between; padding: 0 12px; border-bottom: 0; }
@@ -850,6 +852,10 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .comment-quote-button { display: block; width: 100%; cursor: pointer; transform-origin: left center; transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease, transform 140ms var(--ease-out); }
 .comment-quote.is-block { max-height: none; padding-block: 9px; color: var(--ink); font-weight: 650; }
 .comment-thread.is-resolved { opacity: .62; }
+.comment-stale-group { margin-top: 14px; padding-top: 10px; border-top: 1px dashed var(--line-strong); }
+.comment-stale-heading { margin: 0 0 8px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .02em; }
+.comment-thread.is-stale { border-style: dashed; }
+.comment-stale-badge { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
 .comment-message + .comment-message { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .comment-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 10px; }
 .comment-meta strong { color: var(--ink); font-size: 11px; }
@@ -894,8 +900,8 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .source-editor-input.is-highlighted::selection { background: color-mix(in srgb, var(--accent) 24%, transparent); color: transparent; -webkit-text-fill-color: transparent; }
 .source-editor-highlight { z-index: 0; overflow: hidden; pointer-events: none; scrollbar-width: none; }
 .source-editor-highlight code { font: inherit; }
-.source-comment-highlight { border-radius: 2px; background: color-mix(in srgb, var(--accent) 22%, transparent); box-shadow: inset 0 -1px color-mix(in srgb, var(--accent-dark) 55%, transparent); }
-.source-comment-highlight.is-active { background: color-mix(in srgb, var(--accent) 38%, transparent); box-shadow: none; }
+.source-comment-highlight { border-radius: 2px; background-color: transparent; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent-dark) 62%, transparent); text-decoration-thickness: 2px; text-underline-offset: 3px; text-decoration-skip-ink: none; }
+.source-comment-highlight.is-active { text-decoration-color: var(--accent-dark); text-decoration-thickness: 3px; }
 .source-editor-highlight .hljs-attr { color: #953800; }
 .source-editor-highlight .hljs-string { color: #0a3069; }
 .source-editor-highlight .hljs-literal, .source-editor-highlight .hljs-number { color: #0550ae; }
@@ -1213,3 +1219,15 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .png-preview { max-width: 95vw; max-height: 95vh; overflow: auto; }
 .png-preview img { display: block; max-width: none; margin-top: 12px; }
 .png-preview::backdrop { background: #0009; }
+
+/* TACO-4 document properties: general category and GitHub references */
+.document-property-note { grid-column: 3 / 5; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -1px 6px 3px 8px; color: var(--doc-subtle); font-size: 11px; line-height: 16px; }
+.document-property-migrate { flex: none; padding: 1px 7px; border: 1px solid var(--doc-line); border-radius: 5px; background: transparent; color: var(--doc-muted); font: inherit; cursor: pointer; }
+.document-property-migrate:hover { background: var(--doc-soft); color: var(--doc-ink); }
+.document-property-migrate:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 1px; }
+.document-property-github { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; margin-top: 3px; color: var(--doc-muted); font-size: 11px; line-height: 16px; text-decoration: none; }
+.document-property-github:hover { color: var(--doc-ink); }
+.document-property-github:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 1px; }
+.document-property-github-logo { flex: none; width: 13px; height: 13px; }
+.document-property-github-label { flex: none; font-weight: 600; }
+.document-property-github-title { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--doc-subtle); }

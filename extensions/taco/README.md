@@ -48,7 +48,7 @@ The installing Agent must run `prepare-policy` to install the complete [`policie
 
 The CLI follows relative Markdown context links labeled `Context` or `5xP` (or named `context.md`/`5xp.md`) and selects exactly one link labeled `Process` or named `PROCESS.md` after detecting a 5xP declaration. Inline and full/collapsed reference links are supported; ambiguous or unsupported routing needs deliberate merging. See the [Agent installation guide](../../docs/agent-installation.md#process-routing-and-safe-migration) for the complete contract.
 
-The process policy governs later `speckit.specify` work: new specs use YAML `title`, omit a duplicate H1, and begin the body at H2; routed custom Markdown uses YAML `taco_scope`. It also requires update after every canonical feature-artifact change and the complete review-comment round trip.
+The process policy governs later `speckit.specify` work: new specs use YAML `title`, omit a duplicate H1, and begin the body at H2; routed custom Markdown uses YAML `category`. It also requires update after every canonical feature-artifact change and the complete review-comment round trip.
 
 `prepare-policy --dry-run --json` previews the operation. JSON reports `processPath`, `model`, `process.status`, `agents.status`, `migrated`, `dryRun`, and `applied`; file statuses are `created`, `updated`, `unchanged`, or `manual-merge`. Repeated installation is unchanged. Exact stock legacy Taco sections in `AGENTS.md` migrate automatically; customized sections or managed blocks and unsafe or ambiguous destinations return exit code 2 without writing either file. Preserve local rules and deliberately reconcile them outside the managed policy block before rerunning. The CLI never initializes 5xP for an ordinary project.
 

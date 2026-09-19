@@ -91,7 +91,9 @@ export const resolveTextAnchor = (text: string, anchor: TacoTextAnchor): { start
   return { start: best, end: best + exact.length }
 }
 
+/**
+ * Threads anchored in `path`, in storage order. Display order comes from `resolveCommentPlacement`,
+ * which sorts by the anchored position in the current document rather than by recency.
+ */
 export const commentsForPath = (threads: TacoCommentThread[] | undefined, path: string): TacoCommentThread[] =>
-  (threads ?? [])
-    .filter((thread) => thread.anchor.path === path)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  (threads ?? []).filter((thread) => thread.anchor.path === path)

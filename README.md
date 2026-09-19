@@ -127,16 +127,16 @@ The default specification directory is also the project's executable example. It
 
 ## Document routing and navigation
 
-By default, a feature-root `README.md` routes to Specify and opens first; `spec.md` is the fallback when no README exists. When a Taco contains a top-level `navigation` manifest, files are grouped and ordered directly according to its declarations, and undeclared files appear under Unassigned. You can also organize groups, drag files, and set entry documents directly in the sidebar during review. In unconfigured Spec Kit trees, `spec.md`, `plan.md`, and `tasks.md` remain the core stage files, and other Markdown documents may route explicitly using `taco_scope`:
+By default, a feature-root `README.md` routes to Specify and opens first; `spec.md` is the fallback when no README exists. When a Taco contains a top-level `navigation` manifest, files are grouped and ordered directly according to its declarations, and undeclared files appear under Unassigned. You can also organize groups, drag files, and set entry documents directly in the sidebar during review. In unconfigured Spec Kit trees, `spec.md`, `plan.md`, and `tasks.md` remain the core stage files, and other Markdown documents may route explicitly using `category`:
 
 ```md
 ---
 title: 'Interaction design'
-taco_scope: plan
+category: plan
 ---
 ```
 
-The property accepts text, but only `spec`, `plan`, and `tasks` route a file. Taco presents all leading YAML frontmatter as an Obsidian-style property editor while preserving it in canonical Markdown. New specs store their title in YAML and begin the body at H2 instead of repeating the title as H1. See `AGENTS.md` for the complete convention.
+The property accepts text; `spec`, `plan`, and `tasks` route into the default stage groups, while other values create custom category groups. Taco presents all leading YAML frontmatter as an Obsidian-style property editor while preserving it in canonical Markdown. New specs store their title in YAML and begin the body at H2 instead of repeating the title as H1. See `AGENTS.md` for the complete convention.
 
 ## Design principles
 

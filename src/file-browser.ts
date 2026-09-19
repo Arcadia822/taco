@@ -54,7 +54,9 @@ import { hasCollabSecrets } from './security.ts'
 import { localFileUrl } from './local-file-url.ts'
 import { frontmatterTitle, parseFrontmatter } from './frontmatter.ts'
 import { setEditorFrontmatterProperty } from './tiptap-document-properties.ts'
-import { tacoScope } from './stage-navigation.ts'
+import { stageCategory } from './stage-navigation.ts'
+import { resolveFileCategory } from './category.ts'
+import { commentLineReference } from './comment-position.ts'
 import { createStructuredFileViewer, structuredFileLabels } from './structured-file-viewer.ts'
 import { createSegmentedControl } from './segmented-control.ts'
 
@@ -62,6 +64,12 @@ type AuxiliaryTab = 'outline' | 'comments'
 
 export interface FileBrowserOptions {
   mermaidRuntime?: MermaidRuntime
+}
+
+/** Sidebar grouping identity: a declared category re-groups even when the routed stage stays the same. */
+const navigationSignature = (bundle: TacoBundle, file: TacoFile): string => {
+  const stage = stageCategory(bundle, file)
+  return stage ? `stage:${stage}` : `category:${resolveFileCategory(bundle, file).category}`
 }
 
 const normalizeRelativeLink = (fromPath: string, href: string): { path: string; hash: string } => {
@@ -1036,7 +1044,7 @@ export class FileBrowser {
   private updateFileContent(path: string, content: string, blocks: TacoFile['blocks']): void {
     const canonical = fileByPath(this.bundle, path)
     if (!canonical) return
-    const previousScope = tacoScope(canonical)
+    const previousNavigation = navigationSignature(this.bundle, canonical)
     const previousTitle = canonical.title
     const parsedFrontmatter = parseFrontmatter(content)
     const nextTitle = frontmatterTitle(content)
@@ -1059,8 +1067,7 @@ export class FileBrowser {
         else if (parsedFrontmatter.kind === 'valid') delete this.selected.title
       }
     })
-    const nextScope = tacoScope(canonical)
-    if (previousScope !== nextScope) this.fileNavigation?.refresh(this.selected)
+    if (previousNavigation !== navigationSignature(this.bundle, canonical)) this.fileNavigation?.refresh(this.selected)
     if (previousTitle !== canonical.title && this.selected?.path === path) {
       const title = this.viewer.querySelector<HTMLElement>('.document-inline-title-text')
       if (title && document.activeElement !== title) title.textContent = canonical.title?.trim() || fallbackFileTitle(canonical)
@@ -1177,7 +1184,10 @@ export class FileBrowser {
   private async copyReviewFull(): Promise<void> {
     const changedFiles = this.getModifiedReviewFiles()
     const comments = (this.bundle.comments ?? []).filter((c) => c.status === 'open').map((c) => {
-      let location = c.anchor.path
+      // Line numbers follow the file's current body text, never the stored creation-time offsets.
+      const file = fileByPath(this.bundle, c.anchor.path)
+      const lines = file ? commentLineReference(file.content, c.anchor) : null
+      let location = lines ? `${c.anchor.path}:${lines}` : `${c.anchor.path} (${this.t.positionLost})`
       let quote = c.anchor.quote.exact
       if (c.anchor.block) {
         const b = c.anchor.block

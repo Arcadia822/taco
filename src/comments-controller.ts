@@ -1,5 +1,6 @@
 import { bundleCanWrite, type TacoBundle, type TacoCommentMessage, type TacoCommentThread, type TacoFile, type TacoTextAnchor } from './model.ts'
 import { canDeleteMessage, canEditMessage, commentsForPath, createTextAnchor, deleteCommentMessage, editCommentMessage, isDeletedMessage, resolveTextAnchor, sortCommentMessages } from './comments.ts'
+import { resolveCommentPlacement, type CommentAnchorProbe, type CommentPlacement, type CommentRange } from './comment-position.ts'
 import { domRange, textOffset } from './dom-text-range.ts'
 import { requireAuthorName } from './author-name-dialog.ts'
 import { copy, type Locale } from './i18n.ts'
@@ -23,6 +24,28 @@ export interface CommentsControllerOptions {
   toast: (message: string) => void
 }
 
+interface HighlightTarget {
+  set(name: string, value: unknown): void
+  delete(name: string): void
+}
+
+// The bundled DOM types declare neither HighlightRegistry.set nor Highlight.add, so validate structurally.
+const isHighlightTarget = (value: unknown): value is HighlightTarget =>
+  typeof value === 'object' && value !== null
+  && 'set' in value && typeof value.set === 'function'
+  && 'delete' in value && typeof value.delete === 'function'
+
+const cssHighlights = (): HighlightTarget | undefined => {
+  const candidate: unknown = typeof CSS === 'undefined' ? undefined : CSS.highlights
+  return isHighlightTarget(candidate) ? candidate : undefined
+}
+
+const createHighlight = (ranges: Range[]): unknown =>
+  typeof Highlight === 'undefined' ? null : new Highlight(...ranges)
+
+const placementKey = (placement: CommentPlacement): string =>
+  `${placement.placed.map((entry) => entry.thread.id).join(',')}|${placement.stale.map((thread) => thread.id).join(',')}`
+
 export class CommentsController {
   private commentList: HTMLElement | null = null
   private commentToggle: HTMLButtonElement | null = null
@@ -30,6 +53,7 @@ export class CommentsController {
   private selectionButton: HTMLButtonElement | null = null
   private principal: CommentPrincipal | null = null
   private principalNoticeShown = false
+  private placement: CommentPlacement = { placed: [], stale: [] }
 
   constructor(private readonly options: CommentsControllerOptions) {}
 
@@ -61,10 +85,12 @@ export class CommentsController {
     this.commentToggle.querySelector('.comment-count')?.remove()
     if (openCount) this.commentToggle.append(el('span', 'comment-count', String(openCount)))
 
+    this.placement = resolveCommentPlacement(threads, this.anchorProbe())
     const pendingAnchor = this.pendingAnchor?.path === path ? this.pendingAnchor : null
     if (pendingAnchor) this.commentList.append(this.buildNewCommentComposer(pendingAnchor))
     if (!threads.length && !pendingAnchor) this.commentList.append(this.buildEmptyCommentBanner())
-    for (const thread of threads) this.commentList.append(this.buildCommentThread(thread))
+    for (const { thread } of this.placement.placed) this.commentList.append(this.buildCommentThread(thread))
+    if (this.placement.stale.length) this.commentList.append(this.buildStaleCommentGroup(this.placement.stale))
   }
 
   captureEditorSelection(editorHost: HTMLElement, file: TacoFile): void {
@@ -151,23 +177,21 @@ export class CommentsController {
       if (!article?.contains(target) || target.closest('a, button, input, textarea, select')) return
       if (window.getSelection()?.isCollapsed === false) return
     }
-    const text = inSource ? source.input.value : article!.textContent ?? ''
-    const thread = commentsForPath(this.options.bundle.comments, file.path).find((candidate) => {
-      if (candidate.status !== 'open') return false
-      const position = resolveTextAnchor(text, candidate.anchor)
-      if (!position) return false
-      if (inSource) return source.input.selectionStart >= position.start && source.input.selectionStart < position.end
-      if (candidate.anchor.block) return this.findCommentBlock(candidate.anchor)?.contains(target) ?? false
-      const range = domRange(article!, position.start, position.end)
+    const entry = this.currentPlacement().placed.find((candidate) => {
+      if (candidate.thread.status !== 'open') return false
+      if (candidate.thread.anchor.block && !inSource) return this.findCommentBlock(candidate.thread.anchor)?.contains(target) ?? false
+      if (!candidate.range) return false
+      if (inSource) return source.input.selectionStart >= candidate.range.start && source.input.selectionStart < candidate.range.end
+      const range = domRange(article!, candidate.range.start, candidate.range.end)
       return range && Array.from(range.getClientRects()).some((rect) =>
         event.clientX >= rect.left && event.clientX <= rect.right
         && event.clientY >= rect.top && event.clientY <= rect.bottom)
     })
-    if (!thread) return
+    if (!entry) return
     this.removeSelectionButton()
     this.options.openComments()
     const card = Array.from(this.commentList?.querySelectorAll<HTMLElement>('.comment-thread') ?? [])
-      .find((node) => node.dataset.threadId === thread.id)
+      .find((node) => node.dataset.threadId === entry.thread.id)
     card?.querySelector<HTMLButtonElement>('.comment-quote-button')?.focus({ preventScroll: true })
     card?.scrollIntoView?.({ block: 'nearest', behavior: 'instant' })
   }
@@ -176,31 +200,30 @@ export class CommentsController {
     this.clearHighlights()
     const path = this.options.getSelected()?.path
     if (!path) return
+    const placement = this.currentPlacement()
+    // Marks and panel share this resolution: only a genuine change of order or of the stale set repaints the list.
+    if (placementKey(placement) !== placementKey(this.placement)) {
+      this.placement = placement
+      this.paint()
+    }
+    const open = placement.placed.filter((entry) => entry.thread.status === 'open')
     const sourceEditor = this.options.getSourceEditor()
     if (sourceEditor) {
-      const ranges = commentsForPath(this.options.bundle.comments, path)
-        .filter((thread) => thread.status === 'open')
-        .map((thread) => resolveTextAnchor(sourceEditor.input.value, thread.anchor))
-        .filter((position): position is { start: number; end: number } => Boolean(position))
-      sourceEditor.setCommentRanges(ranges)
+      sourceEditor.setCommentRanges(open.map((entry) => entry.range).filter((range): range is CommentRange => Boolean(range)))
       return
     }
     const article = editorHost?.querySelector<HTMLElement>('.tiptap')
     if (!article || !editorHost) return
-    const openThreads = commentsForPath(this.options.bundle.comments, path)
-      .filter((thread) => thread.status === 'open')
-    for (const thread of openThreads.filter((candidate) => candidate.anchor.block)) {
-      this.findCommentBlock(thread.anchor)?.classList.add('has-comment')
+    for (const entry of open) {
+      if (entry.thread.anchor.block) this.findCommentBlock(entry.thread.anchor)?.classList.add('has-comment')
     }
-    const ranges = openThreads
-      .filter((thread) => !thread.anchor.block)
-      .map((thread) => resolveTextAnchor(article.textContent ?? '', thread.anchor))
-      .filter((position): position is { start: number; end: number } => Boolean(position))
-      .map((position) => domRange(article, position.start, position.end))
+    const ranges = open
+      .filter((entry) => entry.range && !entry.thread.anchor.block)
+      .map((entry) => domRange(article, entry.range!.start, entry.range!.end))
       .filter((range): range is Range => Boolean(range))
-    const highlights = typeof CSS === 'undefined' ? undefined : (CSS as unknown as { highlights?: { set(name: string, value: unknown): void } }).highlights
-    const HighlightConstructor = (globalThis as unknown as { Highlight?: new (...ranges: Range[]) => unknown }).Highlight
-    if (highlights && HighlightConstructor && ranges.length) highlights.set('taco-comments', new HighlightConstructor(...ranges))
+    const highlights = cssHighlights()
+    const highlight = ranges.length ? createHighlight(ranges) : null
+    if (highlights && highlight) highlights.set('taco-comments', highlight)
     else if (ranges.length) this.paintFallbackHighlights(editorHost, ranges, 'comments')
   }
 
@@ -208,14 +231,42 @@ export class CommentsController {
     const sourceEditor = this.options.getSourceEditor()
     sourceEditor?.setCommentRanges([])
     sourceEditor?.activateRange(null)
-    const highlights = typeof CSS === 'undefined' ? undefined : (CSS as unknown as { highlights?: { delete(name: string): void } }).highlights
+    const highlights = cssHighlights()
     highlights?.delete('taco-comments')
     highlights?.delete('taco-active-comment')
+    highlights?.delete('taco-hover-comment')
     const viewer = this.options.getViewer()
     for (const block of viewer.querySelectorAll('.tiptap-code-block.has-comment, .tiptap-code-block.is-active-comment')) {
       block.classList.remove('has-comment', 'is-active-comment')
     }
     for (const layer of viewer.querySelectorAll('[data-comment-highlight-layer]')) layer.remove()
+  }
+
+  /** Where the current document can be read from: the source editor while it is shown, otherwise the rendered document. */
+  private anchorProbe(): CommentAnchorProbe {
+    const sourceEditor = this.options.getSourceEditor()
+    if (sourceEditor) {
+      const text = sourceEditor.input.value
+      // Source mode renders no code-block element, so block anchors resolve against the editable text.
+      return { text, blockRange: (anchor) => resolveTextAnchor(text, anchor) }
+    }
+    const article = this.options.getViewer().querySelector<HTMLElement>('.tiptap')
+    if (!article) return { text: null, blockRange: () => null }
+    return {
+      text: article.textContent ?? '',
+      blockRange: (anchor) => {
+        const block = this.findCommentBlock(anchor)
+        if (!block) return null
+        const start = textOffset(article, block, 0)
+        return { start, end: start + (block.textContent?.length ?? 0) }
+      },
+    }
+  }
+
+  private currentPlacement(): CommentPlacement {
+    const path = this.options.getSelected()?.path
+    const threads = path ? commentsForPath(this.options.bundle.comments, path) : []
+    return resolveCommentPlacement(threads, this.anchorProbe())
   }
 
   private get t() { return copy[this.options.getLocale()] }
@@ -260,13 +311,16 @@ export class CommentsController {
     return composer
   }
 
-  private buildCommentThread(thread: TacoCommentThread): HTMLElement {
-    const card = el('article', `comment-thread${thread.status === 'resolved' ? ' is-resolved' : ''}`)
+  private buildCommentThread(thread: TacoCommentThread, stale = false): HTMLElement {
+    const card = el('article', `comment-thread${thread.status === 'resolved' ? ' is-resolved' : ''}${stale ? ' is-stale' : ''}`)
     card.dataset.threadId = thread.id
+    card.addEventListener('pointerenter', () => this.previewCommentThread(thread))
+    card.addEventListener('pointerleave', () => this.clearCommentPreview())
     const quote = this.buildQuote(thread.anchor, true) as HTMLButtonElement
     quote.type = 'button'
     quote.addEventListener('click', () => this.activateCommentThread(thread))
     card.append(quote)
+    if (stale) card.append(el('p', 'comment-stale-badge', this.t.positionLost))
     for (const message of sortCommentMessages(thread.messages)) card.append(this.buildCommentMessage(thread, message))
     if (!bundleCanWrite(this.options.bundle)) return card
     const actions = el('div', 'comment-thread-actions')
@@ -282,6 +336,44 @@ export class CommentsController {
     actions.append(reply, resolve, remove)
     card.append(actions)
     return card
+  }
+
+  private buildStaleCommentGroup(threads: TacoCommentThread[]): HTMLElement {
+    const group = el('section', 'comment-stale-group')
+    group.setAttribute('role', 'group')
+    group.setAttribute('aria-label', this.t.positionLost)
+    group.append(el('h3', 'comment-stale-heading', this.t.positionLost))
+    for (const thread of threads) group.append(this.buildCommentThread(thread, true))
+    return group
+  }
+
+  /** Point at a thread's live range while the pointer rests on its card, without disturbing the reading surface. */
+  private previewCommentThread(thread: TacoCommentThread): void {
+    const entry = this.currentPlacement().placed.find((candidate) => candidate.thread.id === thread.id)
+    if (!entry?.range) return
+    const sourceEditor = this.options.getSourceEditor()
+    if (sourceEditor) {
+      sourceEditor.highlightRange(entry.range)
+      return
+    }
+    const article = this.options.getViewer().querySelector<HTMLElement>('.tiptap')
+    const host = article?.closest<HTMLElement>('.tiptap-editor-host')
+    if (!article || !host) return
+    const range = domRange(article, entry.range.start, entry.range.end)
+    if (!range) return
+    const highlights = cssHighlights()
+    const highlight = createHighlight([range])
+    if (highlights && highlight) highlights.set('taco-hover-comment', highlight)
+    else {
+      host.querySelector('[data-highlight-name="hover"]')?.remove()
+      this.paintFallbackHighlights(host, [range], 'hover')
+    }
+  }
+
+  private clearCommentPreview(): void {
+    this.options.getSourceEditor()?.highlightRange(null)
+    cssHighlights()?.delete('taco-hover-comment')
+    this.options.getViewer().querySelector('[data-highlight-name="hover"]')?.remove()
   }
 
   private buildCommentMessage(thread: TacoCommentThread, message: TacoCommentMessage): HTMLElement {
@@ -563,22 +655,20 @@ export class CommentsController {
       }
       return
     }
+    const entry = this.currentPlacement().placed.find((candidate) => candidate.thread.id === thread.id)
+    if (!entry?.range) { this.options.toast(this.t.unresolvedAnchor); return }
     const sourceEditor = this.options.getSourceEditor()
     if (sourceEditor) {
-      const position = resolveTextAnchor(sourceEditor.input.value, thread.anchor)
-      if (!position) { this.options.toast(this.t.unresolvedAnchor); return }
-      sourceEditor.activateRange(position)
+      sourceEditor.activateRange(entry.range)
       return
     }
     const article = viewer.querySelector<HTMLElement>('.tiptap')
     if (!article) return
-    const position = resolveTextAnchor(article.textContent ?? '', thread.anchor)
-    if (!position) { this.options.toast(this.t.unresolvedAnchor); return }
-    const range = domRange(article, position.start, position.end)
+    const range = domRange(article, entry.range.start, entry.range.end)
     if (!range) { this.options.toast(this.t.unresolvedAnchor); return }
-    const highlights = typeof CSS === 'undefined' ? undefined : (CSS as unknown as { highlights?: { set(name: string, value: unknown): void } }).highlights
-    const HighlightConstructor = (globalThis as unknown as { Highlight?: new (...ranges: Range[]) => unknown }).Highlight
-    if (highlights && HighlightConstructor) highlights.set('taco-active-comment', new HighlightConstructor(range))
+    const highlights = cssHighlights()
+    const highlight = createHighlight([range])
+    if (highlights && highlight) highlights.set('taco-active-comment', highlight)
     else {
       const host = article.closest<HTMLElement>('.tiptap-editor-host')
       if (host) {
@@ -596,7 +686,7 @@ export class CommentsController {
       .find((block) => block.dataset.tacoBlockId === anchor.block?.id) ?? null
   }
 
-  private paintFallbackHighlights(editorHost: HTMLElement, ranges: Range[], name: 'comments' | 'active'): void {
+  private paintFallbackHighlights(editorHost: HTMLElement, ranges: Range[], name: 'comments' | 'hover' | 'active'): void {
     const layer = el('div', `comment-highlight-layer is-${name}`)
     layer.setAttribute('data-comment-highlight-layer', '')
     layer.dataset.highlightName = name

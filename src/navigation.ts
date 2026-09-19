@@ -1,6 +1,8 @@
 import { fileByPath, type TacoBundle, type TacoFile } from './model.ts'
-import { buildStageNavigation, type StageGroup } from './stage-navigation.ts'
+import { buildStageNavigation, STAGE_CATEGORIES, type StageGroup } from './stage-navigation.ts'
 import { resolveFileCategory, UNCLASSIFIED_CATEGORY } from './category.ts'
+
+const stageCategories = new Set<string>(STAGE_CATEGORIES)
 
 export interface ResolvedCustomGroup {
   id: string
@@ -59,16 +61,11 @@ export function resolveDocumentNavigation(bundle: TacoBundle): ResolvedDocumentN
   }
 
   // 2. 检查是否有文件或一级目录显式声明了非 stage 的通用自定义 category
-  // 注意：若声明的值本身就是 Spec Kit 阶段关键字 ('spec', 'plan', 'tasks')，
-  // 则优先保持原生的 stage 导航体系，避免将规范阶段割裂降级为未分类目录
+  // 注意：category 的 spec / plan / tasks 三个取值仍由原生 stage 导航承接，
+  // 不会被降级为同名自定义分组；其余取值才形成自定义分组
   const hasCategoryDeclaration = bundle.files.some((file) => {
-    const res = resolveFileCategory(bundle, file)
-    return (
-      res.category !== UNCLASSIFIED_CATEGORY &&
-      res.category !== 'spec' &&
-      res.category !== 'plan' &&
-      res.category !== 'tasks'
-    )
+    const { category } = resolveFileCategory(bundle, file)
+    return category !== UNCLASSIFIED_CATEGORY && !stageCategories.has(category)
   })
   if (hasCategoryDeclaration) {
     const categoryMap = new Map<string, TacoFile[]>()

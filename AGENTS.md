@@ -2,27 +2,25 @@
 
 Write new Taco Markdown metadata as leading YAML frontmatter. Put the document title in `title`; do not add an H1 solely to repeat that title, and do not imitate YAML with a heading such as `## title: "..."`. New specs begin their body at H2 or lower.
 
-For an otherwise-unassigned Markdown document that needs explicit routing, use exactly one of these YAML properties:
+For an otherwise-unassigned Markdown document that needs explicit routing, use the general `category` YAML property:
 
 ```md
 ---
-taco_scope: spec
+category: spec
 ---
 
 ---
-
-taco_scope: plan
+category: plan
 ---
 
 ---
-
-taco_scope: tasks
+category: tasks
 ---
 ```
 
-`taco_scope` is an open text enum. The only values that route a file are `spec`, `plan`, and `tasks`. Other values remain canonical YAML but are invalid for routing. Do not generate the legacy `**Taco scope**: ...` form.
+`category` is an open text property. The reserved values `spec`, `plan`, and `tasks` route a file into the corresponding default stage group, while any other value forms a custom category group. Do not generate the legacy `**Taco scope**: ...` form.
 
-The sidebar has only the three default stage groups. `spec.md`, `plan.md`, and `tasks.md` are routed by filename. Known Spec Kit convention paths such as `research.md`, `data-model.md`, `quickstart.md`, `contracts/`, and `checklists/` are routed by Taco's built-in rules. Every other Markdown document needs a valid `taco_scope` value to appear in a stage. Invalid or missing values do not create custom or extension groups.
+The sidebar exposes stage groups alongside any declared custom category groups. `spec.md`, `plan.md`, and `tasks.md` are routed by filename. Known Spec Kit convention paths such as `research.md`, `data-model.md`, `quickstart.md`, `contracts/`, and `checklists/` are routed by Taco's built-in rules. Every other Markdown document declares its placement via `category`.
 
 # Taco contributor agent rules
 

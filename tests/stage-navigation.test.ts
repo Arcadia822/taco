@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildStageNavigation, tacoScope, TACO_SCOPES } from '../src/stage-navigation.ts'
+import { buildStageNavigation, legacyStageScope, stageCategory, STAGE_CATEGORIES } from '../src/stage-navigation.ts'
 import type { TacoBundle, TacoFile } from '../src/model.ts'
 
 const file = (path: string, content = `# ${path}`): TacoFile => ({
@@ -8,38 +8,63 @@ const file = (path: string, content = `# ${path}`): TacoFile => ({
   content,
 })
 
-const bundle = (): TacoBundle => ({
+const bundle = (files: TacoFile[] = [
+  file('README.md', '# Guide'),
+  file('spec.md'),
+  { path: 'specs/001-stage/prototypes/checkout.html', mediaType: 'text/html', content: '<!doctype html><title>Checkout</title>' },
+  file('checklists/requirements.md'),
+  file('interaction-design.md', '---\ncategory: plan\n---\n## Interaction'),
+  file('plan.md'),
+  file('contracts/api.md'),
+  file('tasks.md'),
+  file('checklists/implementation.md', '# Audit\n\n**Taco scope**: tasks'),
+  file('notes.md'),
+]): TacoBundle => ({
   format: 'taco/files',
   version: 1,
   docId: 'stage-test',
   title: 'Stage test',
   root: 'specs/001-stage',
-  files: [
-    file('README.md', '# Guide'),
-    file('spec.md'),
-    { path: 'specs/001-stage/prototypes/checkout.html', mediaType: 'text/html', content: '<!doctype html><title>Checkout</title>' },
-    file('checklists/requirements.md'),
-    file('interaction-design.md', '---\ntaco_scope: plan\n---\n## Interaction'),
-    file('plan.md'),
-    file('contracts/api.md'),
-    file('tasks.md'),
-    file('checklists/implementation.md', '# Audit\n\n**Taco scope**: tasks'),
-    file('notes.md'),
-  ],
+  files,
 })
 
 describe('stage navigation', () => {
-  it('recognizes only the three exact Taco scope enum values', () => {
-    expect(TACO_SCOPES).toEqual(['spec', 'plan', 'tasks'])
-    expect(tacoScope(file('visual-system.md', '---\ntaco_scope: plan\n---\n'))).toBe('plan')
-    expect(tacoScope(file('visual-system.md', '---\ntaco_scope: design\n---\n'))).toBeNull()
-    expect(tacoScope(file('visual-system.md', '---\ntaco_scope: [plan]\n---\n'))).toBeNull()
-    expect(tacoScope(file('visual-system.md', '---\ntitle: Plan\n---\n\n**Taco scope**: tasks'))).toBe('tasks')
-    expect(tacoScope(file('visual-system.md', '**Taco scope**: plan\n'))).toBe('plan')
-    expect(tacoScope(file('visual-system.md', '**Taco scope**: extends `plan.md`\n'))).toBeNull()
-    expect(tacoScope(file('visual-system.md', '**Taco scope**: design\n'))).toBeNull()
-    expect(tacoScope(file('visual-system.md', '# Visual system\n\n**Taco scope**: plan\n'))).toBeNull()
-    expect(tacoScope(file('visual-system.md'))).toBeNull()
+  it('routes only the three reserved category values into stages', () => {
+    const host = bundle()
+    expect(STAGE_CATEGORIES).toEqual(['spec', 'plan', 'tasks'])
+    expect(stageCategory(host, file('visual-system.md', '---\ncategory: plan\n---\n'))).toBe('plan')
+    expect(stageCategory(host, file('visual-system.md', '---\ncategory: design\n---\n'))).toBeNull()
+    expect(stageCategory(host, file('visual-system.md', '---\ncategory: [plan]\n---\n'))).toBeNull()
+    expect(stageCategory(host, file('visual-system.md', '---\ncategory: Plan\n---\n'))).toBeNull()
+    expect(stageCategory(host, file('visual-system.md'))).toBeNull()
+    expect(stageCategory(host, file('diagram.mmd', '---\ncategory: plan\n---\n'))).toBeNull()
+  })
+
+  it('keeps the deprecated taco_scope readable while no category is declared', () => {
+    const host = bundle()
+    expect(stageCategory(host, file('visual-system.md', '---\ntaco_scope: plan\n---\n'))).toBe('plan')
+    expect(stageCategory(host, file('visual-system.md', '---\ntitle: Plan\n---\n\n**Taco scope**: tasks'))).toBe('tasks')
+    expect(stageCategory(host, file('visual-system.md', '**Taco scope**: plan\n'))).toBe('plan')
+    expect(legacyStageScope(file('visual-system.md', '---\ntaco_scope: design\n---\n'))).toBeNull()
+    expect(stageCategory(host, file('visual-system.md', '---\ntaco_scope: [plan]\n---\n'))).toBeNull()
+    expect(stageCategory(host, file('visual-system.md', '**Taco scope**: extends `plan.md`\n'))).toBeNull()
+    expect(stageCategory(host, file('visual-system.md', '**Taco scope**: design\n'))).toBeNull()
+    expect(stageCategory(host, file('visual-system.md', '# Visual system\n\n**Taco scope**: plan\n'))).toBeNull()
+  })
+
+  it('never lets the legacy scope override a declared category', () => {
+    const host = bundle()
+    expect(stageCategory(host, file('notes.md', '---\ncategory: spec\ntaco_scope: plan\n---\n'))).toBe('spec')
+    expect(stageCategory(host, file('notes.md', '---\ncategory: Guides\ntaco_scope: plan\n---\n'))).toBeNull()
+    expect(stageCategory(host, file('notes.md', '---\ncategory: spec\n---\n\n**Taco scope**: tasks'))).toBe('spec')
+  })
+
+  it('routes a first-level directory category into its stage', () => {
+    const host = bundle([
+      file('docs/_dir.yaml', 'category: plan\n'),
+      file('docs/decisions.md'),
+    ])
+    expect(stageCategory(host, host.files[1])).toBe('plan')
   })
 
   it('places every assigned file directly in one of the three stages', () => {

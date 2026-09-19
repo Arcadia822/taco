@@ -31,6 +31,7 @@ let editor: Editor | null = null
 afterEach(() => {
   editor?.destroy()
   editor = null
+  vi.unstubAllGlobals()
 })
 
 describe('Tiptap Markdown integration', () => {
@@ -139,18 +140,73 @@ describe('Tiptap Markdown integration', () => {
     expect(editor.view.dom.querySelector('li')?.textContent).toContain('FR-001')
   })
 
-  it('keeps an invalid open-enum scope and exposes accessible validation', () => {
+  it('treats category as a free-form classification property', () => {
     editor = new Editor({
       extensions: createTacoEditorExtensions(labels),
-      content: '---\ntaco_scope: design\n---\n## Design\n\n**Decision**: Keep Markdown canonical.',
+      content: '---\ncategory: design\n---\n## Design\n\n**Decision**: Keep Markdown canonical.',
       contentType: 'markdown',
     })
 
     expect(editor.view.dom.querySelectorAll('.document-properties')).toHaveLength(1)
-    expect(editor.view.dom.querySelector('.document-property.is-invalid')).not.toBeNull()
-    expect(editor.view.dom.querySelector('[name="taco_scope"]')?.getAttribute('aria-invalid')).toBe('true')
-    expect(editor.getMarkdown()).toContain('taco_scope: design')
+    expect(editor.view.dom.querySelector('.document-property.is-invalid')).toBeNull()
+    const control = editor.view.dom.querySelector<HTMLInputElement>('[name="category"]')
+    expect(control?.value).toBe('design')
+    expect(control?.getAttribute('aria-invalid')).toBeNull()
+    expect(editor.getMarkdown()).toContain('category: design')
     expect(Array.from(editor.view.dom.querySelectorAll('p strong')).map((node) => node.textContent)).toContain('Decision')
+  })
+
+  it('offers an explicit rename from the deprecated taco_scope property', () => {
+    editor = new Editor({
+      extensions: createTacoEditorExtensions(labels),
+      content: '---\ntaco_scope: plan\n---\n## Plan',
+      contentType: 'markdown',
+    })
+
+    expect(editor.view.dom.querySelector('.document-property.is-invalid')).toBeNull()
+    expect(editor.view.dom.querySelector('.document-property-note')?.textContent).toContain('deprecated')
+    editor.view.dom.querySelector<HTMLButtonElement>('.document-property-migrate')!.click()
+    expect(editor.getMarkdown()).toContain('category: plan')
+    expect(editor.getMarkdown()).not.toContain('taco_scope')
+  })
+
+  it('keeps a declared category when the deprecated property is also present', () => {
+    editor = new Editor({
+      extensions: createTacoEditorExtensions(labels),
+      content: '---\ncategory: spec\ntaco_scope: plan\n---\n## Body',
+      contentType: 'markdown',
+    })
+
+    expect(editor.view.dom.querySelector('.document-property-migrate')).toBeNull()
+    expect(editor.view.dom.querySelector('.document-property-note')?.textContent).toContain('already declares')
+    expect(editor.getMarkdown()).toContain('category: spec')
+    expect(editor.getMarkdown()).toContain('taco_scope: plan')
+  })
+
+  it('shows a GitHub link for repo and issue properties without rewriting them', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ full_name: 'Arcadia822/taco', title: 'Taco review' }),
+    })))
+    editor = new Editor({
+      extensions: createTacoEditorExtensions(labels),
+      content: '---\ntitle: Sample\nrepo: https://github.com/Arcadia822/taco\nissue: https://github.com/Arcadia822/taco/issues/32\n---\n## Body',
+      contentType: 'markdown',
+    })
+
+    const links = Array.from(editor.view.dom.querySelectorAll<HTMLAnchorElement>('.document-property-github'))
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      'https://github.com/Arcadia822/taco',
+      'https://github.com/Arcadia822/taco/issues/32',
+    ])
+    expect(links.every((link) => link.getAttribute('rel') === 'noopener noreferrer')).toBe(true)
+    expect(Array.from(editor.view.dom.querySelectorAll('.document-property-github-label')).map((node) => node.textContent))
+      .toEqual(['Arcadia822/taco', 'Arcadia822/taco#32'])
+    await vi.waitFor(() => expect(
+      Array.from(editor!.view.dom.querySelectorAll('.document-property-github-title')).map((node) => node.textContent),
+    ).toEqual(['Arcadia822/taco', 'Taco review']))
+    expect(editor.getMarkdown()).toContain('repo: https://github.com/Arcadia822/taco')
+    expect(editor.getMarkdown()).toContain('issue: https://github.com/Arcadia822/taco/issues/32')
   })
 
   it('preserves a non-text title while refusing to use it as a display title', () => {

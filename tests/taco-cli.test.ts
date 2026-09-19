@@ -788,7 +788,7 @@ describe('Taco extension CLI', () => {
     )
     writeFileSync(
       join(feature, 'checklists/requirements.md'),
-      '---\ntitle: "Checklist"\ntaco_scope: tasks\n---\n\n## Checklist\n\n![UI](../design/screen.png)\n',
+      '---\ntitle: "Checklist"\ncategory: tasks\n---\n\n## Checklist\n\n![UI](../design/screen.png)\n',
     )
     writeFileSync(join(feature, 'design/screen.png'), samplePng)
 
