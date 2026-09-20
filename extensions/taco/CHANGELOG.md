@@ -4,6 +4,8 @@
 
 - Back the standalone `taco-cli` client with npm publication as `@tacobin/cli`, alongside the existing GitHub Release standalone binaries.
 - Publish the review workflow only when a Taco host is actually needed: the `taco` skill stays fully offline, and `taco-cli` is the cloud publication, subscription, and remote review client.
+- Make installing the `taco` skill the default installation: the skill ships its own production shell, whose `#taco-document` block is empty until a document is written into it, plus the `spec`, `architecture`, `api-reference`, and `adr` template packs. Assembly and review then need no CLI, npm package, build, or project modification, and the Spec Kit extension becomes optional project-level wiring taken only on explicit request.
+- Assemble and refresh a Taco by writing the `taco/files` bundle into the `#taco-document` block, preserving `docId`, comments, navigation, and per-file identity, and consume the review through the browser Handoff (which does not require saving) or the saved file. The existing `pack`/`sync`/`comments`/`validate` utilities remain available as optional CLI utilities off the required path.
 - Proactively open generated or refreshed Taco files in the browser when the host supports and permits local HTML navigation; preserve unsaved reviews, report observed verification separately, and retain clickable-file fallback and Codex's user-click boundary (#31).
 - Add runtime-editable sidebar navigation and declarative grouping: create, rename, delete groups, drag files between groups, and declare entry documents.
 - Persist navigation declarations to the top-level `navigation` bundle field on save without modifying `files[]` or source hashes.

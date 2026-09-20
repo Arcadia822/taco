@@ -22,7 +22,7 @@ describe('embedded technical diagrams', () => {
     for (const diagram of diagrams) await expect(mermaid.parse(diagram)).resolves.toBeTruthy()
   })
 
-  it('keeps class diagram labels after the SVG security boundary', async () => {
+  it('keeps diagram labels after the SVG security boundary', async () => {
     const svgPrototype = SVGElement.prototype as unknown as {
       getBBox?: () => { x: number; y: number; width: number; height: number }
       getComputedTextLength?: () => number
@@ -62,15 +62,16 @@ describe('embedded technical diagrams', () => {
       expect(sanitized).toContain('TacoFile')
       expect(sanitized).toContain('files')
 
-      const readme = await readFile('README.md', 'utf8')
-      const flowSource = readme.match(/```mermaid\n([\s\S]*?)\n```/)?.[1]
-      expect(flowSource).toBeTruthy()
-      const { svg: flowSvg } = await mermaid.render('taco-flow-regression', flowSource!)
+      const { svg: flowSvg } = await mermaid.render('taco-flow-regression', [
+        'flowchart LR',
+        '  A["Spec directory<br/>canonical source"] --> B{"Conflicts?"}',
+        '  B -- "No" --> C["Import edits<br/>handle comments"]',
+      ].join('\n'))
       const flow = new DOMParser().parseFromString(sanitizeMermaidSvg(flowSvg), 'image/svg+xml')
 
-      const text = Array.from(flow.querySelectorAll('text')).map((node) => node.textContent).join(' ')
-      expect(text).toContain('speckit.specify')
-      expect(text).toContain('Conflicts?')
+      const flowText = Array.from(flow.querySelectorAll('text')).map((node) => node.textContent).join(' ')
+      expect(flowText).toContain('Conflicts?')
+      expect(flowText.replace(/\s+/g, '')).toContain('canonicalsource')
     } finally {
       if (originalBox) Object.defineProperty(svgPrototype, 'getBBox', { configurable: true, value: originalBox })
       else Reflect.deleteProperty(svgPrototype, 'getBBox')
