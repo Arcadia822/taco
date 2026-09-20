@@ -1220,11 +1220,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .png-preview img { display: block; max-width: none; margin-top: 12px; }
 .png-preview::backdrop { background: #0009; }
 
-/* TACO-4 document properties: general category and GitHub references */
-.document-property-note { grid-column: 3 / 5; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -1px 6px 3px 8px; color: var(--doc-subtle); font-size: 11px; line-height: 16px; }
-.document-property-migrate { flex: none; padding: 1px 7px; border: 1px solid var(--doc-line); border-radius: 5px; background: transparent; color: var(--doc-muted); font: inherit; cursor: pointer; }
-.document-property-migrate:hover { background: var(--doc-soft); color: var(--doc-ink); }
-.document-property-migrate:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 1px; }
+/* TACO-4 document properties: GitHub references */
 .document-property-github { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; margin-top: 3px; color: var(--doc-muted); font-size: 11px; line-height: 16px; text-decoration: none; }
 .document-property-github:hover { color: var(--doc-ink); }
 .document-property-github:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 1px; }

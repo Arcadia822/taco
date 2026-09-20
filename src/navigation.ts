@@ -1,8 +1,8 @@
 import { fileByPath, type TacoBundle, type TacoFile } from './model.ts'
-import { buildStageNavigation, STAGE_CATEGORIES, type StageGroup } from './stage-navigation.ts'
+import { buildStageNavigation, STAGES, type StageGroup } from './stage-navigation.ts'
 import { resolveFileCategory, UNCLASSIFIED_CATEGORY } from './category.ts'
 
-const stageCategories = new Set<string>(STAGE_CATEGORIES)
+const stageCategories = new Set<string>(STAGES.map(({ id }) => id))
 
 export interface ResolvedCustomGroup {
   id: string

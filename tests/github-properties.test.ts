@@ -89,17 +89,22 @@ describe('GitHub property references', () => {
   it('shows the fetched title as plain text and requests it once per reference', async () => {
     const fetcher = responseFetcher({
       ok: true,
-      json: async () => ({ full_name: 'Arcadia822/taco', description: '<img src=x onerror=alert(1)>' }),
+      json: async () => ({ full_name: 'Arcadia822/taco', description: 'A single-file workspace', name: '<img src=x onerror=alert(1)>' }),
     })
     const reference = parseGitHubReference('repo', 'Arcadia822/taco')!
     const first = createGitHubPreview(reference, { openLabel, fetcher })
     const second = createGitHubPreview(reference, { openLabel, fetcher })
     document.body.append(first, second)
 
-    await vi.waitFor(() => expect(first.querySelector('.document-property-github-title')?.textContent).toBe('Arcadia822/taco'))
-    expect(second.querySelector('.document-property-github-title')?.textContent).toBe('Arcadia822/taco')
+    await vi.waitFor(() => expect(first.querySelector('.document-property-github-title')?.textContent).toBe('A single-file workspace'))
+    expect(second.querySelector('.document-property-github-title')?.textContent).toBe('A single-file workspace')
     expect(first.querySelectorAll('img')).toHaveLength(0)
     expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not repeat the label when the repository has no description', async () => {
+    const fetcher = responseFetcher({ ok: true, json: async () => ({ full_name: 'Arcadia822/taco' }) })
+    expect(await githubTitle(parseGitHubReference('repo', 'Arcadia822/taco')!, fetcher)).toBeNull()
   })
 
   it('reports no title for a repository that cannot be read', async () => {

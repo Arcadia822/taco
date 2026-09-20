@@ -54,7 +54,6 @@ import { hasCollabSecrets } from './security.ts'
 import { localFileUrl } from './local-file-url.ts'
 import { frontmatterTitle, parseFrontmatter } from './frontmatter.ts'
 import { setEditorFrontmatterProperty } from './tiptap-document-properties.ts'
-import { stageCategory } from './stage-navigation.ts'
 import { resolveFileCategory } from './category.ts'
 import { commentLineReference } from './comment-position.ts'
 import { createStructuredFileViewer, structuredFileLabels } from './structured-file-viewer.ts'
@@ -66,11 +65,12 @@ export interface FileBrowserOptions {
   mermaidRuntime?: MermaidRuntime
 }
 
-/** Sidebar grouping identity: a declared category re-groups even when the routed stage stays the same. */
-const navigationSignature = (bundle: TacoBundle, file: TacoFile): string => {
-  const stage = stageCategory(bundle, file)
-  return stage ? `stage:${stage}` : `category:${resolveFileCategory(bundle, file).category}`
-}
+/**
+ * Sidebar grouping identity: Taco's built-in Category decides how the sidebar groups a file, so a
+ * change here — a directory declaration or a root document's own category — re-renders navigation.
+ */
+const navigationSignature = (bundle: TacoBundle, file: TacoFile): string =>
+  resolveFileCategory(bundle, file).category
 
 const normalizeRelativeLink = (fromPath: string, href: string): { path: string; hash: string } => {
   const [target, hash = ''] = href.split('#', 2)

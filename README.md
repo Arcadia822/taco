@@ -127,16 +127,9 @@ The default specification directory is also the project's executable example. It
 
 ## Document routing and navigation
 
-By default, a feature-root `README.md` routes to Specify and opens first; `spec.md` is the fallback when no README exists. When a Taco contains a top-level `navigation` manifest, files are grouped and ordered directly according to its declarations, and undeclared files appear under Unassigned. You can also organize groups, drag files, and set entry documents directly in the sidebar during review. In unconfigured Spec Kit trees, `spec.md`, `plan.md`, and `tasks.md` remain the core stage files, and other Markdown documents may route explicitly using `category`:
+By default, a feature-root `README.md` routes to Specify and opens first; `spec.md` is the fallback when no README exists. When a Taco contains a top-level `navigation` manifest, files are grouped and ordered directly according to its declarations, and undeclared files appear under Unassigned. You can also organize groups, drag files, and set entry documents directly in the sidebar during review. In unconfigured Spec Kit trees, `spec.md`, `plan.md`, and `tasks.md` remain the core stage files, known convention paths such as `contracts/` and `checklists/` route with them, and every other document appears under Unassigned until you group it with the Category control in the document header.
 
-```md
----
-title: 'Interaction design'
-category: plan
----
-```
-
-The property accepts text; `spec`, `plan`, and `tasks` route into the default stage groups, while other values create custom category groups. Taco presents all leading YAML frontmatter as an Obsidian-style property editor while preserving it in canonical Markdown. New specs store their title in YAML and begin the body at H2 instead of repeating the title as H1. See `AGENTS.md` for the complete convention.
+Classification is a Taco capability rather than a document property: no frontmatter key routes a file, and the deprecated `taco_scope` property is no longer read. Taco presents all leading YAML frontmatter as an Obsidian-style property editor while preserving it in canonical Markdown. New specs store their title in YAML and begin the body at H2 instead of repeating the title as H1. See `AGENTS.md` for the complete convention.
 
 ## Design principles
 

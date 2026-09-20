@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { FileBrowser } from '../src/file-browser.ts'
 import { configureApp } from '../src/kernel/app.ts'
@@ -20,7 +20,7 @@ const testBundle: TacoBundle = {
     { title: 'Product specification', path: 'specs/001-browser/spec.md', mediaType: 'text/markdown', content: '# Product\n\n## Outcome\n\nReadable Markdown.' },
     { path: 'specs/001-browser/checklists/requirements.md', mediaType: 'text/markdown', content: '# Requirements checklist' },
     { path: 'specs/001-browser/plan.md', mediaType: 'text/markdown', content: '# Plan' },
-    { path: 'specs/001-browser/interaction-design.md', mediaType: 'text/markdown', content: '**Taco scope**: plan\n\n# Interaction' },
+    { path: 'specs/001-browser/interaction-design.md', mediaType: 'text/markdown', content: '# Interaction' },
     { path: 'specs/001-browser/tasks.md', mediaType: 'text/markdown', content: '# Tasks\n\n- [ ] T001 Browse files' },
     { path: 'specs/001-browser/contracts/api.yaml', mediaType: 'application/yaml', content: 'service:\n  name: Taco' },
   ],
@@ -80,6 +80,13 @@ describe('FileBrowser', () => {
       configurable: true,
       value: vi.fn().mockReturnValue(document.body),
     })
+  })
+
+  // FileBrowser sets the document language from the resolved locale; release it so another test
+  // file cannot inherit this suite's zh-CN navigator stub.
+  afterEach(() => {
+    document.documentElement.lang = ''
+    document.body.innerHTML = ''
   })
 
   it.each(['inline', 'zoom'] as const)('writes only the requested Mermaid direction from the %s control', async (surface) => {
@@ -296,21 +303,22 @@ describe('FileBrowser', () => {
     const editor = await waitForEditor()
     await new Promise((resolve) => requestAnimationFrame(resolve))
     expect(document.querySelectorAll('.file-row')).toHaveLength(7)
-    expect(Array.from(document.querySelectorAll('.stage-name')).map((node) => node.textContent)).toEqual(['spec', 'plan', 'tasks'])
+    expect(Array.from(document.querySelectorAll('.stage-name')).map((node) => node.textContent)).toEqual(['spec', 'plan', 'tasks', '未分配文件'])
     const specRows = document.querySelectorAll('[data-stage="spec"] .file-row')
     expect(Array.from(specRows).map((node) => node.getAttribute('data-role'))).toEqual([null, null])
     expect(document.querySelector('[data-stage="spec"] [data-path$="spec.md"]')).not.toBeNull()
     expect(document.querySelector('[data-stage="plan"] [data-path$="checklists/requirements.md"]')).not.toBeNull()
     expect(Array.from(document.querySelectorAll('[data-stage="plan"] .tree-folder .folder-name')).map((node) => node.textContent)).toEqual(['checklists', 'contracts'])
     expect(document.querySelector('[data-stage="spec"] [data-path$="README.md"]')).not.toBeNull()
-    expect(document.querySelector('[data-stage="plan"] [data-path$="interaction-design.md"]')).not.toBeNull()
+    expect(document.querySelector('[data-stage="plan"] [data-path$="interaction-design.md"]')).toBeNull()
     expect(document.querySelector('[data-stage="custom"]')).toBeNull()
-    expect(document.querySelector('.other-files-group')).toBeNull()
+    expect(document.querySelector('[data-stage="other"] [data-path$="interaction-design.md"]')).not.toBeNull()
+    expect(document.querySelector('.other-files-group')).not.toBeNull()
     expect(document.querySelector('[data-role]')).toBeNull()
     expect(document.querySelectorAll('.stage-summary .sidebar-row-icon')).toHaveLength(0)
-    expect(document.querySelectorAll('.stage-summary .stage-caret [data-icon="chevron-right"]')).toHaveLength(3)
+    expect(document.querySelectorAll('.stage-summary .stage-caret [data-icon="chevron-right"]')).toHaveLength(4)
     expect(document.querySelector('.tree-folder[open] > .folder-row [data-icon="folder-open"]')).not.toBeNull()
-    expect(document.querySelectorAll('.sidebar-row')).toHaveLength(13)
+    expect(document.querySelectorAll('.sidebar-row')).toHaveLength(14)
     expect(editor.querySelector('h1')?.textContent).toBe('Guide')
     await new Promise((resolve) => requestAnimationFrame(resolve))
     expect(Array.from(document.querySelectorAll('.outline-link')).map((node) => node.textContent)).toEqual(['Guide'])

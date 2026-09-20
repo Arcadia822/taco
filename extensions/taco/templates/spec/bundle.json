@@ -15,13 +15,13 @@
       "id": "plan-md",
       "path": "spec/plan.md",
       "mediaType": "text/markdown",
-      "content": "---\ntitle: 'Technical Implementation Plan'\ncategory: plan\n---\n\n## Architecture & Approach\n\nOutline technical architecture and key milestones here.\n"
+      "content": "---\ntitle: 'Technical Implementation Plan'\n---\n\n## Architecture & Approach\n\nOutline technical architecture and key milestones here.\n"
     },
     {
       "id": "tasks-md",
       "path": "spec/tasks.md",
       "mediaType": "text/markdown",
-      "content": "---\ntitle: 'Task Breakdown'\ncategory: tasks\n---\n\n## Tasks\n\n- [ ] T001 Implement core data model\n- [ ] T002 Build UI presentation\n"
+      "content": "---\ntitle: 'Task Breakdown'\n---\n\n## Tasks\n\n- [ ] T001 Implement core data model\n- [ ] T002 Build UI presentation\n"
     }
   ],
   "navigation": {

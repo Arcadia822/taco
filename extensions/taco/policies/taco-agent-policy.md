@@ -11,11 +11,11 @@
   add an ATX or Setext H1 that repeats the YAML title. Begin the Markdown body at
   H2 (`##`) or lower. Preserve an existing authored H1 during unrelated edits;
   do not silently migrate legacy content.
-- Core files and known Spec Kit convention paths are routed automatically. For
-  any other Markdown file that needs an explicit Taco stage, add `category` to
-  its YAML frontmatter. Offer `spec`, `plan`, and `tasks`; preserve other
-  text values as authored, but do not treat them as valid routes or create a
-  custom stage. Do not generate the legacy `**Taco scope**: ...` form.
+- Core files and known Spec Kit convention paths are routed automatically. Do not
+  write a routing or scope property into documents: classification is Taco's
+  built-in Category, recorded in the Taco file's navigation manifest. Never
+  generate the deprecated `taco_scope` key or the legacy
+  `**Taco scope**: ...` form; Taco reads neither one.
 - Keep each Spec Kit feature directory canonical. Store its review file at
   `<feature-directory>/<feature-name>.taco.html` and update it only through the
   installed Taco commands.

@@ -9,11 +9,6 @@ import {
   splitFrontmatter,
   type FrontmatterEntry,
 } from './frontmatter.ts'
-import {
-  CATEGORY_PROPERTY,
-  LEGACY_CATEGORY_PROPERTY,
-  migrateLegacyCategory,
-} from './category.ts'
 import { createGitHubPreview, parseGitHubReference } from './github-properties.ts'
 
 type DocumentPropertiesToken = MarkdownToken & {
@@ -33,9 +28,6 @@ export interface DocumentPropertiesLabels {
   removeProperty: (key: string) => string
   invalidYaml: string
   invalidTitle: string
-  legacyScope: string
-  migrateScope: string
-  migrateScopeBlocked: string
   duplicateSource: (keys: string[]) => string
   rawValue: string
   addListItem: (key: string) => string
@@ -50,9 +42,6 @@ const englishLabels: DocumentPropertiesLabels = {
   removeProperty: (key) => `Remove ${key}`,
   invalidYaml: 'Fix the YAML source to edit these properties.',
   invalidTitle: 'The document title must be text. This value is preserved but is not used as the display title.',
-  legacyScope: '`taco_scope` is deprecated: it classifies this file only while no `category` is declared.',
-  migrateScope: 'Rename to category',
-  migrateScopeBlocked: 'This file already declares `category`, which wins; the legacy property is kept as written.',
   duplicateSource: (keys) => `YAML and legacy metadata both define ${keys.join(', ')}. YAML controls Taco behavior; legacy text is preserved.`,
   rawValue: 'Edit YAML value',
   addListItem: (key) => `Add item to ${key}`,
@@ -67,9 +56,6 @@ const chineseLabels: DocumentPropertiesLabels = {
   removeProperty: (key) => `删除 ${key}`,
   invalidYaml: '请修正 YAML 源码后再编辑这些属性。',
   invalidTitle: '文档标题必须是文本。当前值会被保留，但不会作为显示标题使用。',
-  legacyScope: '`taco_scope` 已废弃：仅在本文档未声明 `category` 时参与归类。',
-  migrateScope: '改为 category',
-  migrateScopeBlocked: '本文档已声明 `category`，以其取值为准；旧属性按原样保留。',
   duplicateSource: (keys) => `YAML 与旧式元数据同时定义了 ${keys.join('、')}。Taco 以 YAML 为准，并保留旧式文本。`,
   rawValue: '编辑 YAML 值',
   addListItem: (key) => `向 ${key} 添加一项`,
@@ -79,7 +65,7 @@ const chineseLabels: DocumentPropertiesLabels = {
 const defaultLabels = (): DocumentPropertiesLabels =>
   document.documentElement.lang.toLocaleLowerCase().startsWith('zh') ? chineseLabels : englishLabels
 
-const reservedProperties = new Set(['title', CATEGORY_PROPERTY, LEGACY_CATEGORY_PROPERTY])
+const reservedProperties = new Set(['title', 'taco_scope'])
 let dataListSerial = 0
 
 const leadingLegacyPropertyKeys = (markdown: string): Set<string> => {
@@ -375,7 +361,17 @@ export const createDocumentProperties = (providedLabels?: DocumentPropertiesLabe
         container.append(createGitHubPreview(reference, { openLabel: labels.openOnGitHub }))
       }
 
-      const rowFor = (entry: FrontmatterEntry, categoryDeclared: boolean): HTMLElement => {
+      // One delegated listener: `paint()` rebuilds every row, so a listener bound to a row would go
+      // stale after the first repaint and silently stop refreshing the preview.
+      dom.addEventListener('change', (event) => {
+        const control = event.target
+        if (!(control instanceof HTMLInputElement)) return
+        if (control.name !== 'repo' && control.name !== 'issue') return
+        const container = control.closest('.document-property-value')
+        if (container instanceof HTMLElement) paintGitHubPreview(container, control.name, control.value)
+      })
+
+      const rowFor = (entry: FrontmatterEntry): HTMLElement => {
         const invalid = entry.key === 'title' && entry.kind !== 'string'
         const row = document.createElement('div')
         row.className = 'document-property'
@@ -403,12 +399,6 @@ export const createDocumentProperties = (providedLabels?: DocumentPropertiesLabe
         value.className = 'document-property-value'
         value.append(entry.kind === 'list' ? listEditor(entry) : inputForScalar(entry))
         paintGitHubPreview(value, entry.key, entry.value)
-        if (entry.key === 'repo' || entry.key === 'issue') {
-          row.addEventListener('change', (event) => {
-            const control = event.target
-            if (control instanceof HTMLInputElement) paintGitHubPreview(value, entry.key, control.value)
-          })
-        }
 
         const remove = document.createElement('button')
         remove.type = 'button'
@@ -430,26 +420,6 @@ export const createDocumentProperties = (providedLabels?: DocumentPropertiesLabe
           const control = value.querySelector('input')
           control?.setAttribute('aria-invalid', 'true')
           control?.setAttribute('aria-describedby', error.id)
-        }
-        if (entry.key === LEGACY_CATEGORY_PROPERTY) {
-          const note = document.createElement('p')
-          note.className = 'document-property-note'
-          note.setAttribute('role', 'status')
-          const text = document.createElement('span')
-          text.textContent = categoryDeclared ? labels.migrateScopeBlocked : labels.legacyScope
-          note.append(text)
-          if (!categoryDeclared && editor.isEditable) {
-            const migrate = document.createElement('button')
-            migrate.type = 'button'
-            migrate.className = 'document-property-migrate'
-            migrate.textContent = labels.migrateScope
-            migrate.addEventListener('click', () => {
-              const migrated = migrateLegacyCategory(String(currentNode.attrs.yaml))
-              if (migrated !== null) updateYaml(migrated, true)
-            })
-            note.append(migrate)
-          }
-          row.append(note)
         }
         return row
       }
@@ -507,8 +477,7 @@ export const createDocumentProperties = (providedLabels?: DocumentPropertiesLabe
         }
         const rows = document.createElement('div')
         rows.className = 'document-properties-rows'
-        const categoryDeclared = yamlKeys.has(CATEGORY_PROPERTY)
-        for (const entry of parsed.entries) rows.append(rowFor(entry, categoryDeclared))
+        for (const entry of parsed.entries) rows.append(rowFor(entry))
         dom.append(rows)
 
         if (editor.isEditable) {

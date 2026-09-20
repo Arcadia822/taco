@@ -128,8 +128,9 @@ const requestTitle = async (
     const response = await fetcher(reference.apiUrl, { headers: { accept: 'application/vnd.github+json' } })
     if (!response.ok) return null
     const payload = await response.json() as unknown
+    // A repository's `full_name` only repeats the label, so its description is the informative title.
     return reference.kind === 'repo'
-      ? stringField(payload, 'full_name') ?? stringField(payload, 'name')
+      ? stringField(payload, 'description')
       : stringField(payload, 'title')
   } catch {
     return null

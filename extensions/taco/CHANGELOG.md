@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.8.0 - 2026-09-19
+## 0.8.0 - 2026-09-20
 
-- Unify Markdown classification under the general `category` property; deprecate `taco_scope` while keeping existing files readable, and offer an explicit per-file rename in the property editor without silent data loss or overwriting declared categories (#32).
+- Classify documents only through Taco's built-in Category — the sidebar group control, first-level directory declarations, and the navigation manifest — and stop reading the deprecated `taco_scope` key and the legacy `**Taco scope**:` form entirely; templates, policy, and Agent guidance no longer emit either, and the document property table carries no classification-specific UI (#32).
 - Render GitHub repository and issue links in the property table with the GitHub mark, owner/repo label, and public metadata titles; fall back gracefully to the original link offline or when rate-limited, without altering canonical source (#32).
 - Order comment threads in the right-hand panel by their anchored position in the active document rather than creation recency; place unresolvable stale threads into an explicit separated group (#34).
 - Replace large-area green background comment highlights with a precise underline over the anchored text, preserving readability across multiline and overlapping ranges (#34).

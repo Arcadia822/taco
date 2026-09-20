@@ -26,8 +26,8 @@ describe('Taco Agent instructions', () => {
     expect(policy).toMatch(/do not\s+add an ATX or Setext H1/)
     expect(policy).toContain('Begin the Markdown body at')
     expect(policy).toContain('H2 (`##`) or lower')
-    expect(policy).toContain('`category`')
-    expect(policy).toContain('Do not generate the legacy `**Taco scope**: ...` form')
+    expect(policy).toContain('built-in Category')
+    expect(policy).toContain('Taco reads neither one')
     expect(installation).toContain('.specify/extensions/taco/policies/taco-agent-policy.md')
     expect(installation).toContain('a post-generation Taco hook cannot prevent malformed Markdown')
     expect(extension).toContain('new specs use YAML `title`, omit a duplicate H1')
@@ -39,7 +39,7 @@ describe('Taco Agent instructions', () => {
     expect(installation).toContain('prepare-policy')
     expect(installation).toContain('manual-merge')
     expect(installation).toContain('one imperative reference')
-    for (const contract of ['`feature_id`', '`git_branch`', '`spec`, `plan`, and `tasks`', 'canonical', 'speckit.taco.update', 'native clickable', 'validate --json', 'sync --dry-run --json', '--force', 'complete history', 'credential-bearing']) {
+    for (const contract of ['`feature_id`', '`git_branch`', 'built-in Category', 'canonical', 'speckit.taco.update', 'native clickable', 'validate --json', 'sync --dry-run --json', '--force', 'complete history', 'credential-bearing']) {
       expect(policy, contract).toContain(contract)
     }
   })
@@ -68,12 +68,14 @@ describe('Taco Agent instructions', () => {
     expect(template).toMatch(/^## User Scenarios & Testing/m)
   })
 
-  it('keeps the repository routing prompt on YAML metadata', () => {
+  it('keeps the repository routing prompt free of document classification properties', () => {
     const agents = read('AGENTS.md')
 
-    expect(agents).toContain('category: spec')
+    expect(agents).toContain('Classification is a Taco capability, not a document property')
+    expect(agents).toContain('built-in Category control')
     expect(agents).toContain('title')
     expect(agents).toContain('do not add an H1 solely to repeat that title')
-    expect(agents).toContain('Do not generate the legacy `**Taco scope**: ...` form')
+    expect(agents).not.toContain('taco_scope:')
+    expect(agents).not.toContain('category:')
   })
 })

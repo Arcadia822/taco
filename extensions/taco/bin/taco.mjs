@@ -944,7 +944,7 @@ export const prepareProjectPolicy = async (options = {}) => {
     if (existingRoutes.length > 1 || (existingRoutes.length === 1 && existingRoutes[0] !== route))
       throw new Error('Customized or duplicate Taco routing instruction in AGENTS.md; merge manually')
     if (!existingRoutes.length) nextAgents = appendPolicyText(nextAgents, route)
-    let nextProcess = destination.content ?? '---\ntitle: "Taco workflow"\ncategory: plan\n---\n'
+    let nextProcess = destination.content ?? '---\ntitle: "Taco workflow"\n---\n'
     const starts = nextProcess.split(POLICY_START).length - 1
     const ends = nextProcess.split(POLICY_END).length - 1
     if (starts || ends) {
