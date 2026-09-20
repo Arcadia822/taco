@@ -44,7 +44,7 @@ provides:
   scripts:
     - name: 'taco-cli'
       file: 'bin/taco.mjs'
-      description: 'Offline pack, sync, and comment inspection CLI for Taco files.'
+      description: 'Optional offline CLI for Taco files (prepare-template, prepare-policy, and pack/sync/validate utilities). The Agent workflow uses the shell and bundle JSON directly and does not require this CLI.'
 
 hooks:
   after_specify:

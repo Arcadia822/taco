@@ -40,7 +40,7 @@ for future specs. Follow the installation instructions in the Taco repository:
 https://github.com/Arcadia822/taco
 ```
 
-The Agent reads Taco's repository instructions, installs the Spec Kit extension into the current repository, and runs `prepare-policy` to install Taco's persistent workflow in the declared 5xP Process document, or `docs/taco-process.md` for projects without 5xP. The existing project `AGENTS.md` receives one mandatory reference to that document. That plugin installation is Taco: it includes the Agent commands, mandatory lifecycle hooks, offline CLI, self-contained browser shell, and the project rule that keeps Taco current. No second Taco install is required.
+The Agent reads Taco's repository instructions and performs the default **CLI-free skill installation**: it installs the `taco` skill (`skills/taco/` — agent guide, production shell, and template packs) into its skill location. That is the whole installation: from then on the Agent assembles `.taco.html` review files from the skill's own shell in any directory, fully offline, with no npm package, no CLI, and no build. Optional deeper integrations — Spec Kit extension commands/hooks/policy for project-level wiring, or `taco-cli` for cloud publishing (TacoHub/Tacobin) — are separate, explicitly requested steps described in [`docs/agent-installation.md`](docs/agent-installation.md).
 
 After installation, the SDD flow is:
 
