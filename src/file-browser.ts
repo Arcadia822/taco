@@ -540,7 +540,7 @@ export class FileBrowser {
       this.viewer.append(structured.element)
       structured.sourceEditor.input.addEventListener('mouseup', (event) => this.comments.captureSourceSelection(structured.sourceEditor, file, event))
       structured.sourceEditor.input.addEventListener('keyup', (event) => {
-        if (event.key === 'Shift') return
+        if (event.key === 'Shift' || event.key === 'Escape') return
         this.comments.captureSourceSelection(structured.sourceEditor, file)
       })
       this.comments.refreshHighlights()
@@ -559,7 +559,7 @@ export class FileBrowser {
       this.viewer.append(sourceEditor.element)
       sourceEditor.input.addEventListener('mouseup', (event) => this.comments.captureSourceSelection(sourceEditor, file, event))
       sourceEditor.input.addEventListener('keyup', (event) => {
-        if (event.key === 'Shift') return
+        if (event.key === 'Shift' || event.key === 'Escape') return
         this.comments.captureSourceSelection(sourceEditor, file)
       })
       this.comments.refreshHighlights()
@@ -740,7 +740,7 @@ export class FileBrowser {
     editorHost.addEventListener('click', (event) => this.handleEditorLink(event, file))
     editorHost.addEventListener('mouseup', () => this.comments.captureEditorSelection(editorHost, file))
     editorHost.addEventListener('keyup', (event) => {
-      if ((event as KeyboardEvent).key === 'Shift') return
+      if ((event as KeyboardEvent).key === 'Shift' || (event as KeyboardEvent).key === 'Escape') return
       this.comments.captureEditorSelection(editorHost, file)
     })
   }

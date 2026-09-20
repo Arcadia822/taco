@@ -428,7 +428,7 @@ export const createMermaidSplitView = (
     })
   }
   sourceEditor.input.addEventListener('mouseup', (event) => { event.stopPropagation(); syncSelection(event) })
-  sourceEditor.input.addEventListener('keyup', (event) => { event.stopPropagation(); if (event.key !== 'Shift') syncSelection() })
+  sourceEditor.input.addEventListener('keyup', (event) => { event.stopPropagation(); if (event.key !== 'Shift' && event.key !== 'Escape') syncSelection() })
   const renderLatest = (): void => {
     renderedCode = code
     refresh.disabled = true

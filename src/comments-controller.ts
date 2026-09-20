@@ -51,15 +51,32 @@ export class CommentsController {
   private commentToggle: HTMLButtonElement | null = null
   private pendingAnchor: TacoTextAnchor | null = null
   private selectionButton: HTMLButtonElement | null = null
+  private selectionButtonEvents: AbortController | null = null
   private principal: CommentPrincipal | null = null
   private principalNoticeShown = false
   private placement: CommentPlacement = { placed: [], stale: [] }
+  private layoutFrame = 0
+  private layoutObserver: ResizeObserver | null = null
+  private layoutViewer: HTMLElement | null = null
+  private readonly scheduleLayout = (): void => {
+    if (this.layoutFrame) return
+    this.layoutFrame = requestAnimationFrame(() => {
+      this.layoutFrame = 0
+      this.layoutCards()
+    })
+  }
 
   constructor(private readonly options: CommentsControllerOptions) {}
 
   mount(commentList: HTMLElement, commentToggle: HTMLButtonElement): void {
+    this.layoutViewer?.removeEventListener('scroll', this.scheduleLayout, true)
+    this.layoutObserver?.disconnect()
     this.commentList = commentList
     this.commentToggle = commentToggle
+    this.layoutViewer = this.options.getViewer()
+    this.layoutViewer.addEventListener('scroll', this.scheduleLayout, { capture: true, passive: true })
+    window.addEventListener('resize', this.scheduleLayout)
+    if (typeof ResizeObserver !== 'undefined') this.layoutObserver = new ResizeObserver(this.scheduleLayout)
   }
 
   resetForFileChange(): void {
@@ -68,6 +85,11 @@ export class CommentsController {
   }
 
   destroy(): void {
+    cancelAnimationFrame(this.layoutFrame)
+    this.layoutFrame = 0
+    this.layoutObserver?.disconnect()
+    this.layoutViewer?.removeEventListener('scroll', this.scheduleLayout, true)
+    window.removeEventListener('resize', this.scheduleLayout)
     this.clearHighlights()
     this.removeSelectionButton()
     this.commentList = null
@@ -77,6 +99,8 @@ export class CommentsController {
   paint(): void {
     if (!this.commentList || !this.commentToggle) return
     this.commentList.innerHTML = ''
+    const lane = el('div', 'comment-lane')
+    this.commentList.append(lane)
     const path = this.options.getSelected()?.path
     const threads = path ? commentsForPath(this.options.bundle.comments, path) : []
     const openCount = threads
@@ -87,10 +111,12 @@ export class CommentsController {
 
     this.placement = resolveCommentPlacement(threads, this.anchorProbe())
     const pendingAnchor = this.pendingAnchor?.path === path ? this.pendingAnchor : null
-    if (pendingAnchor) this.commentList.append(this.buildNewCommentComposer(pendingAnchor))
-    if (!threads.length && !pendingAnchor) this.commentList.append(this.buildEmptyCommentBanner())
-    for (const { thread } of this.placement.placed) this.commentList.append(this.buildCommentThread(thread))
-    if (this.placement.stale.length) this.commentList.append(this.buildStaleCommentGroup(this.placement.stale))
+    if (pendingAnchor) lane.append(this.buildNewCommentComposer(pendingAnchor))
+    if (!threads.length && !pendingAnchor) lane.append(this.buildEmptyCommentBanner())
+    for (const { thread } of this.placement.placed) lane.append(this.buildCommentThread(thread))
+    if (this.placement.stale.length) lane.append(this.buildStaleCommentGroup(this.placement.stale))
+    this.observeLayout()
+    this.scheduleLayout()
   }
 
   captureEditorSelection(editorHost: HTMLElement, file: TacoFile): void {
@@ -197,6 +223,8 @@ export class CommentsController {
   }
 
   refreshHighlights(editorHost = this.options.getViewer().querySelector<HTMLElement>('.tiptap-editor-host')): void {
+    this.observeLayout()
+    this.scheduleLayout()
     this.clearHighlights()
     const path = this.options.getSelected()?.path
     if (!path) return
@@ -268,6 +296,69 @@ export class CommentsController {
     const threads = path ? commentsForPath(this.options.bundle.comments, path) : []
     return resolveCommentPlacement(threads, this.anchorProbe())
   }
+  private observeLayout(): void {
+    this.layoutObserver?.disconnect()
+    if (!this.commentList) return
+    this.layoutObserver?.observe(this.commentList)
+    const content = this.options.getSourceEditor()?.element
+      ?? this.options.getViewer().querySelector<HTMLElement>('.tiptap')
+    if (content) this.layoutObserver?.observe(content)
+    for (const card of this.commentList.querySelectorAll('.comment-lane > *')) this.layoutObserver?.observe(card)
+  }
+
+  /** Measure in document scroll coordinates, then pack downward without moving earlier anchors. */
+  private layoutCards(): void {
+    const list = this.commentList
+    if (!list || !list.clientHeight) return
+    const lane = list.querySelector<HTMLElement>('.comment-lane')
+    if (!lane) return
+    const viewer = this.options.getViewer()
+    const source = this.options.getSourceEditor()
+    const root = source?.element.querySelector<HTMLElement>('.source-editor-highlight code')
+      ?? viewer.querySelector<HTMLElement>('.tiptap')
+    if (!root) return
+    const probe = this.anchorProbe()
+    const origin = list.getBoundingClientRect().top + 12
+    const cards = new Map(Array.from(lane.querySelectorAll<HTMLElement>(':scope > .comment-thread'))
+      .map((card) => [card.dataset.threadId, card]))
+    const entries: { card: HTMLElement; top: number; start: number }[] = []
+    const add = (card: HTMLElement, anchor: TacoTextAnchor, range: CommentRange | null): void => {
+      const block = !source && anchor.block ? this.findCommentBlock(anchor) : null
+      const textRange = range ? domRange(root, range.start, range.end) : null
+      // A range at a paragraph boundary can start with a zero-width rect on the previous line.
+      const rect = block?.getBoundingClientRect()
+        ?? Array.from(textRange?.getClientRects() ?? []).find((rect) => rect.width > 0 && rect.height > 0)
+      if (rect) entries.push({ card, top: rect.top - origin + viewer.scrollTop, start: range?.start ?? anchor.position.start })
+    }
+    for (const entry of this.currentPlacement().placed) {
+      const card = cards.get(entry.thread.id)
+      if (card) add(card, entry.thread.anchor, entry.range)
+    }
+    const composer = lane.querySelector<HTMLElement>(':scope > .comment-composer')
+    if (composer && this.pendingAnchor) {
+      const anchor = this.pendingAnchor
+      add(composer, anchor, anchor.block ? probe.blockRange(anchor) : probe.text === null ? null : resolveTextAnchor(probe.text, anchor))
+    }
+    entries.sort((a, b) => a.start - b.start)
+    // Keep DOM/tab order consistent with the visible document order, including the draft.
+    const measured = entries.map((entry) => ({ ...entry, height: entry.card.getBoundingClientRect().height }))
+    let bottom = 0
+    let cursor = lane.firstElementChild
+    for (const { card, top, height } of measured) {
+      const target = Math.max(0, top, bottom)
+      card.style.marginTop = `${target - bottom}px`
+      if (card !== cursor) lane.insertBefore(card, cursor)
+      cursor = card.nextElementSibling
+      bottom = target + height + 12
+    }
+    // Unresolvable drafts and stale threads remain reachable after anchored cards.
+    const positioned = new Set(entries.map((entry) => entry.card))
+    for (const child of Array.from(lane.children)) {
+      if (!positioned.has(child as HTMLElement)) (child as HTMLElement).style.marginTop = ''
+    }
+    lane.style.minHeight = `${Math.max(0, viewer.scrollHeight - 24)}px`
+    list.scrollTop = viewer.scrollTop
+  }
 
   private get t() { return copy[this.options.getLocale()] }
 
@@ -307,7 +398,10 @@ export class CommentsController {
       this.addCommentThread(anchor, body)
     })
     composer.append(form)
-    requestAnimationFrame(() => textarea.focus())
+    requestAnimationFrame(() => {
+      this.layoutCards()
+      textarea.focus({ preventScroll: true })
+    })
     return composer
   }
 
@@ -610,7 +704,6 @@ export class CommentsController {
   }
 
   private showSelectionCommentButton(anchor: TacoTextAnchor, left: number, top: number): void {
-    this.pendingAnchor = anchor
     const button = el('button', 'selection-comment-button', this.t.commentSelection) as HTMLButtonElement
     button.type = 'button'
     button.setAttribute('data-taco-transient', '')
@@ -618,12 +711,42 @@ export class CommentsController {
     button.style.top = `${Math.min(innerHeight - 44, Math.max(8, top))}px`
     button.addEventListener('mousedown', (event) => event.preventDefault())
     button.addEventListener('click', () => {
+      this.removeSelectionButton()
+      this.pendingAnchor = anchor
       document.querySelector<HTMLDialogElement>('.mermaid-zoom-dialog[open]')?.dispatchEvent(new Event('cancel', { cancelable: true }))
       this.options.openComments()
       this.paint()
     })
     ;(document.querySelector('.mermaid-zoom-dialog[open]') ?? document.body).append(button)
     this.selectionButton = button
+    const events = new AbortController()
+    this.selectionButtonEvents = events
+    const options = { signal: events.signal, capture: true }
+    const dismiss = () => this.removeSelectionButton()
+    const dismissOutside = (event: Event) => {
+      if (!(event.target instanceof Node) || !button.contains(event.target)) dismiss()
+    }
+    const selection = window.getSelection()
+    const selectedInput = document.activeElement instanceof HTMLTextAreaElement ? document.activeElement : null
+    const anchorNode = selection?.anchorNode
+    const anchorOffset = selection?.anchorOffset
+    const focusNode = selection?.focusNode
+    const focusOffset = selection?.focusOffset
+    const inputStart = selectedInput?.selectionStart
+    const inputEnd = selectedInput?.selectionEnd
+    document.addEventListener('selectionchange', () => {
+      const current = window.getSelection()
+      if (selectedInput
+        ? selectedInput.selectionStart !== inputStart || selectedInput.selectionEnd !== inputEnd
+        : current?.anchorNode !== anchorNode || current?.anchorOffset !== anchorOffset
+          || current?.focusNode !== focusNode || current?.focusOffset !== focusOffset) dismiss()
+    }, options)
+    document.addEventListener('pointerdown', dismissOutside, options)
+    document.addEventListener('focusin', dismissOutside, options)
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') dismiss() }, options)
+    document.addEventListener('scroll', dismiss, { ...options, passive: true })
+    window.addEventListener('resize', dismiss, options)
+    window.addEventListener('blur', dismiss, options)
   }
 
   private activateCommentThread(thread: TacoCommentThread): void {
@@ -708,6 +831,8 @@ export class CommentsController {
   }
 
   private removeSelectionButton(): void {
+    this.selectionButtonEvents?.abort()
+    this.selectionButtonEvents = null
     this.selectionButton?.remove()
     this.selectionButton = null
   }

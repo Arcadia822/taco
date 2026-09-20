@@ -1381,6 +1381,39 @@ describe('FileBrowser', () => {
     browser.destroy()
   })
 
+  it.each(['outside', 'escape', 'scroll', 'blur', 'selection'] as const)('dismisses the selection action on %s without opening a draft', async (reason) => {
+    const browser = new FileBrowser(document.getElementById('app')!, structuredClone(testBundle))
+    try {
+      const editor = await waitForEditor()
+      const paragraph = Array.from(editor.querySelectorAll('p')).find((node) => node.textContent?.includes('Readable'))!
+      const range = document.createRange()
+      range.selectNodeContents(paragraph)
+      const selection = window.getSelection()!
+      selection.removeAllRanges()
+      selection.addRange(range)
+      paragraph.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+      expect(document.querySelector('.selection-comment-button')).not.toBeNull()
+      // A delayed notification for the same selection must not dismiss a fresh action.
+      document.dispatchEvent(new Event('selectionchange'))
+      expect(document.querySelector('.selection-comment-button')).not.toBeNull()
+      if (reason === 'outside') document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+      if (reason === 'escape') {
+        editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        editor.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', bubbles: true }))
+      }
+      if (reason === 'scroll') document.querySelector('.file-viewer')!.dispatchEvent(new Event('scroll'))
+      if (reason === 'blur') window.dispatchEvent(new Event('blur'))
+      if (reason === 'selection') {
+        selection.removeAllRanges()
+        document.dispatchEvent(new Event('selectionchange'))
+      }
+      expect(document.querySelector('.selection-comment-button')).toBeNull()
+      expect(document.querySelector('.comment-composer')).toBeNull()
+    } finally {
+      browser.destroy()
+    }
+  })
+
   it('creates a persisted comment thread from selected Markdown text', async () => {
     const editableBundle = structuredClone(testBundle)
     new FileBrowser(document.getElementById('app')!, editableBundle)
@@ -1399,6 +1432,7 @@ describe('FileBrowser', () => {
     const selectionComment = document.querySelector<HTMLButtonElement>('.selection-comment-button')!
     expect(selectionComment.textContent).toBe('评论')
     selectionComment.click()
+    expect(document.querySelector('.selection-comment-button')).toBeNull()
     expect(document.querySelector('.comment-panel')?.getAttribute('aria-hidden')).toBe('false')
     expect(document.querySelector('.right-panel-tabs')).not.toBeNull()
     expect(document.querySelector<HTMLButtonElement>('.right-panel-tabs [aria-selected="true"]')?.textContent).toBe('评论')
