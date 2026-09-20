@@ -30,36 +30,34 @@ canonical spec directory → one .taco.html → human review → agent sync → 
 - **Hand off without setup:** Send one HTML file that opens locally in a modern browser and keeps working offline.
 - **Manage the real spec:** Markdown files remain canonical, diffable, and usable by existing repositories, agents, and command-line tools.
 
-## Quickstart: add Taco to a Spec Kit repo
+## Quickstart: install Taco from this repository
 
-In a repository that already uses Spec Kit, give its Agent this instruction:
+Point your Agent at this repository:
 
 ```text
-Install Taco in this Spec Kit repository and make Taco the default review flow
+Install Taco in this repository and make Taco the default review flow
 for future specs. Follow the installation instructions in the Taco repository:
 https://github.com/Arcadia822/taco
 ```
 
 The Agent reads Taco's repository instructions and performs the default **CLI-free skill installation**: it installs the `taco` skill (`skills/taco/` — agent guide, production shell, and template packs) into its skill location. That is the whole installation: from then on the Agent assembles `.taco.html` review files from the skill's own shell in any directory, fully offline, with no npm package, no CLI, and no build. Optional deeper integrations — Spec Kit extension commands/hooks/policy for project-level wiring, or `taco-cli` for cloud publishing (TacoHub/Tacobin) — are separate, explicitly requested steps described in [`docs/agent-installation.md`](docs/agent-installation.md).
 
-After installation, the SDD flow is:
+After installation, the review loop needs no further setup:
 
 ```mermaid
 flowchart LR
-    A["speckit.specify"] --> B["Spec Kit feature directory<br/>canonical source"]
-    B --> C["Taco plugin updates<br/>&lt;feature&gt;/&lt;feature&gt;.taco.html"]
-    C --> D["Agent presents Taco<br/>as a clickable local file"]
-    D --> E["Human reviews<br/>edits, and comments"]
-    E --> F["Save .taco.html"]
-    F --> G["Agent runs<br/>speckit.taco.review"]
-    G --> H{"Conflicts?"}
-    H -- "Yes" --> I["Stop and ask the user"]
-    H -- "No" --> J["Import edits<br/>handle comments"]
-    J --> K["Refresh and show<br/>the same Taco"]
-    K --> E
+    A["Document directory<br/>canonical source"] --> B["Agent assembles one<br/>&lt;dir&gt;.taco.html<br/>from the skill shell"]
+    B --> C["Agent opens it<br/>in the browser"]
+    C --> D["Human reviews,<br/>edits, and comments"]
+    D --> E["Human uses Handoff<br/>or saves the file"]
+    E --> F["Agent applies edits<br/>and comments to<br/>canonical files"]
+    F --> G["Agent refreshes the<br/>same Taco and reopens it"]
+    G --> D
 ```
 
-The project-local `AGENTS.md` routes subsequent Spec Kit and Taco work to the process document. Existing instructions are preserved; rerunning preparation is a no-op. Ambiguous routing or customized Taco policy requires a deliberate merge.
+The Agent copies the skill's shell, writes the document into its data block, and leaves every other file in the directory untouched. Because the Taco carries its own `docId`, comment threads, and sidebar navigation, each refresh preserves them: the next reviewer reopens the same document with their threads intact.
+
+An installation that also wires Taco into a Spec Kit project is a separate, explicitly requested step; the optional extension adds commands, hooks, and project policy but no longer sits on the default path.
 
 ## Why open source
 
@@ -79,7 +77,7 @@ The project is licensed under the MIT License. You can study the implementation,
 - Browse, search, and edit the canonical Markdown and text files while preserving their real directory structure.
 - Review specs with anchored comment threads, including in-place editing of your own messages and tombstone deletion of individual messages without removing their replies; then save an updated Taco or write the changes back to the original directory.
 - Collaborate in real time on the same machine or across devices with encrypted sharing, editor and reader copies, and access controls.
-- Integrate with Spec Kit to keep each feature's Taco current and safely import human edits and comments with conflict detection.
+- Integrate with Spec Kit, optionally and on explicit request, to keep each feature's Taco current and safely import human edits and comments with conflict detection.
 
 ## Agent installation
 
@@ -87,32 +85,36 @@ The Quickstart above is the user-facing entry point. [`docs/agent-installation.m
 
 Agent requirements:
 
-- Keep the feature directory canonical. Create and refresh Taco files through the CLI instead of hand-editing the HTML shell.
-- Preview every import with `sync --dry-run --json`. Stop on conflicts; `--force` requires explicit authorization for the exact paths.
-- Read every open comment and its full message history, then refresh the same Taco so the next reviewer receives the updated spec.
+- Keep the reviewed directory canonical. The `.taco.html` is a transport: copy the skill's `taco-shell.html`, then write the `taco/files` v1 bundle JSON into its `#taco-document` block, preserving `docId`, comments, and `navigation` across refreshes. Only that data block is agent-writable; never hand-edit the shell around it.
+- Open the generated file in the user's browser whenever the host permits local `file://` navigation, and report which of `presented as a clickable file`, `opened`, or `opened and verified` actually happened. A headless load is internal evidence and is never reported as user-visible presentation.
+- Take the review back through either channel: the browser's **Handoff** action, or the reviewer's saved `.taco.html`. Handoff copies the text diff since the last save plus the open comment threads, and does not require saving; the saved-file channel does. If neither arrived, say so instead of importing content you never received.
+- Preserve `docId`, `comments`, and `navigation` on every refresh; never fabricate a comment, a hash, or a verification claim; never delete a canonical file because it is absent from the bundle.
 - Treat a live collaboration-enabled Taco as potentially credential-bearing. Do not upload or paste its contents into another service without the user's approval.
 
-## Spec Kit plugin
+## Optional Spec Kit plugin
 
-The plugin lives in `extensions/taco/` and is implemented as a local Spec Kit extension. The Agent installs and verifies it during Quickstart; the user does not need to manage extension commands manually.
+The plugin lives in `extensions/taco/` and is implemented as a local Spec Kit extension. It is **optional and explicitly requested**: it adds project-level wiring — two agent commands, lifecycle hooks, an offline CLI, and a persistent project policy — to one initialized Spec Kit project. The skill installation above is complete without it, and the skill workflow never needs it.
 
-Installing the extension installs Taco's complete project-local runtime. Required lifecycle hooks run `speckit.taco.update` after Spec Kit operations that create or modify feature artifacts. The command packages the complete feature directory as `<feature>/<feature>.taco.html`; every refresh targets that same file and preserves its comments. After a human edits or comments in Taco and saves the file, ask the Agent to use:
+Installing the extension adds Taco's complete project-local runtime to that one project. Required lifecycle hooks run `speckit.taco.update` after Spec Kit operations that create or modify feature artifacts. The command packages the complete feature directory as `<feature>/<feature>.taco.html`; every refresh targets that same file and preserves its comments. After a human edits or comments in Taco, ask the Agent to use the browser's **Handoff**, or have them save the file and use:
 
 ```text
 speckit.taco.review specs/001-example/001-example.taco.html
 ```
 
-`review` performs a read-only preflight before writing Taco edits back to their original paths. It then hands open comments to the agent with their anchored text, position, and complete message history. Every file includes the SHA-256 baseline captured when it was packaged. If both the source file and the Taco copy changed, the entire sync refuses to write instead of silently choosing one side. Agent-facing installation and CLI details live in [`extensions/taco/README.md`](extensions/taco/README.md).
+`review` reports conflicts instead of overwriting them. It resolves every changed path against the reviewed `root` and rejects absolute paths, `..`, backslashes, and anything that escapes the feature directory. It then compares the received content with the content the reviewer actually reviewed — the packed baseline, using `sourceHash` when the bundle carries one — and if the canonical file changed since packaging, or a diff does not apply cleanly, it reports that specific conflict with the diff rather than writing. Agent-facing installation and CLI details live in [`extensions/taco/README.md`](extensions/taco/README.md).
+
+The stricter all-or-nothing rule belongs to the extension's optional `sync` CLI utility: it records a SHA-256 baseline for every packed file and refuses every write when both the canonical file and the Taco copy changed since packaging. Neither behavior is applied automatically on the skill's offline path — when a review arrives through Handoff or a saved file with no CLI in the loop, the Agent performs the same comparison itself and stops on any change it cannot attribute.
 
 The packer includes every visible UTF-8 regular file plus validated local PNG assets up to 10 MiB. PNGs are embedded for offline Markdown rendering and preserved as binary data during review round trips. Its only default exclusions are `*.taco.html` and hidden paths; repeatable `--ignore` parameters add explicit feature-relative path or glob exclusions. Visible unsupported content fails packaging instead of disappearing silently.
 
-After each successful update, the Agent presents the exact generated Taco as a native clickable local file. In Codex, the user click opens it in Browser; the Agent does not attempt autonomous `file://` navigation. Other Agent GUIs may additionally open and verify the file only when they explicitly support local HTML navigation.
+After each successful update, the Agent presents the exact generated Taco as a native clickable local file, and opens it in the user's browser whenever the host permits local HTML navigation. In Codex, the user click opens it in Browser; the Agent does not attempt autonomous `file://` navigation. A headless boot check is internal evidence and is never reported as user-visible presentation.
 
 ## Project structure
 
 ```text
 src/                                  Browser, editor, comments, save, and collaboration runtime
-extensions/taco/                      Spec Kit manifest, agent commands, offline CLI, and Taco shell
+skills/taco/                          Installable Taco skill: agent guide, production shell, and template packs
+extensions/taco/                      Optional Spec Kit manifest, agent commands, offline CLI, and project policy
 tests/                                Data model, rendering, interaction, collaboration, and CLI round-trip tests
 specs/001-taco-bento-product/         Default Taco content and product specification
 specs/002-taco-speckit-plugin/        Installable Spec Kit plugin specification and acceptance flow

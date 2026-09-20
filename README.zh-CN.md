@@ -30,36 +30,34 @@ canonical spec directory → 一个 .taco.html → 人类评审 → Agent 同步
 - **无需配置即可传递**：只发送一个 HTML 文件，现代浏览器可以本地打开，离线时仍可工作。
 - **管理真实 spec**：Markdown 文件继续保持 canonical、可 diff，并能被现有仓库、Agent 和命令行工具处理。
 
-## Quickstart：在 Spec Kit repo 中引入 Taco
+## Quickstart：从本仓库安装 Taco
 
-在一个已经使用 Spec Kit 的 repo 中，把下面这条指令交给 Agent：
+把下面的指令交给你的 Agent：
 
 ```text
-在当前 Spec Kit repo 中安装 Taco，并让后续 spec 默认使用 Taco 评审流程。
+在当前仓库中安装 Taco，并让后续 spec 默认使用 Taco 评审流程。
 按照 Taco repo 中的安装说明执行：
 https://github.com/Arcadia822/taco
 ```
 
-Agent 会读取 Taco repo 中的说明，把 Spec Kit extension 安装到当前 repo，并运行 `prepare-policy`，将 Taco 的持久工作流写入项目已声明的 5xP Process 文档；未采用 5xP 的项目使用 `docs/taco-process.md`。现有 `AGENTS.md` 只增加一句必须先阅读该文档的引用。这套 plugin 安装流程就是 Taco 安装：它同时带来 Agent 命令、强制生命周期 hooks、离线 CLI、自包含浏览器 shell，以及保证 Taco 持续更新的项目规则；不需要第二次安装 Taco。
+Agent 会读取 Taco repo 中的说明，执行默认的 **CLI-free skill 安装**：把 `taco` skill（`skills/taco/` —— Agent 指南、生产 shell 与模板包）安装到自己的 skill 目录。这就是完整安装；此后 Agent 可以在任意目录用 skill 自带的 shell 组装 `.taco.html` 评审文件，完全离线，不需要 npm 包、CLI 或任何构建。更深入的集成 —— 用于项目级接线的 Spec Kit extension 命令/hooks/policy，或用于云端发布（TacoHub/Tacobin）的 `taco-cli` —— 都属于需要显式请求的独立步骤，详见 [`docs/agent-installation.md`](docs/agent-installation.md)。
 
-安装之后，SDD 流程如下：
+安装之后，评审闭环不需要额外配置：
 
 ```mermaid
 flowchart LR
-    A["speckit.specify"] --> B["Spec Kit feature directory<br/>canonical source"]
-    B --> C["Taco plugin 更新<br/>&lt;feature&gt;/&lt;feature&gt;.taco.html"]
-    C --> D["Agent 将 Taco 展示为<br/>可点击的本地文件"]
-    D --> E["人类评审<br/>编辑和评论"]
-    E --> F["保存 .taco.html"]
-    F --> G["Agent 执行<br/>speckit.taco.review"]
-    G --> H{"存在冲突？"}
-    H -- "是" --> I["停止并询问用户"]
-    H -- "否" --> J["导入修改<br/>处理评论"]
-    J --> K["刷新并展示<br/>同一个 Taco"]
-    K --> E
+    A["文档目录<br/>canonical source"] --> B["Agent 用 skill shell<br/>组装出<br/>&lt;dir&gt;.taco.html"]
+    B --> C["Agent 在浏览器中<br/>打开该文件"]
+    C --> D["人类评审、<br/>编辑和评论"]
+    D --> E["人类使用 Handoff<br/>或保存文件"]
+    E --> F["Agent 将修改与评论<br/>应用到 canonical files"]
+    F --> G["Agent 刷新同一个 Taco<br/>并再次打开"]
+    G --> D
 ```
 
-项目本地 `AGENTS.md` 会将后续 Spec Kit 和 Taco 工作路由到流程文档。安装保留原有指令，重复执行不产生改动；路由不明确或 Taco 政策经过本地定制时，需要明确的人工合并。
+Agent 只复制 skill 的 shell、把文档写入其数据块，目录中的其他文件不受影响。Taco 自带 `docId`、评论线程和侧栏导航，因此每次刷新都会保留这些内容：下一位评审者重新打开的是同一个文档，讨论线程仍然完整。
+
+把 Taco 接入 Spec Kit 项目是另一个需要显式请求的步骤；可选 extension 提供命令、hooks 和项目政策，但已不在默认路径上。
 
 ## 为什么开源
 
@@ -79,7 +77,7 @@ flowchart LR
 - 在保留真实目录结构的同时，浏览、搜索和编辑 canonical Markdown 与其他文本文件。
 - 通过锚定评论线程评审规格，可原位编辑自己的消息，也可将单条消息删除为保留回复的占位记录；随后保存更新后的 Taco，或把修改写回原始目录。
 - 支持同机或跨设备实时协作，并提供加密分享、编辑与只读副本及访问控制。
-- 集成 Spec Kit，持续更新每个 feature 的 Taco，并通过冲突检测安全导入人类修改与评论。
+- 可选地（需显式请求）集成 Spec Kit，持续更新每个 feature 的 Taco，并通过冲突检测安全导入人类修改与评论。
 
 ## Agent 安装说明
 
@@ -87,32 +85,36 @@ flowchart LR
 
 Agent 需要遵守：
 
-- feature directory 始终是 canonical source。通过 CLI 创建和刷新 Taco，不要手改 HTML shell。
-- 每次导入前先运行 `sync --dry-run --json`。发现冲突立即停止；只有用户对具体路径明确授权后才能使用 `--force`。
-- 阅读每条 open comment 及其完整消息历史，处理后刷新同一个 Taco，供下一轮评审使用。
+- 被评审的目录始终是 canonical source。`.taco.html` 只是运输载体：复制 skill 的 `taco-shell.html`，再把 `taco/files` v1 bundle JSON 写入其 `#taco-document` 数据块，并在每次刷新时保留 `docId`、comments 与 `navigation`。只有该数据块可写；不要手工修改它以外的 shell。
+- 当宿主允许本地 `file://` 导航时，用用户的浏览器打开生成的文件，并如实报告 `presented as a clickable file`、`opened`、`opened and verified` 三者中真正发生的一项。headless 加载只是内部证据，不能当作面向用户的可视化展示。
+- 通过任一渠道取回评审结果：浏览器的 **Handoff**，或评审者保存后的 `.taco.html`。Handoff 复制的是自上次保存以来的文本 diff 与 open comment，不要求先保存；保存文件这一渠道则必须先保存。两者都没有收到时，如实说明，不要导入并未真正获得的内容。
+- 每次刷新都保留 `docId`、`comments` 与 `navigation`；不得编造评论、哈希或验证结论；不得因为某个文件不在 bundle 中就删除 canonical 文件。
 - 启用在线协作的 Taco 可能携带访问凭据。未经用户允许，不要把其内容上传或粘贴到其他服务。
 
-## Spec Kit plugin
+## 可选 Spec Kit plugin
 
-Plugin 位于 `extensions/taco/`，以本地 Spec Kit extension 的形式实现。Agent 会在 Quickstart 中完成安装与验证，用户不需要手动管理 extension 命令。
+Plugin 位于 `extensions/taco/`，以本地 Spec Kit extension 的形式实现，是**可选的、需要显式请求**的项目级接线：它向某一个已初始化的 Spec Kit 项目提供两个 Agent 命令、生命周期 hooks、离线 CLI 和持久项目政策。上面的 skill 安装本身就是完整安装，skill 工作流从不依赖它。
 
-安装 extension 就会安装 Taco 的完整项目内运行时。强制生命周期 hooks 会在创建或修改 feature artifact 的 Spec Kit 操作后运行 `speckit.taco.update`。它把完整 feature directory 打包为 `<feature>/<feature>.taco.html`，后续始终刷新同一个文件并保留评论。人类在 Taco 中直接编辑或添加评论并保存后，让 Agent 使用：
+安装 extension 会把 Taco 的完整项目内运行时加入这一个项目。强制生命周期 hooks 会在创建或修改 feature artifact 的 Spec Kit 操作后运行 `speckit.taco.update`。它把完整 feature directory 打包为 `<feature>/<feature>.taco.html`，后续始终刷新同一个文件并保留评论。人类在 Taco 中编辑或添加评论后，可以让 Agent 使用浏览器的 **Handoff**，或先保存文件再使用：
 
 ```text
 speckit.taco.review specs/001-example/001-example.taco.html
 ```
 
-`review` 会先执行只读预检，再把 Taco 中的直接修改写回原始路径，并把开放评论连同锚定文本、位置和完整消息交给 Agent 处理。每个文件携带打包时的 SHA-256 基线；如果原文件与 Taco 两边都发生变化，整次同步拒绝写入，不会悄悄选择一边。面向 Agent 的安装与 CLI 细节见 [`extensions/taco/README.md`](extensions/taco/README.md)。
+`review` 遇到冲突时只报告，不覆盖。它会把每个改动路径相对被评审的 `root` 解析，并拒绝绝对路径、`..`、反斜杠以及任何越出 feature directory 的路径；随后把收到内容与评审者当时真正看到的内容（即打包基线，bundle 带 `sourceHash` 时以它为准）比较。如果 canonical 文件在打包后发生变化，或某个 diff 无法干净应用，它会带 diff 报告这一具体冲突，而不是写入。面向 Agent 的安装与 CLI 细节见 [`extensions/taco/README.md`](extensions/taco/README.md)。
+
+更严格的“全有或全无”规则属于 extension 的可选 `sync` CLI 工具：它为每个打包文件记录 SHA-256 基线，当 canonical 文件与 Taco 副本自打包后都发生变化时，拒绝任何写入。这两条都不是 skill 离线路径上自动生效的行为 —— 当评审通过 Handoff 或保存文件到达、链路中没有 CLI 时，由 Agent 自己完成同样的比对，并在遇到无法归因的改动时停止。
 
 打包器包含所有可见 UTF-8 普通文件，以及单个不超过 10 MiB、验证通过的本地 PNG 资源。PNG 会嵌入 Taco 以供 Markdown 离线渲染，并在评审往返过程中按二进制数据原样保留。唯一默认排除项是 `*.taco.html` 和隐藏路径；可重复的 `--ignore` 参数用于增加 feature-relative 路径或 glob 排除。其他可见但不受支持的内容会让打包明确失败，不会被静默丢弃。
 
-每次 update 成功后，Agent 都会把对应 Taco 作为原生、可点击的本地文件展示。在 Codex 中，由用户点击后交给 Browser 打开；Agent 不会尝试自主导航到 `file://`。其他 Agent GUI 只有在明确支持本地 HTML 导航时，才额外自动打开并验证文件。
+每次 update 成功后，Agent 都会把对应 Taco 作为原生、可点击的本地文件展示，并在宿主允许本地 HTML 导航时用用户的浏览器打开它。在 Codex 中，由用户点击后交给 Browser 打开；Agent 不会尝试自主导航到 `file://`。headless 启动检查只是内部证据，不会当作面向用户的可视化展示。
 
 ## 项目结构
 
 ```text
 src/                                  浏览器、编辑器、评论、保存与协作运行时
-extensions/taco/                      Spec Kit manifest、Agent 命令、离线 CLI 与 Taco shell
+skills/taco/                          可安装的 Taco skill：Agent 指南、生产 shell 与模板包
+extensions/taco/                      可选的 Spec Kit manifest、Agent 命令、离线 CLI 与项目政策
 tests/                                数据模型、渲染、交互、协作和 CLI 往返测试
 specs/001-taco-bento-product/         默认 Taco 与产品规格
 specs/002-taco-speckit-plugin/        可安装 Spec Kit plugin 规格与验收流程
