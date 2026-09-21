@@ -1,6 +1,6 @@
 import { bundleCanWrite, type TacoBundle, type TacoCommentMessage, type TacoCommentThread, type TacoFile, type TacoTextAnchor } from './model.ts'
 import { canDeleteMessage, canEditMessage, commentsForPath, createTextAnchor, deleteCommentMessage, editCommentMessage, isDeletedMessage, resolveTextAnchor, sortCommentMessages } from './comments.ts'
-import { resolveCommentPlacement, type CommentAnchorProbe, type CommentPlacement, type CommentRange } from './comment-position.ts'
+import { packCommentLane, resolveCommentPlacement, type CommentAnchorProbe, type CommentPlacement, type CommentRange } from './comment-position.ts'
 import { domRange, textOffset } from './dom-text-range.ts'
 import { requireAuthorName } from './author-name-dialog.ts'
 import { copy, type Locale } from './i18n.ts'
@@ -27,6 +27,13 @@ export interface CommentsControllerOptions {
 interface HighlightTarget {
   set(name: string, value: unknown): void
   delete(name: string): void
+}
+
+/** Text the reviewer has typed into the panel's open forms, captured before a rebuild tears them down. */
+interface CommentDraftCapture {
+  values: Map<string, string>
+  focus: string | null
+  selection: CommentRange | null
 }
 
 // The bundled DOM types declare neither HighlightRegistry.set nor Highlight.add, so validate structurally.
@@ -58,6 +65,8 @@ export class CommentsController {
   private layoutFrame = 0
   private layoutObserver: ResizeObserver | null = null
   private layoutViewer: HTMLElement | null = null
+  /** Set only while paint() rebuilds the panel, so freshly built forms can reclaim their text. */
+  private draftRestore: CommentDraftCapture | null = null
   private readonly scheduleLayout = (): void => {
     if (this.layoutFrame) return
     this.layoutFrame = requestAnimationFrame(() => {
@@ -98,6 +107,9 @@ export class CommentsController {
 
   paint(): void {
     if (!this.commentList || !this.commentToggle) return
+    // Rebuilding the list must not discard text the reviewer has already typed into an open form.
+    const drafts = this.captureDrafts()
+    this.draftRestore = drafts
     this.commentList.innerHTML = ''
     const lane = el('div', 'comment-lane')
     this.commentList.append(lane)
@@ -117,6 +129,8 @@ export class CommentsController {
     if (this.placement.stale.length) lane.append(this.buildStaleCommentGroup(this.placement.stale))
     this.observeLayout()
     this.scheduleLayout()
+    this.draftRestore = null
+    this.restoreDraftFocus(drafts)
   }
 
   captureEditorSelection(editorHost: HTMLElement, file: TacoFile): void {
@@ -296,6 +310,46 @@ export class CommentsController {
     const threads = path ? commentsForPath(this.options.bundle.comments, path) : []
     return resolveCommentPlacement(threads, this.anchorProbe())
   }
+
+  /** Every open form in the panel keeps its text under a stable draft key so a rebuild can restore it. */
+  private captureDrafts(): CommentDraftCapture {
+    const values = new Map<string, string>()
+    const list = this.commentList
+    if (!list) return { values, focus: null, selection: null }
+    for (const input of list.querySelectorAll<HTMLTextAreaElement>('textarea[data-draft-key]')) {
+      values.set(input.dataset.draftKey ?? '', input.value)
+    }
+    const active = document.activeElement
+    const focused = active instanceof HTMLTextAreaElement && list.contains(active) ? active : null
+    return {
+      values,
+      focus: focused?.dataset.draftKey ?? null,
+      selection: focused ? { start: focused.selectionStart, end: focused.selectionEnd } : null,
+    }
+  }
+
+  /** Focus the rebuilt form the reviewer was typing in, or a newly opened composer when no form had focus. */
+  private restoreDraftFocus(drafts: CommentDraftCapture): void {
+    const list = this.commentList
+    if (!list) return
+    // A form that already held focus keeps it; otherwise a newly opened composer takes focus.
+    const key = drafts.focus ?? (list.querySelector('.comment-composer') ? 'composer' : null)
+    if (!key) return
+    // Draft keys carry user-authored thread and message ids, so match them as data rather than in a selector.
+    const input = Array.from(list.querySelectorAll<HTMLTextAreaElement>('textarea[data-draft-key]'))
+      .find((candidate) => candidate.dataset.draftKey === key)
+    if (!input) return
+    input.focus({ preventScroll: true })
+    if (drafts.focus === key && drafts.selection) input.setSelectionRange(drafts.selection.start, drafts.selection.end)
+  }
+
+  /** Close the form that held a draft once its content has been committed, so the rebuild cannot restore it. */
+  private dropDraftForm(key: string): void {
+    for (const form of this.commentList?.querySelectorAll<HTMLFormElement>('form[data-draft-form]') ?? []) {
+      if (form.dataset.draftForm === key) form.remove()
+    }
+  }
+
   private observeLayout(): void {
     this.layoutObserver?.disconnect()
     if (!this.commentList) return
@@ -342,14 +396,12 @@ export class CommentsController {
     entries.sort((a, b) => a.start - b.start)
     // Keep DOM/tab order consistent with the visible document order, including the draft.
     const measured = entries.map((entry) => ({ ...entry, height: entry.card.getBoundingClientRect().height }))
-    let bottom = 0
+    const margins = packCommentLane(measured)
     let cursor = lane.firstElementChild
-    for (const { card, top, height } of measured) {
-      const target = Math.max(0, top, bottom)
-      card.style.marginTop = `${target - bottom}px`
+    for (const [index, { card }] of measured.entries()) {
+      card.style.marginTop = `${margins[index]}px`
       if (card !== cursor) lane.insertBefore(card, cursor)
       cursor = card.nextElementSibling
-      bottom = target + height + 12
     }
     // Unresolvable drafts and stale threads remain reachable after anchored cards.
     const positioned = new Set(entries.map((entry) => entry.card))
@@ -377,6 +429,8 @@ export class CommentsController {
     composer.append(el('div', 'comment-composer-label', this.t.addComment), this.buildQuote(anchor))
     const form = el('form', 'comment-form')
     const textarea = el('textarea', 'comment-input') as HTMLTextAreaElement
+    textarea.dataset.draftKey = 'composer'
+    textarea.value = this.draftRestore?.values.get('composer') ?? ''
     textarea.placeholder = this.t.commentPlaceholder
     textarea.setAttribute('aria-label', this.t.commentPlaceholder)
     const actions = el('div', 'comment-form-actions')
@@ -398,10 +452,7 @@ export class CommentsController {
       this.addCommentThread(anchor, body)
     })
     composer.append(form)
-    requestAnimationFrame(() => {
-      this.layoutCards()
-      textarea.focus({ preventScroll: true })
-    })
+    requestAnimationFrame(() => this.layoutCards())
     return composer
   }
 
@@ -429,6 +480,8 @@ export class CommentsController {
     remove.addEventListener('click', () => this.deleteThread(thread))
     actions.append(reply, resolve, remove)
     card.append(actions)
+    const draft = this.draftRestore?.values.get(`reply:${thread.id}`)
+    if (draft !== undefined) this.openReplyComposer(card, thread, draft, false)
     return card
   }
 
@@ -513,6 +566,8 @@ export class CommentsController {
       actions.append(remove)
     }
     if (actions.childElementCount) node.append(actions)
+    const draft = this.draftRestore?.values.get(`edit:${message.id}`)
+    if (draft !== undefined) this.openMessageEditor(node, thread, message, draft, false)
     return node
   }
 
@@ -520,6 +575,8 @@ export class CommentsController {
     node: HTMLElement,
     thread: TacoCommentThread,
     message: TacoCommentMessage,
+    draft?: string,
+    focus = true,
   ): void {
     const existing = node.closest('.comment-thread')?.querySelector('.comment-message-editor')?.closest<HTMLElement>('.comment-message')
     if (existing && existing !== node) {
@@ -530,8 +587,10 @@ export class CommentsController {
     node.querySelector('.comment-body')?.remove()
     node.querySelector('.comment-message-actions')?.remove()
     const form = el('form', 'comment-form comment-message-editor')
+    form.dataset.draftForm = `edit:${message.id}`
     const textarea = el('textarea', 'comment-input') as HTMLTextAreaElement
-    textarea.value = message.body
+    textarea.dataset.draftKey = `edit:${message.id}`
+    textarea.value = draft ?? message.body
     textarea.setAttribute('aria-label', this.t.editMessageBy(message.author))
     const error = el('p', 'comment-validation')
     error.id = localId('comment-error')
@@ -576,10 +635,12 @@ export class CommentsController {
       this.options.store.commit({ kind: 'comments', path: thread.anchor.path }, () => {
         editCommentMessage(thread, message.id, body, timestamp)
       })
+      // A saved edit is no longer a draft: drop its live form before the rebuild restores it.
+      this.dropDraftForm(`edit:${message.id}`)
       this.paint()
       requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-message-id="${message.id}"] .comment-action`)?.focus())
     })
-    requestAnimationFrame(() => { textarea.focus(); textarea.select() })
+    if (focus) requestAnimationFrame(() => { textarea.focus(); textarea.select() })
   }
 
   private deleteMessage(thread: TacoCommentThread, message: TacoCommentMessage): void {
@@ -644,11 +705,14 @@ export class CommentsController {
     })
   }
 
-  private openReplyComposer(card: HTMLElement, thread: TacoCommentThread): void {
+  private openReplyComposer(card: HTMLElement, thread: TacoCommentThread, draft = '', focus = true): void {
     if (!bundleCanWrite(this.options.bundle)) return
     card.querySelector('.comment-reply-form')?.remove()
     const form = el('form', 'comment-form comment-reply-form')
+    form.dataset.draftForm = `reply:${thread.id}`
     const textarea = el('textarea', 'comment-input') as HTMLTextAreaElement
+    textarea.dataset.draftKey = `reply:${thread.id}`
+    textarea.value = draft
     textarea.placeholder = this.t.replyPlaceholder
     textarea.setAttribute('aria-label', this.t.replyPlaceholder)
     const submit = el('button', 'comment-submit', this.t.reply) as HTMLButtonElement
@@ -666,11 +730,13 @@ export class CommentsController {
           thread.updatedAt = timestamp
         })
         this.options.sync.setPresence({ name: author })
+        // A submitted reply is no longer a draft: drop its live form before the rebuild restores it.
+        this.dropDraftForm(`reply:${thread.id}`)
         this.paint()
       })
     })
     card.append(form)
-    textarea.focus()
+    if (focus) textarea.focus()
   }
 
   private toggleThreadStatus(thread: TacoCommentThread): void {

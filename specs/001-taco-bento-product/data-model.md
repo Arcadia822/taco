@@ -120,9 +120,9 @@ Future task counts, requirement coverage, or readiness may likewise only be pars
 
 ## Stage Projection
 
-Taco recognizes three core files: `spec.md`, `plan.md`, and `tasks.md`. A feature-root `README.md` enters Specify by convention and is preferred as the opening document, with `spec.md` as the fallback. Known Spec Kit artifacts enter their corresponding stage by path; other Markdown may declare `taco_scope: spec|plan|tasks` in YAML frontmatter and enter the selected stage directly. Other text values remain canonical and visibly invalid but create no custom or extension group.
+Taco recognizes three core files: `spec.md`, `plan.md`, and `tasks.md`. A feature-root `README.md` enters Specify by convention and is preferred as the opening document, with `spec.md` as the fallback. Known Spec Kit artifacts enter their corresponding stage by path; every other document appears under Unassigned until a reviewer groups it with the built-in Category control. No frontmatter key routes a file, and the deprecated `taco_scope` property is preserved as canonical Markdown without being read.
 
-Both stages and directories are derived from `files[]` and are not written to a second navigation schema.
+Stages, directories, and explicit grouping are derived from `files[]` paths and the optional top-level `navigation` manifest; no document property routes a file.
 
 ## Local Comments
 

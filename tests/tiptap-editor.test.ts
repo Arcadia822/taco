@@ -3,6 +3,7 @@ import { Editor } from '@tiptap/core'
 import { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { blockHtml, blocksFromEditor, ensureTacoBlockIds, createTacoEditorExtensions, migrateTacoBundleBlocks } from '../src/tiptap-editor.ts'
 import { setEditorFrontmatterProperty } from '../src/tiptap-document-properties.ts'
+import { resetGitHubTitleCache } from '../src/github-properties.ts'
 import type { TacoBundle } from '../src/model.ts'
 import { readFileSync } from 'node:fs'
 
@@ -36,6 +37,8 @@ beforeEach(() => {
 afterEach(() => {
   editor?.destroy()
   editor = null
+  // Titles are cached per reference, so one test's stubbed response must not reach the next test.
+  resetGitHubTitleCache()
   vi.unstubAllGlobals()
 })
 
@@ -199,6 +202,11 @@ describe('Tiptap Markdown integration', () => {
   })
 
   it('refreshes the GitHub link when its value is edited, and drops it when the value stops being a link', () => {
+    // The preview fetches the title of whatever reference it renders; keep that request off the network.
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ description: 'The React Framework', title: 'Next.js' }),
+    })))
     editor = new Editor({
       extensions: createTacoEditorExtensions(labels),
       content: '---\nrepo: https://github.com/Arcadia822/taco\n---\n## Body',

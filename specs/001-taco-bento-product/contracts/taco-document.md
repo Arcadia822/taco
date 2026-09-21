@@ -62,7 +62,7 @@ flowchart LR
 
 Saving and reopening both go through the same container path. The rendered HTML, Mermaid SVG, and outline state do not flow back into `files[].content`.
 
-Stage navigation adds no bundle fields. Core files and Spec Kit convention files are identified by relative path; other Markdown declares its membership with a `taco_scope: spec|plan|tasks` YAML property. The property remains canonical Markdown and appears in the document property editor. Invalid text remains preserved but does not route. The directory structure continues to be derived from `path`.
+The top-level `navigation` manifest is the only bundle field navigation adds. Core files and Spec Kit convention files are identified by relative path, and every other document appears under Unassigned until a reviewer groups it with Taco's built-in Category control, which records the grouping in that manifest rather than in the document. Classification is a Taco capability, not a document property: no frontmatter key routes a file, and the deprecated `taco_scope` property is preserved as canonical Markdown but is never read. The directory structure continues to be derived from `path`.
 
 ## Invariants
 

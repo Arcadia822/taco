@@ -188,6 +188,36 @@ describe('FileBrowser', () => {
     browser.destroy()
   })
 
+  it('prints a real line range for a comment captured from rendered text', async () => {
+    const bundle = structuredClone(testBundle)
+    bundle.files[0].content = '# Title\n\nThe **spec** is ready for review.\n'
+    const timestamp = '2026-09-14T00:00:00.000Z'
+    bundle.comments = [{
+      id: 'thread-rendered',
+      status: 'open',
+      anchor: { path: bundle.files[0].path, position: { start: 9, end: 38 }, quote: { exact: 'The spec is ready for review.', prefix: '', suffix: '' } },
+      messages: [{ id: 'message-rendered', author: 'Reviewer', body: 'Needs a citation', createdAt: timestamp }],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }]
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    try {
+      await waitForEditor()
+      document.querySelector<HTMLButtonElement>('.copy-review-main')!.click()
+      await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+      const prompt = writeText.mock.calls[0][0] as string
+      // The quote came from the reading surface, which hides the emphasis markers; the reference still
+      // points at the canonical source line instead of reporting a lost position.
+      expect(prompt).toContain(`${bundle.files[0].path}:3`)
+      expect(prompt).toContain('The spec is ready for review.')
+      expect(prompt).not.toContain('位置已失效')
+    } finally {
+      browser.destroy()
+    }
+  })
+
   it.each(['full', 'inspect'] as const)('reports unavailable or rejected clipboard writes for %s handoff', async (mode) => {
     const bundle = structuredClone(testBundle)
     const browser = new FileBrowser(document.getElementById('app')!, bundle)
@@ -1564,6 +1594,68 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.comment-composer')).toBeNull()
     expect(editableBundle.comments).toBeUndefined()
     expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(false)
+  })
+
+  it('keeps open comment drafts when a document edit makes a thread stale and rebuilds the panel', async () => {
+    localStorage.setItem('taco-comment-principal:browser-test', 'principal-a')
+    const editableBundle = structuredClone(testBundle)
+    editableBundle.comments = [{
+      id: 'thread-live',
+      anchor: { path: 'specs/001-browser/spec.md', position: { start: 0, end: 8 }, quote: { exact: 'Readable', prefix: '', suffix: '' } },
+      status: 'open',
+      messages: [{ id: 'message-live', author: 'Ada', authorId: 'principal-a', body: 'Keep this', createdAt: '2026-08-26T00:00:00.000Z' }],
+      createdAt: '2026-08-26T00:00:00.000Z',
+      updatedAt: '2026-08-26T00:00:00.000Z',
+    }]
+    const browser = new FileBrowser(document.getElementById('app')!, editableBundle)
+    try {
+      await waitForEditor()
+      document.querySelector<HTMLButtonElement>('.comment-toggle')!.click()
+
+      // An open reply form on the existing thread.
+      document.querySelector<HTMLButtonElement>('.comment-thread-actions .comment-action')!.click()
+      const reply = document.querySelector<HTMLTextAreaElement>('.comment-reply-form .comment-input')!
+      reply.value = 'Reply in progress'
+      expect(document.activeElement).toBe(reply)
+
+      // An open in-place editor on the existing message.
+      document.querySelector<HTMLButtonElement>('.comment-message-actions .comment-action')!.click()
+      const edit = document.querySelector<HTMLTextAreaElement>('.comment-message-editor .comment-input')!
+      edit.value = 'Edit in progress'
+      await vi.waitFor(() => expect(document.activeElement).toBe(edit))
+
+      // And an open composer on a fresh selection.
+      const paragraph = Array.from(document.querySelectorAll('.tiptap-editor-host .tiptap p'))
+        .find((node) => node.textContent?.includes('Readable Markdown.'))!
+      const text = paragraph.firstChild!
+      const range = document.createRange()
+      range.setStart(text, 0)
+      range.setEnd(text, 8)
+      const selection = window.getSelection()!
+      selection.removeAllRanges()
+      selection.addRange(range)
+      paragraph.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+      document.querySelector<HTMLButtonElement>('.selection-comment-button')!.click()
+      document.querySelector<HTMLTextAreaElement>('.comment-composer .comment-input')!.value = 'Comment in progress'
+
+      // Rewriting the body drops the anchored text, so the threaded comment turns stale and the panel rebuilds.
+      const editor = (browser as unknown as {
+        markdownEditor: { commands: { selectAll: () => boolean; insertContent: (content: string) => boolean } }
+      }).markdownEditor
+      editor.commands.selectAll()
+      expect(editor.commands.insertContent('Rewritten body.')).toBe(true)
+      await vi.waitFor(() => expect(document.querySelector('.comment-stale-group')).not.toBeNull())
+
+      expect(document.querySelector<HTMLTextAreaElement>('.comment-composer .comment-input')?.value).toBe('Comment in progress')
+      expect(document.querySelector<HTMLTextAreaElement>('.comment-reply-form .comment-input')?.value).toBe('Reply in progress')
+      const restoredEdit = document.querySelector<HTMLTextAreaElement>('.comment-message-editor .comment-input')
+      expect(restoredEdit?.value).toBe('Edit in progress')
+      // The rebuilt form the reviewer was typing in keeps focus.
+      expect(document.activeElement).toBe(restoredEdit)
+      expect(editableBundle.comments[0].messages).toHaveLength(1)
+    } finally {
+      browser.destroy()
+    }
   })
 
   it('edits only principal-owned messages in place with validation, no-op and cancel semantics', () => {

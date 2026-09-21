@@ -12,11 +12,14 @@ import {
   sortCommentMessages,
 } from '../src/comments.ts'
 import {
+  COMMENT_LANE_GAP,
   commentLineReference,
   formatLineRange,
   lineNumberAt,
   lineRangeForOffsets,
+  packCommentLane,
   resolveCommentPlacement,
+  type CommentLaneEntry,
 } from '../src/comment-position.ts'
 import type { TacoCommentThread } from '../src/model.ts'
 
@@ -125,6 +128,18 @@ describe('comment message state', () => {
 describe('comment position and line calculations (TACO-6, TACO-7)', () => {
   const doc = 'Line 1: preamble\nLine 2: target block starts\nLine 3: target block ends\nLine 4: trailing note\n'
 
+  /** Absolute lane tops for the margins `packCommentLane` returns, using the panel's margin model. */
+  const laneTops = (entries: readonly CommentLaneEntry[], margins: readonly number[]): number[] => {
+    const tops: number[] = []
+    let cursor = 0
+    for (const [index, entry] of entries.entries()) {
+      const top = cursor + margins[index]
+      tops.push(top)
+      cursor = top + entry.height + COMMENT_LANE_GAP
+    }
+    return tops
+  }
+
   it('computes 1-based line numbers from character offsets', () => {
     expect(lineNumberAt(doc, 0)).toBe(1)
     expect(lineNumberAt(doc, 10)).toBe(1)
@@ -204,5 +219,42 @@ describe('comment position and line calculations (TACO-6, TACO-7)', () => {
       blockRange: () => null,
     })
     expect(placement.placed.map((p) => p.thread.id)).toEqual(['t-1', 't-2'])
+  })
+
+  it('resolves a rendered-text quote that inline markup or block boundaries hide from the source', () => {
+    // The reviewer selected the rendered text, which drops emphasis markers and joins blocks.
+    const markdown = '# Title\n\nThe **spec** is ready for review.\n'
+    const inline = createTextAnchor('spec.md', 'The spec is ready for review.', 0, 29)
+    expect(commentLineReference(markdown, inline)).toBe('3')
+
+    const paragraphs = 'Alpha paragraph.\n\nBeta paragraph.\n'
+    const spanning = createTextAnchor('spec.md', 'Alpha paragraph.Beta paragraph.', 0, 31)
+    expect(commentLineReference(paragraphs, spanning)).toBe('1–3')
+
+    // A quote that exists nowhere is still reported as lost rather than mapped onto a guess.
+    expect(commentLineReference(markdown, createTextAnchor('spec.md', 'Unrelated words', 0, 15))).toBeNull()
+  })
+
+  it('stacks comment cards down the lane and keeps them off their neighbours', () => {
+    // Anchors far enough apart: each card holds its own anchor top.
+    const spread = [
+      { top: 0, height: 100 },
+      { top: 300, height: 50 },
+    ]
+    const spreadMargins = packCommentLane(spread)
+    expect(spreadMargins).toEqual([0, 188])
+    expect(laneTops(spread, spreadMargins)).toEqual([0, 300])
+
+    // Anchors closer together than a card: the later card is pushed below the earlier one.
+    const crowded = [
+      { top: 40, height: 120 },
+      { top: 60, height: 30 },
+      { top: 300, height: 20 },
+    ]
+    expect(laneTops(crowded, packCommentLane(crowded))).toEqual([40, 172, 300])
+
+    // A card whose anchor scrolled above the lane origin stays at the origin.
+    const above = [{ top: -80, height: 20 }, { top: 200, height: 20 }]
+    expect(laneTops(above, packCommentLane(above))).toEqual([0, 200])
   })
 })

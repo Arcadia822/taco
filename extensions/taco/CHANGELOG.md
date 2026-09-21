@@ -7,6 +7,9 @@
 - Order comment threads in the right-hand panel by their anchored position in the active document rather than creation recency; place unresolvable stale threads into an explicit separated group (#34).
 - Align comment cards and new-comment composers with their live document anchors, follow document scrolling, and push colliding cards downward with a 12px gap; recalculate after document reflow or card resizing.
 - Dismiss the floating selection-comment action when opening its composer, changing selection, clicking or focusing elsewhere, pressing Escape, scrolling, resizing, or leaving the window. Keep selection actions separate from pending comment drafts.
+- Keep unsubmitted text in an open comment composer, reply form, or in-place message editor when a document edit rebuilds the panel, restoring focus and caret to the form the reviewer was typing in while closing forms whose content was just committed.
+- Resolve Handoff line references through Markdown's rendered text: a comment captured from a reading surface that hides emphasis markers or joins blocks now reports its canonical source line instead of position lost.
+- Restate the bundled example specification in terms of Taco's built-in Category and navigation manifest, matching the shipped runtime that no longer routes files by `taco_scope`.
 - Replace large-area green background comment highlights with a precise underline over the anchored text, preserving readability across multiline and overlapping ranges (#34).
 - Include live 1-based line number ranges (`spec.md:42–46`) computed from current document body text in copied review handoffs; mark unresolvable quotes explicitly as position-lost rather than printing guessed lines (#35).
 

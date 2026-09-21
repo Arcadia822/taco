@@ -34,12 +34,12 @@ This follows Castrel's AppShell composition: the outer split first, then the wor
 ## 3. Stage Navigation
 
 - Route files into exactly three top-level groups: Requirements, Technical Plan, and Task Breakdown.
-- The sidebar contains only Specify, Plan, and Tasks; scoped documents appear directly in their selected stage.
-- A feature-root `README.md` enters Specify by convention and is the preferred opening document, so it needs no internal `taco_scope` metadata.
+- The sidebar contains Specify, Plan, and Tasks plus Unassigned; documents classified by path or grouped through the Category control appear in their group.
+- A feature-root `README.md` enters Specify by convention and is the preferred opening document, so it needs no declaration at all.
 - All `checklists/` files sit under Technical Plan, matching the official Plan → Checklist → Tasks quality-gate order.
 - Group titles use secondary text and have no leading icon slot. A centered right chevron appears only on hover or keyboard focus and rotates when expanded.
 - Physical folders such as `contracts/` and `checklists/` and custom subdirectories remain navigable. Their leading icon toggles between closed-folder and open-folder states.
-- HTML and HTM files are treated as spec prototypes and automatically routed to Specify; they do not need the Markdown-only `taco_scope` metadata.
+- HTML and HTM files are treated as spec prototypes and automatically routed to Specify; no Markdown property declares where any file lives.
 - The selected file is indicated by text/background, not by color alone.
 - The file icon conveys file identity without implying that a format renderer exists.
 - Mobile and narrow-screen layouts start with the drawer closed.
