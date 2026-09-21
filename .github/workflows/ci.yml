@@ -34,7 +34,19 @@ jobs:
         run: npm run check
 
       - name: Verify committed build artifacts
-        run: git diff --exit-code -- dist-single/Taco_Spec.taco.html extensions/taco/assets/taco-shell.html
+        shell: bash
+        run: |
+          artifacts=(
+            extensions/taco/assets/taco-shell.html
+            extensions/taco/templates
+            skills/taco
+          )
+          stale="$(git status --porcelain --untracked-files=all -- "${artifacts[@]}")"
+          if [ -n "$stale" ]; then
+            echo "Generated artifacts are stale — run 'npm run build' and commit the regenerated files:"
+            echo "$stale"
+            exit 1
+          fi
 
   spec-kit-extension:
     name: Spec Kit ${{ matrix.spec-kit-version }} extension install
