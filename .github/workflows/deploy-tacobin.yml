@@ -1,0 +1,69 @@
+# Tacobin is deployed to Vercel only from a `tacobin-v*` tag.
+#
+# `packages/host/vercel.json` sets `git.deploymentEnabled: false`, so Vercel creates no
+# deployment for branch pushes, pull requests, or tag pushes. Vercel's Git integration has no
+# tag trigger at all, so the tag drives a Deploy Hook instead: this job runs on the tag and
+# asks Vercel to build the production branch, which reuses the project's own Root Directory
+# and Install Command.
+#
+# Requires the repository secret TACOBIN_DEPLOY_HOOK: the Deploy Hook URL from
+# Vercel > tacobin > Settings > Git > Deploy Hooks, created against the `main` branch.
+# Treat that URL as a credential; rotate it in the dashboard if it leaks.
+
+name: Deploy Tacobin
+
+on:
+  push:
+    tags:
+      - 'tacobin-v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-tacobin
+  cancel-in-progress: false
+
+jobs:
+  trigger-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Verify the release tag is on main
+        run: |
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME points at $GITHUB_SHA, which is not on main." \
+              "The Deploy Hook builds main, so this would publish a different commit." \
+              "Merge the tagged commit into main and re-tag."
+            exit 1
+          fi
+          echo "Tagged commit $GITHUB_SHA is on main; the hook will build it." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Trigger the production deploy
+        env:
+          DEPLOY_HOOK: ${{ secrets.TACOBIN_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "::error::Repository secret TACOBIN_DEPLOY_HOOK is not set." \
+              "Create a Deploy Hook for the main branch in Vercel > tacobin > Settings >" \
+              "Git > Deploy Hooks, then store its URL as that secret."
+            exit 1
+          fi
+
+          response="$(curl --silent --show-error --fail-with-body --request POST "$DEPLOY_HOOK")"
+          echo "Deploy hook response: $response"
+          job_id="$(printf '%s' "$response" | jq -r '.job.id // empty')"
+          if [ -z "$job_id" ]; then
+            echo "::error::The Deploy Hook returned no job id: $response"
+            exit 1
+          fi
+
+          echo "Triggered Vercel build $job_id for $GITHUB_REF_NAME ($GITHUB_SHA)." >> "$GITHUB_STEP_SUMMARY"
+          echo "Watch it at https://vercel.com/castrel-ai/tacobin/deployments" >> "$GITHUB_STEP_SUMMARY"
