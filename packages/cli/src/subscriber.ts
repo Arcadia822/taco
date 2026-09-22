@@ -71,7 +71,14 @@ export class TacoSubscriber {
 
   private runOneConnection(): Promise<number | undefined> {
     const { promise, resolve, reject } = Promise.withResolvers<number | undefined>()
-    const wsUrl = this.hostUrl.replace(/^http/, 'ws') + `/v1/tacos/${this.tacoId}/subscribe`
+    // The cursor travels in the URL: the transport carries the resume position, so a
+    // reconnect after a drop resumes from the last confirmed sequence instead of the live
+    // watermark. Transports that negotiate over a control frame also send it below.
+    const resumeQuery = this.lastConfirmedCursor
+      ? `?after=${encodeURIComponent(this.lastConfirmedCursor)}`
+      : ''
+    const wsUrl =
+      this.hostUrl.replace(/^http/, 'ws') + `/v1/tacos/${this.tacoId}/subscribe${resumeQuery}`
     const socket = this.adapterFactory()
 
     socket.onMessage((text) => {
@@ -89,14 +96,16 @@ export class TacoSubscriber {
         } else if (frame.kind === 'checkpoint' && frame.cursor) {
           this.lastConfirmedCursor = frame.cursor
         } else if (frame.kind === 'error') {
+          // Settle first: closing the transport reports a client-initiated close synchronously,
+          // and that must not be mistaken for a dropped connection worth reconnecting.
           if (frame.error?.code === 'CURSOR_EXPIRED') {
-            socket.close()
             resolve(6)
+            socket.close()
             return
           }
           if (frame.error?.code === 'TACO_CLOSED') {
-            socket.close()
             resolve(4)
+            socket.close()
             return
           }
         }

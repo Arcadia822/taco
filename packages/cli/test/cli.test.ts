@@ -70,7 +70,7 @@ describe('taco-cli (Phase 1)', () => {
     expect(readJson.id).toBe('taco')
     expect(readJson.path).toBe('SKILL.md')
     expect(readJson.content).toContain('# Taco Agent Guide')
-    expect(readJson.version).toBe('1.1.0')
+    expect(readJson.version).toBe('1.2.0')
     expect(readJson.content).toContain('## Start Here')
     expect(readJson.content).toContain('references/publishing.md')
 
@@ -119,5 +119,43 @@ describe('taco-cli (Phase 1)', () => {
     expect(json.command).toBe('update')
     expect(json.baseRevisionId).toBe('993b05fd-2f80-48cc-aafd-1d7564781001')
     expect(json.contentHash).toMatch(/^sha256:[a-f0-9]{64}$/)
+  })
+
+  it('carries the requested resume cursor to the Host stream URL', async () => {
+    const originalFetch = globalThis.fetch
+    let requestedUrl = ''
+    globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
+      requestedUrl = String(input)
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const encoder = new TextEncoder()
+          controller.enqueue(
+            encoder.encode('data: {"kind":"ready","cursor":"7","mode":"replay"}\n\n'),
+          )
+          controller.enqueue(
+            encoder.encode('data: {"kind":"error","error":{"code":"TACO_CLOSED"}}\n\n'),
+          )
+          controller.close()
+        },
+      })
+      return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+    }
+
+    try {
+      const res = await runCli([
+        'subscribe',
+        '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001',
+        '--after',
+        '7',
+        '--host',
+        'https://host.example',
+      ])
+      expect(res.exitCode).toBe(4)
+      expect(requestedUrl).toBe(
+        'https://host.example/v1/tacos/8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001/subscribe?after=7',
+      )
+    } finally {
+      globalThis.fetch = originalFetch
+    }
   })
 })

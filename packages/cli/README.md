@@ -5,7 +5,7 @@ Official CLI client for Taco / TacoHub review publication, event subscription, a
 ## Purpose & Boundaries
 
 - **Single Skill for Offline / Local Use**: Taco is designed local-first. The core `taco` skill operates standalone using offline `.taco.html` files and local sync workflows without requiring `taco-cli`, cloud accounts, or remote services.
-- **taco-cli for Cloud Services**: `taco-cli` primarily serves the cloud / remote workflow: publishing specs to remote Taco hosts (such as TacoHub / Tacobin), streaming real-time reviewer comments and events over WebSockets, and managing remote review lifecycles.
+- **taco-cli for Cloud Services**: `taco-cli` primarily serves the cloud / remote workflow: publishing specs to a remote Taco host (such as TacoHub / Tacobin) and streaming real-time reviewer comments and events over Server-Sent Events.
 
 ## Installation
 

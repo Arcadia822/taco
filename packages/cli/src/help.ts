@@ -1,6 +1,6 @@
 export const CLI_SCHEMA_HELP = 'taco-cli-help/1'
 export const CLI_SCHEMA_SKILLS = 'taco-cli-skills/1'
-export const CLI_BINARY_VERSION = '0.1.3'
+export const CLI_BINARY_VERSION = '0.1.4'
 export const DEFAULT_HOST = 'http://localhost:32167'
 
 export interface HelpPositional {
@@ -63,19 +63,13 @@ const GLOBAL_ENV: HelpEnvironment[] = [
     precedence: '--host > TACO_HOST_URL > default',
     description: 'Target Host origin (HTTPS for remote, loopback HTTP permitted)',
   },
-  {
-    name: 'TACO_HOST_API_KEY',
-    default: '',
-    precedence: 'TACO_HOST_API_KEY > stored key for origin',
-    description: 'Management ApiKey for Taco publication and administration',
-  },
 ]
 
 export const ROOT_HELP: CommandHelpOutput = {
   schema: CLI_SCHEMA_HELP,
   binaryVersion: CLI_BINARY_VERSION,
   command: [],
-  summary: 'Taco CLI: publish, review, synchronize and export standalone Taco specifications',
+  summary: 'Taco CLI: publish, review, and synchronize standalone Taco specifications',
   positionals: [],
   options: [
     {
@@ -106,11 +100,25 @@ export const ROOT_HELP: CommandHelpOutput = {
       recovery: 'Check parameters, file paths, or protocol schema',
     },
     {
-      code: 'AUTH_ERROR',
-      exitCode: 3,
-      recovery: 'Provide valid ApiKey or verify host origin match',
+      code: 'LOCAL_IO_ERROR',
+      exitCode: 1,
+      recovery: 'Read the local .taco.html file and the Host response message',
     },
-    { code: 'CONFLICT_ERROR', exitCode: 4, recovery: 'Base revision mismatch or closed Taco' },
+    {
+      code: 'CONFLICT_ERROR',
+      exitCode: 4,
+      recovery: 'The subscribed Taco is closed; read the final events with events or --after',
+    },
+    {
+      code: 'NETWORK_TIMEOUT',
+      exitCode: 5,
+      recovery: 'The Host stayed unreachable past the reconnect window; retry later',
+    },
+    {
+      code: 'CURSOR_EXPIRED',
+      exitCode: 6,
+      recovery: 'Resume from the earliest sequence the Host still retains',
+    },
   ],
   examples: [
     {
@@ -119,7 +127,7 @@ export const ROOT_HELP: CommandHelpOutput = {
     },
     {
       invocation: 'taco-cli publish design.taco.html',
-      purpose: 'Publish new Taco with automatic anonymous bootstrap',
+      purpose: 'Project the local bundle to pure taco/files data and POST it to the Host',
     },
     { invocation: 'taco-cli subscribe <tacoId>', purpose: 'Stream realtime events from Taco' },
     {
@@ -128,13 +136,13 @@ export const ROOT_HELP: CommandHelpOutput = {
     },
   ],
   commands: [
-    { name: 'publish', summary: 'Publish new Taco and initial revision' },
-    { name: 'update', summary: 'Publish new revision for existing Taco' },
-    { name: 'subscribe', summary: 'Stream realtime events via WebSocket' },
-    { name: 'events', summary: 'Page persistent event log' },
-    { name: 'close', summary: 'Close Taco into read-only archived state' },
-    { name: 'export', summary: 'Export complete Taco archive bundle' },
-    { name: 'delete', summary: 'Mark Taco deleted' },
+    { name: 'publish', summary: 'Validate, project, and publish a local Taco to the Host' },
+    {
+      name: 'update',
+      summary: 'Validate a replacement revision locally; network update is not implemented',
+    },
+    { name: 'subscribe', summary: 'Stream realtime events via Server-Sent Events' },
+    { name: 'events', summary: 'Page the persistent event log' },
     { name: 'skills list', summary: 'List offline Agent guides embedded in this binary' },
     { name: 'skills read', summary: 'Read embedded installation, publishing, and review guidance' },
   ],
@@ -148,7 +156,7 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
     schema: CLI_SCHEMA_HELP,
     binaryVersion: CLI_BINARY_VERSION,
     command: ['publish'],
-    summary: 'Publish a new Taco and initial revision',
+    summary: 'Validate, project, and publish a local Taco as a Host paste',
     positionals: [
       {
         name: 'file',
@@ -163,14 +171,7 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
         type: 'boolean',
         required: false,
         default: false,
-        description: 'Perform local projection and size/security check without uploading',
-      },
-      {
-        name: '--request-id',
-        type: 'uuid',
-        required: false,
-        default: null,
-        description: 'Explicit UUID idempotency key for recovery',
+        description: 'Perform local projection and validation without reaching the network',
       },
       {
         name: '--host',
@@ -183,7 +184,7 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
     environment: GLOBAL_ENV,
     output: {
       stdout:
-        'PublishResponse JSON object containing tacoId, revisionId, url, revisionUrl, contentHash',
+        'PublishResponse JSON object containing command, host, id, tacoId, title, blobUrl, url, createdAt',
       stderr: 'ErrorResponse JSON on failure',
       streaming: false,
     },
@@ -191,14 +192,13 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
       {
         code: 'VALIDATION_ERROR',
         exitCode: 2,
-        recovery: 'Verify HTML container validity or file path',
+        recovery: 'Verify HTML container validity, file path, or payload limit',
       },
       {
-        code: 'IDEMPOTENCY_MISMATCH',
-        exitCode: 4,
-        recovery: 'Use distinct idempotency key or identical payload',
+        code: 'LOCAL_IO_ERROR',
+        exitCode: 1,
+        recovery: 'Read the local file and the Host response message',
       },
-      { code: 'PAYLOAD_TOO_LARGE', exitCode: 2, recovery: 'Ensure payload is within 32 MiB limit' },
     ],
     examples: [
       {
@@ -212,7 +212,7 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
     schema: CLI_SCHEMA_HELP,
     binaryVersion: CLI_BINARY_VERSION,
     command: ['update'],
-    summary: 'Publish a new revision for an existing Taco',
+    summary: 'Validate a replacement revision locally; network update is not implemented',
     positionals: [
       { name: 'tacoId', type: 'uuid', required: true, description: 'Target Taco UUID' },
       {
@@ -235,14 +235,7 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
         type: 'boolean',
         required: false,
         default: false,
-        description: 'Local projection check without uploading',
-      },
-      {
-        name: '--request-id',
-        type: 'uuid',
-        required: false,
-        default: null,
-        description: 'Explicit UUID idempotency key',
+        description: 'Required: only the local projection check is implemented',
       },
       {
         name: '--host',
@@ -254,31 +247,21 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
     ],
     environment: GLOBAL_ENV,
     output: {
-      stdout: 'PublishResponse JSON object for the new revision',
+      stdout: 'Local projection summary for the proposed revision',
       stderr: 'ErrorResponse JSON on failure',
       streaming: false,
     },
     errors: [
       {
-        code: 'REVISION_CONFLICT',
-        exitCode: 4,
-        recovery: 'Fetch current revision and re-base changes',
-      },
-      {
-        code: 'TACO_CLOSED',
-        exitCode: 4,
-        recovery: 'Cannot update closed Taco; create new Taco instead',
-      },
-      {
-        code: 'AUTH_FORBIDDEN',
-        exitCode: 3,
-        recovery: 'Must be owner of the Taco to publish revisions',
+        code: 'VALIDATION_ERROR',
+        exitCode: 2,
+        recovery: 'Pass --dry-run; a network update is rejected as not implemented',
       },
     ],
     examples: [
       {
-        invocation: 'taco-cli update <tacoId> design.taco.html --base <revisionId>',
-        purpose: 'Publish revision onto specified base',
+        invocation: 'taco-cli update <tacoId> design.taco.html --base <revisionId> --dry-run',
+        purpose: 'Project the proposed revision locally against the stated base',
       },
     ],
   },
@@ -286,7 +269,7 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
     schema: CLI_SCHEMA_HELP,
     binaryVersion: CLI_BINARY_VERSION,
     command: ['subscribe'],
-    summary: 'Subscribe to persistent realtime events stream',
+    summary: 'Subscribe to the persistent realtime events stream over Server-Sent Events',
     positionals: [
       { name: 'tacoId', type: 'uuid', required: true, description: 'Target Taco UUID' },
     ],
@@ -308,26 +291,128 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
     ],
     environment: GLOBAL_ENV,
     output: {
-      stdout: 'NDJSON stream of ready, event, and checkpoint frames',
+      stdout: 'NDJSON stream of ready and event frames',
       stderr: 'ErrorResponse or diagnostic frames',
       streaming: true,
     },
     errors: [
-      { code: 'CURSOR_EXPIRED', exitCode: 6, recovery: 'Resume from earliest available sequence' },
+      {
+        code: 'CURSOR_EXPIRED',
+        exitCode: 6,
+        recovery: 'Resume from the earliest sequence the Host still retains',
+      },
       {
         code: 'TACO_CLOSED',
         exitCode: 4,
-        recovery: 'Provide valid --after to read final events or export',
+        recovery: 'Read the final events through events or an explicit --after cursor',
+      },
+      {
+        code: 'NETWORK_TIMEOUT',
+        exitCode: 5,
+        recovery: 'The Host stayed unreachable past the reconnect window; retry later',
       },
     ],
     examples: [
       {
         invocation: 'taco-cli subscribe <tacoId>',
-        purpose: 'Stream new events from live watermark',
+        purpose: 'Stream new events from the live watermark',
       },
       {
         invocation: 'taco-cli subscribe <tacoId> --after 42',
         purpose: 'Replay events after 42 then stream live',
+      },
+    ],
+  },
+  events: {
+    schema: CLI_SCHEMA_HELP,
+    binaryVersion: CLI_BINARY_VERSION,
+    command: ['events'],
+    summary: 'Page the persistent event log recorded for a Taco',
+    positionals: [
+      { name: 'tacoId', type: 'uuid', required: true, description: 'Target Taco UUID' },
+    ],
+    options: [
+      {
+        name: '--after',
+        type: 'sequence',
+        required: false,
+        default: null,
+        description: 'Exclusive cursor sequence string to page after',
+      },
+      {
+        name: '--host',
+        type: 'origin',
+        required: false,
+        default: DEFAULT_HOST,
+        description: 'Target Host origin',
+      },
+    ],
+    environment: GLOBAL_ENV,
+    output: {
+      stdout: 'JSON object containing events, throughSequence, nextCursor, and hasMore',
+      stderr: 'ErrorResponse JSON on failure',
+      streaming: false,
+    },
+    errors: [
+      {
+        code: 'LOCAL_IO_ERROR',
+        exitCode: 1,
+        recovery: 'Read the Host response message; confirm the Taco UUID',
+      },
+    ],
+    examples: [
+      {
+        invocation: 'taco-cli events <tacoId>',
+        purpose: 'Read every recorded event for the Taco',
+      },
+    ],
+  },
+  skills: {
+    schema: CLI_SCHEMA_HELP,
+    binaryVersion: CLI_BINARY_VERSION,
+    command: ['skills'],
+    summary: 'List or read the Agent guides embedded in this binary, with no network access',
+    positionals: [
+      {
+        name: 'action',
+        type: 'list|read',
+        required: true,
+        description: 'list every embedded guide, or read one by id',
+      },
+      {
+        name: 'skillId',
+        type: 'id',
+        required: false,
+        default: null,
+        description: 'Required by read; the embedded guide id, such as taco',
+      },
+      {
+        name: 'path',
+        type: 'path',
+        required: false,
+        default: 'SKILL.md',
+        description: 'Required by read; a file inside the guide, such as references/publishing.md',
+      },
+    ],
+    options: [],
+    environment: [],
+    output: {
+      stdout: 'JSON object containing the requested guide listing or file body',
+      stderr: 'ErrorResponse JSON on failure',
+      streaming: false,
+    },
+    errors: [
+      {
+        code: 'VALIDATION_ERROR',
+        exitCode: 2,
+        recovery: 'Pass a known guide id and a path inside that guide',
+      },
+    ],
+    examples: [
+      { invocation: 'taco-cli skills list', purpose: 'List embedded guides' },
+      {
+        invocation: 'taco-cli skills read taco references/publishing.md',
+        purpose: 'Read the publishing contract before publishing',
       },
     ],
   },
