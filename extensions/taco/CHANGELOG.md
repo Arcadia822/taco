@@ -1,7 +1,19 @@
 # Changelog
 
-## 0.7.0 - 2026-09-18
+## 0.8.0 - 2026-09-20
 
+- Classify documents only through Taco's built-in Category — the sidebar group control, first-level directory declarations, and the navigation manifest — and stop reading the deprecated `taco_scope` key and the legacy `**Taco scope**:` form entirely; templates, policy, and Agent guidance no longer emit either, and the document property table carries no classification-specific UI (#32).
+- Render GitHub repository and issue links in the property table with the GitHub mark, owner/repo label, and public metadata titles; fall back gracefully to the original link offline or when rate-limited, without altering canonical source (#32).
+- Order comment threads in the right-hand panel by their anchored position in the active document rather than creation recency; place unresolvable stale threads into an explicit separated group (#34).
+- Align comment cards and new-comment composers with their live document anchors, follow document scrolling, and push colliding cards downward with a 12px gap; recalculate after document reflow or card resizing.
+- Dismiss the floating selection-comment action when opening its composer, changing selection, clicking or focusing elsewhere, pressing Escape, scrolling, resizing, or leaving the window. Keep selection actions separate from pending comment drafts.
+- Keep unsubmitted text in an open comment composer, reply form, or in-place message editor when a document edit rebuilds the panel, restoring focus and caret to the form the reviewer was typing in while closing forms whose content was just committed.
+- Resolve Handoff line references through Markdown's rendered text: a comment captured from a reading surface that hides emphasis markers or joins blocks now reports its canonical source line instead of position lost.
+- Restate the bundled example specification in terms of Taco's built-in Category and navigation manifest, matching the shipped runtime that no longer routes files by `taco_scope`.
+- Replace large-area green background comment highlights with a precise underline over the anchored text, preserving readability across multiline and overlapping ranges (#34).
+- Include live 1-based line number ranges (`spec.md:42–46`) computed from current document body text in copied review handoffs; mark unresolvable quotes explicitly as position-lost rather than printing guessed lines (#35).
+
+## 0.7.0 - 2026-09-18
 - Back the standalone `taco-cli` client with npm publication as `@tacobin/cli`, alongside the existing GitHub Release standalone binaries.
 - Publish the review workflow only when a Taco host is actually needed: the `taco` skill stays fully offline, and `taco-cli` is the cloud publication, subscription, and remote review client.
 - Make installing the `taco` skill the default installation: the skill ships its own production shell, whose `#taco-document` block is empty until a document is written into it, plus the `spec`, `architecture`, `api-reference`, and `adr` template packs. Assembly and review then need no CLI, npm package, build, or project modification, and the Spec Kit extension becomes optional project-level wiring taken only on explicit request.

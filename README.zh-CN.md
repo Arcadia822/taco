@@ -129,16 +129,9 @@ vite.config.ts                        默认 bundle 注入与构建配置
 
 ## 文档路由与侧栏导航
 
-默认情况下，功能目录根部的 `README.md` 会进入 Specify 并默认打开；没有 README 时回退到 `spec.md`。当 Taco 包含顶层 `navigation` 清单时，侧栏直接根据声明展示自定义分组与排序，未声明的文件自动归入未分配区；在评审页面中还可直接增删分组、拖拽移动文件以及设定主入口。在无配置的 Spec Kit 目录中，`spec.md`、`plan.md` 和 `tasks.md` 仍是核心阶段文件，其他 Markdown 可通过 YAML 的 `taco_scope` 属性显式路由：
+默认情况下，功能目录根部的 `README.md` 会进入 Specify 并默认打开；没有 README 时回退到 `spec.md`。当 Taco 包含顶层 `navigation` 清单时，侧栏直接根据声明展示自定义分组与排序，未声明的文件自动归入未分配区；在评审页面中还可直接增删分组、拖拽移动文件以及设定主入口。在无配置的 Spec Kit 目录中，`spec.md`、`plan.md` 和 `tasks.md` 仍是核心阶段文件，`contracts/`、`checklists/` 等约定路径随其归入对应阶段，其余文档一律先进入未分配区，直到评审者用文档头部的 Category 控件为其分组。
 
-```md
----
-title: '交互设计'
-taco_scope: plan
----
-```
-
-该属性允许输入文本，但只有 `spec`、`plan` 和 `tasks` 会参与路由。Taco 会用类似 Obsidian 的属性编辑器展示开头的 YAML frontmatter，同时保留 canonical Markdown。新 spec 把标题写入 YAML，正文从 H2 开始，不再用 H1 重复标题。详细约定见 `AGENTS.md`。
+分类是 Taco 自身的能力，而不是文档属性：没有任何 frontmatter 键会决定文件路由，已废弃的 `taco_scope` 属性也不再被读取。Taco 会用类似 Obsidian 的属性编辑器展示开头的 YAML frontmatter，同时保留 canonical Markdown。新 spec 把标题写入 YAML，正文从 H2 开始，不再用 H1 重复标题。详细约定见 `AGENTS.md`。
 
 ## 设计原则
 

@@ -1,12 +1,6 @@
 import { relativePath, type TacoBundle, type TacoFile } from './model.ts'
-import { parseFrontmatter } from './frontmatter.ts'
 
 export type StageId = 'spec' | 'plan' | 'tasks'
-
-export const TACO_SCOPES = ['spec', 'plan', 'tasks'] as const satisfies readonly StageId[]
-
-const tacoScopeValues = new Set<string>(TACO_SCOPES)
-const tacoScopePrefix = '**Taco scope**:'
 
 export interface StageDefinition {
   id: StageId
@@ -29,6 +23,13 @@ export const STAGES: readonly StageDefinition[] = [
   { id: 'tasks' },
 ]
 
+/**
+ * Stage placement is derived from the file tree alone: the three core filenames and the known
+ * Spec Kit convention paths. Every other document stays Unassigned until a reviewer groups it,
+ * which is what Taco's built-in Category control does — it records the grouping in the bundle's
+ * navigation manifest. No document frontmatter property takes part in routing, and the deprecated
+ * Spec-specific scope keys are not read at all.
+ */
 const conventionStage = (path: string): StageId | null => {
   if (path.toLowerCase() === 'readme.md' || path === 'spec.md') return 'spec'
   if (path === 'plan.md') return 'plan'
@@ -39,53 +40,20 @@ const conventionStage = (path: string): StageId | null => {
   return null
 }
 
-export const tacoScope = (file: TacoFile): StageId | null => {
-  if (!file.path.toLowerCase().endsWith('.md')) return null
-  const frontmatter = parseFrontmatter(file.content)
-  if (frontmatter.kind === 'invalid') return null
-  let legacySource = file.content
-  if (frontmatter.kind === 'valid') {
-    const scope = frontmatter.entries.find((entry) => entry.key === 'taco_scope')
-    if (scope) return scope.kind === 'string' && tacoScopeValues.has(String(scope.value))
-      ? scope.value as StageId
-      : null
-    legacySource = frontmatter.block.body
-  }
-  for (const line of legacySource.split('\n')) {
-    const declaration = line.trim()
-    if (!declaration) continue
-    if (declaration.startsWith(tacoScopePrefix)) {
-      const value = declaration.slice(tacoScopePrefix.length).trim()
-      return tacoScopeValues.has(value) ? value as StageId : null
-    }
-    if (declaration.startsWith('**') && declaration.includes('**:')) continue
-    return null
-  }
-  return null
-}
-
 export const buildStageNavigation = (bundle: TacoBundle): StageNavigation => {
   const conventions = new Map<StageId, TacoFile[]>(STAGES.map(({ id }) => [id, []]))
-  const scoped = new Map<StageId, TacoFile[]>(STAGES.map(({ id }) => [id, []]))
   const unassigned: TacoFile[] = []
 
   for (const file of bundle.files) {
-    const path = relativePath(bundle, file)
-    const convention = conventionStage(path)
-    if (convention) {
-      conventions.get(convention)!.push(file)
-      continue
-    }
-
-    const scope = tacoScope(file)
-    if (scope) scoped.get(scope)!.push(file)
+    const stage = conventionStage(relativePath(bundle, file))
+    if (stage) conventions.get(stage)!.push(file)
     else unassigned.push(file)
   }
 
   const stages = STAGES.map((definition) => ({
     definition,
     core: null,
-    files: [...conventions.get(definition.id)!, ...scoped.get(definition.id)!],
+    files: conventions.get(definition.id)!,
   }))
   return { stages, unassigned }
 }

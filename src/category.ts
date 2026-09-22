@@ -4,6 +4,9 @@ import { parseDocument } from 'yaml'
 
 export const UNCLASSIFIED_CATEGORY = '未分类'
 
+/** The general classification property, in frontmatter or in a directory's `_dir.yaml`. */
+export const CATEGORY_PROPERTY = 'category'
+
 /**
  * 校验子目录层级：最多限定创建 2 级子目录
  * 例：
@@ -34,10 +37,8 @@ export function getDirYamlCategory(bundle: TacoBundle, dirRelPath: string): stri
 
   try {
     const doc = parseDocument(dirFile.content)
-    if (doc.contents && typeof doc.contents === 'object' && 'get' in doc.contents) {
-      const val = (doc.contents as { get: (k: string) => unknown }).get('category')
-      if (typeof val === 'string' && val.trim()) return val.trim()
-    }
+    const val: unknown = doc.get(CATEGORY_PROPERTY)
+    if (typeof val === 'string' && val.trim()) return val.trim()
   } catch {
     return null
   }
@@ -65,7 +66,7 @@ export function resolveFileCategory(bundle: TacoBundle, file: TacoFile): FileCat
 
   // 1. 根目录下的文件 (parts.length === 1)
   if (parts.length === 1) {
-    const selfCategory = frontmatterString(file.content, 'category')?.trim()
+    const selfCategory = frontmatterString(file.content, CATEGORY_PROPERTY)?.trim()
     if (selfCategory) {
       return {
         category: selfCategory,
@@ -121,7 +122,7 @@ export function updateFileCategory(
     // 根目录文件自建 frontmatter
     const nextContent = replaceFrontmatterProperty(
       file.content,
-      'category',
+      CATEGORY_PROPERTY,
       catTrimmed === UNCLASSIFIED_CATEGORY ? undefined : catTrimmed,
     )
     file.content = nextContent
@@ -144,7 +145,7 @@ export function updateFileCategory(
   } else {
     try {
       const doc = parseDocument(dirFile.content)
-      doc.set('category', catTrimmed)
+      doc.set(CATEGORY_PROPERTY, catTrimmed)
       dirFile.content = doc.toString()
     } catch {
       dirFile.content = `category: "${catTrimmed}"\n`

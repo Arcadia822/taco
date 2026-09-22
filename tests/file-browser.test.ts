@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { FileBrowser } from '../src/file-browser.ts'
 import { configureApp } from '../src/kernel/app.ts'
@@ -20,7 +20,7 @@ const testBundle: TacoBundle = {
     { title: 'Product specification', path: 'specs/001-browser/spec.md', mediaType: 'text/markdown', content: '# Product\n\n## Outcome\n\nReadable Markdown.' },
     { path: 'specs/001-browser/checklists/requirements.md', mediaType: 'text/markdown', content: '# Requirements checklist' },
     { path: 'specs/001-browser/plan.md', mediaType: 'text/markdown', content: '# Plan' },
-    { path: 'specs/001-browser/interaction-design.md', mediaType: 'text/markdown', content: '**Taco scope**: plan\n\n# Interaction' },
+    { path: 'specs/001-browser/interaction-design.md', mediaType: 'text/markdown', content: '# Interaction' },
     { path: 'specs/001-browser/tasks.md', mediaType: 'text/markdown', content: '# Tasks\n\n- [ ] T001 Browse files' },
     { path: 'specs/001-browser/contracts/api.yaml', mediaType: 'application/yaml', content: 'service:\n  name: Taco' },
   ],
@@ -80,6 +80,13 @@ describe('FileBrowser', () => {
       configurable: true,
       value: vi.fn().mockReturnValue(document.body),
     })
+  })
+
+  // FileBrowser sets the document language from the resolved locale; release it so another test
+  // file cannot inherit this suite's zh-CN navigator stub.
+  afterEach(() => {
+    document.documentElement.lang = ''
+    document.body.innerHTML = ''
   })
 
   it.each(['inline', 'zoom'] as const)('writes only the requested Mermaid direction from the %s control', async (surface) => {
@@ -179,6 +186,36 @@ describe('FileBrowser', () => {
     expect(writeText).toHaveBeenCalledTimes(1)
     expect(document.querySelector('.taco-toast')?.textContent).toBe('暂无改动可复制')
     browser.destroy()
+  })
+
+  it('prints a real line range for a comment captured from rendered text', async () => {
+    const bundle = structuredClone(testBundle)
+    bundle.files[0].content = '# Title\n\nThe **spec** is ready for review.\n'
+    const timestamp = '2026-09-14T00:00:00.000Z'
+    bundle.comments = [{
+      id: 'thread-rendered',
+      status: 'open',
+      anchor: { path: bundle.files[0].path, position: { start: 9, end: 38 }, quote: { exact: 'The spec is ready for review.', prefix: '', suffix: '' } },
+      messages: [{ id: 'message-rendered', author: 'Reviewer', body: 'Needs a citation', createdAt: timestamp }],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }]
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    try {
+      await waitForEditor()
+      document.querySelector<HTMLButtonElement>('.copy-review-main')!.click()
+      await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+      const prompt = writeText.mock.calls[0][0] as string
+      // The quote came from the reading surface, which hides the emphasis markers; the reference still
+      // points at the canonical source line instead of reporting a lost position.
+      expect(prompt).toContain(`${bundle.files[0].path}:3`)
+      expect(prompt).toContain('The spec is ready for review.')
+      expect(prompt).not.toContain('位置已失效')
+    } finally {
+      browser.destroy()
+    }
   })
 
   it.each(['full', 'inspect'] as const)('reports unavailable or rejected clipboard writes for %s handoff', async (mode) => {
@@ -296,21 +333,22 @@ describe('FileBrowser', () => {
     const editor = await waitForEditor()
     await new Promise((resolve) => requestAnimationFrame(resolve))
     expect(document.querySelectorAll('.file-row')).toHaveLength(7)
-    expect(Array.from(document.querySelectorAll('.stage-name')).map((node) => node.textContent)).toEqual(['spec', 'plan', 'tasks'])
+    expect(Array.from(document.querySelectorAll('.stage-name')).map((node) => node.textContent)).toEqual(['spec', 'plan', 'tasks', '未分配文件'])
     const specRows = document.querySelectorAll('[data-stage="spec"] .file-row')
     expect(Array.from(specRows).map((node) => node.getAttribute('data-role'))).toEqual([null, null])
     expect(document.querySelector('[data-stage="spec"] [data-path$="spec.md"]')).not.toBeNull()
     expect(document.querySelector('[data-stage="plan"] [data-path$="checklists/requirements.md"]')).not.toBeNull()
     expect(Array.from(document.querySelectorAll('[data-stage="plan"] .tree-folder .folder-name')).map((node) => node.textContent)).toEqual(['checklists', 'contracts'])
     expect(document.querySelector('[data-stage="spec"] [data-path$="README.md"]')).not.toBeNull()
-    expect(document.querySelector('[data-stage="plan"] [data-path$="interaction-design.md"]')).not.toBeNull()
+    expect(document.querySelector('[data-stage="plan"] [data-path$="interaction-design.md"]')).toBeNull()
     expect(document.querySelector('[data-stage="custom"]')).toBeNull()
-    expect(document.querySelector('.other-files-group')).toBeNull()
+    expect(document.querySelector('[data-stage="other"] [data-path$="interaction-design.md"]')).not.toBeNull()
+    expect(document.querySelector('.other-files-group')).not.toBeNull()
     expect(document.querySelector('[data-role]')).toBeNull()
     expect(document.querySelectorAll('.stage-summary .sidebar-row-icon')).toHaveLength(0)
-    expect(document.querySelectorAll('.stage-summary .stage-caret [data-icon="chevron-right"]')).toHaveLength(3)
+    expect(document.querySelectorAll('.stage-summary .stage-caret [data-icon="chevron-right"]')).toHaveLength(4)
     expect(document.querySelector('.tree-folder[open] > .folder-row [data-icon="folder-open"]')).not.toBeNull()
-    expect(document.querySelectorAll('.sidebar-row')).toHaveLength(13)
+    expect(document.querySelectorAll('.sidebar-row')).toHaveLength(14)
     expect(editor.querySelector('h1')?.textContent).toBe('Guide')
     await new Promise((resolve) => requestAnimationFrame(resolve))
     expect(Array.from(document.querySelectorAll('.outline-link')).map((node) => node.textContent)).toEqual(['Guide'])
@@ -1373,6 +1411,39 @@ describe('FileBrowser', () => {
     browser.destroy()
   })
 
+  it.each(['outside', 'escape', 'scroll', 'blur', 'selection'] as const)('dismisses the selection action on %s without opening a draft', async (reason) => {
+    const browser = new FileBrowser(document.getElementById('app')!, structuredClone(testBundle))
+    try {
+      const editor = await waitForEditor()
+      const paragraph = Array.from(editor.querySelectorAll('p')).find((node) => node.textContent?.includes('Readable'))!
+      const range = document.createRange()
+      range.selectNodeContents(paragraph)
+      const selection = window.getSelection()!
+      selection.removeAllRanges()
+      selection.addRange(range)
+      paragraph.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+      expect(document.querySelector('.selection-comment-button')).not.toBeNull()
+      // A delayed notification for the same selection must not dismiss a fresh action.
+      document.dispatchEvent(new Event('selectionchange'))
+      expect(document.querySelector('.selection-comment-button')).not.toBeNull()
+      if (reason === 'outside') document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+      if (reason === 'escape') {
+        editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        editor.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', bubbles: true }))
+      }
+      if (reason === 'scroll') document.querySelector('.file-viewer')!.dispatchEvent(new Event('scroll'))
+      if (reason === 'blur') window.dispatchEvent(new Event('blur'))
+      if (reason === 'selection') {
+        selection.removeAllRanges()
+        document.dispatchEvent(new Event('selectionchange'))
+      }
+      expect(document.querySelector('.selection-comment-button')).toBeNull()
+      expect(document.querySelector('.comment-composer')).toBeNull()
+    } finally {
+      browser.destroy()
+    }
+  })
+
   it('creates a persisted comment thread from selected Markdown text', async () => {
     const editableBundle = structuredClone(testBundle)
     new FileBrowser(document.getElementById('app')!, editableBundle)
@@ -1391,6 +1462,7 @@ describe('FileBrowser', () => {
     const selectionComment = document.querySelector<HTMLButtonElement>('.selection-comment-button')!
     expect(selectionComment.textContent).toBe('评论')
     selectionComment.click()
+    expect(document.querySelector('.selection-comment-button')).toBeNull()
     expect(document.querySelector('.comment-panel')?.getAttribute('aria-hidden')).toBe('false')
     expect(document.querySelector('.right-panel-tabs')).not.toBeNull()
     expect(document.querySelector<HTMLButtonElement>('.right-panel-tabs [aria-selected="true"]')?.textContent).toBe('评论')
@@ -1522,6 +1594,68 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.comment-composer')).toBeNull()
     expect(editableBundle.comments).toBeUndefined()
     expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(false)
+  })
+
+  it('keeps open comment drafts when a document edit makes a thread stale and rebuilds the panel', async () => {
+    localStorage.setItem('taco-comment-principal:browser-test', 'principal-a')
+    const editableBundle = structuredClone(testBundle)
+    editableBundle.comments = [{
+      id: 'thread-live',
+      anchor: { path: 'specs/001-browser/spec.md', position: { start: 0, end: 8 }, quote: { exact: 'Readable', prefix: '', suffix: '' } },
+      status: 'open',
+      messages: [{ id: 'message-live', author: 'Ada', authorId: 'principal-a', body: 'Keep this', createdAt: '2026-08-26T00:00:00.000Z' }],
+      createdAt: '2026-08-26T00:00:00.000Z',
+      updatedAt: '2026-08-26T00:00:00.000Z',
+    }]
+    const browser = new FileBrowser(document.getElementById('app')!, editableBundle)
+    try {
+      await waitForEditor()
+      document.querySelector<HTMLButtonElement>('.comment-toggle')!.click()
+
+      // An open reply form on the existing thread.
+      document.querySelector<HTMLButtonElement>('.comment-thread-actions .comment-action')!.click()
+      const reply = document.querySelector<HTMLTextAreaElement>('.comment-reply-form .comment-input')!
+      reply.value = 'Reply in progress'
+      expect(document.activeElement).toBe(reply)
+
+      // An open in-place editor on the existing message.
+      document.querySelector<HTMLButtonElement>('.comment-message-actions .comment-action')!.click()
+      const edit = document.querySelector<HTMLTextAreaElement>('.comment-message-editor .comment-input')!
+      edit.value = 'Edit in progress'
+      await vi.waitFor(() => expect(document.activeElement).toBe(edit))
+
+      // And an open composer on a fresh selection.
+      const paragraph = Array.from(document.querySelectorAll('.tiptap-editor-host .tiptap p'))
+        .find((node) => node.textContent?.includes('Readable Markdown.'))!
+      const text = paragraph.firstChild!
+      const range = document.createRange()
+      range.setStart(text, 0)
+      range.setEnd(text, 8)
+      const selection = window.getSelection()!
+      selection.removeAllRanges()
+      selection.addRange(range)
+      paragraph.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }))
+      document.querySelector<HTMLButtonElement>('.selection-comment-button')!.click()
+      document.querySelector<HTMLTextAreaElement>('.comment-composer .comment-input')!.value = 'Comment in progress'
+
+      // Rewriting the body drops the anchored text, so the threaded comment turns stale and the panel rebuilds.
+      const editor = (browser as unknown as {
+        markdownEditor: { commands: { selectAll: () => boolean; insertContent: (content: string) => boolean } }
+      }).markdownEditor
+      editor.commands.selectAll()
+      expect(editor.commands.insertContent('Rewritten body.')).toBe(true)
+      await vi.waitFor(() => expect(document.querySelector('.comment-stale-group')).not.toBeNull())
+
+      expect(document.querySelector<HTMLTextAreaElement>('.comment-composer .comment-input')?.value).toBe('Comment in progress')
+      expect(document.querySelector<HTMLTextAreaElement>('.comment-reply-form .comment-input')?.value).toBe('Reply in progress')
+      const restoredEdit = document.querySelector<HTMLTextAreaElement>('.comment-message-editor .comment-input')
+      expect(restoredEdit?.value).toBe('Edit in progress')
+      // The rebuilt form the reviewer was typing in keeps focus.
+      expect(document.activeElement).toBe(restoredEdit)
+      expect(editableBundle.comments[0].messages).toHaveLength(1)
+    } finally {
+      browser.destroy()
+    }
   })
 
   it('edits only principal-owned messages in place with validation, no-op and cancel semantics', () => {

@@ -21,3 +21,12 @@ it('provides a discoverable Spec Kit template with logical feature metadata', ()
   })
   expect(frontmatter).not.toHaveProperty('git_branch')
 })
+
+it('keeps the repository routing prompt free of document classification properties', () => {
+  const agents = readFileSync('AGENTS.md', 'utf8')
+
+  expect(agents).toContain('Classification is a Taco capability, not a document property')
+  expect(agents).toContain('built-in Category control')
+  expect(agents).not.toContain('taco_scope:')
+  expect(agents).not.toContain('category:')
+})

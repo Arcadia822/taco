@@ -9,6 +9,7 @@ import {
   splitFrontmatter,
   type FrontmatterEntry,
 } from './frontmatter.ts'
+import { createGitHubPreview, parseGitHubReference } from './github-properties.ts'
 
 type DocumentPropertiesToken = MarkdownToken & {
   type: 'documentProperties'
@@ -26,11 +27,11 @@ export interface DocumentPropertiesLabels {
   propertyValue: (key: string) => string
   removeProperty: (key: string) => string
   invalidYaml: string
-  invalidScope: string
   invalidTitle: string
   duplicateSource: (keys: string[]) => string
   rawValue: string
   addListItem: (key: string) => string
+  openOnGitHub: (label: string) => string
 }
 
 const englishLabels: DocumentPropertiesLabels = {
@@ -40,11 +41,11 @@ const englishLabels: DocumentPropertiesLabels = {
   propertyValue: (key) => `${key} value`,
   removeProperty: (key) => `Remove ${key}`,
   invalidYaml: 'Fix the YAML source to edit these properties.',
-  invalidScope: 'Choose spec, plan, or tasks. Other values are preserved but do not route this file.',
   invalidTitle: 'The document title must be text. This value is preserved but is not used as the display title.',
   duplicateSource: (keys) => `YAML and legacy metadata both define ${keys.join(', ')}. YAML controls Taco behavior; legacy text is preserved.`,
   rawValue: 'Edit YAML value',
   addListItem: (key) => `Add item to ${key}`,
+  openOnGitHub: (label) => `Open ${label} on GitHub`,
 }
 
 const chineseLabels: DocumentPropertiesLabels = {
@@ -54,17 +55,16 @@ const chineseLabels: DocumentPropertiesLabels = {
   propertyValue: (key) => `${key} 的值`,
   removeProperty: (key) => `删除 ${key}`,
   invalidYaml: '请修正 YAML 源码后再编辑这些属性。',
-  invalidScope: '请选择 spec、plan 或 tasks。其他值会被保留，但不会用于文件路由。',
   invalidTitle: '文档标题必须是文本。当前值会被保留，但不会作为显示标题使用。',
   duplicateSource: (keys) => `YAML 与旧式元数据同时定义了 ${keys.join('、')}。Taco 以 YAML 为准，并保留旧式文本。`,
   rawValue: '编辑 YAML 值',
   addListItem: (key) => `向 ${key} 添加一项`,
+  openOnGitHub: (label) => `在 GitHub 打开 ${label}`,
 }
 
 const defaultLabels = (): DocumentPropertiesLabels =>
   document.documentElement.lang.toLocaleLowerCase().startsWith('zh') ? chineseLabels : englishLabels
 
-const tacoScopes = new Set(['spec', 'plan', 'tasks'])
 const reservedProperties = new Set(['title', 'taco_scope'])
 let dataListSerial = 0
 
@@ -288,24 +288,6 @@ export const createDocumentProperties = (providedLabels?: DocumentPropertiesLabe
         input.setAttribute('autocomplete', 'off')
         if (entry.kind === 'number') input.inputMode = 'decimal'
 
-        if (entry.key === 'taco_scope') {
-          const dataList = document.createElement('datalist')
-          dataList.id = `taco-scope-values-${++dataListSerial}`
-          for (const value of tacoScopes) {
-            const option = document.createElement('option')
-            option.value = value
-            dataList.append(option)
-          }
-          input.setAttribute('list', dataList.id)
-          input.addEventListener('change', () => {
-            mutate(() => setFrontmatterProperty(String(currentNode.attrs.yaml), entry.key, input.value), true)
-          })
-          const container = document.createElement('div')
-          container.className = 'document-property-combobox'
-          container.append(input, dataList)
-          return container
-        }
-
         const commit = (): void => {
           const value = entry.kind === 'number' ? Number(input.value) : entry.kind === 'null' && !input.value ? null : input.value
           mutate(() => setFrontmatterProperty(String(currentNode.attrs.yaml), entry.key, value), false)
@@ -372,10 +354,25 @@ export const createDocumentProperties = (providedLabels?: DocumentPropertiesLabe
         return list
       }
 
+      const paintGitHubPreview = (container: HTMLElement, key: string, value: unknown): void => {
+        container.querySelector('.document-property-github')?.remove()
+        const reference = parseGitHubReference(key, value)
+        if (!reference) return
+        container.append(createGitHubPreview(reference, { openLabel: labels.openOnGitHub }))
+      }
+
+      // One delegated listener: `paint()` rebuilds every row, so a listener bound to a row would go
+      // stale after the first repaint and silently stop refreshing the preview.
+      dom.addEventListener('change', (event) => {
+        const control = event.target
+        if (!(control instanceof HTMLInputElement)) return
+        if (control.name !== 'repo' && control.name !== 'issue') return
+        const container = control.closest('.document-property-value')
+        if (container instanceof HTMLElement) paintGitHubPreview(container, control.name, control.value)
+      })
+
       const rowFor = (entry: FrontmatterEntry): HTMLElement => {
-        const invalidScope = entry.key === 'taco_scope' && (typeof entry.value !== 'string' || !tacoScopes.has(entry.value))
-        const invalidTitle = entry.key === 'title' && entry.kind !== 'string'
-        const invalid = invalidScope || invalidTitle
+        const invalid = entry.key === 'title' && entry.kind !== 'string'
         const row = document.createElement('div')
         row.className = 'document-property'
         row.classList.toggle('is-invalid', invalid)
@@ -401,6 +398,7 @@ export const createDocumentProperties = (providedLabels?: DocumentPropertiesLabe
         const value = document.createElement('div')
         value.className = 'document-property-value'
         value.append(entry.kind === 'list' ? listEditor(entry) : inputForScalar(entry))
+        paintGitHubPreview(value, entry.key, entry.value)
 
         const remove = document.createElement('button')
         remove.type = 'button'
@@ -416,7 +414,7 @@ export const createDocumentProperties = (providedLabels?: DocumentPropertiesLabe
           const error = document.createElement('p')
           error.className = 'document-property-error'
           error.id = `document-property-error-${dataListSerial}-${entry.key}`
-          error.textContent = invalidScope ? labels.invalidScope : labels.invalidTitle
+          error.textContent = labels.invalidTitle
           error.setAttribute('aria-live', 'polite')
           row.append(error)
           const control = value.querySelector('input')

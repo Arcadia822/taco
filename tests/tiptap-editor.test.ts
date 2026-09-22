@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Editor } from '@tiptap/core'
 import { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { blockHtml, blocksFromEditor, ensureTacoBlockIds, createTacoEditorExtensions, migrateTacoBundleBlocks } from '../src/tiptap-editor.ts'
 import { setEditorFrontmatterProperty } from '../src/tiptap-document-properties.ts'
+import { resetGitHubTitleCache } from '../src/github-properties.ts'
 import type { TacoBundle } from '../src/model.ts'
 import { readFileSync } from 'node:fs'
 
@@ -28,9 +29,17 @@ const labels = {
 
 let editor: Editor | null = null
 
+// Document-property labels follow the document language, so pin the language these tests assert on.
+beforeEach(() => {
+  document.documentElement.lang = 'en'
+})
+
 afterEach(() => {
   editor?.destroy()
   editor = null
+  // Titles are cached per reference, so one test's stubbed response must not reach the next test.
+  resetGitHubTitleCache()
+  vi.unstubAllGlobals()
 })
 
 describe('Tiptap Markdown integration', () => {
@@ -139,18 +148,88 @@ describe('Tiptap Markdown integration', () => {
     expect(editor.view.dom.querySelector('li')?.textContent).toContain('FR-001')
   })
 
-  it('keeps an invalid open-enum scope and exposes accessible validation', () => {
+  it('leaves category an ordinary property without editor-specific routing UI', () => {
     editor = new Editor({
       extensions: createTacoEditorExtensions(labels),
-      content: '---\ntaco_scope: design\n---\n## Design\n\n**Decision**: Keep Markdown canonical.',
+      content: '---\ncategory: design\n---\n## Design\n\n**Decision**: Keep Markdown canonical.',
       contentType: 'markdown',
     })
 
     expect(editor.view.dom.querySelectorAll('.document-properties')).toHaveLength(1)
-    expect(editor.view.dom.querySelector('.document-property.is-invalid')).not.toBeNull()
-    expect(editor.view.dom.querySelector('[name="taco_scope"]')?.getAttribute('aria-invalid')).toBe('true')
-    expect(editor.getMarkdown()).toContain('taco_scope: design')
-    expect(Array.from(editor.view.dom.querySelectorAll('p strong')).map((node) => node.textContent)).toContain('Decision')
+    expect(editor.view.dom.querySelector('.document-property.is-invalid')).toBeNull()
+    const control = editor.view.dom.querySelector<HTMLInputElement>('[name="category"]')
+    expect(control?.value).toBe('design')
+    expect(control?.getAttribute('aria-invalid')).toBeNull()
+    expect(editor.getMarkdown()).toContain('category: design')
+  })
+
+  it('edits the deprecated taco_scope property as plain YAML without routing UI', () => {
+    editor = new Editor({
+      extensions: createTacoEditorExtensions(labels),
+      content: '---\ntaco_scope: plan\n---\n## Plan',
+      contentType: 'markdown',
+    })
+
+    expect(editor.view.dom.querySelector('.document-property.is-invalid')).toBeNull()
+    expect(editor.view.dom.querySelector<HTMLInputElement>('[name="taco_scope"]')?.value).toBe('plan')
+    expect(editor.getMarkdown()).toContain('taco_scope: plan')
+  })
+
+  it('shows a GitHub link for repo and issue properties without rewriting them', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ description: 'A single-file workspace', title: 'Taco review' }),
+    })))
+    editor = new Editor({
+      extensions: createTacoEditorExtensions(labels),
+      content: '---\ntitle: Sample\nrepo: https://github.com/Arcadia822/taco\nissue: https://github.com/Arcadia822/taco/issues/32\n---\n## Body',
+      contentType: 'markdown',
+    })
+
+    const links = Array.from(editor.view.dom.querySelectorAll<HTMLAnchorElement>('.document-property-github'))
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      'https://github.com/Arcadia822/taco',
+      'https://github.com/Arcadia822/taco/issues/32',
+    ])
+    expect(links.every((link) => link.getAttribute('rel') === 'noopener noreferrer')).toBe(true)
+    expect(Array.from(editor.view.dom.querySelectorAll('.document-property-github-label')).map((node) => node.textContent))
+      .toEqual(['Arcadia822/taco', 'Arcadia822/taco#32'])
+    await vi.waitFor(() => expect(
+      Array.from(editor!.view.dom.querySelectorAll('.document-property-github-title')).map((node) => node.textContent),
+    ).toEqual(['A single-file workspace', 'Taco review']))
+    expect(editor.getMarkdown()).toContain('repo: https://github.com/Arcadia822/taco')
+    expect(editor.getMarkdown()).toContain('issue: https://github.com/Arcadia822/taco/issues/32')
+  })
+
+  it('refreshes the GitHub link when its value is edited, and drops it when the value stops being a link', () => {
+    // The preview fetches the title of whatever reference it renders; keep that request off the network.
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ description: 'The React Framework', title: 'Next.js' }),
+    })))
+    editor = new Editor({
+      extensions: createTacoEditorExtensions(labels),
+      content: '---\nrepo: https://github.com/Arcadia822/taco\n---\n## Body',
+      contentType: 'markdown',
+    })
+
+    const setValue = (value: string): void => {
+      const control = editor!.view.dom.querySelector<HTMLInputElement>('input[name="repo"]')!
+      control.value = value
+      control.dispatchEvent(new Event('change', { bubbles: true }))
+    }
+
+    expect(editor.view.dom.querySelectorAll('.document-property-github')).toHaveLength(1)
+
+    setValue('not a link')
+    expect(editor.view.dom.querySelectorAll('.document-property-github')).toHaveLength(0)
+    expect(editor.getMarkdown()).toContain('repo: not a link')
+
+    setValue('https://github.com/vercel/next.js')
+    const link = editor.view.dom.querySelector<HTMLAnchorElement>('.document-property-github')
+    expect(link?.getAttribute('href')).toBe('https://github.com/vercel/next.js')
+    expect(link?.querySelector('.document-property-github-label')?.textContent).toBe('vercel/next.js')
+    expect(editor.getMarkdown()).toContain('repo: https://github.com/vercel/next.js')
   })
 
   it('preserves a non-text title while refusing to use it as a display title', () => {

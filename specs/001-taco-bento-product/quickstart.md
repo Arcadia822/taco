@@ -18,9 +18,9 @@ Open `dist-single/Taco_Spec.taco.html` directly from the file system.
 2. Compare it with `window.taco.listFiles()`.
 3. Confirm the sidebar exposes only Specify, Plan, and Tasks, with each stage's core file first.
 4. Open `contracts/` and other physical subdirectories in the left navigation.
-5. In a temporary copy, change a document's YAML `taco_scope` between `spec`, `plan`, `tasks`, and an invalid text value; verify routing and validation update without losing the invalid text.
+5. In a temporary copy, assign a document to another group with the Category control in the document header, then clear the assignment; verify the grouping follows the manifest and that the document's frontmatter is untouched.
 
-Expected: the file count and relative paths match exactly; real directories stay nested; the modified document moves directly to the selected stage without creating an extension group. A missing or invalid scope value does not create a fourth group.
+Expected: the file count and relative paths match exactly; real directories stay nested; a grouped document moves into the selected group without creating an extension group, and clearing the assignment returns it to Unassigned. A document carrying the legacy `taco_scope` property stays where its path or grouping places it, and the property remains unchanged.
 
 ## Scenario B — Markdown Reading
 

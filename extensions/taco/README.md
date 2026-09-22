@@ -59,7 +59,7 @@ The installing Agent must run `prepare-policy` to install the complete [`policie
 - To migrate an older installation, run `prepare-policy --dry-run --json` and then rerun without `--dry-run`. Only an exact stock Taco section from the shipped policy or a former installation guide is removed from `AGENTS.md`; its full replacement is installed in the selected Process document.
 - When a manual merge is required, the merge is yours to perform, not something the command can do for you: inspect the reported files, retain every local rule, reconcile the local policy with the shipped policy deliberately, resolve the project's declared Process route, and rerun. Keep project-specific rules outside the managed Taco block and retain exactly one imperative reference in `AGENTS.md`. The CLI never initializes 5xP for an ordinary project.
 
-The process policy governs later `speckit.specify` work: new specs use YAML `title`, omit a duplicate H1, and begin the body at H2; routed custom Markdown uses YAML `taco_scope`. It also requires update after every canonical feature-artifact change and the complete review-comment round trip.
+The process policy governs later `speckit.specify` work: new specs use YAML `title`, omit a duplicate H1, and begin the body at H2; grouped documents are classified in Taco's built-in Category rather than by a document property. It also requires update after every canonical feature-artifact change and the complete review-comment round trip.
 
 ## Agent commands
 
@@ -75,6 +75,8 @@ speckit.taco.review [path-to-file.taco.html]
 The browser's Handoff action copies the text diffs since the last save (or since the document was loaded, when it has not been saved) plus the open comment threads, retaining deleted-message placeholders as history. Resolved threads are not replayed as requests. If clipboard access is unavailable or denied, either handoff action reports failure rather than claiming the text was copied. Saving resets the handoff diff baseline; canonical import still uses the conflict-safe `review` flow above.
 
 The rightmost header button uses a fixed, arrowless sidebar icon to toggle the outline/comment panel without changing its active tab or discarding an unsubmitted draft. Its selected state stays on while the panel is open. On desktop, pointer toggles animate the panel width; closing releases its reading-space width and remembers the choice per document for the current browser session. Keyboard toggles and reduced-motion preferences skip the transition. Narrow screens start with a closed drawer and do not overwrite the desktop preference. Use the header toggle or Escape to close the panel, or click outside the drawer on narrow screens; active dialogs, menus, and editor key handlers take precedence over Escape. Starting a comment opens its composer, and clicking an existing inline comment highlight opens and focuses the matching thread. These panel preferences are local UI state, not saved document edits.
+
+Comment cards and new-comment composers align with their live anchor lines and follow document scrolling. Nearby cards stack downward with a 12px gap instead of overlapping; resizing a composer or reflowing the document recalculates the layout. The comment panel can still scroll independently to reach crowded threads and the separate position-lost group. Rebuilding the panel never discards unsubmitted text: an open composer, reply form, or in-place message editor keeps its content, focus, and caret.
 
 ## Optional CLI utilities
 

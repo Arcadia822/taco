@@ -9,13 +9,13 @@
   omits that optional property.
 - When `speckit.specify` or another authoring command creates `spec.md`, do not
   add an ATX or Setext H1 that repeats the YAML title. Begin the Markdown body at
-  H2 (`##`) or lower. Preserve an existing authored H1 during unrelated edits; do
-  not silently migrate legacy content.
-- Core files and known Spec Kit convention paths are routed automatically. For
-  any other Markdown file that needs an explicit Taco stage, add `taco_scope`
-  to its YAML frontmatter. Offer `spec`, `plan`, and `tasks`; preserve other
-  text values as authored, but do not treat them as valid routes or create a
-  custom stage. Do not generate the legacy `**Taco scope**: ...` form.
+  H2 (`##`) or lower. Preserve an existing authored H1 during unrelated edits;
+  do not silently migrate legacy content.
+- Core files and known Spec Kit convention paths are routed automatically. Do not
+  write a routing or scope property into documents: classification is Taco's
+  built-in Category, recorded in the Taco file's navigation manifest. Never
+  generate the deprecated `taco_scope` key or the legacy
+  `**Taco scope**: ...` form; Taco reads neither one.
 - Choose the artifact carrier by information type: keep narrative, constraints,
   decisions, and acceptance criteria in `spec.md`/`plan.md`; put reusable
   flow/sequence/state designs in `diagrams/*.mmd`, HTTP APIs in
