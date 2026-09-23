@@ -19,9 +19,10 @@ type Sphere = { points: Float32Array; color: string; phase: number; radius: numb
 
 function composeTerrain(width: number, height: number): TerrainLayer[] {
   const mobile = width < 700
-  const rows = mobile ? 22 : 34
-  const cols = mobile ? 50 : 96
-  const leftBound = mobile ? width * 0.12 : width * 0.28
+  const rows = mobile ? 20 : 30
+  const cols = mobile ? 46 : 86
+  const xStart = width * (mobile ? 0.20 : 0.35)
+  const xEnd = width * 1.02
   const groups: number[][] = TERRAIN_COLORS.map(() => [])
   for (let r = 0; r < rows; r++) {
     const v = r / (rows - 1)
@@ -31,11 +32,15 @@ function composeTerrain(width: number, height: number): TerrainLayer[] {
       const u = c / (cols - 1)
       const uj = Math.max(0, Math.min(1, u + (noise(index, 2) - 0.5) * (1 / cols) * 0.7))
       const vj = Math.max(0, Math.min(1, v + (noise(index, 3) - 0.5) * (1 / rows) * 0.7))
-      const x0 = leftBound + uj * (width - leftBound + 24)
-      const crest = height * (0.92 - 0.40 * Math.pow(uj, 1.5)) + Math.sin(uj * 5) * 20
-      const y0 = crest + vj * (height + 24 - crest)
+      const x0 = xStart + uj * (xEnd - xStart)
+      // Natural gentle curve matching user boundary:
+      // tapers into bottom edge at xStart, rises smoothly to ~0.74 height on right
+      const crest = height * (1.01 - 0.27 * Math.pow(uj, 1.25))
+      const thickness = (height + 16) - crest
+      if (thickness <= 0) continue
+      const y0 = crest + vj * thickness
       const tone = Math.max(0, Math.min(3, Math.floor((1 - vj) * 3.1 + noise(index, 4) * 0.6)))
-      const sizeBase = 1.3 + noise(index, 5) * 0.9
+      const sizeBase = 1.2 + noise(index, 5) * 0.8
       groups[tone].push(x0, y0, noise(index, 6) * TAU, sizeBase)
     }
   }
@@ -87,8 +92,8 @@ export function TacoPixelBackground() {
       context.fillRect(0, 0, width, height)
       const time = elapsed / 1000
       const mobile = width < 700
-      // 1. Gentle sea-wave swaying in the bottom-right corner (calm, breathing, no falling motion)
-      const drift = Math.sin(time * TAU / 36) * 4
+      // 1. Gentle sea-wave swaying strictly below the red-line crest in the bottom-right
+      const drift = Math.sin(time * TAU / 40) * 3
       for (const { points, color } of terrainLayers) {
         context.fillStyle = color
         context.beginPath()
@@ -97,8 +102,8 @@ export function TacoPixelBackground() {
           const y0 = points[i + 1]
           const phase = points[i + 2]
           const sizeBase = points[i + 3]
-          const x = x0 + drift + Math.sin(time * TAU / 28 + phase) * 2.5
-          const y = y0 + Math.sin(time * TAU / 22 + (x0 / width) * 4 + phase * 0.3) * 5 + Math.cos(time * TAU / 34 - (y0 / height) * 3) * 2.5
+          const x = x0 + drift + Math.sin(time * TAU / 32 + phase) * 2
+          const y = y0 + Math.sin(time * TAU / 26 + (x0 / width) * 3.5 + phase * 0.25) * 4 + Math.cos(time * TAU / 38 - (y0 / height) * 2.5) * 2
           if (x >= -10 && x <= width + 10 && y >= -10 && y <= height + 10) {
             context.rect(x - sizeBase / 2, y - sizeBase / 2, sizeBase, sizeBase)
           }
