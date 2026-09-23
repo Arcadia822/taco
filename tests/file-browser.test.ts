@@ -1092,16 +1092,16 @@ describe('FileBrowser', () => {
     expect(firstDialog.getAttribute('aria-labelledby')).toBe('taco-confirmation-title')
     expect(firstDialog.querySelector('.confirmation-dialog-title')?.textContent).toBe('下载此 Taco？')
     expect(firstDialog.querySelector('.confirmation-dialog-body')?.textContent).toContain('保存位置由浏览器设置决定')
-    expect(document.activeElement).toBe(firstDialog.querySelector('.confirmation-dialog-cancel'))
+    expect(document.activeElement).toBe(firstDialog.querySelector('button[aria-label="取消"]'))
 
-    firstDialog.querySelector<HTMLButtonElement>('.confirmation-dialog-cancel')!.click()
+    firstDialog.querySelector<HTMLButtonElement>('button[aria-label="取消"]')!.click()
     await Promise.resolve()
     expect(downloadClick).not.toHaveBeenCalled()
     expect(document.querySelector('.confirmation-dialog')).toBeNull()
     expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(true)
 
     document.querySelector<HTMLButtonElement>('.save-button')!.click()
-    document.querySelector<HTMLButtonElement>('.confirmation-dialog-confirm')!.click()
+    document.querySelector<HTMLButtonElement>('.confirmation-dialog button[aria-label="下载"]')!.click()
     await vi.waitFor(() => expect(document.querySelector('.taco-toast')).not.toBeNull())
 
     expect(document.querySelector('.taco-toast')?.textContent).toBe('已开始下载 Taco 文件')
@@ -1253,6 +1253,137 @@ describe('FileBrowser', () => {
     expect(document.querySelector<HTMLDetailsElement>('[data-stage="plan"]')?.open).toBe(false)
     expect(document.querySelector<HTMLDetailsElement>('.tree-folder[data-path$="/checklists"]')?.open).toBe(false)
     expect(document.querySelector<HTMLElement>('.sidebar-scroll')?.scrollTop).toBe(48)
+  })
+
+  it('creates ordinary files without changing checkpoint membership and keeps category switching available', async () => {
+    const bundle = structuredClone(testBundle)
+    bundle.checkpoints = {
+      version: 1,
+      nodes: [{ id: 'gate', title: 'Gate', after: [], documents: [{ path: 'specs/001-browser/spec.md', optional: true }] }],
+      documents: [],
+    }
+    bundle.navigation = { version: 1, groups: [{ id: 'custom', title: 'Custom', paths: ['plan.md'] }] }
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+
+    document.querySelector<HTMLButtonElement>('[data-stage="checkpoint-gate"] .add-file-to-group-btn')!.click()
+    const dialog = document.querySelector<HTMLDialogElement>('.new-file-dialog')!
+    expect(dialog.textContent).toContain('文件类型')
+    expect(dialog.textContent).toContain('分类')
+    expect(dialog.querySelector('.new-file-confirm.control-button-primary')).not.toBeNull()
+    const category = dialog.querySelector<HTMLSelectElement>('.new-file-category')!
+    expect(Array.from(category.options, ({ value }) => value)).toEqual(['', 'checkpoint-gate', 'custom'])
+    category.value = 'custom'
+    dialog.querySelector<HTMLInputElement>('.new-file-input')!.value = 'extra-proof'
+    dialog.querySelector<HTMLButtonElement>('.new-file-confirm')!.click()
+    await vi.waitFor(() => expect(bundle.files.some((file) => file.path.endsWith('/extra-proof.md'))).toBe(true))
+
+    expect(bundle.checkpoints).toEqual({
+      version: 1,
+      nodes: [{ id: 'gate', title: 'Gate', after: [], documents: [{ path: 'specs/001-browser/spec.md', optional: true }] }],
+      documents: [],
+    })
+    expect(browser.getCheckpointDocumentAdditions()).toEqual([])
+    expect(bundle.navigation.groups[0].paths).toContain('extra-proof.md')
+    const badge = document.querySelector<HTMLButtonElement>('.workspace-category-badge')!
+    expect(badge.disabled).toBe(false)
+    expect(badge.textContent).toBe('Custom')
+    badge.click()
+    expect(document.querySelector('.group-selector-popover')).not.toBeNull()
+    browser.destroy()
+  })
+
+  it('lets an ordinary file use a Checkpoint category without acquiring a document status', async () => {
+    const bundle = structuredClone(testBundle)
+    bundle.checkpoints = {
+      version: 1,
+      nodes: [{ id: 'gate', title: 'Gate', after: [], documents: [{ path: 'specs/001-browser/spec.md' }] }],
+      documents: [],
+    }
+    bundle.navigation = { version: 1, groups: [{ id: 'custom', title: 'Custom', paths: ['plan.md'] }] }
+    const original = structuredClone(bundle.checkpoints)
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+
+    document.querySelector<HTMLButtonElement>('.file-row[data-path$="plan.md"]')!.click()
+    const badge = document.querySelector<HTMLButtonElement>('.workspace-category-badge')!
+    badge.click()
+    const gate = Array.from(document.querySelectorAll<HTMLButtonElement>('.group-selector-popover .popover-action'))
+      .find((button) => button.textContent?.trim() === 'Gate · Checkpoint')!
+    gate.click()
+
+    const categoryFile = document.querySelector<HTMLElement>('.checkpoint-group .file-row[data-path$="plan.md"]')!
+    expect(categoryFile).not.toBeNull()
+    expect(categoryFile.closest('.checkpoint-file-row')).toBeNull()
+    expect(categoryFile.querySelector('.checkpoint-status-button')).toBeNull()
+    expect(badge.disabled).toBe(false)
+    expect(badge.textContent).toBe('Gate')
+    expect(bundle.checkpoints).toEqual(original)
+    expect(browser.getCheckpointDocumentAdditions()).toEqual([])
+
+    badge.click()
+    Array.from(document.querySelectorAll<HTMLButtonElement>('.group-selector-popover .popover-action'))
+      .find((button) => button.textContent?.trim() === 'Custom')!.click()
+    expect(document.querySelector('.checkpoint-group .file-row[data-path$="plan.md"]')).toBeNull()
+    expect(badge.textContent).toBe('Custom')
+    expect(bundle.checkpoints).toEqual(original)
+
+    document.querySelector<HTMLButtonElement>('[data-stage="checkpoint-gate"] .add-file-to-group-btn')!.click()
+    const dialog = document.querySelector<HTMLDialogElement>('.new-file-dialog')!
+    expect(dialog.querySelector<HTMLSelectElement>('.new-file-category')!.value).toBe('checkpoint-gate')
+    dialog.querySelector<HTMLInputElement>('.new-file-input')!.value = 'category-only'
+    dialog.querySelector<HTMLButtonElement>('.new-file-confirm')!.click()
+    await vi.waitFor(() => expect(document.querySelector('.checkpoint-group .file-row[data-path$="category-only.md"]')).not.toBeNull())
+    expect(bundle.checkpoints).toEqual(original)
+    expect(browser.getCheckpointDocumentAdditions()).toEqual([])
+    browser.destroy()
+  })
+
+  it('keeps owned Checkpoint files non-renamable while ordinary files remain renamable', () => {
+    const bundle = structuredClone(testBundle)
+    bundle.checkpoints = {
+      version: 1,
+      nodes: [{ id: 'gate', title: 'Gate', after: [], documents: [{ path: 'specs/001-browser/spec.md' }] }],
+      documents: [],
+    }
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    document.querySelector<HTMLButtonElement>('.checkpoint-file-row .checkpoint-file-menu')!.click()
+    expect(Array.from(document.querySelectorAll('.navigation-popover .popover-action'), (button) => button.textContent))
+      .not.toContain('重命名文件')
+    document.querySelector<HTMLButtonElement>('.file-row[data-path$="plan.md"] .file-action-btn')!.click()
+    expect(Array.from(document.querySelectorAll('.navigation-popover .popover-action'), (button) => button.textContent))
+      .toContain('重命名文件')
+    expect(bundle.files[0].path).toBe('specs/001-browser/spec.md')
+    browser.destroy()
+  })
+
+  it('loads malformed local Checkpoints with a warning and preserves their raw value', () => {
+    const bundle = structuredClone(testBundle)
+    bundle.checkpoints = { version: 1, nodes: 'invalid', documents: [] }
+    bundle.collab = { room: 'offline-room', on: true }
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    expect(document.querySelector('.checkpoint-warning-row')?.textContent).toContain('checkpoints.nodes')
+    expect(bundle.checkpoints).toEqual({ version: 1, nodes: 'invalid', documents: [] })
+    browser.destroy()
+  })
+
+  it('shows missing Checkpoint documents without status controls until created', () => {
+    const bundle = structuredClone(testBundle)
+    bundle.checkpoints = {
+      version: 1,
+      nodes: [{ id: 'gate', title: 'Gate', after: [], documents: [{ path: 'specs/001-browser/missing.md' }] }],
+      documents: [],
+    }
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    const missing = document.querySelector<HTMLButtonElement>('.checkpoint-placeholder-row [data-path$="missing.md"]')!
+    expect(missing.closest('.checkpoint-file-row')?.querySelector('.checkpoint-status-button')).toBeNull()
+    missing.click()
+    expect(document.querySelector('.checkpoint-placeholder .checkpoint-document-status')).toBeNull()
+    expect(document.querySelector('.checkpoint-placeholder .checkpoint-create-hint')).toBeNull()
+    expect(document.querySelector<HTMLButtonElement>('.checkpoint-create-button')).not.toBeNull()
+    document.querySelector<HTMLButtonElement>('.checkpoint-nav-item')!.click()
+    const graphRow = document.querySelector('.checkpoint-view .checkpoint-document')!
+    expect(graphRow.textContent).toContain('missing.md')
+    expect(graphRow.querySelector('.checkpoint-document-status')).toBeNull()
+    browser.destroy()
   })
 
   it('uses the first supported browser language when no choice was saved', () => {
@@ -1562,13 +1693,13 @@ describe('FileBrowser', () => {
     expect(editableBundle.comments).toBeUndefined()
     expect(document.querySelector('.author-name-dialog[open]')).not.toBeNull()
 
-    document.querySelector<HTMLButtonElement>('.author-name-dialog .comment-action')!.click()
+    document.querySelector<HTMLButtonElement>('.author-name-dialog button[aria-label="取消"]')!.click()
     expect(document.querySelector('.author-name-dialog')).toBeNull()
     expect(document.querySelector<HTMLTextAreaElement>('.comment-composer .comment-input')?.value).toBe('Keep this pending.')
 
     comment.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     const name = document.querySelector<HTMLInputElement>('.author-name-input')!
-    const confirm = document.querySelector<HTMLButtonElement>('.author-name-dialog .comment-submit')!
+    const confirm = document.querySelector<HTMLButtonElement>('.author-name-dialog button[aria-label="添加评论"]')!
     expect(confirm.disabled).toBe(true)
     name.value = 'Ada'
     name.dispatchEvent(new Event('input', { bubbles: true }))

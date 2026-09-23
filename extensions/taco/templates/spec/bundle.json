@@ -24,25 +24,29 @@
       "content": "---\ntitle: 'Task Breakdown'\n---\n\n## Tasks\n\n- [ ] T001 Implement core data model\n- [ ] T002 Build UI presentation\n"
     }
   ],
-  "navigation": {
+  "checkpoints": {
     "version": 1,
-    "entry": "spec/spec.md",
-    "groups": [
+    "template": "spec",
+    "nodes": [
       {
-        "id": "group-specify",
-        "title": "Specify",
-        "paths": ["spec/spec.md"]
+        "id": "spec",
+        "title": "Specification",
+        "after": [],
+        "documents": [{ "path": "spec/spec.md" }]
       },
       {
-        "id": "group-plan",
+        "id": "plan",
         "title": "Plan",
-        "paths": ["spec/plan.md"]
+        "after": ["spec"],
+        "documents": [{ "path": "spec/plan.md" }]
       },
       {
-        "id": "group-tasks",
+        "id": "tasks",
         "title": "Tasks",
-        "paths": ["spec/tasks.md"]
+        "after": ["plan"],
+        "documents": [{ "path": "spec/tasks.md" }]
       }
-    ]
+    ],
+    "documents": []
   }
 }

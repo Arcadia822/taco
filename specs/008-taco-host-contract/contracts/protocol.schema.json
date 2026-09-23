@@ -17,6 +17,51 @@
       "pattern": "^(?:\\.|(?![a-zA-Z]:)(?!(?:\\.{1,2}(?:/|$)))[^/\\\\\\0]+(?:/(?!(?:\\.{1,2}(?:/|$)))[^/\\\\\\0]+)*)$",
       "description": "安全相对根目录路径。允许单点 '.' 表示当前根，或不带遍历段与驱动器前缀的安全相对目录路径"
     },
+    "CheckpointDocumentRef": {
+      "type": "object",
+      "required": ["path"],
+      "properties": {
+        "path": { "$ref": "#/$defs/SafePath" },
+        "optional": { "type": "boolean" }
+      }
+    },
+    "CheckpointNode": {
+      "type": "object",
+      "required": ["id", "title", "after", "documents"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "after": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "documents": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CheckpointDocumentRef" }
+        }
+      }
+    },
+    "DocumentStatusRecord": {
+      "type": "object",
+      "required": ["path", "status", "updatedAt"],
+      "properties": {
+        "path": { "$ref": "#/$defs/SafePath" },
+        "status": { "enum": ["todo", "in_progress", "complete", "freeze"] },
+        "updatedAt": { "type": "string", "format": "date-time", "pattern": "Z$" }
+      }
+    },
+    "CheckpointsState": {
+      "type": "object",
+      "description": "Checkpoint DAG and path-keyed status table. Root membership, unique IDs/paths, references, and cycles are validated by validateCheckpoints at runtime.",
+      "required": ["version", "nodes", "documents"],
+      "properties": {
+        "version": { "const": 1 },
+        "template": { "type": "string" },
+        "nodes": { "type": "array", "items": { "$ref": "#/$defs/CheckpointNode" } },
+        "documents": { "type": "array", "items": { "$ref": "#/$defs/DocumentStatusRecord" } }
+      }
+    },
     "Uuid": {
       "type": "string",
       "format": "uuid",
@@ -288,6 +333,10 @@
               }
             }
           }
+        },
+        "checkpoints": {
+          "$ref": "#/$defs/CheckpointsState",
+          "description": "可选 Checkpoint 定义和文档状态；无文件哈希校验，非法状态拒绝发布而非静默剥离"
         }
       },
       "examples": [

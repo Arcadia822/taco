@@ -1,6 +1,7 @@
 import { isSafePath, relativePath, type TacoBundle, type TacoFile } from './model.ts'
 import { decodePng } from '../extensions/taco/bin/png.mjs'
 import { inertImageAttributes } from './security.ts'
+import { createControlButton } from './ui-primitives.ts'
 
 declare const __EMBEDDED_ASSETS__: Record<string, string> | undefined
 
@@ -40,9 +41,7 @@ export const openPngPreview = (file: TacoFile): void => {
   const dialog = document.createElement('dialog')
   dialog.className = 'png-preview'
   dialog.dataset.tacoTransient = ''
-  const close = document.createElement('button')
-  close.textContent = 'Close'
-  close.addEventListener('click', () => dialog.close())
+  const close = createControlButton('x', 'Close', () => dialog.close(), '', true)
   const image = document.createElement('img')
   image.src = file.content
   image.alt = file.title || file.path

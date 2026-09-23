@@ -144,15 +144,29 @@ const I18N = {
     copied: '已复制',
     copyFailed: '复制失败',
     scrollDown: '向下滚动',
-    section1Eyebrow: '03 / 一个文件',
+    section1Eyebrow: '04 / 一个文件',
     section1Title: '一个文件，带齐所有东西',
     section1Desc: '一个 .taco.html 就是完整的交接件：文档、阅读应用和评论线程一起入库或发送。审阅者双击即可阅读、编辑、划词评论；保存后，下一位审阅者或 Agent 接手的仍是同一份上下文。本地评审无需安装或登录。',
-    section1FileSize: '478.3 KB',
+    sectionCpEyebrow: '03 / 阶段进度',
+    sectionCpTitle: 'Checkpoints：文档状态与依赖图',
+    sectionCpDesc: '为项目定义文档依赖关系，查看每个阶段的进度和下一步建议。状态随 Taco 文件一起交接，方便人与 Agent 对齐工作；它不会锁定内容或阻止跨阶段编辑。',
+    sectionCpPoints: [
+      ['依赖图 (DAG)', '定义规范到任务的串并行阶段依赖，支持多分支与汇合'],
+      ['4 级生命周期', 'todo、in_progress、complete 与 freeze 状态追踪'],
+      ['下一步建议', '根据已标记的前序阶段推导 frontier，供人与 Agent 参考'],
+      ['无需内容锁', '状态保存在数据块中，不做哈希校验或强制门禁'],
+    ],
+    sectionCpBadge: 'CHECKPOINTS DAG',
+    sectionCpDemoTemplate: '008 宿主协议规范',
+    sectionCpStage1: '01 规范定义',
+    sectionCpStage2: '02 架构与模型',
+    sectionCpStage3: '03 接口契约',
+    section1FileSize: '约 743 KB',
     section1Tree: [
-      ['应用', '编辑器、渲染器、样式与运行时全内联', '（466.5 KB）'],
-      ['文件', '4 个文件：spec、data-model、流程图、OpenAPI', '（7.7 KB）'],
-      ['评论', '4 条跨文件评审意见与状态机', '（2.2 KB）'],
-      ['导航', '三组分类与入口映射清单', '（0.3 KB）'],
+      ['应用', '编辑器、渲染器、样式与运行时全内联'],
+      ['文件', '4 个文件：spec、data-model、流程图、OpenAPI'],
+      ['评论', '跨文件评审意见与状态'],
+      ['导航', '分类与入口映射清单'],
     ],
     section1Online: '可选依赖（需联网）',
     section1OnlineItems: ['Mermaid 渲染库：打开图表时从 jsDelivr 加载，离线时显示源码', '实时协作中继：可选'],
@@ -166,12 +180,12 @@ const I18N = {
       '点「交接改动」，把改动和评论整理成一段话交给 Agent',
     ],
     section2Tip: '试试窗口右上角的「交接改动」，左边的 Agent 会重跑一遍。',
-    section3Eyebrow: '04 / SPEC KIT 集成',
+    section3Eyebrow: '05 / SPEC KIT 集成',
     section3Title: '原生支持 GitHub Spec Kit 工作流',
     section3DescBefore: '已为 ',
     section3DescAfter: ' 做好完整集成。安装 Taco 扩展插件后，Agent 在每个规范生命周期（specify、plan、tasks 等）自动更新单文件容器，人类审查随时跟进。',
     section3Cmd: 'specify extension add taco --from https://github.com/Arcadia822/taco/releases/latest/download/taco-extension.zip',
-    section4Eyebrow: '05 / TACOBIN 协作空间',
+    section4Eyebrow: '06 / TACOBIN 协作空间',
     section4Title: 'Tacobin：为团队连接 Taco 与 Agent',
     section4Desc:
       '本地单文件适合自洽存档；当需要团队多人在线评审、生成可分享链接，或让终端 Agent 实时订阅评审事件流时，使用 taco-cli 一键推送到 Tacobin 空间。',
@@ -180,8 +194,8 @@ const I18N = {
     section4AgentTitle: 'FOR AGENT',
     section4AgentPrompt:
       '阅读 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md 并安装 taco-cli，再运行 taco-cli skills read taco 获取内置发布与评审指南。将当前 Taco 发布到 Tacobin，使用返回的 tacoId 运行 subscribe 监听评审事件。',
+    creditsEyebrow: '07 / SHOUTOUT',
     creditsBackToTop: '回到顶部',
-    section4Star: 'GitHub Star',
     creditsTitlePrefix: '感谢',
     creditsTitleEnd: '。',
     creditsDescription: 'Taco 的灵感与核心代码来自 Bento 项目。感谢 nyblnet 将它开源，让 Taco 得以在此基础上继续生长。',
@@ -212,6 +226,7 @@ const I18N = {
       firstHit: '[open] spec.md:5:32 > 匿名可发布，最小流程不含登录',
       moreHits: '… 另有 3 条：data-model.mmd、anonymous-publish.mmd、openapi.yaml',
       diffLine: 'datetime expiresAt "默认 90 天，每次成功鉴权顺延"',
+      checkpointHit: '节点 architecture 达成聚合 complete，等待测试与接口契约推进',
       placeholder: '粘贴 Taco 交接内容…',
       pasted: (lines: number) => `[已粘贴 ${lines} 行]`,
       summary: '已在 data-model.mmd 给 ApiKey 补上 expiresAt、lastUsedAt，给匿名 User 补上 reclaimAt，这条评论已解决。另外 3 条涉及设计取舍，留给你拍板。',
@@ -238,15 +253,29 @@ const I18N = {
     copied: 'Copied',
     copyFailed: 'Could not copy',
     scrollDown: 'Scroll down',
-    section1Eyebrow: '03 / One file',
+    section1Eyebrow: '04 / One file',
     section1Title: 'One file carries everything.',
     section1Desc: 'One .taco.html is the whole handoff: docs, the reader app and review threads travel together in your repo or as a shared file. Reviewers double-click to read, edit and comment in context; once saved, the next reviewer or agent gets that same context. No install or account for local review.',
-    section1FileSize: '479.0 KB',
+    sectionCpEyebrow: '03 / DOCUMENT PROGRESS',
+    sectionCpTitle: 'Checkpoints: Document Status & Dependencies',
+    sectionCpDesc: 'Define document dependencies for a project and see each stage’s progress and suggested next steps. Status travels with the Taco file so people and agents can coordinate; it does not lock content or block out-of-order edits.',
+    sectionCpPoints: [
+      ['DAG Stages', 'Define serial and parallel dependencies from spec to tasks with fan-in'],
+      ['4-State Lifecycle', 'Track documents through todo, in_progress, complete, and freeze'],
+      ['Suggested Next Steps', 'Derive a frontier from marked predecessors for people and agents to consider'],
+      ['No Content Lock', 'State lives in the data block without hash checks or enforced gates'],
+    ],
+    sectionCpBadge: 'CHECKPOINTS DAG',
+    sectionCpDemoTemplate: '008 Host Protocol',
+    sectionCpStage1: '01 Specification',
+    sectionCpStage2: '02 Architecture & Model',
+    sectionCpStage3: '03 API Contract',
+    section1FileSize: 'about 744 KB',
     section1Tree: [
-      ['App', 'inlined editor, renderers, styling and runtime', '(466.5 KB)'],
-      ['Files', '4 files: spec, data model, flowchart, OpenAPI', '(7.7 KB)'],
-      ['Comments', '4 cross-file review threads and state machine', '(2.2 KB)'],
-      ['Navigation', '3 custom groups and entry manifest', '(0.3 KB)'],
+      ['App', 'inlined editor, renderers, styling and runtime'],
+      ['Files', '4 files: spec, data model, flowchart, OpenAPI'],
+      ['Comments', 'cross-file review threads and status'],
+      ['Navigation', 'categories and entry manifest'],
     ],
     section1Online: 'OPTIONAL DEPENDENCIES',
     section1OnlineItems: ['Mermaid renderer — loaded from jsDelivr when a diagram opens; offline shows the source', 'Live collaboration relay — optional'],
@@ -260,12 +289,12 @@ const I18N = {
       'Hit Handoff to pack every edit and comment into one message for your agent',
     ],
     section2Tip: 'Try Handoff at the window’s top right — the agent on the left replays.',
-    section3Eyebrow: '04 / SPEC KIT INTEGRATION',
+    section3Eyebrow: '05 / SPEC KIT INTEGRATION',
     section3Title: 'Built-in GitHub Spec Kit Integration',
     section3DescBefore: 'Full integration ready out of the box. Installing the Taco extension equips ',
     section3DescAfter: ' with automatic single-file container refreshes across all lifecycle hooks.',
     section3Cmd: 'specify extension add taco --from https://github.com/Arcadia822/taco/releases/latest/download/taco-extension.zip',
-    section4Eyebrow: '05 / TACOBIN SPACE',
+    section4Eyebrow: '06 / TACOBIN SPACE',
     section4Title: 'Tacobin: Collaborative Relay for Teams & Agents',
     section4Desc:
       'While single-file Tacos excel at self-contained local governance, Tacobin provides cloud sharing, web reviews, and live event streaming back to your terminal agent via taco-cli.',
@@ -274,8 +303,8 @@ const I18N = {
     section4AgentTitle: 'FOR AGENT',
     section4AgentPrompt:
       'Read https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and install taco-cli, then run taco-cli skills read taco for its publishing and review guide. Publish the current Taco to Tacobin; use the returned tacoId with subscribe to stream review events.',
+    creditsEyebrow: '07 / SHOUTOUT',
     creditsBackToTop: 'Back to Top',
-    section4Star: 'Star on GitHub',
     creditsTitlePrefix: 'Thank you,',
     creditsTitleEnd: '.',
     creditsDescription: 'Taco’s inspiration and core code come from Bento. Thank you to nyblnet for making it open source and giving Taco a place to begin.',
@@ -306,7 +335,7 @@ const I18N = {
       firstHit: '[open] spec.md:5:106 > anonymous publishing works and the minimal flow has no login',
       moreHits: '… +3 more: data-model.mmd, anonymous-publish.mmd, openapi.yaml',
       diffLine: 'datetime expiresAt "90 days by default, extended on each successful auth"',
-      placeholder: 'Paste a Taco handoff…',
+      checkpointHit: 'Node architecture aggregated to complete, awaiting test & API contracts',
       pasted: (lines: number) => `[Pasted text · ${lines} lines]`,
       summary: 'Added expiresAt and lastUsedAt to ApiKey and reclaimAt to anonymous Users in data-model.mmd and resolved that thread. The other 3 are design calls — they are yours.',
       replay: 'Replay',
@@ -470,11 +499,11 @@ export default function HomePage() {
   }
 
   return (
-    <div id="top" className={`home-root ${geist.variable} ${firaCode.variable}`} data-background-muted={activeSection > 0 && activeSection < 5}>
+    <div id="top" className={`home-root ${geist.variable} ${firaCode.variable}`} data-background-muted={activeSection > 0 && activeSection < 6}>
       {/* Continuous page position, including a wheel gesture before the next page turns. */}
       <div ref={indicatorRef} className="page-indicator" aria-label={t.pageNavAria} aria-hidden="true">
         <span className="page-indicator__track" aria-hidden="true" />
-        {[0, 1, 2, 3, 4, 5].map((idx) => (
+        {[0, 1, 2, 3, 4, 5, 6].map((idx) => (
           <button
             key={idx}
             type="button"
@@ -782,7 +811,142 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ================= PAGE 2: 特性 01 - 真正单文件自洽 ================= */}
+      {/* ================= PAGE 2: 特性 02 - CHECKPOINTS 阶段门禁 ================= */}
+      <section className="snap-page snap-page--checkpoints">
+        <div style={{ width: '100%' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+              gap: '48px',
+              alignItems: 'center',
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: '11px',
+                  letterSpacing: '0.24em',
+                  textTransform: 'uppercase',
+                  color: '#3ecf8e',
+                  fontFamily: 'var(--mono)',
+                  marginBottom: '16px',
+                }}
+              >
+                {t.sectionCpEyebrow}
+              </div>
+              <h2
+                style={{
+                  fontSize: 'clamp(32px, 4.5vw, 48px)',
+                  fontWeight: 600,
+                  letterSpacing: '-0.035em',
+                  lineHeight: 1.15,
+                  margin: '0 0 20px',
+                  color: '#fff',
+                }}
+              >
+                {t.sectionCpTitle}
+              </h2>
+              <p
+                style={{
+                  fontSize: '16px',
+                  lineHeight: 1.7,
+                  color: '#a1a1aa',
+                  margin: '0 0 28px',
+                  maxWidth: '520px',
+                }}
+              >
+                {t.sectionCpDesc}
+              </p>
+
+              <div className="cp-feature-list">
+                {t.sectionCpPoints.map(([title, desc]) => (
+                  <div key={title} className="cp-feature-item">
+                    <span className="cp-feature-item__bullet" aria-hidden="true" />
+                    <div>
+                      <strong className="cp-feature-item__title">{title}</strong>
+                      <span className="cp-feature-item__desc">{desc}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 拟态 Checkpoint DAG 图与阶段卡片 */}
+            <div className="cp-card">
+              <div className="cp-card__header">
+                <div className="cp-card__badge-row">
+                  <span className="cp-card__badge">{t.sectionCpBadge}</span>
+                  <span className="cp-card__template">{t.sectionCpDemoTemplate}</span>
+                </div>
+                <span className="cp-card__status-summary">1 / 3 Freeze</span>
+              </div>
+
+              <div className="cp-graph-container">
+                {/* 节点 1: 规范定义 (Freeze) */}
+                <div className="cp-node cp-node--freeze">
+                  <div className="cp-node__header">
+                    <span className="cp-node__dot" aria-hidden="true" />
+                    <span className="cp-node__title">{t.sectionCpStage1}</span>
+                    <span className="cp-node__status">freeze</span>
+                  </div>
+                  <div className="cp-node__docs">
+                    <div className="cp-doc-item">
+                      <span className="cp-doc-item__icon cp-doc-item__icon--freeze" />
+                      <span className="cp-doc-item__path">spec.md</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="cp-edge-down" aria-hidden="true">
+                  <span className="cp-edge-line" />
+                </div>
+
+                {/* 节点 2: 架构与模型 (Complete / Frontier) */}
+                <div className="cp-node cp-node--complete is-frontier">
+                  <div className="cp-node__header">
+                    <span className="cp-node__dot" aria-hidden="true" />
+                    <span className="cp-node__title">{t.sectionCpStage2}</span>
+                    <span className="cp-node__status">complete</span>
+                    <span className="cp-node__frontier-tag">FRONTIER</span>
+                  </div>
+                  <div className="cp-node__docs">
+                    <div className="cp-doc-item">
+                      <span className="cp-doc-item__icon cp-doc-item__icon--complete" />
+                      <span className="cp-doc-item__path">data-model.mmd</span>
+                    </div>
+                    <div className="cp-doc-item">
+                      <span className="cp-doc-item__icon cp-doc-item__icon--complete" />
+                      <span className="cp-doc-item__path">flows/anonymous-publish.mmd</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="cp-edge-down" aria-hidden="true">
+                  <span className="cp-edge-line cp-edge-line--dashed" />
+                </div>
+
+                {/* 节点 3: 接口契约 (Todo) */}
+                <div className="cp-node cp-node--todo">
+                  <div className="cp-node__header">
+                    <span className="cp-node__dot" aria-hidden="true" />
+                    <span className="cp-node__title">{t.sectionCpStage3}</span>
+                    <span className="cp-node__status">todo</span>
+                  </div>
+                  <div className="cp-node__docs">
+                    <div className="cp-doc-item">
+                      <span className="cp-doc-item__icon cp-doc-item__icon--todo" />
+                      <span className="cp-doc-item__path">contracts/openapi.yaml</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ================= PAGE 3: 特性 01 - 真正单文件自洽 ================= */}
       <section className="snap-page">
         <div style={{ width: '100%' }}>
           <div
@@ -850,11 +1014,11 @@ export default function HomePage() {
               </div>
 
               <div className="bundle-card__tree">
-                {t.section1Tree.map(([key, value, size], index) => (
+                {t.section1Tree.map(([key, value], index) => (
                   <div key={key} className="bundle-card__row">
                     <span className="bundle-card__branch">{index === t.section1Tree.length - 1 ? '└──' : '├──'}</span>
                     <span className="bundle-card__key">{key}</span>
-                    <span className="bundle-card__value">{value} <strong className="bundle-card__size">{size}</strong></span>
+                    <span className="bundle-card__value">{value}</span>
                   </div>
                 ))}
               </div>
@@ -1047,36 +1211,6 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginTop: '4px' }}>
-                <a
-                  href="https://github.com/Arcadia822/taco"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    background: 'transparent',
-                    border: '1px solid rgba(255, 255, 255, 0.16)',
-                    borderRadius: '4px',
-                    padding: '10px 20px',
-                    color: '#fff',
-                    textDecoration: 'none',
-                    fontSize: '11px',
-                    fontFamily: 'var(--mono)',
-                    letterSpacing: '0.1em',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                  }}
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    style={{ width: '13px', height: '13px', marginRight: '6px', flexShrink: 0 }}
-                    aria-hidden="true"
-                  >
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                  </svg>
-                  {t.section4Star} ↗
-                </a>
-              </div>
             </div>
 
             {/* 示例终端：Agent 发起发布与订阅，Shell 输出 URL 和评审事件 */}
@@ -1112,7 +1246,7 @@ export default function HomePage() {
       </section>
       <section className="snap-page snap-page--credits" aria-labelledby="credits-title">
         <div className="credits-content">
-          <p className="credits-eyebrow">06 / SHOUTOUT</p>
+          <p className="credits-eyebrow">{t.creditsEyebrow}</p>
           <h2 id="credits-title">{t.creditsTitlePrefix} <span className="credits-brand"><img src="/bento-logo.svg" width="112" height="112" alt="" />Bento{t.creditsTitleEnd}</span></h2>
           <p className="credits-description">{t.creditsDescription}</p>
           <a className="credits-source" href="https://github.com/nyblnet/bento" target="_blank" rel="noopener noreferrer">nyblnet / bento <span aria-hidden="true">↗</span></a>

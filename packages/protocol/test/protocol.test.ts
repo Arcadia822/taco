@@ -140,4 +140,73 @@ describe('@taco/protocol', () => {
     expect(hostileProjection.ok).toBe(false)
     expect(hostileProjection.err).toContain('Undeclared top-level property rejected')
   })
+  it('preserves valid checkpoints in projected and validated Host snapshots', () => {
+    const checkpoints = {
+      version: 1,
+      nodes: [{
+        id: 'plan',
+        title: 'Plan',
+        after: [],
+        documents: [
+          { path: 'specs/test/spec.md' },
+          { path: 'specs/test/future.md', optional: true },
+        ],
+      }],
+      documents: [
+        { path: 'specs/test/future.md', status: 'freeze', updatedAt: '2026-09-23T08:00:00Z' },
+      ],
+    }
+    const localBundle = {
+      format: 'taco/files',
+      version: 1,
+      docId: 'checkpoint-host-test',
+      title: 'Checkpoint test',
+      root: 'specs/test',
+      files: [{ path: 'specs/test/spec.md', mediaType: 'text/markdown', content: '# Spec' }],
+      checkpoints,
+    }
+
+    const projection = projectLocalBundleToUploadContent(localBundle)
+    expect(projection.ok).toBe(true)
+    if (!projection.ok) return
+    expect(projection.content.snapshot.checkpoints).toBe(checkpoints)
+    const validated = validateStagedUploadContent(projection.content)
+    expect(validated.ok).toBe(true)
+    if (!validated.ok) return
+    expect(validated.payload.snapshot.checkpoints).toBe(checkpoints)
+    expect(validateDocumentSnapshot({ ...localBundle, checkpoints: undefined }).ok).toBe(true)
+  })
+
+  it('rejects malformed checkpoints rather than stripping or publishing them', () => {
+    const invalid = {
+      version: 1,
+      nodes: [{
+        id: 'plan',
+        title: 'Plan',
+        after: [],
+        documents: [{ path: '../escaped.md' }],
+      }],
+      documents: [],
+    }
+    const snapshot = {
+      format: 'taco/files',
+      version: 1,
+      docId: 'checkpoint-host-test',
+      title: 'Checkpoint test',
+      root: 'specs/test',
+      files: [{ path: 'specs/test/spec.md', mediaType: 'text/markdown', content: '# Spec' }],
+      checkpoints: invalid,
+    }
+    const validation = validateDocumentSnapshot(snapshot)
+    expect(validation).toMatchObject({
+      ok: false,
+      err: expect.stringContaining('Checkpoints invalid at checkpoints.nodes[0].documents[0].path'),
+    })
+    const projection = projectLocalBundleToUploadContent(snapshot)
+    expect(projection).toMatchObject({
+      ok: false,
+      err: expect.stringContaining('checkpoints.nodes[0].documents[0].path'),
+    })
+    expect(validateStagedUploadContent({ protocol: 'taco-host/1', snapshot }).ok).toBe(false)
+  })
 })

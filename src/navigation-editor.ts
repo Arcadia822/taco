@@ -1,3 +1,4 @@
+import { checkpointMembership, validateCheckpoints } from '@taco/protocol'
 import { type NavigationGroup, type NavigationManifest, type TacoBundle, type TacoFile } from './model.ts'
 import { resolveDocumentNavigation } from './navigation.ts'
 
@@ -61,7 +62,13 @@ export function moveFileToGroup(
   filePath: string,
   targetGroupId: string | null, // null 表示移出所有组，回到未分配
   bundleRoot: string,
+  bundle: TacoBundle,
 ): NavigationManifest {
+  if (bundle.checkpoints !== undefined) {
+    const validated = validateCheckpoints(bundle.checkpoints, bundle.root)
+    const fullPath = filePath.startsWith(`${bundleRoot}/`) ? filePath : `${bundleRoot}/${filePath}`
+    if (validated.ok && checkpointMembership(validated.value).has(fullPath)) return manifest
+  }
   const next = structuredClone(manifest)
   const relPath = filePath.startsWith(`${bundleRoot}/`) ? filePath.slice(bundleRoot.length + 1) : filePath
 
@@ -73,12 +80,18 @@ export function moveFileToGroup(
     })
   }
 
-  // 如果目标组存在，则添加进去
+  // Checkpoint categories are navigation groups, not node document requirements.
   if (targetGroupId) {
-    const targetGroup = next.groups.find((g) => g.id === targetGroupId)
-    if (targetGroup) {
-      targetGroup.paths.push(relPath)
+    let targetGroup = next.groups.find((g) => g.id === targetGroupId)
+    if (!targetGroup) {
+      const validated = bundle.checkpoints === undefined ? null : validateCheckpoints(bundle.checkpoints, bundle.root)
+      const node = validated?.ok ? validated.value.nodes.find(({ id }) => `checkpoint-${id}` === targetGroupId) : undefined
+      if (node) {
+        targetGroup = { id: targetGroupId, title: node.title, paths: [] }
+        next.groups.push(targetGroup)
+      }
     }
+    targetGroup?.paths.push(relPath)
   }
 
   return next

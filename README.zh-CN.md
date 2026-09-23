@@ -40,7 +40,9 @@ canonical spec directory → 一个 .taco.html → 人类评审 → Agent 同步
 https://github.com/Arcadia822/taco
 ```
 
-Agent 会读取 Taco repo 中的说明，执行默认的 **CLI-free skill 安装**：把 `taco` skill（`skills/taco/` —— Agent 指南、生产 shell 与模板包）安装到自己的 skill 目录。这就是完整安装；此后 Agent 可以在任意目录用 skill 自带的 shell 组装 `.taco.html` 评审文件，完全离线，不需要 npm 包、CLI 或任何构建。更深入的集成 —— 用于项目级接线的 Spec Kit extension 命令/hooks/policy，或用于云端发布（TacoHub/Tacobin）的 `taco-cli` —— 都属于需要显式请求的独立步骤，详见 [`docs/agent-installation.md`](docs/agent-installation.md)。
+Agent 会读取 Taco repo 中的说明，执行默认的 **CLI-free skill 安装**：把完整的 `skills/taco/` 目录（Agent 指南、生产 shell、按需加载的参考文档与读取脚本、文档示例）安装到自己的 skill 目录。这就是完整安装；此后 Agent 可以在任意目录用 skill 自带的 shell 组装 `.taco.html` 评审文件，完全离线，不需要 npm 包、CLI 或任何构建。更深入的集成 —— 用于项目级接线的 Spec Kit extension 命令/hooks/policy，或用于云端发布（TacoHub/Tacobin）的 `taco-cli` —— 都属于需要显式请求的独立步骤，详见 [`docs/agent-installation.md`](docs/agent-installation.md)。
+
+是否使用 Checkpoint 取决于用户和项目的评审要求。随 skill 提供的 `spec/` SDD 阶段图只是可改写的示例，不是默认阶段方案，也不决定生成的 Taco 要存在哪里。只有处理 Checkpoint 时才需要加载对应的详细协议参考；普通评审不必设置 Checkpoint。
 
 安装之后，评审闭环不需要额外配置：
 
@@ -85,10 +87,10 @@ Agent 只复制 skill 的 shell、把文档写入其数据块，目录中的其�
 
 Agent 需要遵守：
 
-- 被评审的目录始终是 canonical source。`.taco.html` 只是运输载体：复制 skill 的 `taco-shell.html`，再把 `taco/files` v1 bundle JSON 写入其 `#taco-document` 数据块，并在每次刷新时保留 `docId`、comments 与 `navigation`。只有该数据块可写；不要手工修改它以外的 shell。
+- 被评审的目录始终是 canonical source。`.taco.html` 只是运输载体：复制 skill 的 `taco-shell.html`，再把 `taco/files` v1 bundle JSON 写入其 `#taco-document` 数据块，并在每次刷新时保留 `docId`、comments、navigation，以及已有的 Checkpoint 图和状态。只有该数据块和转义后的 HTML `<title>` 可写；不要手工修改其余 shell。
 - 当宿主允许本地 `file://` 导航时，用用户的浏览器打开生成的文件，并如实报告 `presented as a clickable file`、`opened`、`opened and verified` 三者中真正发生的一项。headless 加载只是内部证据，不能当作面向用户的可视化展示。
 - 通过任一渠道取回评审结果：浏览器的 **Handoff**，或评审者保存后的 `.taco.html`。Handoff 复制的是自上次保存以来的文本 diff 与 open comment，不要求先保存；保存文件这一渠道则必须先保存。两者都没有收到时，如实说明，不要导入并未真正获得的内容。
-- 每次刷新都保留 `docId`、`comments` 与 `navigation`；不得编造评论、哈希或验证结论；不得因为某个文件不在 bundle 中就删除 canonical 文件。
+- 每次刷新都保留所有已有 bundle 字段，包括存在时的 `checkpoints`；不得编造评论、哈希或验证结论；不得因为某个文件不在 bundle 中就删除 canonical 文件。
 - 启用在线协作的 Taco 可能携带访问凭据。未经用户允许，不要把其内容上传或粘贴到其他服务。
 
 ## 可选 Spec Kit plugin
@@ -113,8 +115,9 @@ speckit.taco.review specs/001-example/001-example.taco.html
 
 ```text
 src/                                  浏览器、编辑器、评论、保存与协作运行时
-skills/taco/                          可安装的 Taco skill：Agent 指南、生产 shell 与模板包
+skills/taco/                          可安装的 Taco skill：指南、shell、按需加载的参考文档、脚本与示例
 extensions/taco/                      可选的 Spec Kit manifest、Agent 命令、离线 CLI 与项目政策
+examples/checkpoint-scroll/           独立的大型 Checkpoint 演示；不作为安装模板发布
 tests/                                数据模型、渲染、交互、协作和 CLI 往返测试
 specs/001-taco-bento-product/         默认 Taco 与产品规格
 specs/002-taco-speckit-plugin/        可安装 Spec Kit plugin 规格与验收流程

@@ -8,6 +8,7 @@ import {
   type TacoBundle,
   type TacoFile,
 } from './model.ts'
+import { resolveCheckpoints, setDocumentStatus, type DocumentStatus } from '@taco/protocol'
 import { Editor } from '@tiptap/core'
 import { canSaveAndUnpack, canWriteInPlace, saveAndUnpack, saveCopy, saveFile, type SaveResult } from './kernel/save.ts'
 import { blockHtml, blocksFromEditor, createTacoEditorExtensions, ensureTacoBlockIds, migrateTacoBundleBlocks } from './tiptap-editor.ts'
@@ -25,7 +26,7 @@ import {
 import { createBrandMarkContainer } from './brand.ts'
 import { createSourceEditor, type SourceEditorController } from './source-editor.ts'
 import { FileNavigation } from './file-navigation.ts'
-import { getFileCurrentGroup, openGroupSelectorPopover } from './group-selector.ts'
+import { getAvailableGroups, getFileCurrentGroup, openGroupSelectorPopover } from './group-selector.ts'
 import { addNavigationGroup, createInitialManifest, moveFileToGroup } from './navigation-editor.ts'
 import { showNewFileDialog } from './new-file-dialog.ts'
 import {
@@ -58,6 +59,8 @@ import { resolveFileCategory } from './category.ts'
 import { commentLineReference } from './comment-position.ts'
 import { createStructuredFileViewer, structuredFileLabels } from './structured-file-viewer.ts'
 import { createSegmentedControl } from './segmented-control.ts'
+import { createCheckpointView } from './checkpoint-view.ts'
+import { checkpointCopy } from './i18n.ts'
 
 type AuxiliaryTab = 'outline' | 'comments'
 
@@ -88,6 +91,11 @@ const normalizeRelativeLink = (fromPath: string, href: string): { path: string; 
 
 export class FileBrowser {
   private selected: TacoFile | null
+  private checkpointView = false
+  private selectedPlaceholder: string | null = null
+  private checkpointBaseline = new Map<string, DocumentStatus>()
+  private checkpointTemplateBaseline: string | null = null
+  private checkpointDocumentBaseline = new Set<string>()
   private sidebar!: HTMLElement
   private fileNavigation: FileNavigation | null = null
   private viewer!: HTMLElement
@@ -100,6 +108,7 @@ export class FileBrowser {
   private outlineTab!: HTMLButtonElement
   private commentsTab!: HTMLButtonElement
   private categoryBadge!: HTMLButtonElement
+  private checkpointTemplateInput!: HTMLInputElement
   private workspacePath!: HTMLElement
   private readonly markdownMigrationErrors = new Map<string, string>()
   private markdownEditor: Editor | null = null
@@ -166,6 +175,41 @@ export class FileBrowser {
           ...(diff ? { diff } : {}),
         }
       })
+  }
+
+  getCheckpointChanges(): Array<{ path: string; from: DocumentStatus; to: DocumentStatus }> {
+    const current = resolveCheckpoints(this.bundle)
+    if (!current.valid) return []
+    const statuses = new Map(current.state?.documents.map(({ path, status }) => [path, status]))
+    const paths = new Set([...this.checkpointBaseline.keys(), ...statuses.keys()])
+    return [...paths].sort().flatMap((path) => {
+      const from = this.checkpointBaseline.get(path) ?? 'todo'
+      const to = statuses.get(path) ?? 'todo'
+      return from === to ? [] : [{ path, from, to }]
+    })
+  }
+  getCheckpointTemplateChange(): { from: string | null; to: string | null } | null {
+    const current = resolveCheckpoints(this.bundle)
+    if (!current.valid) return null
+    const to = current.state?.template?.trim() || null
+    return this.checkpointTemplateBaseline === to ? null : { from: this.checkpointTemplateBaseline, to }
+  }
+
+  getCheckpointDocumentAdditions(): Array<{ checkpointId: string; path: string }> {
+    const current = resolveCheckpoints(this.bundle)
+    if (!current.valid) return []
+    return current.nodes.flatMap((node) => node.documents
+      .filter((doc) => !this.checkpointDocumentBaseline.has(`${node.id}\u0000${doc.path}`))
+      .map((doc) => ({ checkpointId: node.id, path: doc.path })))
+  }
+
+  private captureCheckpointBaseline(): void {
+    const result = resolveCheckpoints(this.bundle)
+    this.checkpointBaseline = new Map(result.valid ? result.state?.documents.map(({ path, status }) => [path, status]) : [])
+    this.checkpointTemplateBaseline = result.valid ? result.state?.template?.trim() || null : null
+    this.checkpointDocumentBaseline = new Set(result.valid
+      ? result.nodes.flatMap((node) => node.documents.map((doc) => `${node.id}\u0000${doc.path}`))
+      : [])
   }
 
   constructor(private root: HTMLElement, private bundle: TacoBundle, private readonly options: FileBrowserOptions = {}) {
@@ -243,7 +287,7 @@ export class FileBrowser {
       this.dirtyTracker.note(change)
       if (this.saveButton) this.syncDirtyState()
     }))
-    if (this.bundle.collab?.room && this.bundle.collab.on !== false) {
+    if (this.bundle.collab?.room && this.bundle.collab.on !== false && resolveCheckpoints(this.bundle).valid) {
       this.sync.enable()
       this.share.wireOnlineStatus(joinFromDoc(this.sync, this.store))
     }
@@ -252,6 +296,7 @@ export class FileBrowser {
     this.dirtyTracker.markSaved()
     // An embedding page may present the file as a reviewer's in-progress session (e.g. the Tacobin demo).
     if (this.embedded && new URLSearchParams(location.search).has('pending')) this.dirtyTracker.markCommentsPending()
+    this.captureCheckpointBaseline()
     this.syncDirtyState()
     document.addEventListener('keydown', this.handleDocumentKeyDown)
     window.addEventListener('resize', this.handleWindowResize)
@@ -295,6 +340,12 @@ export class FileBrowser {
 
     this.fileNavigation = new FileNavigation({
       bundle: this.bundle,
+      checkpointView: this.checkpointView,
+      selectedPlaceholderPath: this.selectedPlaceholder,
+      checkpointLabels: checkpointCopy(this.locale),
+      onSelectCheckpoint: () => this.showCheckpoints(),
+      onSelectPlaceholder: (path) => this.selectPlaceholder(path),
+      onChangeCheckpointStatus: (path, status) => this.changeCheckpointStatus(path, status),
       selected: this.selected,
       labels: {
         files: this.t.files,
@@ -350,6 +401,38 @@ export class FileBrowser {
     title.addEventListener('change', () => {
       title.value = this.bundle.title
     })
+    const checkpointLabels = checkpointCopy(this.locale)
+    const checkpointPageTitle = el('label', 'checkpoint-page-title')
+    checkpointPageTitle.append(el('span', '', `${checkpointLabels.checkpoints}:`))
+    this.checkpointTemplateInput = el('input', 'checkpoint-template-name') as HTMLInputElement
+    this.checkpointTemplateInput.type = 'text'
+    this.checkpointTemplateInput.value = resolveCheckpoints(this.bundle).state?.template ?? ''
+    this.checkpointTemplateInput.placeholder = checkpointLabels.checkpointUnnamed
+    this.checkpointTemplateInput.setAttribute('aria-label', checkpointLabels.checkpointTemplateName)
+    this.checkpointTemplateInput.size = Math.max(8, Math.min(this.checkpointTemplateInput.value.length, 32))
+    this.checkpointTemplateInput.disabled = !bundleCanWrite(this.bundle)
+    this.checkpointTemplateInput.addEventListener('input', () => {
+      this.checkpointTemplateInput.size = Math.max(8, Math.min(this.checkpointTemplateInput.value.length, 32))
+    })
+    this.checkpointTemplateInput.addEventListener('change', () => {
+      const current = resolveCheckpoints(this.bundle)
+      if (!current.valid || !current.state) return
+      const name = this.checkpointTemplateInput.value.trim()
+      this.checkpointTemplateInput.value = name
+      if (name === (current.state.template ?? '')) return
+      const next = structuredClone(current.state)
+      if (name) next.template = name
+      else delete next.template
+      this.store.commit({ kind: 'document' }, () => { this.bundle.checkpoints = next })
+    })
+    this.checkpointTemplateInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); this.checkpointTemplateInput.blur() }
+      else if (event.key === 'Escape') {
+        this.checkpointTemplateInput.value = resolveCheckpoints(this.bundle).state?.template ?? ''
+        this.checkpointTemplateInput.blur()
+      }
+    })
+    checkpointPageTitle.append(this.checkpointTemplateInput)
     this.categoryBadge = el('button', 'workspace-category-badge') as HTMLButtonElement
     this.categoryBadge.type = 'button'
     this.categoryBadge.addEventListener('click', () => { void this.promptChangeCategory() })
@@ -414,6 +497,7 @@ export class FileBrowser {
       collapsedBrandName,
       leftHeaderToggle,
       title,
+      checkpointPageTitle,
       this.categoryBadge,
       this.workspacePath,
       workspaceHeaderSpacer,
@@ -464,13 +548,16 @@ export class FileBrowser {
   }
 
   private selectFile(file: TacoFile, writeHash = true): void {
+    this.checkpointView = false
+    this.selectedPlaceholder = null
+    this.root.classList.remove('is-checkpoint-view')
     this.selected = file
     this.auxiliaryTab = this.embedded || fileKind(file) !== 'markdown' ? 'comments' : 'outline'
     this.sync.setPresence({ fileId: file.id ?? '', from: 0, to: 0, focused: false, hasCursor: false })
     this.comments.resetForFileChange()
     this.updateSelectionLocation(file, writeHash)
     this.syncWorkspaceHeader()
-    this.fileNavigation?.paint(file)
+    this.fileNavigation?.paint(file, false, null)
     this.paintViewer(false)
     this.comments.paint()
     this.syncAuxiliaryTabs()
@@ -480,6 +567,49 @@ export class FileBrowser {
       this.commentPanelOpen = false
       this.syncPanelToggles()
     }
+  }
+
+  private showCheckpoints(): void {
+    if (this.bundle.checkpoints === undefined) return
+    this.checkpointView = true
+    this.selectedPlaceholder = null
+    this.root.classList.add('is-checkpoint-view')
+    this.selected = null
+    this.comments.resetForFileChange()
+    this.sync.setPresence({ fileId: '', from: 0, to: 0, focused: false, hasCursor: false })
+    this.syncWorkspaceHeader()
+    this.fileNavigation?.paint(null, true, null)
+    this.paintViewer()
+    this.comments.paint()
+    this.syncAuxiliaryTabs()
+    this.viewer.scrollTop = 0
+  }
+
+  private selectPlaceholder(path: string): void {
+    const result = resolveCheckpoints(this.bundle)
+    if (!result.valid || !result.nodes.some((node) => node.documents.some((doc) => doc.path === path && !doc.exists))) return
+    this.checkpointView = false
+    this.root.classList.remove('is-checkpoint-view')
+    this.selectedPlaceholder = path
+    this.selected = null
+    this.comments.resetForFileChange()
+    this.syncWorkspaceHeader()
+    this.fileNavigation?.paint(null, false, path)
+    this.paintViewer()
+    this.comments.paint()
+    this.syncAuxiliaryTabs()
+    this.viewer.scrollTop = 0
+  }
+
+  private changeCheckpointStatus(path: string, status: DocumentStatus): void {
+    const current = resolveCheckpoints(this.bundle)
+    if (!bundleCanWrite(this.bundle) || !current.valid || !current.state) return
+    if (!current.nodes.some((node) => node.documents.some((doc) => doc.path === path))) return
+    const next = setDocumentStatus(current.state, path, status, new Date().toISOString())
+    if (next === current.state) return
+    this.store.commit({ kind: 'document' }, () => { this.bundle.checkpoints = next })
+    this.fileNavigation?.refresh(this.selected, this.checkpointView, this.selectedPlaceholder)
+    if (this.checkpointView || this.selectedPlaceholder) this.paintViewer()
   }
 
   private rememberOfflineSelection(file: TacoFile): void {
@@ -508,6 +638,23 @@ export class FileBrowser {
     this.sourceEditor = null
     this.resetHtmlPreviewUrl()
     this.viewer.innerHTML = ''
+    if (this.checkpointView) {
+      this.viewer.append(createCheckpointView(resolveCheckpoints(this.bundle), checkpointCopy(this.locale), {
+        readOnly: !bundleCanWrite(this.bundle),
+        onSelect: (path) => {
+          const file = fileByPath(this.bundle, path)
+          if (file) this.selectFile(file)
+          else this.selectPlaceholder(path)
+        },
+        onSet: (path, status) => this.changeCheckpointStatus(path, status),
+        onOpenView: () => this.showCheckpoints(),
+      }))
+      return
+    }
+    if (this.selectedPlaceholder) {
+      this.paintCheckpointPlaceholder(this.selectedPlaceholder)
+      return
+    }
     const file = this.selected
     if (!file) {
       this.viewer.append(el('div', 'empty-state', this.t.empty))
@@ -572,6 +719,40 @@ export class FileBrowser {
       this.comments.refreshHighlights()
     }
     if (animateEntrance) this.animateSurfaceEntrance(this.viewer.firstElementChild as HTMLElement | null, 'file')
+  }
+
+  private paintCheckpointPlaceholder(path: string): void {
+    const result = resolveCheckpoints(this.bundle)
+    if (!result.valid) return
+    const node = result.nodes.find((item) => item.documents.some((doc) => doc.path === path))
+    const doc = node?.documents.find((item) => item.path === path)
+    if (!node || !doc) return
+    const labels = checkpointCopy(this.locale)
+    const surface = el('section', 'checkpoint-placeholder')
+    surface.append(svgIcon('file-text'), el('h1', '', fileName(path)), el('p', 'checkpoint-placeholder-path', path))
+    const meta = el('div', 'checkpoint-placeholder-meta')
+    meta.append(el('span', '', `${node.title} · ${doc.optional ? labels.checkpointOptional : labels.checkpointRequired}`))
+    surface.append(meta)
+    if (bundleCanWrite(this.bundle)) {
+      const create = el('button', 'checkpoint-create-button', labels.checkpointCreateFile) as HTMLButtonElement
+      create.type = 'button'
+      create.addEventListener('click', () => this.createCheckpointFile(path))
+      surface.append(create)
+    } else surface.append(el('p', 'checkpoint-create-hint', labels.checkpointNotCreatedRead))
+    this.viewer.append(surface)
+  }
+
+  private createCheckpointFile(path: string): void {
+    if (!bundleCanWrite(this.bundle) || fileByPath(this.bundle, path)) return
+    const ext = path.split('.').at(-1)?.toLowerCase()
+    const mediaType = ext === 'md' ? 'text/markdown'
+      : ext === 'yaml' || ext === 'yml' ? 'application/yaml'
+        : ext === 'json' ? 'application/json'
+          : 'text/plain'
+    const file: TacoFile = { id: `file-${crypto.randomUUID()}`, path, mediaType, content: '' }
+    this.store.commit({ kind: 'file', fileId: file.id! }, () => { this.bundle.files.push(file) })
+    this.selectFile(file)
+    this.fileNavigation?.refresh(this.selected)
   }
 
   private animateSurfaceEntrance(surface: HTMLElement | null, profile: 'file' | 'panel' = 'panel'): void {
@@ -918,23 +1099,38 @@ export class FileBrowser {
 
   private get t() { return copy[this.locale] }
   private syncWorkspaceHeader(): void {
-    this.workspacePath.textContent = this.selected ? relativePath(this.bundle, this.selected) : ''
-    if (!this.selected) {
+    const result = resolveCheckpoints(this.bundle)
+    const path = this.selected?.path ?? this.selectedPlaceholder
+    this.workspacePath.textContent = path ? path.slice(this.bundle.root.length + 1) : ''
+    if (this.checkpointView || !path) {
       this.categoryBadge.style.display = 'none'
       return
     }
-
     this.categoryBadge.style.display = 'inline-flex'
+    const node = result.valid ? result.nodes.find((item) => item.documents.some((doc) => doc.path === path)) : undefined
+    this.categoryBadge.classList.toggle('is-checkpoint', Boolean(node))
+    if (node) {
+      const category = this.selected ? resolveFileCategory(this.bundle, this.selected) : null
+      this.categoryBadge.textContent = node.title
+      this.categoryBadge.title = category?.overridden
+        ? checkpointCopy(this.locale).checkpointOverridden(category.overridden)
+        : checkpointCopy(this.locale).checkpointGroupHint
+      this.categoryBadge.disabled = true
+      this.categoryBadge.classList.remove('is-editable')
+      return
+    }
+    if (!this.selected) return
     const groupInfo = getFileCurrentGroup(this.bundle, this.selected, this.t.ungrouped)
     this.categoryBadge.textContent = groupInfo.groupTitle
     this.categoryBadge.title = bundleCanWrite(this.bundle)
-      ? `Group: ${groupInfo.groupTitle} (Click to change)`
-      : `Group: ${groupInfo.groupTitle}`
+      ? `${groupInfo.groupTitle} · ${this.t.changeCategory}`
+      : groupInfo.groupTitle
+    this.categoryBadge.disabled = !bundleCanWrite(this.bundle)
     this.categoryBadge.classList.toggle('is-editable', bundleCanWrite(this.bundle))
   }
 
   private promptChangeCategory(): void {
-    if (!this.selected || !bundleCanWrite(this.bundle)) return
+    if (!this.selected || !bundleCanWrite(this.bundle) || resolveFileCategory(this.bundle, this.selected).source === 'checkpoint') return
     const groupInfo = getFileCurrentGroup(this.bundle, this.selected, this.t.ungrouped)
 
     openGroupSelectorPopover({
@@ -952,7 +1148,7 @@ export class FileBrowser {
       },
       onSelectGroup: (targetGroupId) => {
         const current = createInitialManifest(this.bundle)
-        const next = moveFileToGroup(current, this.selected!.path, targetGroupId, this.bundle.root)
+        const next = moveFileToGroup(current, this.selected!.path, targetGroupId, this.bundle.root, this.bundle)
         this.store.updateNavigation(next)
         this.syncWorkspaceHeader()
         this.fileNavigation?.refresh(this.selected)
@@ -961,7 +1157,7 @@ export class FileBrowser {
         const current = createInitialManifest(this.bundle)
         const withNewGroup = addNavigationGroup(current, newTitle)
         const newGroupId = withNewGroup.groups[withNewGroup.groups.length - 1]?.id
-        const next = moveFileToGroup(withNewGroup, this.selected!.path, newGroupId, this.bundle.root)
+        const next = moveFileToGroup(withNewGroup, this.selected!.path, newGroupId, this.bundle.root, this.bundle)
         this.store.updateNavigation(next)
         this.syncWorkspaceHeader()
         this.fileNavigation?.refresh(this.selected)
@@ -970,11 +1166,26 @@ export class FileBrowser {
   }
   private applyRemoteState(): void {
     const selectedId = this.selected?.id
-    this.selected = this.bundle.files.find((file) => file.id === selectedId)
+    if (this.checkpointView || this.selectedPlaceholder) {
+      if (this.selectedPlaceholder && fileByPath(this.bundle, this.selectedPlaceholder)) {
+        this.selected = fileByPath(this.bundle, this.selectedPlaceholder)
+        this.selectedPlaceholder = null
+      } else if (this.checkpointView && this.bundle.checkpoints === undefined) {
+        this.checkpointView = false
+        this.root.classList.remove('is-checkpoint-view')
+        this.selected = defaultFile(this.bundle)
+        this.selectedPlaceholder = null
+      } else this.selected = null
+    } else this.selected = this.bundle.files.find((file) => file.id === selectedId)
       ?? (this.selected ? fileByPath(this.bundle, this.selected.path) : null)
       ?? defaultFile(this.bundle)
     const title = this.root.querySelector<HTMLInputElement>('.bundle-title')
     if (title && title.value !== this.bundle.title) title.value = this.bundle.title
+    if (this.checkpointTemplateInput && document.activeElement !== this.checkpointTemplateInput) {
+      const template = resolveCheckpoints(this.bundle).state?.template ?? ''
+      this.checkpointTemplateInput.value = template
+      this.checkpointTemplateInput.size = Math.max(8, Math.min(template.length, 32))
+    }
     document.title = `${this.bundle.title} — Taco`
 
     if (this.markdownEditor && this.selected && fileKind(this.selected) === 'markdown') {
@@ -1000,8 +1211,8 @@ export class FileBrowser {
         this.comments.refreshHighlights(host)
       }
       this.outline.paint()
-    } else if (this.selected) this.paintViewer()
-    this.fileNavigation?.refresh(this.selected)
+    } else this.paintViewer()
+    this.fileNavigation?.refresh(this.selected, this.checkpointView, this.selectedPlaceholder)
     this.syncWorkspaceHeader()
     this.comments.paint()
     this.syncDirtyState()
@@ -1087,11 +1298,14 @@ export class FileBrowser {
     this.saveButton.title = saveDirty ? this.t.unsaved : this.t.save
     this.saveButton.setAttribute('aria-label', this.saveButton.title)
 
-    // handoff 与 save 分开判定：仅实际有文件改动、增删文件或有评论时才给 copyButton 加 dot
+    // Handoff reflects actual file, comment, and Checkpoint changes.
     const hasFileChanges = this.dirtyTracker.getDirtyFileIds().size > 0
     const hasCommentChanges = this.dirtyTracker.isCommentsDirty()
     const hasOpenComments = (this.bundle.comments ?? []).some((c) => c.status === 'open')
-    const handoffDirty = hasFileChanges || hasCommentChanges || (hasOpenComments && saveDirty)
+    const hasCheckpointChanges = this.dirtyTracker.isDocumentDirty()
+      && (this.getCheckpointChanges().length > 0 || this.getCheckpointTemplateChange() !== null
+        || this.getCheckpointDocumentAdditions().length > 0)
+    const handoffDirty = hasFileChanges || hasCommentChanges || hasCheckpointChanges || (hasOpenComments && saveDirty)
     this.copyButton.classList.toggle('is-dirty', handoffDirty)
   }
 
@@ -1229,8 +1443,13 @@ export class FileBrowser {
         })),
       }
     })
+    const checkpointChanges = this.getCheckpointChanges()
+    const checkpointTemplateChange = this.getCheckpointTemplateChange()
+    const checkpointDocumentAdditions = this.getCheckpointDocumentAdditions()
     const hasDocTitleChange = this.dirtyTracker.isDocumentDirty() && !this.bundle.navigation
-    const hasFileOrCommentChanges = changedFiles.length > 0 || comments.length > 0 || this.dirtyTracker.isCommentsDirty() || this.dirtyTracker.getDirtyFileIds().size > 0
+    const hasFileOrCommentChanges = changedFiles.length > 0 || comments.length > 0 || checkpointChanges.length > 0
+      || checkpointTemplateChange !== null || checkpointDocumentAdditions.length > 0
+      || this.dirtyTracker.isCommentsDirty() || this.dirtyTracker.getDirtyFileIds().size > 0
     if (!hasDocTitleChange && !hasFileOrCommentChanges) {
       this.toast(this.t.noReviewChanges)
       return
@@ -1240,6 +1459,14 @@ export class FileBrowser {
       if (f.diff) return `\n### \`${f.path}\`\n\`\`\`diff\n${f.diff}\n\`\`\``
       return `\n### \`${f.path}\`\n*${this.t.handoffBinaryNotice}*\n`
     }).join('\n')
+    const checkpointSections = checkpointChanges.map(({ path, from, to }) =>
+      `- \`${path}\`: ${from} → ${to}`).join('\n')
+    const checkpointDefinitionSections = [
+      checkpointTemplateChange
+        ? `- template: ${JSON.stringify(checkpointTemplateChange.from)} → ${JSON.stringify(checkpointTemplateChange.to)}`
+        : '',
+      ...checkpointDocumentAdditions.map(({ checkpointId, path }) => `- ${JSON.stringify(checkpointId)}: add \`${path}\``),
+    ].filter(Boolean).join('\n')
     const commentSections = comments.map((c) => {
       const msgs = c.messages.map((m) => `  - **${m.author}**: ${m.body}`).join('\n')
       return `- [${c.location}] ${this.t.handoffQuoteLabel}: "${c.quote}"\n${msgs}`
@@ -1249,6 +1476,8 @@ export class FileBrowser {
       `- ${this.t.handoffDocTitle}: "${this.bundle.title}"`,
       originPath ? `- ${this.t.handoffLocalPath}: ${originPath}` : '',
       diffSections ? `\n## ${this.t.handoffDiffHeader}${diffSections}` : '',
+      checkpointSections ? `\n## Checkpoint status changes\n${checkpointSections}` : '',
+      checkpointDefinitionSections ? `\n## Checkpoint definition changes\n${checkpointDefinitionSections}` : '',
       commentSections ? `\n## ${this.t.handoffCommentsHeader}\n${commentSections}` : '',
     ].filter(Boolean).join('\n')
     const text = prompt
@@ -1332,6 +1561,7 @@ export class FileBrowser {
     if (result === 'cancelled') { this.toast(this.t.saveCancelled); return }
     if (result === 'directory-unavailable') { this.toast(this.t.directoryUnavailable); return }
     this.dirtyTracker.markSaved()
+    this.captureCheckpointBaseline()
     this.syncDirtyState()
     if (result !== 'downloaded') this.saveButton.querySelector('.button-label')!.textContent = this.t.saved
     this.toast(result === 'downloaded'
@@ -1371,19 +1601,25 @@ export class FileBrowser {
     setTimeout(() => toast.remove(), 2360)
   }
   private async handleCreateFile(targetGroupId: string | null): Promise<void> {
+    const groups = getAvailableGroups(this.bundle)
     const result = await showNewFileDialog({
-      title: this.t.addFile ?? 'Add file',
-      typeLabel: 'File type:',
-      nameLabel: 'File name:',
-      namePlaceholder: 'overview',
-      confirmLabel: this.t.save ?? 'Create',
-      cancelLabel: this.t.cancel ?? 'Cancel',
+      title: this.t.addFile,
+      typeLabel: this.t.newFileType,
+      nameLabel: this.t.newFileName,
+      categoryLabel: this.t.newFileCategory,
+      ungroupedLabel: this.t.ungrouped,
+      groups,
+      initialGroupId: groups.some((group) => group.id === targetGroupId) ? targetGroupId : null,
+      confirmLabel: this.t.create,
+      cancelLabel: this.t.cancel,
     })
     if (!result) return
 
     const fileNameClean = result.fileName.trim().replaceAll('\\', '/').split('/').filter(Boolean).join('/')
     const fullPath = `${this.bundle.root}/${fileNameClean}`
     if (fileByPath(this.bundle, fullPath)) return
+    if (result.groupId && !groups.some(({ id }) => id === result.groupId)) return
+    const navigation = result.groupId ? createInitialManifest(this.bundle) : null
 
     const newFile: TacoFile = {
       id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -1392,14 +1628,10 @@ export class FileBrowser {
       content: result.content,
     }
 
-    this.store.commit({ kind: 'document' }, () => {
+    this.store.commit({ kind: 'all' }, () => {
       this.bundle.files.push(newFile)
-      if (this.bundle.navigation) {
-        const rel = fileNameClean
-        if (targetGroupId) {
-          const group = this.bundle.navigation.groups.find((g) => g.id === targetGroupId)
-          if (group) group.paths.push(rel)
-        }
+      if (navigation) {
+        this.bundle.navigation = moveFileToGroup(navigation, fullPath, result.groupId, this.bundle.root, this.bundle)
       }
     })
 
@@ -1408,6 +1640,9 @@ export class FileBrowser {
   }
 
   private async handleRenameFile(file: TacoFile): Promise<void> {
+    const isTracked = (): boolean => resolveCheckpoints(this.bundle).nodes
+      .some((node) => node.documents.some((document) => document.path === file.path))
+    if (isTracked()) return
     const fullName = fileName(file.path)
     const dotIndex = fullName.lastIndexOf('.')
     const baseName = dotIndex > 0 ? fullName.slice(0, dotIndex) : fullName
@@ -1422,6 +1657,7 @@ export class FileBrowser {
       cancelLabel: this.t.cancel ?? 'Cancel',
     })
     if (!newName || !newName.trim()) return
+    if (isTracked()) return
 
     // 清理并剥除可能误输的相同后缀，严格强制追加原有后缀名
     let cleanBase = newName.trim().replaceAll('\\', '/').split('/').filter(Boolean).pop() ?? ''

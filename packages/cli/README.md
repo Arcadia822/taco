@@ -4,8 +4,8 @@ Official CLI client for Taco / TacoHub review publication, event subscription, a
 
 ## Purpose & Boundaries
 
-- **Single Skill for Offline / Local Use**: Taco is designed local-first. The core `taco` skill operates standalone using offline `.taco.html` files and local sync workflows without requiring `taco-cli`, cloud accounts, or remote services.
-- **taco-cli for Cloud Services**: `taco-cli` primarily serves the cloud / remote workflow: publishing specs to a remote Taco host (such as TacoHub / Tacobin) and streaming real-time reviewer comments and events over Server-Sent Events.
+- **Local use**: Install the complete repository `skills/taco/` directory (including its shell, `references/`, `scripts/`, and optional examples). The local review workflow does not require this CLI or a cloud account.
+- **Hosted use**: `taco-cli` publishes a local Taco to a Host and reads hosted review events. Use the installed skill's `references/publishing.md` and `references/reviewing.md` for the optional hosted workflow, and `taco-cli help` for the binary's current command contract.
 
 ## Installation
 
@@ -30,12 +30,14 @@ taco-cli help
 # Preview upload bundle locally without sending to network
 taco-cli publish specs/feature.taco.html --dry-run
 
-# Publish Taco to remote host
-taco-cli publish specs/feature.taco.html
+# Publish to a remote Host by supplying its origin (the default Host is localhost)
+taco-cli publish specs/feature.taco.html --host https://tacobin.arcadia-han.com
 
-# Stream review events in real time
-taco-cli subscribe <tacoId>
+# Stream review events from that Host
+taco-cli subscribe <tacoId> --host https://tacobin.arcadia-han.com
 
-# Read embedded Agent guidance
+# Inspect the CLI-embedded guide (currently separate from the repository skill)
 taco-cli skills read taco
 ```
+
+The CLI's embedded guide is currently cloud-oriented and is not yet generated from `skills/taco/`. It does not replace installation of that complete directory for offline review. Do not treat the two copies as synchronized until the release build actually embeds the canonical skill.

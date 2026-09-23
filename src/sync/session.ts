@@ -2,6 +2,7 @@
 // Copyright (c) 2026 The Bento authors
 // Local-only Taco session adapted from Bento slides/src/sync/session.ts.
 
+import { validateCheckpoints } from '@taco/protocol'
 import type { TacoBundle } from '../model.ts'
 import { projectSyncChanges, TacoStore, toSyncDoc, type StoreChange, type TacoSyncDoc } from '../store.ts'
 import { SyncState, SYNC_V, type Op, type SyncStateJSON } from './crdt.ts'
@@ -92,6 +93,7 @@ export class TacoSyncSession {
   readonly color = actorColor(this.actor)
   private state: SyncState
   private syncDoc: TacoSyncDoc
+  private invalidLocalCheckpoints = false
   private pendingChanges: StoreChange[] = []
   private log: Op[] = []
   private transports: Transport[] = []
@@ -109,7 +111,13 @@ export class TacoSyncSession {
   private readonly beforeUnload = (): void => this.send({ t: 'bye', a: this.actor })
 
   constructor(private store: TacoStore) {
-    this.syncDoc = rebuildSyncDoc(toSyncDoc(store.bundle), store.bundle)
+    const checkpoints = store.bundle.checkpoints
+    this.invalidLocalCheckpoints = checkpoints !== undefined
+      && !validateCheckpoints(checkpoints, store.bundle.root).ok
+    const localBundle = this.invalidLocalCheckpoints
+      ? { ...store.bundle, checkpoints: undefined }
+      : store.bundle
+    this.syncDoc = rebuildSyncDoc(toSyncDoc(localBundle), store.bundle)
     const saved = store.bundle.collab?.sync as SyncStateJSON | undefined
     try {
       if (saved?.v !== SYNC_V) throw new Error('security:sync-state-version')
@@ -132,6 +140,15 @@ export class TacoSyncSession {
   }
 
   enable(): void {
+    if (this.invalidLocalCheckpoints) {
+      const checkpoints = validateCheckpoints(this.store.bundle.checkpoints, this.store.bundle.root)
+      if (!checkpoints.ok) throw new Error(`security:invalid-checkpoints:${checkpoints.path}: ${checkpoints.err}`)
+      const restored = rebuildSyncDoc(toSyncDoc(this.store.bundle), this.store.bundle)
+      this.log.push(...this.state.diff(this.syncDoc, restored, { text: true }))
+      this.syncDoc = restored
+      this.state.adopt(restored)
+      this.invalidLocalCheckpoints = false
+    }
     if (this.active) return
     this.flush()
     this.transports = [new BroadcastTransport(this.store.bundle.docId, (frame) => this.onFrame(frame))]
@@ -354,7 +371,7 @@ export class TacoSyncSession {
       return
     }
     const beforeDoc = structuredClone(this.syncDoc)
-    const beforeState = this.state.toJSON()
+    const beforeState = structuredClone(this.state.toJSON())
     const beforeLogLength = this.log.length
     for (const op of ops) {
       if (!this.log.some((known) => known.a === op.a && known.s === op.s)) this.log.push(op)
@@ -388,7 +405,7 @@ export class TacoSyncSession {
     }
     this.flush()
     const beforeDoc = structuredClone(this.syncDoc)
-    const beforeState = this.state.toJSON()
+    const beforeState = structuredClone(this.state.toJSON())
     let result
     try {
       result = this.state.mergeSnapshot(this.syncDoc, safeDoc, safeState)

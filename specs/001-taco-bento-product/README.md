@@ -40,7 +40,9 @@ for future specs. Follow the installation instructions in the Taco repository:
 https://github.com/Arcadia822/taco
 ```
 
-The Agent reads Taco's repository instructions and performs the default **CLI-free skill installation**: it installs the `taco` skill (`skills/taco/` — agent guide, production shell, and template packs) into its skill location. That is the whole installation: from then on the Agent assembles `.taco.html` review files from the skill's own shell in any directory, fully offline, with no npm package, no CLI, and no build. Optional deeper integrations — Spec Kit extension commands/hooks/policy for project-level wiring, or `taco-cli` for cloud publishing (TacoHub/Tacobin) — are separate, explicitly requested steps described in [`docs/agent-installation.md`](docs/agent-installation.md).
+The Agent reads Taco's repository instructions and performs the default **CLI-free skill installation**: it installs the complete `skills/taco/` directory (agent guide, production shell, optional references and reader script, and document examples) into its skill location. That is the whole installation: from then on the Agent assembles `.taco.html` review files from the skill's own shell in any directory, fully offline, with no npm package, no CLI, and no build. Optional deeper integrations — Spec Kit extension commands/hooks/policy for project-level wiring, or `taco-cli` for cloud publishing (TacoHub/Tacobin) — are separate, explicitly requested steps described in [`docs/agent-installation.md`](docs/agent-installation.md).
+
+Checkpoint use follows the user's and project's review requirements. The bundled `spec/` SDD graph is an example to adapt, not a default stage plan or a required destination for generated Taco files. Agents load its detailed protocol reference only when working with Checkpoints; a normal review does not need one.
 
 After installation, the review loop needs no further setup:
 
@@ -85,10 +87,10 @@ The Quickstart above is the user-facing entry point. [`docs/agent-installation.m
 
 Agent requirements:
 
-- Keep the reviewed directory canonical. The `.taco.html` is a transport: copy the skill's `taco-shell.html`, then write the `taco/files` v1 bundle JSON into its `#taco-document` block, preserving `docId`, comments, and `navigation` across refreshes. Only that data block is agent-writable; never hand-edit the shell around it.
+- Keep the reviewed directory canonical. The `.taco.html` is a transport: copy the skill's `taco-shell.html`, then write the `taco/files` v1 bundle JSON into its `#taco-document` block, preserving `docId`, comments, navigation, and any Checkpoint graph and statuses across refreshes. Only that data block and the escaped HTML `<title>` are agent-writable; never hand-edit the rest of the shell.
 - Open the generated file in the user's browser whenever the host permits local `file://` navigation, and report which of `presented as a clickable file`, `opened`, or `opened and verified` actually happened. A headless load is internal evidence and is never reported as user-visible presentation.
 - Take the review back through either channel: the browser's **Handoff** action, or the reviewer's saved `.taco.html`. Handoff copies the text diff since the last save plus the open comment threads, and does not require saving; the saved-file channel does. If neither arrived, say so instead of importing content you never received.
-- Preserve `docId`, `comments`, and `navigation` on every refresh; never fabricate a comment, a hash, or a verification claim; never delete a canonical file because it is absent from the bundle.
+- Preserve all existing bundle fields on every refresh, including `checkpoints` when present; never fabricate a comment, a hash, or a verification claim; never delete a canonical file because it is absent from the bundle.
 - Treat a live collaboration-enabled Taco as potentially credential-bearing. Do not upload or paste its contents into another service without the user's approval.
 
 ## Optional Spec Kit plugin
@@ -113,8 +115,9 @@ After each successful update, the Agent presents the exact generated Taco as a n
 
 ```text
 src/                                  Browser, editor, comments, save, and collaboration runtime
-skills/taco/                          Installable Taco skill: agent guide, production shell, and template packs
+skills/taco/                          Installable Taco skill: guide, shell, routed references, script, and examples
 extensions/taco/                      Optional Spec Kit manifest, agent commands, offline CLI, and project policy
+examples/checkpoint-scroll/           Standalone dense Checkpoint demo; not a shipped template
 tests/                                Data model, rendering, interaction, collaboration, and CLI round-trip tests
 specs/001-taco-bento-product/         Default Taco content and product specification
 specs/002-taco-speckit-plugin/        Installable Spec Kit plugin specification and acceptance flow

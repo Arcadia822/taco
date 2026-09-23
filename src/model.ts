@@ -106,6 +106,7 @@ export interface TacoBundle {
   files: TacoFile[]
   comments?: TacoCommentThread[]
   navigation?: NavigationManifest
+  checkpoints?: unknown
   access?: 'reader'
   collab?: TacoCollab
   [extra: string]: unknown

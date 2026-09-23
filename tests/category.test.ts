@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { FORMAT, type TacoBundle } from '../src/model.ts'
 import {
   resolveFileCategory,
+  resolvePathCategory,
   UNCLASSIFIED_CATEGORY,
   updateFileCategory,
   validateDirectoryDepth,
@@ -94,5 +95,50 @@ describe('Category resolution and directory constraints', () => {
     // 再次解析该文件，确保类别已生效
     const res = resolveFileCategory(bundle, bundle.files[0])
     expect(res.category).toBe('API Reference')
+  })
+})
+
+describe('Checkpoint category precedence', () => {
+  it('overrides declared file and directory categories without changing their content', () => {
+    const bundle = createBundle([
+      { path: 'specs/sample/intro.md', content: '---\ncategory: Guides\n---\n# Intro' },
+      { path: 'specs/sample/docs/_dir.yaml', content: 'category: References\n' },
+      { path: 'specs/sample/docs/owned.md' },
+      { path: 'specs/sample/docs/ordinary.md' },
+    ])
+    bundle.checkpoints = {
+      version: 1,
+      nodes: [{ id: 'review', title: 'Review', after: [], documents: [
+        { path: 'specs/sample/intro.md' },
+        { path: 'specs/sample/docs/owned.md' },
+        { path: 'specs/sample/docs/missing.md' },
+      ] }],
+      documents: [],
+    }
+
+    expect(resolveFileCategory(bundle, bundle.files[0])).toMatchObject({
+      category: 'Review', source: 'checkpoint', canEdit: false, checkpointId: 'review', overridden: 'Guides',
+    })
+    expect(resolveFileCategory(bundle, bundle.files[2])).toMatchObject({
+      category: 'Review', source: 'checkpoint', canEdit: false, checkpointId: 'review', overridden: 'References',
+    })
+    expect(resolvePathCategory(bundle, 'specs/sample/docs/missing.md')).toMatchObject({
+      category: 'Review', source: 'checkpoint', canEdit: false, checkpointId: 'review', overridden: 'References',
+    })
+    expect(resolveFileCategory(bundle, bundle.files[3]).category).toBe('References')
+    expect(() => updateFileCategory(bundle, bundle.files[0], 'Other')).toThrow(/Checkpoint/)
+    expect(bundle.files[0].content).toContain('category: Guides')
+    expect(bundle.files[1].content).toBe('category: References\n')
+  })
+
+  it('ignores invalid definitions while preserving the original category', () => {
+    const bundle = createBundle([
+      { path: 'specs/sample/doc.md', content: '---\ncategory: Guides\n---\n# Doc' },
+    ])
+    bundle.checkpoints = { version: 1, nodes: 'invalid', documents: [] }
+    expect(resolveFileCategory(bundle, bundle.files[0])).toMatchObject({
+      category: 'Guides', source: 'root-file', canEdit: true,
+    })
+    expect(updateFileCategory(bundle, bundle.files[0], 'Other').modifiedFile.content).toContain('Other')
   })
 })

@@ -1,0 +1,1833 @@
+{
+  "format": "taco/files",
+  "version": 1,
+  "docId": "checkpoint-scroll-template",
+  "title": "大规模 Checkpoint 滚动示例",
+  "root": "checkpoint-scroll",
+  "files": [
+    {
+      "id": "overview-md",
+      "path": "checkpoint-scroll/overview.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: 大规模 Checkpoint 滚动示例\n---\n\n## 用途\n\n打开左上角的 Checkpoints 入口，查看 10 层 × 5 列的依赖图。桌面可以横向和纵向滚动；窄屏将每层的卡片纵向排列。\n\n## 示例数据\n\n50 个 Checkpoint，每个节点引用范围、设计、评审和测试 4 份文档。部分文档已创建，其他保持占位。状态仅供观察视图，不代表实际审批。\n\n## 使用\n\n先观察卡片阴影、行间距和连线，再滚动到右侧及最底部检查边缘节点。真实项目应替换此示例数据、路径和状态。\n"
+    },
+    {
+      "id": "p01-a-scope",
+      "path": "checkpoint-scroll/phase-01/stream-a/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 A · scope'\n---\n\n## 需求发现 · 工作流 A\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p01-a-design",
+      "path": "checkpoint-scroll/phase-01/stream-a/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 A · design'\n---\n\n## 需求发现 · 工作流 A\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p01-a-review",
+      "path": "checkpoint-scroll/phase-01/stream-a/review.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 A · review'\n---\n\n## 需求发现 · 工作流 A\n\nreview 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p01-a-tests",
+      "path": "checkpoint-scroll/phase-01/stream-a/tests.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 A · tests'\n---\n\n## 需求发现 · 工作流 A\n\ntests 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p01-b-scope",
+      "path": "checkpoint-scroll/phase-01/stream-b/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 B · scope'\n---\n\n## 需求发现 · 工作流 B\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p01-b-design",
+      "path": "checkpoint-scroll/phase-01/stream-b/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 B · design'\n---\n\n## 需求发现 · 工作流 B\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p01-b-review",
+      "path": "checkpoint-scroll/phase-01/stream-b/review.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 B · review'\n---\n\n## 需求发现 · 工作流 B\n\nreview 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p01-b-tests",
+      "path": "checkpoint-scroll/phase-01/stream-b/tests.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 B · tests'\n---\n\n## 需求发现 · 工作流 B\n\ntests 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p01-c-scope",
+      "path": "checkpoint-scroll/phase-01/stream-c/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 C · scope'\n---\n\n## 需求发现 · 工作流 C\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p01-c-design",
+      "path": "checkpoint-scroll/phase-01/stream-c/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 C · design'\n---\n\n## 需求发现 · 工作流 C\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p01-c-review",
+      "path": "checkpoint-scroll/phase-01/stream-c/review.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 C · review'\n---\n\n## 需求发现 · 工作流 C\n\nreview 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p01-c-tests",
+      "path": "checkpoint-scroll/phase-01/stream-c/tests.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 C · tests'\n---\n\n## 需求发现 · 工作流 C\n\ntests 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p01-d-scope",
+      "path": "checkpoint-scroll/phase-01/stream-d/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 D · scope'\n---\n\n## 需求发现 · 工作流 D\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p01-d-design",
+      "path": "checkpoint-scroll/phase-01/stream-d/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 D · design'\n---\n\n## 需求发现 · 工作流 D\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p01-d-review",
+      "path": "checkpoint-scroll/phase-01/stream-d/review.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 D · review'\n---\n\n## 需求发现 · 工作流 D\n\nreview 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p01-d-tests",
+      "path": "checkpoint-scroll/phase-01/stream-d/tests.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 D · tests'\n---\n\n## 需求发现 · 工作流 D\n\ntests 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p01-e-scope",
+      "path": "checkpoint-scroll/phase-01/stream-e/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 E · scope'\n---\n\n## 需求发现 · 工作流 E\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p01-e-design",
+      "path": "checkpoint-scroll/phase-01/stream-e/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 E · design'\n---\n\n## 需求发现 · 工作流 E\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p01-e-review",
+      "path": "checkpoint-scroll/phase-01/stream-e/review.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 E · review'\n---\n\n## 需求发现 · 工作流 E\n\nreview 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p01-e-tests",
+      "path": "checkpoint-scroll/phase-01/stream-e/tests.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '需求发现 · 工作流 E · tests'\n---\n\n## 需求发现 · 工作流 E\n\ntests 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p02-a-scope",
+      "path": "checkpoint-scroll/phase-02/stream-a/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '系统设计 · 工作流 A · scope'\n---\n\n## 系统设计 · 工作流 A\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p02-a-design",
+      "path": "checkpoint-scroll/phase-02/stream-a/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '系统设计 · 工作流 A · design'\n---\n\n## 系统设计 · 工作流 A\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p02-b-scope",
+      "path": "checkpoint-scroll/phase-02/stream-b/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '系统设计 · 工作流 B · scope'\n---\n\n## 系统设计 · 工作流 B\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p02-b-design",
+      "path": "checkpoint-scroll/phase-02/stream-b/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '系统设计 · 工作流 B · design'\n---\n\n## 系统设计 · 工作流 B\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p02-c-scope",
+      "path": "checkpoint-scroll/phase-02/stream-c/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '系统设计 · 工作流 C · scope'\n---\n\n## 系统设计 · 工作流 C\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p02-c-design",
+      "path": "checkpoint-scroll/phase-02/stream-c/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '系统设计 · 工作流 C · design'\n---\n\n## 系统设计 · 工作流 C\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p02-d-scope",
+      "path": "checkpoint-scroll/phase-02/stream-d/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '系统设计 · 工作流 D · scope'\n---\n\n## 系统设计 · 工作流 D\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p02-d-design",
+      "path": "checkpoint-scroll/phase-02/stream-d/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '系统设计 · 工作流 D · design'\n---\n\n## 系统设计 · 工作流 D\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p02-e-scope",
+      "path": "checkpoint-scroll/phase-02/stream-e/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '系统设计 · 工作流 E · scope'\n---\n\n## 系统设计 · 工作流 E\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p02-e-design",
+      "path": "checkpoint-scroll/phase-02/stream-e/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '系统设计 · 工作流 E · design'\n---\n\n## 系统设计 · 工作流 E\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p03-a-scope",
+      "path": "checkpoint-scroll/phase-03/stream-a/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '接口定义 · 工作流 A · scope'\n---\n\n## 接口定义 · 工作流 A\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p03-a-design",
+      "path": "checkpoint-scroll/phase-03/stream-a/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '接口定义 · 工作流 A · design'\n---\n\n## 接口定义 · 工作流 A\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p03-b-scope",
+      "path": "checkpoint-scroll/phase-03/stream-b/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '接口定义 · 工作流 B · scope'\n---\n\n## 接口定义 · 工作流 B\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p03-b-design",
+      "path": "checkpoint-scroll/phase-03/stream-b/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '接口定义 · 工作流 B · design'\n---\n\n## 接口定义 · 工作流 B\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p03-c-scope",
+      "path": "checkpoint-scroll/phase-03/stream-c/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '接口定义 · 工作流 C · scope'\n---\n\n## 接口定义 · 工作流 C\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p03-c-design",
+      "path": "checkpoint-scroll/phase-03/stream-c/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '接口定义 · 工作流 C · design'\n---\n\n## 接口定义 · 工作流 C\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p03-d-scope",
+      "path": "checkpoint-scroll/phase-03/stream-d/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '接口定义 · 工作流 D · scope'\n---\n\n## 接口定义 · 工作流 D\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p03-d-design",
+      "path": "checkpoint-scroll/phase-03/stream-d/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '接口定义 · 工作流 D · design'\n---\n\n## 接口定义 · 工作流 D\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p03-e-scope",
+      "path": "checkpoint-scroll/phase-03/stream-e/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '接口定义 · 工作流 E · scope'\n---\n\n## 接口定义 · 工作流 E\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p03-e-design",
+      "path": "checkpoint-scroll/phase-03/stream-e/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '接口定义 · 工作流 E · design'\n---\n\n## 接口定义 · 工作流 E\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p04-a-scope",
+      "path": "checkpoint-scroll/phase-04/stream-a/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '数据建模 · 工作流 A · scope'\n---\n\n## 数据建模 · 工作流 A\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p04-a-design",
+      "path": "checkpoint-scroll/phase-04/stream-a/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '数据建模 · 工作流 A · design'\n---\n\n## 数据建模 · 工作流 A\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p04-b-scope",
+      "path": "checkpoint-scroll/phase-04/stream-b/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '数据建模 · 工作流 B · scope'\n---\n\n## 数据建模 · 工作流 B\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p04-b-design",
+      "path": "checkpoint-scroll/phase-04/stream-b/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '数据建模 · 工作流 B · design'\n---\n\n## 数据建模 · 工作流 B\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p04-c-scope",
+      "path": "checkpoint-scroll/phase-04/stream-c/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '数据建模 · 工作流 C · scope'\n---\n\n## 数据建模 · 工作流 C\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p04-c-design",
+      "path": "checkpoint-scroll/phase-04/stream-c/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '数据建模 · 工作流 C · design'\n---\n\n## 数据建模 · 工作流 C\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p04-d-scope",
+      "path": "checkpoint-scroll/phase-04/stream-d/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '数据建模 · 工作流 D · scope'\n---\n\n## 数据建模 · 工作流 D\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p04-d-design",
+      "path": "checkpoint-scroll/phase-04/stream-d/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '数据建模 · 工作流 D · design'\n---\n\n## 数据建模 · 工作流 D\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p04-e-scope",
+      "path": "checkpoint-scroll/phase-04/stream-e/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '数据建模 · 工作流 E · scope'\n---\n\n## 数据建模 · 工作流 E\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p04-e-design",
+      "path": "checkpoint-scroll/phase-04/stream-e/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '数据建模 · 工作流 E · design'\n---\n\n## 数据建模 · 工作流 E\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p05-a-scope",
+      "path": "checkpoint-scroll/phase-05/stream-a/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交互方案 · 工作流 A · scope'\n---\n\n## 交互方案 · 工作流 A\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p05-a-design",
+      "path": "checkpoint-scroll/phase-05/stream-a/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交互方案 · 工作流 A · design'\n---\n\n## 交互方案 · 工作流 A\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p05-b-scope",
+      "path": "checkpoint-scroll/phase-05/stream-b/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交互方案 · 工作流 B · scope'\n---\n\n## 交互方案 · 工作流 B\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p05-b-design",
+      "path": "checkpoint-scroll/phase-05/stream-b/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交互方案 · 工作流 B · design'\n---\n\n## 交互方案 · 工作流 B\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p05-c-scope",
+      "path": "checkpoint-scroll/phase-05/stream-c/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交互方案 · 工作流 C · scope'\n---\n\n## 交互方案 · 工作流 C\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p05-c-design",
+      "path": "checkpoint-scroll/phase-05/stream-c/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交互方案 · 工作流 C · design'\n---\n\n## 交互方案 · 工作流 C\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p05-d-scope",
+      "path": "checkpoint-scroll/phase-05/stream-d/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交互方案 · 工作流 D · scope'\n---\n\n## 交互方案 · 工作流 D\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p05-d-design",
+      "path": "checkpoint-scroll/phase-05/stream-d/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交互方案 · 工作流 D · design'\n---\n\n## 交互方案 · 工作流 D\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p05-e-scope",
+      "path": "checkpoint-scroll/phase-05/stream-e/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交互方案 · 工作流 E · scope'\n---\n\n## 交互方案 · 工作流 E\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p05-e-design",
+      "path": "checkpoint-scroll/phase-05/stream-e/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交互方案 · 工作流 E · design'\n---\n\n## 交互方案 · 工作流 E\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p06-a-scope",
+      "path": "checkpoint-scroll/phase-06/stream-a/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '风险评估 · 工作流 A · scope'\n---\n\n## 风险评估 · 工作流 A\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p06-a-design",
+      "path": "checkpoint-scroll/phase-06/stream-a/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '风险评估 · 工作流 A · design'\n---\n\n## 风险评估 · 工作流 A\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p06-b-scope",
+      "path": "checkpoint-scroll/phase-06/stream-b/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '风险评估 · 工作流 B · scope'\n---\n\n## 风险评估 · 工作流 B\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p06-b-design",
+      "path": "checkpoint-scroll/phase-06/stream-b/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '风险评估 · 工作流 B · design'\n---\n\n## 风险评估 · 工作流 B\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p06-c-scope",
+      "path": "checkpoint-scroll/phase-06/stream-c/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '风险评估 · 工作流 C · scope'\n---\n\n## 风险评估 · 工作流 C\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p06-c-design",
+      "path": "checkpoint-scroll/phase-06/stream-c/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '风险评估 · 工作流 C · design'\n---\n\n## 风险评估 · 工作流 C\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p06-d-scope",
+      "path": "checkpoint-scroll/phase-06/stream-d/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '风险评估 · 工作流 D · scope'\n---\n\n## 风险评估 · 工作流 D\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p06-d-design",
+      "path": "checkpoint-scroll/phase-06/stream-d/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '风险评估 · 工作流 D · design'\n---\n\n## 风险评估 · 工作流 D\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p06-e-scope",
+      "path": "checkpoint-scroll/phase-06/stream-e/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '风险评估 · 工作流 E · scope'\n---\n\n## 风险评估 · 工作流 E\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p06-e-design",
+      "path": "checkpoint-scroll/phase-06/stream-e/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '风险评估 · 工作流 E · design'\n---\n\n## 风险评估 · 工作流 E\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p07-a-scope",
+      "path": "checkpoint-scroll/phase-07/stream-a/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '实现计划 · 工作流 A · scope'\n---\n\n## 实现计划 · 工作流 A\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p07-a-design",
+      "path": "checkpoint-scroll/phase-07/stream-a/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '实现计划 · 工作流 A · design'\n---\n\n## 实现计划 · 工作流 A\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p07-b-scope",
+      "path": "checkpoint-scroll/phase-07/stream-b/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '实现计划 · 工作流 B · scope'\n---\n\n## 实现计划 · 工作流 B\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p07-b-design",
+      "path": "checkpoint-scroll/phase-07/stream-b/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '实现计划 · 工作流 B · design'\n---\n\n## 实现计划 · 工作流 B\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p07-c-scope",
+      "path": "checkpoint-scroll/phase-07/stream-c/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '实现计划 · 工作流 C · scope'\n---\n\n## 实现计划 · 工作流 C\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p07-c-design",
+      "path": "checkpoint-scroll/phase-07/stream-c/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '实现计划 · 工作流 C · design'\n---\n\n## 实现计划 · 工作流 C\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p07-d-scope",
+      "path": "checkpoint-scroll/phase-07/stream-d/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '实现计划 · 工作流 D · scope'\n---\n\n## 实现计划 · 工作流 D\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p07-d-design",
+      "path": "checkpoint-scroll/phase-07/stream-d/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '实现计划 · 工作流 D · design'\n---\n\n## 实现计划 · 工作流 D\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p07-e-scope",
+      "path": "checkpoint-scroll/phase-07/stream-e/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '实现计划 · 工作流 E · scope'\n---\n\n## 实现计划 · 工作流 E\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p07-e-design",
+      "path": "checkpoint-scroll/phase-07/stream-e/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '实现计划 · 工作流 E · design'\n---\n\n## 实现计划 · 工作流 E\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p08-a-scope",
+      "path": "checkpoint-scroll/phase-08/stream-a/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '集成验证 · 工作流 A · scope'\n---\n\n## 集成验证 · 工作流 A\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p08-a-design",
+      "path": "checkpoint-scroll/phase-08/stream-a/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '集成验证 · 工作流 A · design'\n---\n\n## 集成验证 · 工作流 A\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p08-b-scope",
+      "path": "checkpoint-scroll/phase-08/stream-b/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '集成验证 · 工作流 B · scope'\n---\n\n## 集成验证 · 工作流 B\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p08-b-design",
+      "path": "checkpoint-scroll/phase-08/stream-b/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '集成验证 · 工作流 B · design'\n---\n\n## 集成验证 · 工作流 B\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p08-c-scope",
+      "path": "checkpoint-scroll/phase-08/stream-c/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '集成验证 · 工作流 C · scope'\n---\n\n## 集成验证 · 工作流 C\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p08-c-design",
+      "path": "checkpoint-scroll/phase-08/stream-c/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '集成验证 · 工作流 C · design'\n---\n\n## 集成验证 · 工作流 C\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p08-d-scope",
+      "path": "checkpoint-scroll/phase-08/stream-d/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '集成验证 · 工作流 D · scope'\n---\n\n## 集成验证 · 工作流 D\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p08-d-design",
+      "path": "checkpoint-scroll/phase-08/stream-d/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '集成验证 · 工作流 D · design'\n---\n\n## 集成验证 · 工作流 D\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p08-e-scope",
+      "path": "checkpoint-scroll/phase-08/stream-e/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '集成验证 · 工作流 E · scope'\n---\n\n## 集成验证 · 工作流 E\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p08-e-design",
+      "path": "checkpoint-scroll/phase-08/stream-e/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '集成验证 · 工作流 E · design'\n---\n\n## 集成验证 · 工作流 E\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p09-a-scope",
+      "path": "checkpoint-scroll/phase-09/stream-a/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '发布准备 · 工作流 A · scope'\n---\n\n## 发布准备 · 工作流 A\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p09-a-design",
+      "path": "checkpoint-scroll/phase-09/stream-a/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '发布准备 · 工作流 A · design'\n---\n\n## 发布准备 · 工作流 A\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p09-b-scope",
+      "path": "checkpoint-scroll/phase-09/stream-b/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '发布准备 · 工作流 B · scope'\n---\n\n## 发布准备 · 工作流 B\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p09-b-design",
+      "path": "checkpoint-scroll/phase-09/stream-b/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '发布准备 · 工作流 B · design'\n---\n\n## 发布准备 · 工作流 B\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p09-c-scope",
+      "path": "checkpoint-scroll/phase-09/stream-c/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '发布准备 · 工作流 C · scope'\n---\n\n## 发布准备 · 工作流 C\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p09-c-design",
+      "path": "checkpoint-scroll/phase-09/stream-c/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '发布准备 · 工作流 C · design'\n---\n\n## 发布准备 · 工作流 C\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p09-d-scope",
+      "path": "checkpoint-scroll/phase-09/stream-d/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '发布准备 · 工作流 D · scope'\n---\n\n## 发布准备 · 工作流 D\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p09-d-design",
+      "path": "checkpoint-scroll/phase-09/stream-d/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '发布准备 · 工作流 D · design'\n---\n\n## 发布准备 · 工作流 D\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p09-e-scope",
+      "path": "checkpoint-scroll/phase-09/stream-e/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '发布准备 · 工作流 E · scope'\n---\n\n## 发布准备 · 工作流 E\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p09-e-design",
+      "path": "checkpoint-scroll/phase-09/stream-e/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '发布准备 · 工作流 E · design'\n---\n\n## 发布准备 · 工作流 E\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p10-a-scope",
+      "path": "checkpoint-scroll/phase-10/stream-a/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交付复盘 · 工作流 A · scope'\n---\n\n## 交付复盘 · 工作流 A\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p10-a-design",
+      "path": "checkpoint-scroll/phase-10/stream-a/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交付复盘 · 工作流 A · design'\n---\n\n## 交付复盘 · 工作流 A\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p10-b-scope",
+      "path": "checkpoint-scroll/phase-10/stream-b/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交付复盘 · 工作流 B · scope'\n---\n\n## 交付复盘 · 工作流 B\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p10-b-design",
+      "path": "checkpoint-scroll/phase-10/stream-b/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交付复盘 · 工作流 B · design'\n---\n\n## 交付复盘 · 工作流 B\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p10-c-scope",
+      "path": "checkpoint-scroll/phase-10/stream-c/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交付复盘 · 工作流 C · scope'\n---\n\n## 交付复盘 · 工作流 C\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p10-c-design",
+      "path": "checkpoint-scroll/phase-10/stream-c/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交付复盘 · 工作流 C · design'\n---\n\n## 交付复盘 · 工作流 C\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p10-d-scope",
+      "path": "checkpoint-scroll/phase-10/stream-d/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交付复盘 · 工作流 D · scope'\n---\n\n## 交付复盘 · 工作流 D\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p10-d-design",
+      "path": "checkpoint-scroll/phase-10/stream-d/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交付复盘 · 工作流 D · design'\n---\n\n## 交付复盘 · 工作流 D\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p10-e-scope",
+      "path": "checkpoint-scroll/phase-10/stream-e/scope.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交付复盘 · 工作流 E · scope'\n---\n\n## 交付复盘 · 工作流 E\n\nscope 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    },
+    {
+      "id": "p10-e-design",
+      "path": "checkpoint-scroll/phase-10/stream-e/design.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '交付复盘 · 工作流 E · design'\n---\n\n## 交付复盘 · 工作流 E\n\ndesign 文档用于检验大型 Checkpoint 模板中的文件导航、状态和滚动。这里是演示内容，不代表实际审批。\n"
+    }
+  ],
+  "checkpoints": {
+    "version": 1,
+    "template": "10 层 × 5 列 · 滚动压力示例",
+    "nodes": [
+      {
+        "id": "p01-a",
+        "title": "01 需求发现 · A",
+        "after": [],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-01/stream-a/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-01/stream-a/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-01/stream-a/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-01/stream-a/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p01-b",
+        "title": "01 需求发现 · B",
+        "after": [],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-01/stream-b/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-01/stream-b/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-01/stream-b/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-01/stream-b/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p01-c",
+        "title": "01 需求发现 · C",
+        "after": [],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-01/stream-c/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-01/stream-c/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-01/stream-c/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-01/stream-c/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p01-d",
+        "title": "01 需求发现 · D",
+        "after": [],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-01/stream-d/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-01/stream-d/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-01/stream-d/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-01/stream-d/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p01-e",
+        "title": "01 需求发现 · E",
+        "after": [],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-01/stream-e/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-01/stream-e/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-01/stream-e/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-01/stream-e/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p02-a",
+        "title": "02 系统设计 · A",
+        "after": ["p01-a"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-02/stream-a/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-02/stream-a/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-02/stream-a/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-02/stream-a/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p02-b",
+        "title": "02 系统设计 · B",
+        "after": ["p01-b", "p01-a"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-02/stream-b/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-02/stream-b/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-02/stream-b/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-02/stream-b/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p02-c",
+        "title": "02 系统设计 · C",
+        "after": ["p01-c", "p01-b"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-02/stream-c/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-02/stream-c/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-02/stream-c/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-02/stream-c/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p02-d",
+        "title": "02 系统设计 · D",
+        "after": ["p01-d", "p01-c"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-02/stream-d/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-02/stream-d/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-02/stream-d/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-02/stream-d/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p02-e",
+        "title": "02 系统设计 · E",
+        "after": ["p01-e", "p01-d"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-02/stream-e/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-02/stream-e/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-02/stream-e/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-02/stream-e/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p03-a",
+        "title": "03 接口定义 · A",
+        "after": ["p02-a"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-03/stream-a/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-03/stream-a/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-03/stream-a/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-03/stream-a/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p03-b",
+        "title": "03 接口定义 · B",
+        "after": ["p02-b", "p02-a"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-03/stream-b/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-03/stream-b/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-03/stream-b/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-03/stream-b/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p03-c",
+        "title": "03 接口定义 · C",
+        "after": ["p02-c", "p02-b"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-03/stream-c/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-03/stream-c/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-03/stream-c/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-03/stream-c/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p03-d",
+        "title": "03 接口定义 · D",
+        "after": ["p02-d", "p02-c"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-03/stream-d/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-03/stream-d/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-03/stream-d/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-03/stream-d/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p03-e",
+        "title": "03 接口定义 · E",
+        "after": ["p02-e", "p02-d"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-03/stream-e/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-03/stream-e/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-03/stream-e/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-03/stream-e/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p04-a",
+        "title": "04 数据建模 · A",
+        "after": ["p03-a"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-04/stream-a/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-04/stream-a/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-04/stream-a/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-04/stream-a/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p04-b",
+        "title": "04 数据建模 · B",
+        "after": ["p03-b", "p03-a"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-04/stream-b/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-04/stream-b/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-04/stream-b/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-04/stream-b/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p04-c",
+        "title": "04 数据建模 · C",
+        "after": ["p03-c", "p03-b"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-04/stream-c/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-04/stream-c/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-04/stream-c/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-04/stream-c/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p04-d",
+        "title": "04 数据建模 · D",
+        "after": ["p03-d", "p03-c"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-04/stream-d/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-04/stream-d/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-04/stream-d/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-04/stream-d/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p04-e",
+        "title": "04 数据建模 · E",
+        "after": ["p03-e", "p03-d"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-04/stream-e/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-04/stream-e/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-04/stream-e/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-04/stream-e/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p05-a",
+        "title": "05 交互方案 · A",
+        "after": ["p04-a"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-05/stream-a/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-05/stream-a/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-05/stream-a/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-05/stream-a/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p05-b",
+        "title": "05 交互方案 · B",
+        "after": ["p04-b", "p04-a"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-05/stream-b/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-05/stream-b/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-05/stream-b/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-05/stream-b/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p05-c",
+        "title": "05 交互方案 · C",
+        "after": ["p04-c", "p04-b"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-05/stream-c/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-05/stream-c/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-05/stream-c/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-05/stream-c/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p05-d",
+        "title": "05 交互方案 · D",
+        "after": ["p04-d", "p04-c"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-05/stream-d/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-05/stream-d/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-05/stream-d/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-05/stream-d/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p05-e",
+        "title": "05 交互方案 · E",
+        "after": ["p04-e", "p04-d"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-05/stream-e/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-05/stream-e/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-05/stream-e/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-05/stream-e/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p06-a",
+        "title": "06 风险评估 · A",
+        "after": ["p05-a"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-06/stream-a/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-06/stream-a/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-06/stream-a/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-06/stream-a/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p06-b",
+        "title": "06 风险评估 · B",
+        "after": ["p05-b", "p05-a"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-06/stream-b/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-06/stream-b/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-06/stream-b/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-06/stream-b/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p06-c",
+        "title": "06 风险评估 · C",
+        "after": ["p05-c", "p05-b"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-06/stream-c/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-06/stream-c/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-06/stream-c/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-06/stream-c/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p06-d",
+        "title": "06 风险评估 · D",
+        "after": ["p05-d", "p05-c"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-06/stream-d/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-06/stream-d/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-06/stream-d/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-06/stream-d/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p06-e",
+        "title": "06 风险评估 · E",
+        "after": ["p05-e", "p05-d"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-06/stream-e/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-06/stream-e/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-06/stream-e/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-06/stream-e/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p07-a",
+        "title": "07 实现计划 · A",
+        "after": ["p06-a"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-07/stream-a/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-07/stream-a/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-07/stream-a/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-07/stream-a/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p07-b",
+        "title": "07 实现计划 · B",
+        "after": ["p06-b", "p06-a"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-07/stream-b/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-07/stream-b/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-07/stream-b/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-07/stream-b/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p07-c",
+        "title": "07 实现计划 · C",
+        "after": ["p06-c", "p06-b"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-07/stream-c/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-07/stream-c/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-07/stream-c/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-07/stream-c/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p07-d",
+        "title": "07 实现计划 · D",
+        "after": ["p06-d", "p06-c"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-07/stream-d/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-07/stream-d/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-07/stream-d/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-07/stream-d/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p07-e",
+        "title": "07 实现计划 · E",
+        "after": ["p06-e", "p06-d"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-07/stream-e/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-07/stream-e/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-07/stream-e/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-07/stream-e/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p08-a",
+        "title": "08 集成验证 · A",
+        "after": ["p07-a"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-08/stream-a/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-08/stream-a/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-08/stream-a/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-08/stream-a/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p08-b",
+        "title": "08 集成验证 · B",
+        "after": ["p07-b", "p07-a"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-08/stream-b/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-08/stream-b/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-08/stream-b/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-08/stream-b/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p08-c",
+        "title": "08 集成验证 · C",
+        "after": ["p07-c", "p07-b"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-08/stream-c/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-08/stream-c/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-08/stream-c/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-08/stream-c/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p08-d",
+        "title": "08 集成验证 · D",
+        "after": ["p07-d", "p07-c"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-08/stream-d/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-08/stream-d/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-08/stream-d/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-08/stream-d/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p08-e",
+        "title": "08 集成验证 · E",
+        "after": ["p07-e", "p07-d"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-08/stream-e/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-08/stream-e/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-08/stream-e/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-08/stream-e/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p09-a",
+        "title": "09 发布准备 · A",
+        "after": ["p08-a"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-09/stream-a/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-09/stream-a/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-09/stream-a/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-09/stream-a/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p09-b",
+        "title": "09 发布准备 · B",
+        "after": ["p08-b", "p08-a"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-09/stream-b/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-09/stream-b/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-09/stream-b/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-09/stream-b/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p09-c",
+        "title": "09 发布准备 · C",
+        "after": ["p08-c", "p08-b"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-09/stream-c/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-09/stream-c/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-09/stream-c/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-09/stream-c/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p09-d",
+        "title": "09 发布准备 · D",
+        "after": ["p08-d", "p08-c"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-09/stream-d/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-09/stream-d/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-09/stream-d/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-09/stream-d/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p09-e",
+        "title": "09 发布准备 · E",
+        "after": ["p08-e", "p08-d"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-09/stream-e/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-09/stream-e/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-09/stream-e/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-09/stream-e/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p10-a",
+        "title": "10 交付复盘 · A",
+        "after": ["p09-a"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-10/stream-a/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-10/stream-a/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-10/stream-a/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-10/stream-a/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p10-b",
+        "title": "10 交付复盘 · B",
+        "after": ["p09-b", "p09-a"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-10/stream-b/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-10/stream-b/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-10/stream-b/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-10/stream-b/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p10-c",
+        "title": "10 交付复盘 · C",
+        "after": ["p09-c", "p09-b"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-10/stream-c/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-10/stream-c/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-10/stream-c/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-10/stream-c/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p10-d",
+        "title": "10 交付复盘 · D",
+        "after": ["p09-d", "p09-c"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-10/stream-d/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-10/stream-d/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-10/stream-d/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-10/stream-d/tests.md",
+            "optional": true
+          }
+        ]
+      },
+      {
+        "id": "p10-e",
+        "title": "10 交付复盘 · E",
+        "after": ["p09-e", "p09-d"],
+        "documents": [
+          {
+            "path": "checkpoint-scroll/phase-10/stream-e/scope.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-10/stream-e/design.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-10/stream-e/review.md"
+          },
+          {
+            "path": "checkpoint-scroll/phase-10/stream-e/tests.md",
+            "optional": true
+          }
+        ]
+      }
+    ],
+    "documents": [
+      {
+        "path": "checkpoint-scroll/phase-01/stream-a/scope.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-01/stream-a/design.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-01/stream-a/review.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-01/stream-a/tests.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-01/stream-b/scope.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-01/stream-b/design.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-01/stream-b/review.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-01/stream-b/tests.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-01/stream-c/scope.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-01/stream-c/design.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-01/stream-c/review.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-01/stream-c/tests.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-01/stream-d/scope.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-01/stream-d/design.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-01/stream-d/review.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-01/stream-d/tests.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-01/stream-e/scope.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-01/stream-e/design.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-01/stream-e/review.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-01/stream-e/tests.md",
+        "status": "freeze",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-02/stream-a/scope.md",
+        "status": "in_progress",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-02/stream-a/design.md",
+        "status": "complete",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-02/stream-b/scope.md",
+        "status": "in_progress",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-02/stream-b/design.md",
+        "status": "complete",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-02/stream-c/scope.md",
+        "status": "in_progress",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-02/stream-c/design.md",
+        "status": "complete",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-02/stream-d/scope.md",
+        "status": "in_progress",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-02/stream-d/design.md",
+        "status": "complete",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-02/stream-e/scope.md",
+        "status": "in_progress",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      },
+      {
+        "path": "checkpoint-scroll/phase-02/stream-e/design.md",
+        "status": "complete",
+        "updatedAt": "2026-09-23T00:00:00.000Z"
+      }
+    ]
+  }
+}

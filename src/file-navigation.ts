@@ -1,6 +1,9 @@
+import type { DocumentStatus } from '@taco/protocol'
+import { resolveCheckpoints } from '@taco/protocol'
 import { createBrandMarkContainer } from './brand.ts'
+import { openCheckpointStatusMenu, statusLabel, type CheckpointLabels } from './checkpoint-view.ts'
 import { defaultFile, fileName, relativePath, type NavigationManifest, type TacoBundle, type TacoFile } from './model.ts'
-import { createControlButton, createFileTypeIcon, el, showConfirmDialog, showPromptDialog, sidebarRow, svgIcon } from './ui-primitives.ts'
+import { createControlButton, createFileAttribute, createFileTypeIcon, createStatusIcon, el, showConfirmDialog, showPromptDialog, sidebarRow, svgIcon } from './ui-primitives.ts'
 import { resolveDocumentNavigation } from './navigation.ts'
 import {
   addNavigationGroup,
@@ -43,11 +46,17 @@ export interface FileNavigationOptions {
   bundle: TacoBundle
   selected: TacoFile | null
   labels: FileNavigationLabels
+  checkpointLabels: CheckpointLabels
+  checkpointView?: boolean
+  selectedPlaceholderPath?: string | null
   stageOpenState: Map<string, boolean>
   folderOpenState: Map<string, boolean>
   scrollTop: number
   editable?: boolean
   onSelect: (file: TacoFile) => void
+  onSelectCheckpoint?: () => void
+  onSelectPlaceholder?: (path: string) => void
+  onChangeCheckpointStatus?: (path: string, status: DocumentStatus) => void
   onToggleSidebar: () => void
   onUpdateNavigation?: (navigation: NavigationManifest) => void
   onCreateFile?: (targetGroupId: string | null) => void
@@ -85,10 +94,17 @@ export class FileNavigation {
   private selected: TacoFile | null
   private scrollTop: number
   private scroll: HTMLElement | null = null
+  private checkpointView: boolean
+  private selectedPlaceholderPath: string | null
+  private readonly checkpointPinned: HTMLElement
+  private readonly checkpointButton: HTMLButtonElement
+  private checkpointWarning: HTMLElement | null = null
 
   constructor(private readonly options: FileNavigationOptions) {
     this.selected = options.selected
     this.scrollTop = options.scrollTop
+    this.checkpointView = options.checkpointView ?? false
+    this.selectedPlaceholderPath = options.selectedPlaceholderPath ?? null
     this.element = el('nav', 'file-sidebar')
     this.element.setAttribute('aria-label', options.labels.files)
 
@@ -119,6 +135,15 @@ export class FileNavigation {
     brand.append(this.toggle)
     header.append(brand)
     this.element.append(header)
+    this.checkpointButton = sidebarRow('button', {
+      className: 'checkpoint-nav-item',
+      leading: svgIcon('workflow'),
+      label: options.checkpointLabels.checkpoints,
+    }) as HTMLButtonElement
+    this.checkpointButton.type = 'button'
+    this.checkpointButton.addEventListener('click', () => options.onSelectCheckpoint?.())
+    this.checkpointPinned = el('div', 'sidebar-pinned')
+    this.checkpointPinned.append(this.checkpointButton)
     this.paint(this.selected)
   }
 
@@ -126,19 +151,37 @@ export class FileNavigation {
     return this.scroll?.scrollTop ?? this.scrollTop
   }
 
-  refresh(selected: TacoFile | null): void {
+  refresh(
+    selected: TacoFile | null,
+    checkpointView = this.checkpointView,
+    selectedPlaceholderPath = this.selectedPlaceholderPath,
+  ): void {
     if (this.scroll) this.scrollTop = this.scroll.scrollTop
     this.scroll?.remove()
     this.scroll = null
+    this.checkpointView = checkpointView
+    this.selectedPlaceholderPath = selectedPlaceholderPath
+    this.checkpointWarning?.remove()
+    this.checkpointWarning = null
     this.paint(selected)
   }
 
-  paint(selected: TacoFile | null): void {
+  paint(
+    selected: TacoFile | null,
+    checkpointView = this.checkpointView,
+    selectedPlaceholderPath = this.selectedPlaceholderPath,
+  ): void {
     this.selected = selected
+    this.checkpointView = checkpointView
+    this.selectedPlaceholderPath = selectedPlaceholderPath
+    this.checkpointButton.classList.toggle('is-selected', this.checkpointView)
     if (this.scroll) {
       this.scrollTop = this.scroll.scrollTop
       for (const button of this.scroll.querySelectorAll<HTMLButtonElement>('.file-row')) {
-        button.classList.toggle('is-selected', button.dataset.path === selected?.path)
+        button.classList.toggle('is-selected',
+          !this.checkpointView && (button.dataset.placeholder === 'true'
+            ? button.dataset.path === this.selectedPlaceholderPath
+            : button.dataset.path === selected?.path))
       }
       return
     }
@@ -146,6 +189,71 @@ export class FileNavigation {
     const scroll = el('div', 'sidebar-scroll')
     const navigation = el('div', 'stage-navigation')
     const resolved = resolveDocumentNavigation(this.options.bundle)
+    const checkpoints = resolveCheckpoints(this.options.bundle)
+    if (this.options.bundle.checkpoints !== undefined && checkpoints.valid) {
+      this.element.querySelector('.sidebar-header')?.after(this.checkpointPinned)
+    } else {
+      this.checkpointPinned.remove()
+    }
+    if (!checkpoints.valid && this.options.bundle.checkpoints !== undefined) {
+      const warning = el('div', 'checkpoint-warning-row', `${this.options.checkpointLabels.checkpointsInvalid}: ${checkpoints.error}`)
+      warning.title = checkpoints.error
+      this.checkpointWarning = warning
+      this.element.querySelector('.sidebar-header')?.after(warning)
+    }
+    const nodes = new Map(checkpoints.nodes.map((node) => [node.id, node]))
+    const documents = new Map(checkpoints.documents.map((document) => [document.path, document]))
+    for (const group of resolved.checkpointGroups) {
+      const stage = el('details', 'stage-group checkpoint-group') as HTMLDetailsElement
+      stage.dataset.stage = group.id
+      this.bindDisclosureState(stage, group.id, this.options.stageOpenState)
+
+      const summary = el('summary', 'stage-summary sidebar-row')
+      const head = el('span', 'stage-head')
+      head.append(el('span', 'stage-name', group.title), this.disclosureIcon('stage-caret'))
+      summary.append(head, el('span', 'stage-spacer'))
+      if (this.options.editable && this.options.onCreateFile) {
+        const actions = el('span', 'group-actions')
+        const addFileBtn = createControlButton(
+          'plus',
+          this.options.labels.addFile ?? 'Add file',
+          () => this.options.onCreateFile?.(group.id),
+          'group-action-btn add-file-to-group-btn',
+        )
+        addFileBtn.addEventListener('click', (event) => {
+          event.stopPropagation()
+          event.preventDefault()
+        })
+        actions.append(addFileBtn)
+        summary.append(actions)
+      }
+      const aggregate = nodes.get(group.checkpointId)?.aggregate ?? 'todo'
+      const groupStatus = el('span', 'checkpoint-group-status')
+      groupStatus.append(createStatusIcon(aggregate, statusLabel(aggregate, this.options.checkpointLabels)))
+      groupStatus.title = statusLabel(aggregate, this.options.checkpointLabels)
+      summary.append(groupStatus)
+      stage.append(summary)
+
+      const list = el('ul', 'tree-list')
+      for (const entry of group.entries) {
+        const item = el('li')
+        if (entry.kind === 'category-file') {
+          item.append(this.fileButton(entry.file))
+        } else {
+          const path = entry.kind === 'placeholder' ? entry.path : entry.file.path
+          const document = documents.get(path)
+          item.append(this.checkpointFileRow(
+            path,
+            document?.status ?? 'todo',
+            document?.optional ?? (entry.kind === 'placeholder' && entry.optional),
+            entry.kind === 'file' ? entry.file : null,
+          ))
+        }
+        list.append(item)
+      }
+      stage.append(list)
+      navigation.append(stage)
+    }
 
     for (const group of resolved.groups) {
       const stage = el('details', 'stage-group') as HTMLDetailsElement
@@ -163,21 +271,6 @@ export class FileNavigation {
       if (this.options.editable) {
         const actions = el('span', 'group-actions')
 
-        // 需求3：快捷显式只露出新建文件按钮
-        if (this.options.onCreateFile) {
-          const addFileBtn = createControlButton(
-            'plus',
-            this.options.labels.addFile ?? 'Add file',
-            () => this.options.onCreateFile?.(group.id),
-            'group-action-btn add-file-to-group-btn',
-          )
-          addFileBtn.addEventListener('click', (event) => {
-            event.stopPropagation()
-            event.preventDefault()
-          })
-          actions.append(addFileBtn)
-        }
-
         // 需求3：把重命名和删除收敛至操作菜单按钮（more-horizontal）中
         if (this.options.onUpdateNavigation && group.isCustom) {
           const menuBtn = createControlButton(
@@ -194,6 +287,21 @@ export class FileNavigation {
           })
           actions.append(menuBtn)
         }
+        // 需求3：快捷显式只露出新建文件按钮
+        if (this.options.onCreateFile) {
+          const addFileBtn = createControlButton(
+            'plus',
+            this.options.labels.addFile ?? 'Add file',
+            () => this.options.onCreateFile?.(group.id),
+            'group-action-btn add-file-to-group-btn',
+          )
+          addFileBtn.addEventListener('click', (event) => {
+            event.stopPropagation()
+            event.preventDefault()
+          })
+          actions.append(addFileBtn)
+        }
+
 
         summary.append(actions)
       }
@@ -342,6 +450,75 @@ export class FileNavigation {
     container.append(list)
   }
 
+  private checkpointFileRow(
+    path: string,
+    status: DocumentStatus,
+    optional: boolean,
+    file: TacoFile | null,
+  ): HTMLElement {
+    const labels = this.options.checkpointLabels
+    const leading = file ? createFileTypeIcon(file) : svgIcon('file')
+    if (!file) leading.classList.add('file-type')
+    const row = el('div', `checkpoint-file-row${file ? '' : ' checkpoint-placeholder-row'}`)
+    const name = fileName(path)
+    const select = sidebarRow('button', {
+      className: 'file-row checkpoint-file-select',
+      leading,
+      label: name,
+      labelClass: 'file-name',
+    }) as HTMLButtonElement
+    select.type = 'button'
+    select.dataset.path = path
+    if (!file) select.dataset.placeholder = 'true'
+    select.title = file ? path : `${path} · ${labels.checkpointMissingFile}`
+    select.classList.toggle('is-selected', !this.checkpointView &&
+      (file ? this.selected?.path === path : this.selectedPlaceholderPath === path))
+    if (file && defaultFile(this.options.bundle)?.path === path) select.append(createFileAttribute('key', this.options.labels.entryBadge ?? 'Entry', 'entry-label'))
+    if (optional) select.append(createFileAttribute('optional', labels.checkpointOptional, 'checkpoint-optional'))
+    select.addEventListener('click', () => {
+      if (file) this.options.onSelect(file)
+      else this.options.onSelectPlaceholder?.(path)
+    })
+    row.append(select)
+    if (!file) return row
+
+    const actions = el('span', 'checkpoint-row-actions')
+    if (this.options.editable) {
+      const menu = createControlButton(
+        'more-horizontal',
+        'Actions',
+        () => this.openFileMenu(menu, file, true),
+        'file-action-btn checkpoint-file-menu',
+      )
+      actions.append(menu)
+      row.addEventListener('contextmenu', (event) => {
+        event.preventDefault()
+        this.openFileMenu(menu, file, true)
+      })
+    }
+    const statusText = statusLabel(status, labels)
+    const statusButton = el('button', 'checkpoint-status-button') as HTMLButtonElement
+    statusButton.type = 'button'
+    statusButton.title = `${name} · ${statusText}`
+    statusButton.setAttribute('aria-label', statusButton.title)
+    statusButton.append(createStatusIcon(status, statusText))
+    statusButton.addEventListener('click', () => {
+      openCheckpointStatusMenu(statusButton, {
+        path,
+        title: name,
+        optional,
+        status,
+        labels,
+        readOnly: !this.options.editable || !this.options.onChangeCheckpointStatus,
+        onSet: (next) => this.options.onChangeCheckpointStatus?.(path, next),
+        onOpenView: () => this.options.onSelectCheckpoint?.(),
+      })
+    })
+    actions.append(statusButton)
+    row.append(actions)
+    return row
+  }
+
   private fileButton(file: TacoFile): HTMLButtonElement {
     const button = sidebarRow('button', {
       className: 'file-row',
@@ -351,18 +528,10 @@ export class FileNavigation {
     }) as HTMLButtonElement
     button.type = 'button'
     button.dataset.path = file.path
-    button.classList.toggle('is-selected', file.path === this.selected?.path)
+    button.classList.toggle('is-selected', !this.checkpointView && file.path === this.selected?.path)
 
-    const entryFile = defaultFile(this.options.bundle)
-    const isCurrentEntry = entryFile?.path === file.path
+    if (defaultFile(this.options.bundle)?.path === file.path) button.append(createFileAttribute('key', this.options.labels.entryBadge ?? 'Entry', 'entry-label'))
     const fileMeta = el('span', 'file-meta')
-    if (isCurrentEntry) {
-      // 使用 icon 形式的 Entry 标识（key 图标），与侧栏整体视觉保持一致
-      const badge = el('span', 'entry-badge')
-      badge.append(svgIcon('key'))
-      badge.title = this.options.labels.entryBadge ?? 'Entry'
-      fileMeta.append(badge)
-    }
 
     if (this.options.editable) {
       button.draggable = true
@@ -433,7 +602,7 @@ export class FileNavigation {
     this.positionPopover(popover, anchor)
   }
 
-  private openFileMenu(anchor: HTMLElement, file: TacoFile): void {
+  private openFileMenu(anchor: HTMLElement, file: TacoFile, checkpointFile = false): void {
     this.closePopover()
     const popover = el('div', 'topbar-popover navigation-popover')
     popover.setAttribute('role', 'menu')
@@ -450,7 +619,7 @@ export class FileNavigation {
     })
     popover.append(setEntryBtn)
 
-    if (this.options.onRenameFile) {
+    if (!checkpointFile && this.options.onRenameFile) {
       const renameBtn = sidebarRow('button', {
         className: 'popover-action',
         leading: svgIcon('edit'),
@@ -464,7 +633,7 @@ export class FileNavigation {
       popover.append(renameBtn)
     }
 
-    if (this.options.onDeleteFile) {
+    if (!checkpointFile && this.options.onDeleteFile) {
       const deleteBtn = sidebarRow('button', {
         className: 'popover-action is-destructive',
         leading: svgIcon('trash'),
@@ -540,7 +709,7 @@ export class FileNavigation {
 
   private handleMoveFile(filePath: string, targetGroupId: string | null): void {
     const current = createInitialManifest(this.options.bundle)
-    const next = moveFileToGroup(current, filePath, targetGroupId, this.options.bundle.root)
+    const next = moveFileToGroup(current, filePath, targetGroupId, this.options.bundle.root, this.options.bundle)
     this.options.onUpdateNavigation?.(next)
   }
 
