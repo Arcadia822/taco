@@ -122,6 +122,8 @@ export class FileBrowser {
   private copyReviewGroup!: HTMLElement
   private readonly systemAppearance = window.matchMedia('(prefers-color-scheme: dark)')
   private themePreference: 'system' | 'light' | 'dark' = 'system'
+  /** Embedded in a host page (`?embed`): the host owns theme, language and sharing; comments lead. */
+  private readonly embedded = new URLSearchParams(location.search).has('embed')
   private readonly handleSystemAppearanceChange = (): void => {
     if (this.themePreference === 'system') this.applyAppearance()
   }
@@ -168,12 +170,14 @@ export class FileBrowser {
 
   constructor(private root: HTMLElement, private bundle: TacoBundle, private readonly options: FileBrowserOptions = {}) {
     this.store = new TacoStore(bundle)
+    const hostParams = new URLSearchParams(location.search)
     this.locale = resolveLocale(
-      storageGet('taco-locale'),
+      (this.embedded ? hostParams.get('lang') : null) ?? storageGet('taco-locale'),
       __DEFAULT_LOCALE__ ? [__DEFAULT_LOCALE__] : undefined,
     )
     document.documentElement.lang = this.locale
-    const savedTheme = storageGet('taco-theme')
+    document.documentElement.classList.toggle('taco-embedded', this.embedded)
+    const savedTheme = (this.embedded ? hostParams.get('theme') : null) ?? storageGet('taco-theme')
     this.themePreference = savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'system'
     this.applyAppearance()
     for (const failure of migrateTacoBundleBlocks(bundle, this.mermaidLabels())) {
@@ -188,7 +192,7 @@ export class FileBrowser {
     const initialPath = selectedPathForLoad(location.protocol, location.hash, storageGet(selectionKey, 'session'))
     this.selected = fileByPath(bundle, initialPath) ?? defaultFile(bundle)
     if (this.selected) this.rememberOfflineSelection(this.selected)
-    this.auxiliaryTab = this.selected && fileKind(this.selected) === 'markdown' ? 'outline' : 'comments'
+    this.auxiliaryTab = this.embedded || !this.selected || fileKind(this.selected) !== 'markdown' ? 'comments' : 'outline'
     this.sync = new TacoSyncSession(this.store)
     this.comments = new CommentsController({
       bundle: this.bundle,
@@ -246,6 +250,8 @@ export class FileBrowser {
     this.build()
     window.addEventListener('hashchange', this.handleHashChange)
     this.dirtyTracker.markSaved()
+    // An embedding page may present the file as a reviewer's in-progress session (e.g. the Tacobin demo).
+    if (this.embedded && new URLSearchParams(location.search).has('pending')) this.dirtyTracker.markCommentsPending()
     this.syncDirtyState()
     document.addEventListener('keydown', this.handleDocumentKeyDown)
     window.addEventListener('resize', this.handleWindowResize)
@@ -350,7 +356,7 @@ export class FileBrowser {
     this.workspacePath = el('div', 'workspace-path', this.selected ? relativePath(this.bundle, this.selected) : '')
     this.syncWorkspaceHeader()
     const workspaceHeaderSpacer = el('span', 'workspace-header-spacer')
-    const share = createControlButton('share', this.t.share, () => this.share.open(share), 'share-button')
+    const share = createControlButton('share', this.t.share, () => { if (!this.embedded) this.share.open(share) }, 'share-button')
     this.share.mount(share)
     const presenceStrip = el('div', 'presence-strip')
     this.presence.mount(presenceStrip)
@@ -372,11 +378,12 @@ export class FileBrowser {
     const saveMore = createControlButton('chevron-down', this.t.saveCopy, () => this.openSaveMenu(saveMore), 'save-more', false, true)
     const saveGroup = el('div', 'save-group v2-button-group')
     saveGroup.append(this.saveButton, saveMore)
-    const language = createControlButton('globe', this.t.language, () => this.openLanguageMenu(language))
+    const language = createControlButton('globe', this.t.language, () => { if (!this.embedded) this.openLanguageMenu(language) })
     const theme = createControlButton(
       this.themePreference === 'system' ? 'monitor' : this.themePreference === 'dark' ? 'moon' : 'sun',
       this.t.mermaidTheme,
       () => {
+        if (this.embedded) return
         const menu = this.openPopover(theme, 'theme-menu')
         const themeIcons: Record<'system' | 'light' | 'dark', Parameters<typeof svgIcon>[0]> = {
           system: 'monitor',
@@ -458,7 +465,7 @@ export class FileBrowser {
 
   private selectFile(file: TacoFile, writeHash = true): void {
     this.selected = file
-    this.auxiliaryTab = fileKind(file) === 'markdown' ? 'outline' : 'comments'
+    this.auxiliaryTab = this.embedded || fileKind(file) !== 'markdown' ? 'comments' : 'outline'
     this.sync.setPresence({ fileId: file.id ?? '', from: 0, to: 0, focused: false, hasCursor: false })
     this.comments.resetForFileChange()
     this.updateSelectionLocation(file, writeHash)
@@ -1245,6 +1252,10 @@ export class FileBrowser {
       commentSections ? `\n## ${this.t.handoffCommentsHeader}\n${commentSections}` : '',
     ].filter(Boolean).join('\n')
     const text = prompt
+    // Same-origin host pages (e.g. the Tacobin homepage demo) may react to a handoff; other origins get nothing.
+    if (this.embedded && window.parent !== window && location.origin !== 'null') {
+      window.parent.postMessage({ type: 'taco:handoff', text }, location.origin)
+    }
     try {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable')
       await navigator.clipboard.writeText(text)

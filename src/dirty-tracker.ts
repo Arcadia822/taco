@@ -77,6 +77,12 @@ export class BundleDirtyTracker {
     this.dirtyFiles.clear()
   }
 
+  /** Count the bundle's review threads as unsaved session work, as if they were written after opening. */
+  markCommentsPending(): void {
+    this.savedComments = JSON.stringify([])
+    this.commentsDirty = commentsSignature(this.bundle) !== this.savedComments
+  }
+
   private compareFile(file: TacoFile): void {
     const id = file.id ?? file.path
     if (fileSignature(file) === this.savedFiles.get(id)) this.dirtyFiles.delete(id)

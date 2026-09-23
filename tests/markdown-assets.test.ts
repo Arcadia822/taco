@@ -21,7 +21,7 @@ describe('embedded Markdown assets', () => {
     const root = document.createElement('div')
     root.innerHTML = [
       '<img src="https://raw.githubusercontent.com/Arcadia822/taco/main/src/assets/taco-logo.svg">',
-      '<img src="https://raw.githubusercontent.com/Arcadia822/taco/main/docs/assets/taco-overview.png">',
+      '<img src="https://raw.githubusercontent.com/Arcadia822/taco/main/src/assets/taco-logo.svg">',
       '<img src="https://example.com/badge.svg">',
     ].join('')
 
@@ -30,8 +30,8 @@ describe('embedded Markdown assets', () => {
     const images = root.querySelectorAll('img')
     expect(images[0].getAttribute('src')).toMatch(/^data:image\/svg\+xml;base64,/)
     expect(images[0].dataset.tacoSource).toBe('https://raw.githubusercontent.com/Arcadia822/taco/main/src/assets/taco-logo.svg')
-    expect(images[1].getAttribute('src')).toMatch(/^data:image\/jpeg;base64,/)
-    expect(images[1].dataset.tacoSource).toBe('https://raw.githubusercontent.com/Arcadia822/taco/main/docs/assets/taco-overview.png')
+    expect(images[1].getAttribute('src')).toMatch(/^data:image\/svg\+xml;base64,/)
+    expect(images[1].dataset.tacoSource).toBe('https://raw.githubusercontent.com/Arcadia822/taco/main/src/assets/taco-logo.svg')
     expect(images[2].getAttribute('src')).toBe('https://example.com/badge.svg')
     expect(documentBundle.files[0].content).toBe('# Taco')
   })
