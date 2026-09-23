@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 
 const TAU = Math.PI * 2
 const HEADER_HEIGHT = 84
-const COLORS = ['#3ecf8e', '#75e9ad', '#bbfbd8', '#effff5']
+const TERRAIN_COLORS = ['#1d6f46', '#3ecf8e', '#79eeb4', '#d8ffeb']
 const SPHERE_COLORS = ['#b4f7d8', '#c1dcff', '#ffd8b7']
 const SPHERE_PHASES = [-1.05, 2.7, 0.8]
 
@@ -14,37 +14,30 @@ function noise(index: number, seed: number) {
 }
 
 // Position, wave phase, square size. Geometry is rebuilt only on resize.
-type ParticleLayer = { points: Float32Array; color: string }
+type TerrainLayer = { points: Float32Array; color: string }
 type Sphere = { points: Float32Array; color: string; phase: number; radius: number; x: number; y: number; z: number }
 
-function compose(width: number, height: number): ParticleLayer[] {
-  const groups: number[][] = COLORS.map(() => [])
+function composeTerrain(width: number, height: number): TerrainLayer[] {
   const mobile = width < 700
-  const add = (x: number, y: number, index: number, strength = 1) => {
-    const tone = Math.min(3, Math.floor(noise(index, 8) * 4))
-    groups[tone].push(x, y, noise(index, 9) * TAU, (0.9 + noise(index, 10) * 0.9) * strength)
-  }
-
-  // Three separated streams sweep upward from the lower left. Black gaps,
-  // rather than dark shading, describe the folds and preserve their silhouette.
-  const columns = mobile ? 110 : 235
-  for (let band = 0; band < 3; band++) {
-    for (let column = 0; column < columns; column++) {
-      const u = column / (columns - 1)
-      const crest = height * (1.08 - 0.48 * u * u) + Math.sin(u * 7 + band * 0.9) * height * 0.035 + band * height * 0.095
-      const rows = 6 + Math.floor(u * 10)
-      for (let row = 0; row < rows; row++) {
-        const index = band * 10000 + column * 30 + row
-        if (noise(index, 2) < 0.22) continue
-        const x = u * (width + 40) - 20 + (noise(index, 3) - 0.5) * 4
-        const depth = row / rows
-        const y = crest + depth * depth * height * 0.105 + (noise(index, 4) - 0.5) * 5
-        add(x, y, index, mobile ? 0.8 : 1)
-      }
+  const rows = mobile ? 36 : 48
+  const cols = mobile ? 56 : 96
+  const groups: number[][] = TERRAIN_COLORS.map(() => [])
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const index = r * cols + c
+      if (noise(index, 1) < 0.12) continue
+      const u = c / (cols - 1)
+      const v = r / (rows - 1)
+      // Jitter grid slightly for organic stippling
+      const uj = Math.max(0, Math.min(1, u + (noise(index, 2) - 0.5) * (1 / cols) * 0.6))
+      const vj = Math.max(0, Math.min(1, v + (noise(index, 3) - 0.5) * (1 / rows) * 0.6))
+      const heightBias = Math.pow(uj, 1.4) * 0.65 + (1 - vj) * 0.35
+      const tone = Math.max(0, Math.min(3, Math.floor(heightBias * 3.4 + noise(index, 4) * 0.6)))
+      const sizeBase = 1.3 + noise(index, 5) * 0.9
+      groups[tone].push(uj, vj, noise(index, 6) * TAU, sizeBase)
     }
   }
-
-  return groups.map((points, index) => ({ points: new Float32Array(points), color: COLORS[index] }))
+  return groups.map((points, index) => ({ points: new Float32Array(points), color: TERRAIN_COLORS[index] }))
 }
 
 function composeSpheres(width: number, height: number): Sphere[] {
@@ -80,7 +73,7 @@ export function TacoPixelBackground() {
     let width = 0
     let height = 0
     let ratio = 1
-    let layers: ParticleLayer[] = []
+    let terrainLayers: TerrainLayer[] = []
     let spheres: Sphere[] = []
     let frame = 0
     let lastTime = 0
@@ -91,20 +84,34 @@ export function TacoPixelBackground() {
       context.fillStyle = '#000'
       context.fillRect(0, 0, width, height)
       const time = elapsed / 1000
-      const drift = Math.sin(time * TAU / 36) * 5
-      for (const { points, color } of layers) {
+      // 1. Sweeping 3D perspective particle terrain across the bottom
+      const wavePhase = time * TAU / 48
+      const mobile = width < 700
+      for (const { points, color } of terrainLayers) {
         context.fillStyle = color
         context.beginPath()
         for (let i = 0; i < points.length; i += 4) {
+          const u = points[i]
+          const v = points[i + 1]
           const phase = points[i + 2]
-          const x = points[i] + drift + Math.sin(time * TAU / 42 + phase) * 2
-          const y = points[i + 1] + Math.sin(time * TAU / 28 + points[i] / width * 5 + phase * 0.2) * 7
-          const size = points[i + 3]
-          context.rect(x, y, size, size)
+          const sizeBase = points[i + 3]
+          const x = (u - (mobile ? 0.42 : 0.46)) * width * (mobile ? 1.45 : 1.62)
+          const z = 220 + v * 780
+          const wave = Math.sin(u * 4.5 - v * 2.2 + wavePhase + phase * 0.1) * 85 + Math.cos(u * 9 + v * 3.5 - wavePhase * 0.7) * 40
+          const ridge = (Math.pow(u, 1.55) * 360) - (v * 140)
+          const y = -(wave + ridge - 80)
+          const fov = 650
+          const sx = (x * fov) / z + width * (mobile ? 0.54 : 0.52)
+          const sy = (y * fov) / z + height * (mobile ? 0.86 : 0.82)
+          if (sx >= -10 && sx <= width + 10 && sy >= -10 && sy <= height + 10) {
+            const size = Math.max(1, (1 - v * 0.55) * sizeBase)
+            context.rect(sx - size / 2, sy - size / 2, size, size)
+          }
         }
         context.fill()
       }
-      const mobile = width < 700
+
+      // 2. Three 3D spherical particle clouds orbiting with true depth and mutual occlusion
       const revolution = time * TAU / 100
       const orbit = width * (mobile ? 0.15 : 0.095)
       const camera = orbit * 5
@@ -161,6 +168,7 @@ export function TacoPixelBackground() {
       const scaleY = targetHeight / height
       context!.setTransform(scaleX, 0, 0, scaleY, 0, 0)
       header!.setTransform(scaleX, 0, 0, scaleY, 0, 0)
+      terrainLayers = composeTerrain(width, height)
       spheres = composeSpheres(width, height)
       draw()
     }
