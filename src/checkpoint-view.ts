@@ -197,24 +197,27 @@ function checkpointCard(node: ResolvedCheckpointNode, labels: CheckpointLabels, 
     filename.addEventListener('click', () => options.onSelect(doc.path))
     row.append(filename)
     if (doc.optional) row.append(createFileAttribute('optional', labels.checkpointOptional, 'checkpoint-document-attribute is-optional'))
-    if (!doc.exists) row.append(el('span', 'checkpoint-document-attribute', labels.checkpointMissingFile))
-    const status = el('button', 'checkpoint-document-status') as HTMLButtonElement
-    status.type = 'button'
-    const title = statusLabel(doc.status, labels)
-    status.title = title
-    status.setAttribute('aria-label', `${filename.textContent}: ${title}`)
-    status.append(createStatusIcon(doc.status, title))
-    status.addEventListener('click', () => openCheckpointStatusMenu(status, {
-      path: doc.path,
-      title: node.title,
-      optional: doc.optional,
-      status: doc.status,
-      labels,
-      readOnly: options.readOnly,
-      onSet: (value) => options.onSet(doc.path, value),
-      onOpenView: options.onOpenView,
-    }))
-    row.append(status)
+    if (!doc.exists) {
+      row.append(el('span', 'checkpoint-document-attribute', labels.checkpointMissingFile))
+    } else {
+      const status = el('button', 'checkpoint-document-status') as HTMLButtonElement
+      status.type = 'button'
+      const title = statusLabel(doc.status, labels)
+      status.title = title
+      status.setAttribute('aria-label', `${filename.textContent}: ${title}`)
+      status.append(createStatusIcon(doc.status, title))
+      status.addEventListener('click', () => openCheckpointStatusMenu(status, {
+        path: doc.path,
+        title: node.title,
+        optional: doc.optional,
+        status: doc.status,
+        labels,
+        readOnly: options.readOnly,
+        onSet: (value) => options.onSet(doc.path, value),
+        onOpenView: options.onOpenView,
+      }))
+      row.append(status)
+    }
     card.append(row)
   }
   return card

@@ -287,7 +287,7 @@ export class FileBrowser {
       this.dirtyTracker.note(change)
       if (this.saveButton) this.syncDirtyState()
     }))
-    if (this.bundle.collab?.room && this.bundle.collab.on !== false) {
+    if (this.bundle.collab?.room && this.bundle.collab.on !== false && resolveCheckpoints(this.bundle).valid) {
       this.sync.enable()
       this.share.wireOnlineStatus(joinFromDoc(this.sync, this.store))
     }
@@ -1640,6 +1640,9 @@ export class FileBrowser {
   }
 
   private async handleRenameFile(file: TacoFile): Promise<void> {
+    const isTracked = (): boolean => resolveCheckpoints(this.bundle).nodes
+      .some((node) => node.documents.some((document) => document.path === file.path))
+    if (isTracked()) return
     const fullName = fileName(file.path)
     const dotIndex = fullName.lastIndexOf('.')
     const baseName = dotIndex > 0 ? fullName.slice(0, dotIndex) : fullName
@@ -1654,6 +1657,7 @@ export class FileBrowser {
       cancelLabel: this.t.cancel ?? 'Cancel',
     })
     if (!newName || !newName.trim()) return
+    if (isTracked()) return
 
     // 清理并剥除可能误输的相同后缀，严格强制追加原有后缀名
     let cleanBase = newName.trim().replaceAll('\\', '/').split('/').filter(Boolean).pop() ?? ''

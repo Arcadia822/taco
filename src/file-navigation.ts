@@ -619,7 +619,7 @@ export class FileNavigation {
     })
     popover.append(setEntryBtn)
 
-    if (this.options.onRenameFile) {
+    if (!checkpointFile && this.options.onRenameFile) {
       const renameBtn = sidebarRow('button', {
         className: 'popover-action',
         leading: svgIcon('edit'),

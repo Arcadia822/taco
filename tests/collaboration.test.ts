@@ -127,6 +127,23 @@ describe('local collaboration', () => {
     expect(bundle().checkpoints).toBeUndefined()
   })
 
+  it('opens malformed local checkpoints without publishing them to collaborators', () => {
+    const document = bundle()
+    const invalid = { ...checkpoints(), nodes: [{ ...checkpoints().nodes[0], after: ['missing'] }] }
+    document.checkpoints = invalid
+
+    const session = new TacoSyncSession(new TacoStore(document))
+    expect(document.checkpoints).toEqual(invalid)
+    expect(session.snapshot().doc.checkpoints).toBeUndefined()
+    expect(() => session.enable()).toThrow('security:invalid-checkpoints')
+    expect(session.isActive()).toBe(false)
+    document.checkpoints = checkpoints()
+    session.enable()
+    expect(session.isActive()).toBe(true)
+    expect(session.snapshot().doc.checkpoints).toEqual(checkpoints())
+    session.close()
+  })
+
   it('rejects invalid remote checkpoints without changing local document state', () => {
     const document = bundle()
     document.checkpoints = checkpoints()

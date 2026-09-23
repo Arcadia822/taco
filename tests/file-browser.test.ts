@@ -1337,6 +1337,34 @@ describe('FileBrowser', () => {
     browser.destroy()
   })
 
+  it('keeps owned Checkpoint files non-renamable while ordinary files remain renamable', () => {
+    const bundle = structuredClone(testBundle)
+    bundle.checkpoints = {
+      version: 1,
+      nodes: [{ id: 'gate', title: 'Gate', after: [], documents: [{ path: 'specs/001-browser/spec.md' }] }],
+      documents: [],
+    }
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    document.querySelector<HTMLButtonElement>('.checkpoint-file-row .checkpoint-file-menu')!.click()
+    expect(Array.from(document.querySelectorAll('.navigation-popover .popover-action'), (button) => button.textContent))
+      .not.toContain('重命名文件')
+    document.querySelector<HTMLButtonElement>('.file-row[data-path$="plan.md"] .file-action-btn')!.click()
+    expect(Array.from(document.querySelectorAll('.navigation-popover .popover-action'), (button) => button.textContent))
+      .toContain('重命名文件')
+    expect(bundle.files[0].path).toBe('specs/001-browser/spec.md')
+    browser.destroy()
+  })
+
+  it('loads malformed local Checkpoints with a warning and preserves their raw value', () => {
+    const bundle = structuredClone(testBundle)
+    bundle.checkpoints = { version: 1, nodes: 'invalid', documents: [] }
+    bundle.collab = { room: 'offline-room', on: true }
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    expect(document.querySelector('.checkpoint-warning-row')?.textContent).toContain('checkpoints.nodes')
+    expect(bundle.checkpoints).toEqual({ version: 1, nodes: 'invalid', documents: [] })
+    browser.destroy()
+  })
+
   it('shows missing Checkpoint documents without status controls until created', () => {
     const bundle = structuredClone(testBundle)
     bundle.checkpoints = {
@@ -1351,6 +1379,10 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.checkpoint-placeholder .checkpoint-document-status')).toBeNull()
     expect(document.querySelector('.checkpoint-placeholder .checkpoint-create-hint')).toBeNull()
     expect(document.querySelector<HTMLButtonElement>('.checkpoint-create-button')).not.toBeNull()
+    document.querySelector<HTMLButtonElement>('.checkpoint-nav-item')!.click()
+    const graphRow = document.querySelector('.checkpoint-view .checkpoint-document')!
+    expect(graphRow.textContent).toContain('missing.md')
+    expect(graphRow.querySelector('.checkpoint-document-status')).toBeNull()
     browser.destroy()
   })
 
