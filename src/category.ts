@@ -1,6 +1,7 @@
 import { fileByPath, relativePath, type TacoBundle, type TacoFile } from './model.ts'
 import { frontmatterString, replaceFrontmatterProperty } from './frontmatter.ts'
 import { parseDocument } from 'yaml'
+import { checkpointMembership, validateCheckpoints } from '@taco/protocol'
 
 export const UNCLASSIFIED_CATEGORY = '未分类'
 
@@ -47,9 +48,11 @@ export function getDirYamlCategory(bundle: TacoBundle, dirRelPath: string): stri
 
 export interface FileCategoryResolution {
   category: string
-  source: 'root-default' | 'root-file' | 'first-level-dir' | 'inherited-root'
+  source: 'checkpoint' | 'root-default' | 'root-file' | 'first-level-dir' | 'inherited-root'
   canEdit: boolean
   firstLevelDir: string | null
+  checkpointId?: string
+  overridden?: string
 }
 
 /**
@@ -61,12 +64,42 @@ export interface FileCategoryResolution {
  * 5. 子目录最多限定创建 2 级
  */
 export function resolveFileCategory(bundle: TacoBundle, file: TacoFile): FileCategoryResolution {
-  const rel = relativePath(bundle, file)
+  return resolveCategory(bundle, file.path, file)
+}
+
+/** Resolve a path even when its Checkpoint document has not yet been created. */
+export function resolvePathCategory(bundle: TacoBundle, path: string): FileCategoryResolution {
+  return resolveCategory(bundle, path, fileByPath(bundle, path))
+}
+
+function resolveCategory(bundle: TacoBundle, path: string, file: TacoFile | null): FileCategoryResolution {
+  const original = resolveOrdinaryPathCategory(bundle, path, file)
+  if (bundle.checkpoints === undefined) return original
+  const validated = validateCheckpoints(bundle.checkpoints, bundle.root)
+  if (!validated.ok) return original
+  const member = checkpointMembership(validated.value).get(path)
+  if (!member) return original
+  const node = validated.value.nodes.find(({ id }) => id === member.nodeId)!
+  const overridden = original.source === 'root-file' || original.source === 'first-level-dir'
+    ? original.category
+    : undefined
+  return {
+    category: node.title,
+    source: 'checkpoint',
+    canEdit: false,
+    firstLevelDir: original.firstLevelDir,
+    checkpointId: node.id,
+    ...(overridden !== undefined && overridden !== node.title ? { overridden } : {}),
+  }
+}
+
+function resolveOrdinaryPathCategory(bundle: TacoBundle, path: string, file: TacoFile | null): FileCategoryResolution {
+  const rel = path.slice(bundle.root.length + 1)
   const parts = rel.split('/').filter(Boolean)
 
   // 1. 根目录下的文件 (parts.length === 1)
   if (parts.length === 1) {
-    const selfCategory = frontmatterString(file.content, CATEGORY_PROPERTY)?.trim()
+    const selfCategory = file ? frontmatterString(file.content, CATEGORY_PROPERTY)?.trim() : undefined
     if (selfCategory) {
       return {
         category: selfCategory,
@@ -114,6 +147,9 @@ export function updateFileCategory(
   file: TacoFile,
   newCategory: string,
 ): { modifiedFile: TacoFile; updatedBundle: TacoBundle } {
+  if (resolveFileCategory(bundle, file).source === 'checkpoint') {
+    throw new Error(`Cannot change category of Checkpoint document: ${file.path}`)
+  }
   const rel = relativePath(bundle, file)
   const parts = rel.split('/').filter(Boolean)
   const catTrimmed = newCategory.trim() || UNCLASSIFIED_CATEGORY

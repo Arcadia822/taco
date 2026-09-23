@@ -1,11 +1,14 @@
 import { copyFile, mkdir, readdir, readFile, rm, rmdir, writeFile } from 'node:fs/promises'
 import { dirname, join, relative, resolve, sep } from 'node:path'
+import { build } from 'vite'
 
 const projectRoot = resolve(new URL('..', import.meta.url).pathname)
 const shellPath = resolve(projectRoot, 'extensions/taco/assets/taco-shell.html')
 const skillShellPath = resolve(projectRoot, 'skills/taco/taco-shell.html')
 const templatesDir = resolve(projectRoot, 'extensions/taco/templates')
 const skillTemplatesDir = resolve(projectRoot, 'skills/taco/templates')
+const skillScriptsDir = resolve(projectRoot, 'skills/taco/scripts')
+const checkpointCliSource = resolve(projectRoot, 'scripts/checkpoints-cli.mjs')
 
 const DATA_BLOCK = /<script\b[^>]*\bid=["']taco-document["'][^>]*>([\s\S]*?)<\/script>/i
 
@@ -103,6 +106,19 @@ async function buildTemplateHtmls() {
   }
 
   await syncSkillTemplates(generated)
+  // Bundle the same protocol resolver used by the browser into a standalone Node reader.
+  // The skill installation cannot rely on the source checkout or TS module loading.
+  await build({
+    configFile: false,
+    root: projectRoot,
+    build: {
+      ssr: checkpointCliSource,
+      outDir: skillScriptsDir,
+      emptyOutDir: false,
+      minify: false,
+      rollupOptions: { output: { entryFileNames: 'checkpoints.mjs' } },
+    },
+  })
 }
 
 buildTemplateHtmls().catch((err) => {

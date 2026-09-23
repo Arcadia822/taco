@@ -76,6 +76,7 @@ export const projectSyncChanges = (
   if (changes.some((change) => change.kind === 'document')) {
     const { files: _files, comments: _comments, collab: _collab, ...document } = bundle
     next = { ...current, ...clone(document), files: current.files }
+    if (document.checkpoints === undefined) delete next.checkpoints
   }
 
   const fileIds = new Set(changes.flatMap((change) => {
@@ -146,6 +147,11 @@ export const applySyncDoc = (bundle: TacoBundle, sync: TacoSyncDoc): void => {
     bundle.navigation = clone(sync.navigation as NavigationManifest)
   } else {
     delete bundle.navigation
+  }
+  if (sync.checkpoints !== undefined) {
+    bundle.checkpoints = clone(sync.checkpoints)
+  } else {
+    delete bundle.checkpoints
   }
 }
 

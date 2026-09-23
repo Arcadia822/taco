@@ -1,4 +1,4 @@
-import { el, svgIcon, type IconName } from './ui-primitives.ts'
+import { createControlButton, el, type IconName } from './ui-primitives.ts'
 
 export type AllowedNewFileType = 'markdown' | 'mermaid' | 'json' | 'yaml' | 'openapi'
 
@@ -58,8 +58,12 @@ export interface NewFileDialogOptions {
   title: string
   confirmLabel: string
   cancelLabel: string
-  typeLabel?: string
-  nameLabel?: string
+  typeLabel: string
+  nameLabel: string
+  categoryLabel: string
+  ungroupedLabel: string
+  groups: ReadonlyArray<{ id: string; title: string }>
+  initialGroupId: string | null
   namePlaceholder?: string
 }
 
@@ -67,6 +71,7 @@ export interface NewFileResult {
   fileName: string
   mediaType: string
   content: string
+  groupId: string | null
 }
 
 export const showNewFileDialog = (options: NewFileDialogOptions): Promise<NewFileResult | null> =>
@@ -80,7 +85,7 @@ export const showNewFileDialog = (options: NewFileDialogOptions): Promise<NewFil
 
     // 1. 类型选择卡片容器（每个卡片都配上和 sidebar 里面一模一样的彩色图标）
     const typeRow = el('div', 'new-file-type-row')
-    const typeLabel = el('label', 'new-file-field-label', options.typeLabel ?? 'File type:')
+    const typeLabel = el('span', 'new-file-field-label', options.typeLabel)
     const typeList = el('div', 'new-file-type-list')
 
     let selectedType: AllowedNewFileType = 'markdown'
@@ -88,21 +93,16 @@ export const showNewFileDialog = (options: NewFileDialogOptions): Promise<NewFil
 
     const typeButtons: HTMLButtonElement[] = []
     for (const opt of NEW_FILE_TYPES) {
-      const btn = el('button', `new-file-type-card${opt.type === selectedType ? ' is-active' : ''}`) as HTMLButtonElement
-      btn.type = 'button'
-
-      const icon = svgIcon(opt.iconName)
-      icon.classList.add('file-type', opt.colorClass)
-
-      const text = el('span', 'new-file-type-card-label', opt.label)
-      btn.append(icon, text)
-
-      btn.addEventListener('click', () => {
+      const btn = createControlButton(opt.iconName, opt.label, () => {
         selectedType = opt.type
         extSuffix.textContent = opt.extension
-        for (const b of typeButtons) b.classList.toggle('is-active', b === btn)
-      })
-
+        for (const button of typeButtons) {
+          button.classList.toggle('is-active', button === btn)
+          button.setAttribute('aria-pressed', String(button === btn))
+        }
+      }, `new-file-type-card${opt.type === selectedType ? ' is-active' : ''}`, true)
+      btn.setAttribute('aria-pressed', String(opt.type === selectedType))
+      btn.querySelector('.ui-icon')?.classList.add('file-type', opt.colorClass)
       typeButtons.push(btn)
       typeList.append(btn)
     }
@@ -110,39 +110,46 @@ export const showNewFileDialog = (options: NewFileDialogOptions): Promise<NewFil
 
     // 2. 纯文件名输入
     const nameRow = el('div', 'new-file-name-row')
-    const nameLabel = el('label', 'new-file-field-label', options.nameLabel ?? 'File name:')
+    const nameLabel = el('label', 'new-file-field-label', options.nameLabel)
+    nameLabel.htmlFor = 'taco-new-file-name'
     const inputWrapper = el('div', 'new-file-input-wrapper')
     const input = el('input', 'prompt-dialog-input new-file-input') as HTMLInputElement
-    input.type = 'text'
+    input.id = 'taco-new-file-name'
+    input.name = 'file-name'
+    input.autocomplete = 'off'
     input.placeholder = options.namePlaceholder ?? 'overview'
     inputWrapper.append(input, extSuffix)
     nameRow.append(nameLabel, inputWrapper)
 
-    body.append(typeRow, nameRow)
+    const categoryRow = el('div', 'new-file-category-row')
+    const categoryLabel = el('label', 'new-file-field-label', options.categoryLabel)
+    categoryLabel.htmlFor = 'taco-new-file-category'
+    const category = el('select', 'prompt-dialog-input new-file-category') as HTMLSelectElement
+    category.id = 'taco-new-file-category'
+    category.name = 'category'
+    category.append(new Option(options.ungroupedLabel, ''))
+    for (const group of options.groups) category.append(new Option(group.title, group.id))
+    category.value = options.groups.some((group) => group.id === options.initialGroupId) ? options.initialGroupId! : ''
+    categoryRow.append(categoryLabel, category)
+    body.append(typeRow, nameRow, categoryRow)
 
     const actions = el('div', 'confirmation-dialog-actions')
-    const cancel = el('button', 'confirmation-dialog-cancel', options.cancelLabel) as HTMLButtonElement
-    cancel.type = 'button'
-    const confirm = el('button', 'confirmation-dialog-confirm', options.confirmLabel) as HTMLButtonElement
-    confirm.type = 'button'
+    const cancel = createControlButton('x', options.cancelLabel, () => finish(false), 'new-file-cancel', true)
+    const confirm = createControlButton('plus', options.confirmLabel, () => finish(true), 'new-file-confirm', true, true)
     actions.append(cancel, confirm)
     dialog.append(title, body, actions)
 
     let settled = false
     const finish = (accepted: boolean): void => {
       if (settled) return
+      const rawName = input.value.trim()
+      if (accepted && !rawName) { input.focus(); return }
       settled = true
       try {
         if (dialog.open && typeof dialog.close === 'function') dialog.close()
       } finally {
         dialog.remove()
         if (!accepted) {
-          resolve(null)
-          return
-        }
-
-        const rawName = input.value.trim()
-        if (!rawName) {
           resolve(null)
           return
         }
@@ -160,12 +167,11 @@ export const showNewFileDialog = (options: NewFileDialogOptions): Promise<NewFil
           fileName: finalName,
           mediaType,
           content: chosen.defaultContent(cleanBase),
+          groupId: category.value || null,
         })
       }
     }
 
-    cancel.addEventListener('click', () => finish(false))
-    confirm.addEventListener('click', () => finish(true))
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
         event.preventDefault()

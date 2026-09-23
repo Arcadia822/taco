@@ -1,3 +1,5 @@
+import type { DocumentStatus } from '@taco/protocol'
+
 import { fileKind, fileName, type TacoFile } from './model.ts'
 
 export type IconName =
@@ -28,11 +30,17 @@ export type IconName =
   | 'template'
   | 'key'
   | 'zoom-in'
+  | 'optional'
   | 'x'
   | 'plus'
   | 'edit'
   | 'trash'
   | 'more-horizontal'
+  | 'status-todo'
+  | 'status-in_progress'
+  | 'status-complete'
+  | 'status-freeze'
+  | 'workflow'
 const iconPaths: Record<IconName, string> = {
   braces: '<path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/>',
   check: '<path d="m20 6-11 11-5-5"/>',
@@ -60,12 +68,19 @@ const iconPaths: Record<IconName, string> = {
   square: '<rect width="14" height="14" x="5" y="5" rx="1"/>',
   template: '<rect width="18" height="14" x="3" y="5" rx="2"/><path d="M7 9h4"/><path d="M7 13h8"/>',
   key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L21 8"/>',
+  // Icon Park Outline: optional (48×48), scaled to Taco's 24×24 icon grid.
+  optional: '<g transform="scale(.5)" stroke-width="4"><path d="M39 6H9a3 3 0 0 0-3 3v30a3 3 0 0 0 3 3h30a3 3 0 0 0 3-3V9a3 3 0 0 0-3-3"/><path d="m14 28 8-8 4 7 8-8"/></g>',
   'zoom-in': '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/><path d="M11 8v6M8 11h6"/>',
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
   trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
   'more-horizontal': '<circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/><circle cx="5" cy="12" r="1.5"/>',
+  'status-todo': '<circle cx="12" cy="12" r="8.5"/>',
+  'status-in_progress': '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none"/>',
+  'status-complete': '<circle cx="12" cy="12" r="8.5" fill="currentColor"/><path d="m8.4 12 2.5 2.5 4.8-5" fill="none" stroke="var(--surface)" stroke-width="2"/>',
+  'status-freeze': '<rect x="6.5" y="10.5" width="11" height="9" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>',
+  workflow: '<rect x="9.5" y="2" width="5" height="5" rx="1"/><rect x="2" y="17" width="5" height="5" rx="1"/><rect x="17" y="17" width="5" height="5" rx="1"/><path d="M12 7v5M4.5 17v-5h15v5"/>',
 }
 export const el = <K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -91,6 +106,23 @@ export const svgIcon = (name: IconName): SVGSVGElement => {
   svg.dataset.icon = name
   svg.innerHTML = iconPaths[name]
   return svg
+}
+export const createFileAttribute = (name: 'key' | 'optional', label: string, className = ''): HTMLSpanElement => {
+  const attribute = el('span', `file-attribute ${className}`.trim())
+  attribute.setAttribute('role', 'img')
+  attribute.setAttribute('aria-label', label)
+  attribute.title = label
+  attribute.append(svgIcon(name))
+  return attribute
+}
+
+export const createStatusIcon = (status: DocumentStatus, label: string): SVGSVGElement => {
+  const icon = svgIcon(`status-${status}`)
+  icon.classList.add('checkpoint-status-icon', `status-${status}`)
+  icon.setAttribute('role', 'img')
+  icon.removeAttribute('aria-hidden')
+  icon.setAttribute('aria-label', label)
+  return icon
 }
 
 export const setButtonIcon = (button: HTMLButtonElement, name: IconName): void => {
@@ -170,10 +202,8 @@ export const showConfirmDialog = (options: ConfirmDialogOptions): Promise<boolea
     for (const message of options.messages) body.append(el('p', '', message))
 
     const actions = el('div', 'confirmation-dialog-actions')
-    const cancel = el('button', 'confirmation-dialog-cancel', options.cancelLabel) as HTMLButtonElement
-    cancel.type = 'button'
-    const confirm = el('button', `confirmation-dialog-confirm${options.destructive ? ' is-destructive' : ''}`, options.confirmLabel) as HTMLButtonElement
-    confirm.type = 'button'
+    const cancel = createControlButton('x', options.cancelLabel, () => finish(false), '', true)
+    const confirm = createControlButton(options.destructive ? 'trash' : 'check', options.confirmLabel, () => finish(true), options.destructive ? 'is-destructive' : '', true, true)
     actions.append(cancel, confirm)
     dialog.append(title, body, actions)
 
@@ -189,8 +219,6 @@ export const showConfirmDialog = (options: ConfirmDialogOptions): Promise<boolea
       }
     }
 
-    cancel.addEventListener('click', () => finish(false))
-    confirm.addEventListener('click', () => finish(true))
     dialog.addEventListener('cancel', (event) => {
       event.preventDefault()
       finish(false)
@@ -222,15 +250,16 @@ export const showPromptDialog = (options: PromptDialogOptions): Promise<string |
   const body = el('div', 'confirmation-dialog-body')
   const input = el('input', 'prompt-dialog-input') as HTMLInputElement
   input.type = 'text'
+  input.name = 'prompt'
+  input.autocomplete = 'off'
+  input.setAttribute('aria-label', options.title)
   input.value = options.initialValue ?? ''
   if (options.placeholder) input.placeholder = options.placeholder
   body.append(input)
 
   const actions = el('div', 'confirmation-dialog-actions')
-  const cancel = el('button', 'confirmation-dialog-cancel', options.cancelLabel) as HTMLButtonElement
-  cancel.type = 'button'
-  const confirm = el('button', 'confirmation-dialog-confirm', options.confirmLabel) as HTMLButtonElement
-  confirm.type = 'button'
+  const cancel = createControlButton('x', options.cancelLabel, () => finish(null), '', true)
+  const confirm = createControlButton('check', options.confirmLabel, () => finish(input.value.trim() || null), '', true, true)
   actions.append(cancel, confirm)
   dialog.append(title, body, actions)
 
@@ -246,8 +275,6 @@ export const showPromptDialog = (options: PromptDialogOptions): Promise<string |
     }
   }
 
-  cancel.addEventListener('click', () => finish(null))
-  confirm.addEventListener('click', () => finish(input.value.trim() || null))
   input.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault()

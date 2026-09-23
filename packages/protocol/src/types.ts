@@ -1,3 +1,5 @@
+import type { CheckpointsState } from './checkpoints.ts'
+
 export const FORMAT = 'taco/files'
 export const FORMAT_VERSION = 1
 
@@ -88,6 +90,7 @@ export interface DocumentSnapshot {
   root: string
   files: SnapshotFile[]
   navigation?: NavigationConfig
+  checkpoints?: CheckpointsState
 }
 
 export interface ImportedCommentMessage {

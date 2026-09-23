@@ -6,7 +6,7 @@ This is the machine-facing installation guide for an Agent adding Taco to an env
 
 **Installing Taco means installing the `taco` skill.** There is no package manager step, no daemon, no build, no project modification, and no CLI requirement for the core workflow:
 
-- The skill directory (`skills/taco/`) is self-sufficient: `SKILL.md` (the agent guide), `taco-shell.html` (the production browser shell, whose `#taco-document` data block is empty — the runtime holds no document until you write one), and `templates/` (starter packs).
+- The skill directory (`skills/taco/`) is self-sufficient: `SKILL.md` (the agent guide), `taco-shell.html` (the production browser shell, whose `#taco-document` data block is empty), `references/` (loaded only for the relevant Checkpoint or hosted workflow), `scripts/` (the optional saved-Checkpoint reader), and `templates/` (optional examples).
 - Once the skill is installed, the Agent can assemble, present, open, and review `.taco.html` files in any directory, forever, fully offline.
 - `taco-cli` exists only for optional cloud workflows (TacoHub / Tacobin publishing and live review). It is **never** part of the local installation.
 
@@ -18,20 +18,22 @@ When the user gives the Taco repository URL (e.g. `https://github.com/Arcadia822
    - `skills/taco/SKILL.md`
    - `skills/taco/taco-shell.html`
    - `skills/taco/templates/**`
+   - `skills/taco/references/**`
+   - `skills/taco/scripts/**`
 2. Copy them into the harness's skill location (for example `~/.claude/skills/taco/` or the equivalent for the active agent harness), keeping the files together in one `taco/` directory.
 3. Verify before reporting success. Every check below is required:
-   - `SKILL.md`, `taco-shell.html`, and `templates/` live in that one skill directory, and each template pack keeps its `README.md`, `template.md`, `bundle.json`, and `empty.taco.html` beside one another.
+   - `SKILL.md`, `taco-shell.html`, `references/`, `scripts/`, and `templates/` live in that one skill directory. The `SKILL.md` routes Checkpoint work to `references/checkpoints.md` and hosted publication/review to their own references; each template example keeps its `README.md`, `template.md`, `bundle.json`, and `empty.taco.html` beside one another.
    - `taco-shell.html` is the **production shell, not a demo document**. Its single `#taco-document` block is empty — exactly `<script type="application/taco+json" id="taco-document"></script>` — the `<title>` is generic, and the block carries no `docId`, `files`, `comments`, `navigation`, `access`, or `packOptions`. A block that still contains a bundled document means you copied the wrong file; replace it before use.
    - The shell and the template packs are **self-contained**. Every script, style, font, and image is inline or a `data:` URI, and nothing resolves to an external `http(s)://` script, stylesheet, or asset or to a sibling asset directory shipped beside the skill. That is what keeps a produced `.taco.html` portable and offline on any machine.
    - `SKILL.md` states that the data block is filled before the file is opened; only that block and the escaped HTML title may change.
-   - Read `SKILL.md` once to confirm it describes the shell you installed.
+   - Read `SKILL.md` once to confirm it describes the shell and routes optional references that exist in the installed directory. The bundled `spec/` SDD graph is an example, not a required Checkpoint policy; project-owned review rules take precedence.
 4. Done. Report the installed skill path. Running the packaging flow once against a scratch directory is useful internal evidence, but it is not required, and a headless load is never user-visible presentation (see below).
 
 Do not install npm packages, download `taco-cli`, or run any build for the default install. Do not modify the target project. If the user's request is explicitly about cloud publishing (TacoHub/Tacobin), see "Install taco-cli" below.
 
 ## Use the skill
 
-1. **Assemble.** Read the existing review bundle first, then read the skill shell into memory; never copy an empty shell over the destination. Follow `SKILL.md` for the full bundle and file-type contract. Exclude every `*.taco.html` from source enumeration. Preserve all existing bundle fields, stable file identities, and review state, including collaboration/access settings and unknown fields. Serialize JSON with `<`, `>`, `&`, and line separators escaped as `\uXXXX`, and insert it using a callback or index splice, never replacement-string interpolation. Only the single `#taco-document` block and escaped HTML title may change. Validate a temporary sibling file before atomically replacing the destination; failures leave the old review intact.
+1. **Assemble.** Read the existing review bundle first, then read the skill shell into memory; never copy an empty shell over the destination. Follow `SKILL.md` for the common bundle and file-type contract. Read `references/checkpoints.md` only when creating, modifying, inspecting, or reporting Checkpoint data. Follow the user's and project's review requirements; a bundled SDD example does not determine whether a Checkpoint is needed or where the Taco is saved. Exclude every `*.taco.html` from source enumeration. Preserve all existing bundle fields, stable file identities, and review state, including collaboration/access settings and unknown fields. Serialize JSON with `<`, `>`, `&`, and line separators escaped as `\uXXXX`, and insert it using a callback or index splice, never replacement-string interpolation. Only the single `#taco-document` block and escaped HTML title may change. Validate a temporary sibling file before atomically replacing the destination; failures leave the old review intact.
 
 2. **Open it for the human.** Present the exact absolute path through the Agent GUI's native clickable-file surface. When the host's browser tool supports and permits local `file://` navigation, open the file yourself, in a fresh tab so an existing unsaved review survives, because the path is often hard for the reviewer to find. Report exactly one of `presented as a clickable file`, `opened`, or `opened and verified`. A headless or automation boot check is internal evidence only: it is not user-visible presentation and must never be reported as `opened` or `opened and verified`. If browser tools are unavailable or the host prohibits `file://` navigation — Codex cannot autonomously complete that transition, so the user's click is what hands the file to Browser — keep the clickable-file handoff and state the reason. Never bypass a restriction with a `data:`/Blob URL, a development server, or an external upload.
 
@@ -78,7 +80,7 @@ install -m 0755 taco-cli "$HOME/.local/bin/taco-cli"
 taco-cli help
 ```
 
-The JSON returned by `taco-cli skills read taco` is the cloud usage contract (`references/publishing.md`, `references/reviewing.md`).
+The canonical skill's optional cloud workflow lives in `skills/taco/references/publishing.md` and `references/reviewing.md`; read those when using a Host. `taco-cli skills read taco` currently returns the CLI's separately embedded, cloud-oriented guide, not a copy of the repository skill. Use `taco-cli help` for the installed binary's command contract; release-time embedding from the canonical skill has not yet been wired.
 
 ## Credential boundary
 

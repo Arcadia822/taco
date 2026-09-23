@@ -34,7 +34,7 @@ describe('confirmation dialog', () => {
 
     expect(Array.from(dialog.querySelectorAll('.confirmation-dialog-body p')).map((node) => node.textContent))
       .toEqual(['The browser controls the destination.', 'This copy contains credentials.'])
-    dialog.querySelector<HTMLButtonElement>('.confirmation-dialog-confirm')!.click()
+    dialog.querySelector<HTMLButtonElement>('button[aria-label="Download"]')!.click()
 
     await expect(result).resolves.toBe(true)
     expect(document.querySelector('.confirmation-dialog')).toBeNull()

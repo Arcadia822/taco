@@ -19,9 +19,15 @@ No CLI is required. A `.taco.html` is plain HTML with one plaintext JSON data bl
 - No project scaffolding is required. Taco works in any repository or sandbox on a plain directory.
 - Spec Kit projects: if the project already has the Taco Spec Kit extension installed (`.specify/extensions/taco/` and the `taco-speckit` skill), use that flow. Otherwise this skill handles a Spec Kit feature directory exactly the same way — installing the extension is an optional deeper integration, never a requirement.
 
-### Starting a new document from a template pack
+### Optional document and Checkpoint examples
 
-This skill bundles self-contained template packs in `templates/` next to this `SKILL.md`: `spec/`, `architecture/`, `api-reference/`, and `adr/`. (A Taco source checkout carries the same packs at `extensions/taco/templates/`; an installed Spec Kit extension exposes them at `.specify/extensions/taco/templates/`.) Each pack contains a skeleton `template.md`, a minimal `bundle.json`, and an open-in-browser `empty.taco.html`. When the user asks to draft a new design document, ADR, or API reference, read the matching pack's `README.md` and `template.md` and follow its field contract (`title`, `feature_id` or equivalent, `created`, `status`, `input`) instead of inventing structure.
+This skill bundles optional document examples in `templates/` next to this `SKILL.md`: `spec/`, `architecture/`, `api-reference/`, and `adr/`. (A Taco source checkout carries the same packs at `extensions/taco/templates/`; an installed Spec Kit extension exposes them at `.specify/extensions/taco/templates/`.) First use the user's instructions and project-owned templates or review policy, if present. Read a bundled pack's `README.md` and `template.md` only when it is useful as a starting reference; its fields, files, and Checkpoint graph are not required structure.
+
+Decide whether to use Checkpoints from the review contract, not the task label or document count. Use them when the team needs named review milestones, dependencies, or explicit status tracking; follow any project-specific Checkpoint policy or reviewer request. Otherwise omit `checkpoints` and use Taco's ordinary document review. For comparison, a small copy edit or straightforward bug fix often needs no Checkpoint, while a `spec.md` → `plan.md` → `tasks.md` review can draw on the bundled `spec/` **SDD example**. Neither shape is mandatory: a small change may require client sign-off, and a complex change may use a different project-defined graph. If adapting an example, update every `checkpoints.nodes[].documents[].path` to the new root; never import sample status records as real review progress.
+
+### Optional hosted review
+
+Local assembly and Handoff never require `taco-cli` or a Host. When explicitly publishing a Taco to a remote Host, read `references/publishing.md` first; when consuming hosted review events, read `references/reviewing.md` first. Both references are part of this same skill, not a second CLI-only guide. A hosted publication is public by default; inspect the payload and credential boundary before sending it.
 
 ### Choosing the right artifact for design content
 
@@ -70,7 +76,7 @@ The document lives in one plaintext block near the top of the shell:
 
 ```html
 <script type="application/taco+json" id="taco-document">
-{ "format": "taco/files", "version": 1, ... }
+  { "format": "taco/files", "version": 1, ... }
 </script>
 ```
 
@@ -83,19 +89,25 @@ Bundle fields:
 - `title`: document title. The runtime normalizes it to the persisted `.taco.html` filename stem, so name the file after the title.
 - `root`: the directory the bundle covers, as a safe relative POSIX path (no leading `/`, no `\`, no empty, `.`, or `..` segments). Every `path` must sit under `root/`.
 - `files`: `{ id?, title?, path, mediaType, content, sourceUrl?, sourceHash?, blocks? }[]`, `path` safe, unique, and starting with `root/`.
-- `comments`, `navigation`, `access`, `collab`, `packOptions`, and any other field: carry over from the previous bundle when present.
+- `comments`, `navigation`, `checkpoints`, `access`, `collab`, `packOptions`, and any other field: carry over from the previous bundle when present.
+
+### Checkpoints and document status
+
+When creating, modifying, inspecting, or reporting a Checkpoint graph or its document statuses, read `references/checkpoints.md` before acting. The main workflow below still applies: preserve an existing graph and status table across refreshes; omit `checkpoints` when the review contract does not call for them.
+
+### File media types
 
 `mediaType` by carrier:
 
-| File | `mediaType` | Notes |
-| --- | --- | --- |
-| `.md` | `text/markdown` | editable document |
-| `.json` | `application/json` | source view |
-| `.yaml` / `.yml` | `application/yaml` | source view |
-| `diagrams/*.mmd` | `text/plain` | Mermaid source; the runtime routes it by extension, not by media type |
-| `.png` | `image/png` | `content` is a `data:image/png;base64,…` URI |
-| `.html` / `.htm` | `text/html` | requires `sourceUrl` |
-| any other text | `text/plain` | plain-text source |
+| File             | `mediaType`        | Notes                                                                 |
+| ---------------- | ------------------ | --------------------------------------------------------------------- |
+| `.md`            | `text/markdown`    | editable document                                                     |
+| `.json`          | `application/json` | source view                                                           |
+| `.yaml` / `.yml` | `application/yaml` | source view                                                           |
+| `diagrams/*.mmd` | `text/plain`       | Mermaid source; the runtime routes it by extension, not by media type |
+| `.png`           | `image/png`        | `content` is a `data:image/png;base64,…` URI                          |
+| `.html` / `.htm` | `text/html`        | requires `sourceUrl`                                                  |
+| any other text   | `text/plain`       | plain-text source                                                     |
 
 Per-file fields:
 
@@ -126,7 +138,7 @@ Writing rules:
 1. If a `.taco.html` already exists at the destination, **read its bundle first** — before you copy or overwrite anything, or you will read your own fresh copy instead of the reviewed document.
 2. Read the shell into memory; do not copy it over the destination. For a refresh, retain the old bundle in memory separately.
 3. Enumerate the document directory and build `files[]` from regular source files. Exclude dotfiles and every `*.taco.html`. Preserve the existing `packOptions.ignore` rules unless new exclusions were requested. Report exclusions; stop on unhandled symlinks, non-UTF-8 files, invalid PNGs or unsupported entries instead of following or silently skipping them.
-4. For a new document, set `format: "taco/files"`, `version: 1`, a fresh unique `docId`, `title`, `root` and `files`. For a refresh, preserve the previous bundle wholesale and replace only intended fields; keep `root`, format/version and identity unchanged. Stop on an unsupported format/version rather than downgrading it. Match existing file entries by path, preserve unknown fields and stable ids, and update content-dependent fields using the rules above.
+4. For a new document, set `format: "taco/files"`, `version: 1`, a fresh unique `docId`, `title`, `root` and `files`. Choose the Checkpoint definition from the user's or project's review requirements, if any; otherwise omit `checkpoints`, even if a starter pack contains one. The bundled `spec/` SDD graph is an example to adapt only if it fits; its stage names, document paths, and display template are not defaults that override project conventions. For a refresh, preserve the previous bundle wholesale—including `checkpoints.nodes`, `checkpoints.documents`, and any unknown fields—and replace only intended fields; keep `root`, format/version and identity unchanged. Stop on an unsupported format/version rather than downgrading it. Match existing file entries by path, preserve unknown fields and stable ids, and update content-dependent fields using the rules above.
 5. Serialize into the in-memory shell, validate the exact result, then write a temporary sibling and rename it to `<DOC_DIR>/<name>.taco.html`. Until this succeeds, leave the previous destination untouched.
 
 ### 2. Present and verify: open it for the human
@@ -142,7 +154,7 @@ Writing rules:
 The reviewer's changes reach you through one of these channels — do not require more than the one that arrives:
 
 - **Handoff (primary)**: clicking Handoff copies **Markdown prose** to the clipboard — an intro line, the document title, an optional local path, a modifications section with one fenced `diff` block per changed file, and a comments section listing open threads (headings follow the reviewer's UI language). Treat that pasted Markdown as the review input. The "Handoff (w/o data)" variant instead copies a short prompt asking you to inspect the open review tab.
-- **Review tab API**: in the open review tab, `window.taco.getReviewHandoff()` returns an in-memory object `{ title, root, originPath, changedFiles: [{ path, mediaType, content, diff? }], comments }`, including unsaved edits. `changedFiles[].path` is **root-relative** — resolve the canonical file as `<root>/<path>` (or call `window.taco.readFile(path)`, which accepts either form). This channel needs no save.
+- **Review tab API**: in the open review tab, `window.taco.getReviewHandoff()` returns an in-memory object `{ title, root, originPath, changedFiles: [{ path, mediaType, content, diff? }], comments, checkpointChanges: [{ path, from, to }], checkpointTemplateChange, checkpointDocumentAdditions: [{ checkpointId, path }] }`, including unsaved edits. `changedFiles[].path` is **root-relative** — resolve the canonical file as `<root>/<path>` (or call `window.taco.readFile(path)`, which accepts either form). This channel needs no save.
   The API returns all stored comment threads, so filter `status === "open"` yourself; comment anchor paths already include `root/`. The clipboard may contain only a notice for a new file or binary asset: obtain its actual contents from the review tab or saved file before applying it.
 - **Saved file**: read the saved `.taco.html`, parse the `#taco-document` block, and diff `files[].content` against the baseline you packed. The file holds only saved state; if the reviewer edited without saving, say so rather than reporting content you did not receive.
 
@@ -158,13 +170,13 @@ Then:
 
 ### 4. Refresh: rebuild after canonical edits
 
-After canonical edits, refresh the same Taco only when pending direct review edits are handled. If any edits remain conflicted or unavailable, preserve the reviewed file unchanged and report the blocker. Otherwise repeat assembly using the full previous bundle and present/open the result. Verify the path and review history are preserved; runtime comment normalization may change serialization but not meaning.
+After canonical edits, refresh the same Taco only when pending direct review edits are handled. If any edits remain conflicted or unavailable, preserve the reviewed file unchanged and report the blocker. Otherwise repeat assembly using the full previous bundle and present/open the result. Verify the path, review history, and **entire Checkpoint definition and status table** are preserved; runtime comment normalization may change serialization but not meaning. Do not reinitialize statuses from a template or infer them from document content.
 
 ## Invariants
 
 - The directory remains canonical; the Taco is a review transport.
 - Only the `#taco-document` block and the `<title>` are agent-writable; never touch the shell around them.
-- Preserve `docId`, `comments`, `navigation`, and every other stored bundle field across refreshes.
+- Preserve `docId`, `comments`, `navigation`, `checkpoints`, and every other stored bundle field across refreshes.
 - Never fabricate comments, hashes, or verification claims; never claim a user-visible open that did not happen.
 
 ## Report format

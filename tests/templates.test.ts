@@ -20,6 +20,14 @@ const listFiles = (directory: string, base = directory): string[] =>
 describe('Template Packs integrity and empty Taco files', () => {
   const packs = ['spec', 'architecture', 'api-reference', 'adr']
 
+  it('ships only the supported document example packs', () => {
+    const shipped = readdirSync(canonicalTemplatesDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort()
+    expect(shipped).toEqual([...packs].sort())
+  })
+
   it('contains all required files for each template pack', () => {
     for (const pack of packs) {
       const dir = resolve(canonicalTemplatesDir, pack)
@@ -41,8 +49,6 @@ describe('Template Packs integrity and empty Taco files', () => {
       if (parsed.ok) {
         expect(parsed.bundle.format).toBe('taco/files')
         expect(parsed.bundle.files.length).toBeGreaterThan(0)
-        expect(parsed.bundle.navigation?.version).toBe(1)
-        expect(parsed.bundle.navigation?.groups.length).toBeGreaterThan(0)
       }
     }
   })

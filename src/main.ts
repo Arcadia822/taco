@@ -1,3 +1,4 @@
+import { resolveCheckpoints, type ResolvedCheckpoints, type DocumentStatus } from '@taco/protocol'
 import './styles.css'
 import { capturePristine, openedFileName, readEmbeddedDoc, titleForFileName } from './kernel/save.ts'
 import { configureApp } from './kernel/app.ts'
@@ -13,11 +14,15 @@ export interface TacoFileApi {
   listFiles(): Array<{ path: string; mediaType: string; bytes: number }>
   readFile(path: string): TacoFile | null
   search(query: string): TacoFile[]
+  getCheckpoints(): ResolvedCheckpoints
   getReviewHandoff(): {
     title: string
     root: string
     originPath: string | null
     changedFiles: Array<{ path: string; mediaType: string; content: string; diff?: string }>
+    checkpointChanges: Array<{ path: string; from: DocumentStatus; to: DocumentStatus }>
+    checkpointTemplateChange: { from: string | null; to: string | null } | null
+    checkpointDocumentAdditions: Array<{ checkpointId: string; path: string }>
     comments: unknown[]
   }
   fileHash?: (content: string, mediaType?: string) => string
@@ -74,6 +79,7 @@ function boot(bundle: TacoBundle): void {
           || (file.mediaType !== 'image/png' && file.content.toLocaleLowerCase().includes(needle)))
         .map(credentialFreeFile)
     },
+    getCheckpoints: () => resolveCheckpoints(bundle),
     getReviewHandoff: () => {
       const changedFiles = browser.getModifiedReviewFiles()
       return {
@@ -81,6 +87,9 @@ function boot(bundle: TacoBundle): void {
         root: bundle.root,
         originPath: new URLSearchParams(location.search).get('origin_path') || null,
         changedFiles,
+        checkpointChanges: browser.getCheckpointChanges(),
+        checkpointTemplateChange: browser.getCheckpointTemplateChange(),
+        checkpointDocumentAdditions: browser.getCheckpointDocumentAdditions(),
         comments: bundle.comments ?? [],
       }
     },

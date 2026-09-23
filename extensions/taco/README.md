@@ -138,4 +138,6 @@ policies/taco-agent-policy.md
 
 The repository's default install target is the `taco` skill at `skills/taco/` — agent guide, production shell, and template packs; this extension is installed in addition to it, and only on explicit request. The `skills/taco-speckit/` skill directory ships in the repository for source-based consumers; the Spec Kit installation itself registers only the two `speckit.taco.*` commands as agent skills.
 
+Template locations do not determine where an Agent writes the resulting `.taco.html`. The `spec/` SDD graph is an optional example; project-owned templates and review policy take precedence, including custom Checkpoint graphs or no Checkpoints at all. The extension's `spec-template.md` is a separate Spec Kit document template, not a mandatory Checkpoint configuration.
+
 Everything in this directory is local. Assembling, updating, opening, and reviewing a Taco requires no network connection. A collaboration-enabled Taco can contain access credentials; follow the [Agent installation guide](https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md) before sending its content to any external model, service, log, or ticket.

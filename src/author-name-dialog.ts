@@ -1,5 +1,5 @@
 import { currentAuthorName, normalizeAuthorName, setAuthorName } from './identity.ts'
-import { el } from './ui-primitives.ts'
+import { createControlButton, el } from './ui-primitives.ts'
 
 export interface AuthorNameDialogLabels {
   title: string
@@ -36,14 +36,11 @@ export const requireAuthorName = (labels: AuthorNameDialogLabels, onConfirm: (na
   input.setAttribute('aria-label', labels.title)
   input.setAttribute('aria-describedby', hint.id)
   const actions = el('div', 'author-name-actions')
-  const cancel = el('button', 'comment-action', labels.cancel) as HTMLButtonElement
-  cancel.type = 'button'
-  const confirm = el('button', 'comment-submit', labels.confirm) as HTMLButtonElement
-  confirm.type = 'submit'
+  const cancel = createControlButton('x', labels.cancel, () => closeDialog(dialog), '', true)
+  const confirm = createControlButton('check', labels.confirm, () => form.requestSubmit(), '', true, true)
   confirm.disabled = true
 
   input.addEventListener('input', () => { confirm.disabled = !normalizeAuthorName(input.value) })
-  cancel.addEventListener('click', () => closeDialog(dialog))
   form.addEventListener('submit', (event) => {
     event.preventDefault()
     const name = normalizeAuthorName(input.value)

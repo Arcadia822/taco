@@ -1,3 +1,4 @@
+import { validateCheckpoints } from './checkpoints.ts'
 import {
   MAX_BLOCK_HTML,
   MAX_COMMENT_BYTES,
@@ -143,7 +144,7 @@ export const validateImportedThread = (
       author: msg.author,
       authorId: typeof msg.authorId === 'string' ? msg.authorId : undefined,
       body: msg.body,
-      createdAt: msg.createdAt,
+      createdAt: msg.createdAt as string,
       updatedAt: typeof msg.updatedAt === 'string' ? msg.updatedAt : undefined,
       deletedAt: typeof msg.deletedAt === 'string' ? msg.deletedAt : undefined,
     })
@@ -279,6 +280,12 @@ export const validateDocumentSnapshot = (
     }
     validatedNav = snapshot.navigation as unknown as NavigationConfig
   }
+  const validatedCheckpoints = snapshot.checkpoints === undefined
+    ? undefined
+    : validateCheckpoints(snapshot.checkpoints, snapshot.root)
+  if (validatedCheckpoints && !validatedCheckpoints.ok) {
+    return { ok: false, err: `Checkpoints invalid at ${validatedCheckpoints.path}: ${validatedCheckpoints.err}` }
+  }
 
   return {
     ok: true,
@@ -290,6 +297,7 @@ export const validateDocumentSnapshot = (
       root: snapshot.root,
       files: validatedFiles,
       navigation: validatedNav,
+      ...(validatedCheckpoints?.ok ? { checkpoints: validatedCheckpoints.value } : {}),
     },
   }
 }

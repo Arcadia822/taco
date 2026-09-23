@@ -22,6 +22,12 @@ export function getFileCurrentGroup(
   ungroupedTitle?: string,
 ): FileGroupResolution {
   const resolved = resolveDocumentNavigation(bundle)
+  for (const group of resolved.checkpointGroups) {
+    if (group.entries.some((entry) => entry.kind === 'category-file' && entry.file.path === file.path)) {
+      return { groupId: group.id, groupTitle: group.title }
+    }
+  }
+
 
   if (resolved.mode === 'custom') {
     for (const group of resolved.groups) {
@@ -61,10 +67,10 @@ export function getAvailableGroups(
   bundle: TacoBundle,
 ): GroupSelectOption[] {
   const resolved = resolveDocumentNavigation(bundle)
-  return resolved.groups.map((g) => ({
-    id: g.id,
-    title: g.title,
-  }))
+  return [
+    ...resolved.checkpointGroups.map(({ id, title }) => ({ id, title: `${title} · Checkpoint` })),
+    ...resolved.groups.map(({ id, title }) => ({ id, title })),
+  ]
 }
 
 export interface OpenGroupSelectorOptions {

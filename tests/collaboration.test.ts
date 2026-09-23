@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { TacoBundle } from '../src/model.ts'
 import { applySyncDoc, projectSyncChanges, TacoStore, toSyncDoc, type TacoSyncDoc } from '../src/store.ts'
+import { rebuildSyncDoc } from '../src/sync/validation.ts'
 import { SyncState } from '../src/sync/crdt.ts'
 import { TacoSyncSession, type Frame } from '../src/sync/session.ts'
 import { SYNC_V } from '../src/sync/crdt.ts'
@@ -30,6 +31,19 @@ const mutateBlock = (doc: TacoSyncDoc, text: string): void => {
   if (!block || block.kind !== 'block') throw new Error('missing block')
   block.html = `<p data-taco-block-id="block-intro">${text}</p>`
 }
+
+const checkpoints = () => ({
+  version: 1 as const,
+  nodes: [{
+    id: 'plan',
+    title: 'Plan',
+    after: [],
+    documents: [{ path: 'specs/collaboration/spec.md' }],
+  }],
+  documents: [
+    { path: 'specs/collaboration/spec.md', status: 'todo' as const, updatedAt: '2026-09-23T08:00:00Z' },
+  ],
+})
 
 describe('local collaboration', () => {
   it('keeps a new session inactive until collaboration is explicitly enabled', () => {
@@ -87,6 +101,66 @@ describe('local collaboration', () => {
     })
     expect(document.title).toBe('Accepted later')
     expect(warning).toHaveBeenCalledWith('[taco-security] security:invalid-set-op')
+    session.close()
+    warning.mockRestore()
+  })
+
+  it('round-trips checkpoint definitions and status across local and remote document changes', () => {
+    const source = bundle()
+    source.checkpoints = checkpoints()
+    const initial = rebuildSyncDoc(toSyncDoc(source), source)
+    expect(initial.checkpoints).toEqual(source.checkpoints)
+    const target = bundle()
+    applySyncDoc(target, initial)
+    expect(target.checkpoints).toEqual(source.checkpoints)
+
+    source.checkpoints = {
+      ...checkpoints(),
+      documents: [{ path: 'specs/collaboration/spec.md', status: 'freeze', updatedAt: '2026-09-23T09:00:00Z' }],
+    }
+    const changed = projectSyncChanges(initial, source, [{ kind: 'document' }])
+    applySyncDoc(target, changed)
+    expect(target.checkpoints).toEqual(source.checkpoints)
+    delete source.checkpoints
+    applySyncDoc(target, projectSyncChanges(changed, source, [{ kind: 'document' }]))
+    expect(target.checkpoints).toBeUndefined()
+    expect(bundle().checkpoints).toBeUndefined()
+  })
+
+  it('rejects invalid remote checkpoints without changing local document state', () => {
+    const document = bundle()
+    document.checkpoints = checkpoints()
+    const session = new TacoSyncSession(new TacoStore(document))
+    // In-process test access to the private frame entrypoint.
+    const frameReceiver = session as unknown as { onFrame(frame: Frame): void }
+    const receive = frameReceiver.onFrame.bind(session)
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const invalid = {
+      ...checkpoints(),
+      documents: [{ path: 'specs/collaboration/spec.md', status: 'invalid', updatedAt: '2026-09-23T09:00:00Z' }],
+    }
+    receive({
+      t: 'ops', a: 'peer', pv: SYNC_V,
+      ops: [
+        { a: 'peer', s: 1, l: 1, op: 'set', k: 'title', v: 'Untrusted title' },
+        { a: 'peer', s: 2, l: 2, op: 'set', k: 'checkpoints', v: invalid },
+      ],
+    })
+    expect(document.title).toBe('Collaboration test')
+    expect(document.checkpoints).toEqual(checkpoints())
+    expect(session.snapshot().doc.checkpoints).toEqual(checkpoints())
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('security:invalid-checkpoints:checkpoints.documents[0].status'))
+
+    receive({
+      t: 'ops', a: 'peer', pv: SYNC_V,
+      ops: [{ a: 'peer', s: 1, l: 1, op: 'set', k: 'checkpoints', v: {
+        ...checkpoints(),
+        documents: [{ path: 'specs/collaboration/spec.md', status: 'complete', updatedAt: '2026-09-23T09:00:00Z' }],
+      } }],
+    })
+    expect(document.checkpoints).toMatchObject({
+      documents: [{ path: 'specs/collaboration/spec.md', status: 'complete' }],
+    })
     session.close()
     warning.mockRestore()
   })

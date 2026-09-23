@@ -1,3 +1,4 @@
+import { validateCheckpoints } from './checkpoints.ts'
 import { computeSnapshotContentHash } from './jcs.ts'
 import type {
   DocumentSnapshot,
@@ -27,6 +28,7 @@ const ALLOWED_TOP_LEVEL_PROPERTIES = new Set([
   'root',
   'files',
   'navigation',
+  'checkpoints',
   'comments', // legacy local comments property, stripped/converted to importedComments
   ...KNOWN_STRIPPED_TOP_FIELDS,
 ])
@@ -69,6 +71,12 @@ export const projectLocalBundleToUploadContent = (
   if (!Array.isArray(rawBundle.files)) {
     return { ok: false, err: 'Bundle files must be an array' }
   }
+  const checkpoints = rawBundle.checkpoints === undefined
+    ? undefined
+    : validateCheckpoints(rawBundle.checkpoints, rawBundle.root)
+  if (checkpoints && !checkpoints.ok) {
+    return { ok: false, err: `Checkpoints invalid at ${checkpoints.path}: ${checkpoints.err}` }
+  }
 
   const projectedFiles: SnapshotFile[] = []
   for (let i = 0; i < rawBundle.files.length; i += 1) {
@@ -103,6 +111,7 @@ export const projectLocalBundleToUploadContent = (
     root: rawBundle.root,
     files: projectedFiles,
     navigation: rawBundle.navigation as DocumentSnapshot['navigation'],
+    ...(checkpoints?.ok ? { checkpoints: checkpoints.value } : {}),
   }
 
   const importedComments: ImportedCommentThread[] = Array.isArray(rawBundle.comments)

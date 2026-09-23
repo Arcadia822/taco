@@ -1,3 +1,4 @@
+import { validateCheckpoints } from '@taco/protocol'
 import { isSafePath } from '../model.ts'
 import {
   assertBoundedJson,
@@ -21,7 +22,7 @@ const timestamp = (value: unknown): value is string => string(value, 128) && !Nu
 const reg = (value: unknown): value is [number, string] => Array.isArray(value) && value.length === 2 && integer(value[0]) && boundedString(value[1], 256)
 const ord = (value: unknown): value is string => string(value, 512) && /^[0-9A-Za-z]+$/.test(value)
 
-const DOC_SET_KEYS = new Set(['title', 'navigation'])
+const DOC_SET_KEYS: Record<string, true> = { title: true, navigation: true, checkpoints: true }
 const FILE_SET_KEYS = new Set(['path', 'mediaType', 'title', 'sourceHash'])
 const NODE_SET_KEYS = new Set([
   'type', 'html', 'anchor', 'status', 'createdAt', 'updatedAt', 'threadId', 'author',
@@ -144,6 +145,12 @@ export const rebuildSyncDoc = (
       navigation = value.navigation
     }
   }
+  const checkpoints = value.checkpoints === undefined
+    ? undefined
+    : validateCheckpoints(value.checkpoints, expected.root)
+  if (checkpoints && !checkpoints.ok) {
+    throw new Error(`security:invalid-checkpoints:${checkpoints.path}: ${checkpoints.err}`)
+  }
 
   return {
     format: 'taco/files',
@@ -153,6 +160,7 @@ export const rebuildSyncDoc = (
     root: expected.root,
     ...(expected.access === 'reader' ? { access: 'reader' } : {}),
     ...(navigation ? { navigation } : {}),
+    ...(checkpoints?.ok ? { checkpoints: checkpoints.value } : {}),
     files,
   }
 }
@@ -196,7 +204,7 @@ export const validateOps = (value: unknown, expected?: Pick<TacoBundle, 'root'>)
         ? validElementIdentity(candidate.el, candidate.sl) && NODE_SET_KEYS.has(candidate.k)
         : candidate.sl !== undefined
           ? validId(candidate.sl) && FILE_SET_KEYS.has(candidate.k)
-          : DOC_SET_KEYS.has(candidate.k)
+          : Object.hasOwn(DOC_SET_KEYS, candidate.k)
       if (!allowed) throw new Error('security:invalid-set-op')
       assertOptionalBoundedJson(candidate.v, 'op-value')
     } else if (candidate.op === 'ins') {

@@ -354,7 +354,7 @@ export class TacoSyncSession {
       return
     }
     const beforeDoc = structuredClone(this.syncDoc)
-    const beforeState = this.state.toJSON()
+    const beforeState = structuredClone(this.state.toJSON())
     const beforeLogLength = this.log.length
     for (const op of ops) {
       if (!this.log.some((known) => known.a === op.a && known.s === op.s)) this.log.push(op)
@@ -388,7 +388,7 @@ export class TacoSyncSession {
     }
     this.flush()
     const beforeDoc = structuredClone(this.syncDoc)
-    const beforeState = this.state.toJSON()
+    const beforeState = structuredClone(this.state.toJSON())
     let result
     try {
       result = this.state.mergeSnapshot(this.syncDoc, safeDoc, safeState)
