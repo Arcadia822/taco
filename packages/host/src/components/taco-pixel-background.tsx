@@ -150,14 +150,17 @@ export function TacoPixelBackground() {
       width = window.innerWidth
       height = window.innerHeight
       ratio = Math.min(window.devicePixelRatio || 1, 2)
-      canvas.width = cover.width = Math.round(width * ratio)
-      canvas.height = Math.round(height * ratio)
-      cover.height = Math.round(HEADER_HEIGHT * ratio)
+      const targetWidth = Math.min(Math.round(width * ratio), 3840)
+      const targetHeight = Math.min(Math.round(height * ratio), 2160)
+      canvas.width = cover.width = targetWidth
+      canvas.height = targetHeight
+      cover.height = Math.round(HEADER_HEIGHT * (targetHeight / height))
       canvas.style.width = cover.style.width = `${width}px`
       canvas.style.height = `${height}px`
-      context!.setTransform(ratio, 0, 0, ratio, 0, 0)
-      header!.setTransform(ratio, 0, 0, ratio, 0, 0)
-      layers = compose(width, height)
+      const scaleX = targetWidth / width
+      const scaleY = targetHeight / height
+      context!.setTransform(scaleX, 0, 0, scaleY, 0, 0)
+      header!.setTransform(scaleX, 0, 0, scaleY, 0, 0)
       spheres = composeSpheres(width, height)
       draw()
     }

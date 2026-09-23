@@ -4,7 +4,7 @@
 // Changes: Tailwind classes replaced by plain CSS classes (see home.css `.mui-terminal*`).
 
 import React, { Children, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { motion, useInView, type MotionProps } from 'motion/react'
+import { motion, useInView, useReducedMotion, type MotionProps } from 'motion/react'
 
 interface SequenceContextValue {
   completeItem: (index: number) => void
@@ -25,6 +25,7 @@ interface AnimatedSpanProps extends MotionProps {
 export const AnimatedSpan = ({ children, delay = 0, className, startOnView = false, ...props }: AnimatedSpanProps) => {
   const elementRef = useRef<HTMLDivElement | null>(null)
   const isInView = useInView(elementRef as React.RefObject<Element>, { amount: 0.3, once: true })
+  const shouldReduceMotion = useReducedMotion()
   const sequence = useContext(SequenceContext)
   const itemIndex = useContext(ItemIndexContext)
   const [hasStarted, setHasStarted] = useState(false)
@@ -38,12 +39,14 @@ export const AnimatedSpan = ({ children, delay = 0, className, startOnView = fal
   // Lines waiting their turn take no space, so the transcript grows (and autoscrolls) line by line.
   if (sequence && !hasStarted) return null
 
+  const yOffset = shouldReduceMotion ? 0 : -5
+
   return (
     <motion.div
-      ref={elementRef}
-      initial={{ opacity: 0, y: -5 }}
-      animate={shouldAnimate ? { opacity: 1, y: 0 } : { opacity: 0, y: -5 }}
-      transition={{ duration: 0.3, delay: delay / 1000 }}
+        ref={elementRef}
+        initial={{ opacity: 0, y: yOffset }}
+        animate={shouldAnimate ? { opacity: 1, y: 0 } : { opacity: 0, y: yOffset }}
+        transition={{ duration: shouldReduceMotion ? 0.15 : 0.3, delay: shouldReduceMotion ? 0 : delay / 1000 }}
       className={className ? `mui-terminal__line ${className}` : 'mui-terminal__line'}
       onAnimationComplete={() => {
         // Only a line that actually played may advance the sequence; the initial hidden state must not.

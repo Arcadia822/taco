@@ -186,6 +186,9 @@ const I18N = {
     creditsTitleEnd: '。',
     creditsDescription: 'Taco 的灵感与核心代码来自 Bento 项目。感谢 nyblnet 将它开源，让 Taco 得以在此基础上继续生长。',
     creditsContact: '保持联系',
+    pageNavAria: '页面导航',
+    pageDotAria: (page: number) => `跳转到第 ${page} 页`,
+    langSwitchAria: '切换语言',
     tracePublish: '发布 Taco，拿到分享地址',
     traceSubscribe: '用 tacoId 订阅这份文档的评审',
     traceEvent: '有人评论，事件回到 Agent 的终端',
@@ -278,6 +281,9 @@ const I18N = {
     creditsDescription: 'Taco’s inspiration and core code come from Bento. Thank you to nyblnet for making it open source and giving Taco a place to begin.',
     creditsContact: 'Keep in touch',
     tracePublish: 'Publish the Taco and get a share URL',
+    pageNavAria: 'Page navigation',
+    pageDotAria: (page: number) => `Scroll to page ${page}`,
+    langSwitchAria: 'Switch Language',
     traceSubscribe: 'Subscribe to reviews using its tacoId',
     traceEvent: 'A review comment lands in the agent terminal',
     traceComment: 'Please cover the failure path',
@@ -371,8 +377,21 @@ export default function HomePage() {
       const step = dots && dots.length > 1 ? dots[1].offsetTop - dots[0].offsetTop : 21
       if (markerRef.current) markerRef.current.style.transform = `translateY(${position * step}px) scale(1.45)`
     }
+    const getScrollPosition = () => {
+      const scrollY = window.scrollY
+      if (!sections.length) return 0
+      for (let i = 0; i < sections.length - 1; i++) {
+        const curr = sections[i].offsetTop
+        const next = sections[i + 1].offsetTop
+        if (scrollY < next) {
+          const progress = next > curr ? (scrollY - curr) / (next - curr) : 0
+          return i + Math.min(1, Math.max(0, progress))
+        }
+      }
+      return sections.length - 1
+    }
     const syncScroll = () => {
-      const actual = Math.min(5, Math.max(0, window.scrollY / window.innerHeight))
+      const actual = getScrollPosition()
       if (preview !== null && (direction > 0 ? actual >= preview : actual <= preview)) preview = null
       positionMarker(preview === null ? actual : direction > 0 ? Math.max(actual, preview) : Math.min(actual, preview))
       const viewportCenter = window.scrollY + window.innerHeight / 2
@@ -403,7 +422,7 @@ export default function HomePage() {
       if (Math.sign(delta) !== Math.sign(distance)) distance = 0
       distance += Math.sign(delta) * Math.min(Math.abs(delta), 120)
       direction = Math.sign(distance)
-      const actual = Math.min(5, Math.max(0, window.scrollY / window.innerHeight))
+      const actual = getScrollPosition()
       const current = Math.round(actual)
       preview = Math.min(5, Math.max(0, current + direction * Math.min(Math.abs(distance) / 160, 1)))
       positionMarker(preview)
@@ -415,7 +434,10 @@ export default function HomePage() {
         syncScroll()
       }, Math.abs(distance) >= 160 ? 900 : 380)
       if (Math.abs(distance) < 160) return
-      window.scrollTo({ top: Math.min(5, Math.max(0, current + direction)) * window.innerHeight, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+      const targetIndex = Math.min(sections.length - 1, Math.max(0, current + direction))
+      const targetSection = sections[targetIndex]
+      const top = targetSection ? targetSection.offsetTop : targetIndex * window.innerHeight
+      window.scrollTo({ top, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
       distance = 0
       locked = true
     }
@@ -441,13 +463,16 @@ export default function HomePage() {
   }
 
   const scrollToPage = (idx: number) => {
-    window.scrollTo({ top: idx * window.innerHeight, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+    const sections = document.querySelectorAll<HTMLElement>('.snap-page')
+    const target = sections[idx]
+    const top = target ? target.offsetTop : idx * window.innerHeight
+    window.scrollTo({ top, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
   }
 
   return (
     <div id="top" className={`home-root ${geist.variable} ${firaCode.variable}`} data-background-muted={activeSection > 0 && activeSection < 5}>
       {/* Continuous page position, including a wheel gesture before the next page turns. */}
-      <div ref={indicatorRef} className="page-indicator" aria-label="Page navigation" aria-hidden="true">
+      <div ref={indicatorRef} className="page-indicator" aria-label={t.pageNavAria} aria-hidden="true">
         <span className="page-indicator__track" aria-hidden="true" />
         {[0, 1, 2, 3, 4, 5].map((idx) => (
           <button
@@ -456,7 +481,7 @@ export default function HomePage() {
             onClick={() => scrollToPage(idx)}
             className="page-dot"
             aria-current={activeSection === idx ? 'step' : undefined}
-            aria-label={`Scroll to page ${idx + 1}`}
+            aria-label={t.pageDotAria(idx + 1)}
           />
         ))}
         <span ref={markerRef} className="page-indicator__marker" aria-hidden="true" />
@@ -533,8 +558,8 @@ export default function HomePage() {
               <button
                 type="button"
                 className="control-button"
-                title="Switch Language"
-                aria-label="Switch Language"
+                title={t.langSwitchAria}
+                aria-label={t.langSwitchAria}
                 onClick={() => setLangMenuOpen(!langMenuOpen)}
               >
                 <svg
