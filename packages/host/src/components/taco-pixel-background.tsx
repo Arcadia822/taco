@@ -19,22 +19,24 @@ type Sphere = { points: Float32Array; color: string; phase: number; radius: numb
 
 function composeTerrain(width: number, height: number): TerrainLayer[] {
   const mobile = width < 700
-  const rows = mobile ? 36 : 48
-  const cols = mobile ? 56 : 96
+  const rows = mobile ? 22 : 34
+  const cols = mobile ? 50 : 96
+  const leftBound = mobile ? width * 0.12 : width * 0.28
   const groups: number[][] = TERRAIN_COLORS.map(() => [])
   for (let r = 0; r < rows; r++) {
+    const v = r / (rows - 1)
     for (let c = 0; c < cols; c++) {
       const index = r * cols + c
-      if (noise(index, 1) < 0.12) continue
+      if (noise(index, 1) < 0.14) continue
       const u = c / (cols - 1)
-      const v = r / (rows - 1)
-      // Jitter grid slightly for organic stippling
-      const uj = Math.max(0, Math.min(1, u + (noise(index, 2) - 0.5) * (1 / cols) * 0.6))
-      const vj = Math.max(0, Math.min(1, v + (noise(index, 3) - 0.5) * (1 / rows) * 0.6))
-      const heightBias = Math.pow(uj, 1.4) * 0.65 + (1 - vj) * 0.35
-      const tone = Math.max(0, Math.min(3, Math.floor(heightBias * 3.4 + noise(index, 4) * 0.6)))
+      const uj = Math.max(0, Math.min(1, u + (noise(index, 2) - 0.5) * (1 / cols) * 0.7))
+      const vj = Math.max(0, Math.min(1, v + (noise(index, 3) - 0.5) * (1 / rows) * 0.7))
+      const x0 = leftBound + uj * (width - leftBound + 24)
+      const crest = height * (0.92 - 0.40 * Math.pow(uj, 1.5)) + Math.sin(uj * 5) * 20
+      const y0 = crest + vj * (height + 24 - crest)
+      const tone = Math.max(0, Math.min(3, Math.floor((1 - vj) * 3.1 + noise(index, 4) * 0.6)))
       const sizeBase = 1.3 + noise(index, 5) * 0.9
-      groups[tone].push(uj, vj, noise(index, 6) * TAU, sizeBase)
+      groups[tone].push(x0, y0, noise(index, 6) * TAU, sizeBase)
     }
   }
   return groups.map((points, index) => ({ points: new Float32Array(points), color: TERRAIN_COLORS[index] }))
@@ -84,38 +86,25 @@ export function TacoPixelBackground() {
       context.fillStyle = '#000'
       context.fillRect(0, 0, width, height)
       const time = elapsed / 1000
-      // 1. Sweeping 3D perspective particle terrain shifted toward bottom-right
-      const wavePhase = time * TAU / 54
       const mobile = width < 700
-      const leftSafe = mobile ? width * 0.14 : width * 0.26
-      const cx = width * (mobile ? 0.60 : 0.65)
-      const cy = height * (mobile ? 0.88 : 0.85)
+      // 1. Gentle sea-wave swaying in the bottom-right corner (calm, breathing, no falling motion)
+      const drift = Math.sin(time * TAU / 36) * 4
       for (const { points, color } of terrainLayers) {
         context.fillStyle = color
         context.beginPath()
         for (let i = 0; i < points.length; i += 4) {
-          const u = points[i]
-          const v = points[i + 1]
+          const x0 = points[i]
+          const y0 = points[i + 1]
           const phase = points[i + 2]
           const sizeBase = points[i + 3]
-          const x = (u - (mobile ? 0.36 : 0.40)) * width * (mobile ? 1.4 : 1.5)
-          const z = 220 + v * 780
-          // Calmer, smaller wave motion amplitude (~75% reduction)
-          const wave = Math.sin(u * 4.5 - v * 2.2 + wavePhase + phase * 0.1) * 20 + Math.cos(u * 9 + v * 3.5 - wavePhase * 0.7) * 10
-          const ridge = (Math.pow(u, 1.55) * 340) - (v * 130)
-          const y = -(wave + ridge - 70)
-          const fov = 650
-          const sx = (x * fov) / z + cx
-          const sy = (y * fov) / z + cy
-          // Clear bottom-left space so particles never overlap the scroll-down hint or hero text
-          if (sx >= leftSafe && sx <= width + 10 && sy >= -10 && sy <= height + 10) {
-            const size = Math.max(1, (1 - v * 0.55) * sizeBase)
-            context.rect(sx - size / 2, sy - size / 2, size, size)
+          const x = x0 + drift + Math.sin(time * TAU / 28 + phase) * 2.5
+          const y = y0 + Math.sin(time * TAU / 22 + (x0 / width) * 4 + phase * 0.3) * 5 + Math.cos(time * TAU / 34 - (y0 / height) * 3) * 2.5
+          if (x >= -10 && x <= width + 10 && y >= -10 && y <= height + 10) {
+            context.rect(x - sizeBase / 2, y - sizeBase / 2, sizeBase, sizeBase)
           }
         }
         context.fill()
       }
-
       // 2. Three 3D spherical particle clouds orbiting with true depth and mutual occlusion
       const revolution = time * TAU / 120
       const orbit = width * (mobile ? 0.11 : 0.075)
