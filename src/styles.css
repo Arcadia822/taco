@@ -48,6 +48,8 @@
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; overflow: hidden; scrollbar-gutter: stable both-edges; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent; }
+html.taco-embedded { scrollbar-gutter: auto; }
+html.taco-embedded, html.taco-embedded body { overscroll-behavior: none; }
 body { margin: 0; min-width: 320px; min-height: 100dvh; overflow: hidden; background: var(--paper); font-weight: 500; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 button, input { font: inherit; color: inherit; }
 button { cursor: pointer; -webkit-tap-highlight-color: transparent; }

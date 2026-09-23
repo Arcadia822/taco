@@ -1277,6 +1277,57 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.workspace-header .save-button')?.textContent).toContain('Speichern')
   })
 
+  it('lets an embedding page own theme, language and sharing and opens comments first', () => {
+    localStorage.setItem('taco-locale', 'de')
+    localStorage.setItem('taco-theme', 'light')
+    const previousUrl = location.href
+    history.replaceState(null, '', '?embed&lang=en&theme=dark')
+    try {
+      new FileBrowser(document.getElementById('app')!, structuredClone(testBundle))
+
+      expect(document.documentElement.lang).toBe('en')
+      expect(document.documentElement.dataset.theme).toBe('dark')
+      for (const selector of ['.theme-toggle', '.share-button', '[aria-label="Language"]']) {
+        const button = document.querySelector<HTMLButtonElement>(`.workspace-header ${selector}`)!
+        expect(button.disabled).toBe(false)
+        button.click()
+      }
+      expect(document.querySelector('.theme-menu, .share-menu, .language-menu')).toBeNull()
+      expect(document.querySelector('[aria-controls="taco-comment-list"]')?.getAttribute('aria-selected')).toBe('true')
+      expect(localStorage.getItem('taco-locale')).toBe('de')
+      expect(localStorage.getItem('taco-theme')).toBe('light')
+    } finally {
+      history.replaceState(null, '', previousUrl)
+    }
+  })
+
+  it('shows an embedded pending review as unsaved, handoff-ready work', () => {
+    const bundle = structuredClone(testBundle)
+    bundle.comments = [{
+      id: 'thread-pending',
+      anchor: { path: 'specs/001-browser/spec.md', position: { start: 20, end: 28 }, quote: { exact: 'Readable', prefix: '', suffix: '' } },
+      status: 'open',
+      messages: [{ id: 'message-pending', author: 'Ada', body: 'Make this measurable.', createdAt: '2026-08-26T00:00:00.000Z' }],
+      createdAt: '2026-08-26T00:00:00.000Z',
+      updatedAt: '2026-08-26T00:00:00.000Z',
+    }]
+    const previousUrl = location.href
+    try {
+      history.replaceState(null, '', '?embed')
+      new FileBrowser(document.getElementById('app')!, structuredClone(bundle))
+      expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(false)
+      expect(document.querySelector('.copy-review-main')?.classList.contains('is-dirty')).toBe(false)
+
+      document.getElementById('app')!.replaceChildren()
+      history.replaceState(null, '', '?embed&pending')
+      new FileBrowser(document.getElementById('app')!, structuredClone(bundle))
+      expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(true)
+      expect(document.querySelector('.copy-review-main')?.classList.contains('is-dirty')).toBe(true)
+    } finally {
+      history.replaceState(null, '', previousUrl)
+    }
+  })
+
   it('provides share, save and language actions in the header', () => {
     new FileBrowser(document.getElementById('app')!, structuredClone(testBundle))
     expect(document.querySelector('.workspace-header .share-button')).not.toBeNull()

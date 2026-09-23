@@ -7,7 +7,7 @@
     <meta name="generator" content="taco" />
     <meta name="taco-security-version" content="1" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='15.2' cy='8.8' r='4.8' fill='%233ecf8e'/%3E%3Ccircle cx='7.2' cy='14.4' r='3.2' fill='%233b82f6'/%3E%3Ccircle cx='14.8' cy='18' r='2' fill='%23f97316'/%3E%3C/svg%3E" />
-    <title>API Reference — Taco</title>
+    <title>008-taco-host-contract — Taco</title>
     <!--
       Taco includes code adapted from Bento, MIT licensed.
       https://github.com/nyblnet/bento
@@ -17,50 +17,176 @@
 {
   "format": "taco/files",
   "version": 1,
-  "docId": "api-reference-template",
-  "title": "API Reference",
-  "root": "api",
-  "files": [
-    {
-      "id": "api-overview",
-      "path": "api/overview.md",
-      "mediaType": "text/markdown",
-      "content": "---\ntitle: 'API Overview \u0026 Auth'\nversion: 'v1'\n---\n\n## Base URL\n\n`https://api.example.com/v1`\n\n## Authentication\n\nBearer token via Authorization header.\n"
-    },
-    {
-      "id": "api-endpoints",
-      "path": "api/endpoints.md",
-      "mediaType": "text/markdown",
-      "content": "---\ntitle: 'Endpoints Reference'\n---\n\n## GET /items\n\nReturns list of items.\n\n## POST /items\n\nCreates a new item.\n"
-    },
-    {
-      "id": "api-schemas",
-      "path": "api/schemas.yaml",
-      "mediaType": "application/yaml",
-      "content": "components:\n  schemas:\n    Item:\n      type: object\n      properties:\n        id:\n          type: string\n        name:\n          type: string\n"
-    }
-  ],
+  "docId": "specs-008-taco-host-contract",
+  "title": "008-taco-host-contract",
+  "root": "specs/008-taco-host-contract",
+  "packOptions": {
+    "ignore": []
+  },
   "navigation": {
     "version": 1,
-    "entry": "api/overview.md",
+    "entry": "spec.md",
     "groups": [
       {
-        "id": "group-guide",
-        "title": "Guide \u0026 Auth",
+        "id": "requirements",
+        "title": "Requirements",
         "paths": [
-          "api/overview.md"
+          "spec.md"
         ]
       },
       {
-        "id": "group-specs",
-        "title": "Endpoints \u0026 Schemas",
+        "id": "design",
+        "title": "Design",
         "paths": [
-          "api/endpoints.md",
-          "api/schemas.yaml"
+          "data-model.mmd",
+          "flows/anonymous-publish.mmd"
+        ]
+      },
+      {
+        "id": "api",
+        "title": "API",
+        "paths": [
+          "contracts/openapi.yaml"
         ]
       }
     ]
-  }
+  },
+  "files": [
+    {
+      "title": "008-taco-host-contract",
+      "path": "specs/008-taco-host-contract/spec.md",
+      "mediaType": "text/markdown",
+      "content": "## 1. Status and scope\n\nThis is a usage contract and interface design under review; it does not mean the commands or service already exist. Directions the user has confirmed are recorded separately from the interface details proposed here. This is not an implementation plan and does not move existing directories.\n\nConfirmed in review: JSON output by default; everything is public by default, with no visibility switch; anonymous publishing works and the minimal flow has no login; the Host defaults to `http://localhost:32167` and honors an environment variable; Taco and Revision use UUIDs; the first release ships complete help and a built-in skill in the binary. OAuth `taco-cli login` is deferred; ApiKeys are used for now. Automatic anonymous keys, concrete APIs, exit codes, limits and retention described here are still implementation proposals, not shipped behavior.\n\n## User and ApiKey\n\nA User is either anonymous or registered. An anonymous User is a holder identity that cannot pass as a named account and needs no sign-up or OAuth. Later, provider/subject will be unique; users are never identified by an editable name or email. The first release has no OAuth or web login; public fields are defined in OpenAPI and internal relations in the data model.\n\nAn ApiKey is a high-entropy random credential owned by a User: the plaintext is returned once in the creation response and the server stores only a digest; it never appears in URLs, logs, shared data or exports. The first release has no scopes; one key stands for one user, and a Taco belongs to the User, not the key.\n\nProposed anonymous publishing: with no credential, the CLI calls `POST /v1/anonymous-credentials`; the Host creates an anonymous User and issues its ApiKey; the CLI stores the key safely, then publishes. The user only runs publish — no separate login or sign-up. This still uses just User and ApiKey, with no per-document admin token. The bootstrap endpoint is rate-limited and abuse-controlled and never accepts a client-chosen userId. If the key response is lost, at most an anonymous identity with no Taco is left behind for cleanup; content is never uploaded before the credential is stored. Once the first Taco is published the credential is saved, and a lost response is recovered with the same key and idempotency key. A lost anonymous key cannot be taken over through a public UUID; the first release has no anonymous recovery or claiming. Existing Users and ApiKeys can be provisioned by Host operators, and no OAuth is needed today.\n",
+      "sourceHash": "97396959bca8d6e8fc52b486bc332f86046a5e5f3476abfa4e3d2f6090c709f3"
+    },
+    {
+      "title": "Taco Host data model",
+      "path": "specs/008-taco-host-contract/data-model.mmd",
+      "mediaType": "text/plain",
+      "content": "erDiagram\n  USER ||--o{ API_KEY : \"holds\"\n  USER ||--o{ TACO : \"owns\"\n  TACO ||--|{ REVISION : \"versions\"\n  REVISION ||--o{ REVIEW_EVENT : \"reviews\"\n  USER {\n    uuid id PK\n    string kind \"anonymous | registered\"\n    datetime createdAt\n  }\n  API_KEY {\n    uuid id PK\n    uuid userId FK\n    string secretHash \"SHA-256; plaintext returned once\"\n    datetime createdAt\n  }\n  TACO {\n    uuid id PK\n    uuid ownerId FK\n    string lifecycle \"open | closed | deleted\"\n    datetime expiresAt\n  }\n  REVISION {\n    uuid id PK\n    uuid tacoId FK\n    string blobKey\n    datetime committedAt\n  }\n  REVIEW_EVENT {\n    uuid id PK\n    uuid revisionId FK\n    string kind \"comment | confirm | feedback-done\"\n    datetime createdAt\n  }\n",
+      "sourceHash": "63eecbc3d653400169dc2ab3adcf474bde9d4cb9e4bd13da1ca84b779afe54f7"
+    },
+    {
+      "title": "Anonymous publish flow",
+      "path": "specs/008-taco-host-contract/flows/anonymous-publish.mmd",
+      "mediaType": "text/plain",
+      "content": "flowchart TD\n  A[\"taco-cli publish\"] --> B{\"ApiKey for this Host on this machine?\"}\n  B -->|yes| E[\"POST /v1/uploads to request a direct upload\"]\n  B -->|no| C[\"POST /v1/anonymous-credentials\"]\n  C --> D[\"Store the key safely first\"]\n  D --> E\n  E --> F[\"PUT the private blob\"]\n  F --> G[\"POST /v1/tacos to commit the revision\"]\n  G --> H[\"Return tacoId and share link\"]\n",
+      "sourceHash": "0e60fd47c377676aef05307942463fa08683c6890fe2cdb7b1bca23f4d87e492"
+    },
+    {
+      "title": "Taco Host API",
+      "path": "specs/008-taco-host-contract/contracts/openapi.yaml",
+      "mediaType": "application/yaml",
+      "content": "openapi: 3.1.0\ninfo:\n  title: Taco Host API\n  version: 1.0.0-draft\n  description: >-\n    Taco Host server HTTP contract (demo excerpt).\n    Public by default; management calls authenticate the owner with a Bearer ApiKey.\nservers:\n  - url: http://localhost:32167\n    description: Default address for local development and loopback tests\npaths:\n  /v1/anonymous-credentials:\n    post:\n      summary: Bootstrap an anonymous User and issue an ApiKey\n      description: Called by the CLI on its first publish without a credential; the plaintext secret is returned only in this response.\n      operationId: createAnonymousCredentials\n      responses:\n        '201':\n          description: Anonymous identity and ApiKey created\n          content:\n            application/json:\n              schema:\n                type: object\n                required: [user, apiKey]\n                properties:\n                  user:\n                    type: object\n                    properties:\n                      id: { type: string, format: uuid }\n                      kind: { type: string, enum: [anonymous] }\n                  apiKey:\n                    type: object\n                    properties:\n                      id: { type: string, format: uuid }\n                      secret: { type: string, description: plaintext returned once }\n        '429':\n          description: IP / rate limit exceeded\n  /v1/uploads:\n    post:\n      summary: Reserve an upload and get a signed private PUT URL\n      operationId: createUpload\n      security: [{ bearer: [] }]\n      responses:\n        '201':\n          description: Reservation and a short-lived PUT URL\n          content:\n            application/json:\n              schema:\n                type: object\n                properties:\n                  reservationId: { type: string, format: uuid }\n                  putUrl: { type: string, format: uri }\n                  expiresAt: { type: string, format: date-time }\n  /v1/tacos:\n    post:\n      summary: Publish a new Taco with its first Revision\n      operationId: createTaco\n      security: [{ bearer: [] }]\n      responses:\n        '201':\n          description: Published\n          content:\n            application/json:\n              schema:\n                type: object\n                properties:\n                  tacoId: { type: string, format: uuid }\n                  revisionId: { type: string, format: uuid }\n                  url: { type: string, format: uri }\n        '409':\n          description: Idempotency key conflict\n  /v1/tacos/{id}:\n    get:\n      summary: Get public Taco metadata\n      operationId: getTaco\n      parameters:\n        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }\n      responses:\n        '200':\n          description: Taco metadata\n        '404':\n          description: Not found or deleted\n  /v1/tacos/{id}/reviews:\n    get:\n      summary: Get aggregated review data for a revision\n      operationId: listReviews\n      parameters:\n        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }\n      responses:\n        '200':\n          description: Comment threads and confirmation state\n    post:\n      summary: Submit a review action or state change\n      operationId: submitReview\n      parameters:\n        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }\n      responses:\n        '202':\n          description: Written to the event log\n  /v1/tacos/{id}/subscribe:\n    get:\n      summary: WebSocket live event subscription\n      operationId: subscribeTaco\n      parameters:\n        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }\n      responses:\n        '101':\n          description: Upgraded to WebSocket\ncomponents:\n  securitySchemes:\n    bearer: { type: http, scheme: bearer }\n",
+      "sourceHash": "0c0a1b0bf205c37d72845a5d78b0ffb6abb06414623592c9613b9bb9dc02e087"
+    }
+  ],
+  "comments": [
+    {
+      "id": "demo-thread-anon-key",
+      "anchor": {
+        "path": "specs/008-taco-host-contract/spec.md",
+        "position": {
+          "start": 421,
+          "end": 481
+        },
+        "quote": {
+          "exact": "anonymous publishing works and the minimal flow has no login",
+          "prefix": "with no visibility switch; ",
+          "suffix": "; the Host defaults to "
+        }
+      },
+      "status": "open",
+      "messages": [
+        {
+          "id": "demo-thread-anon-key-m1",
+          "author": "arcadia",
+          "body": "How long does the ApiKey issued for anonymous publishing last, and how is it reclaimed? Please add the fields to data-model.mmd.",
+          "createdAt": "2026-09-22T09:30:00.000Z"
+        }
+      ],
+      "createdAt": "2026-09-22T09:30:00.000Z",
+      "updatedAt": "2026-09-22T09:30:00.000Z"
+    },
+    {
+      "id": "demo-thread-review-kind",
+      "anchor": {
+        "path": "specs/008-taco-host-contract/data-model.mmd",
+        "position": {
+          "start": 643,
+          "end": 690
+        },
+        "quote": {
+          "exact": "string kind \"comment | confirm | feedback-done\"",
+          "prefix": "visionId FK\n    ",
+          "suffix": "\n    datetime cr"
+        }
+      },
+      "status": "open",
+      "messages": [
+        {
+          "id": "demo-thread-review-kind-m1",
+          "author": "lin",
+          "body": "The spec says confirmations and feedback-done are review data, not body comments. Should confirm / feedback-done really share one kind with comment?",
+          "createdAt": "2026-09-22T09:12:00.000Z"
+        }
+      ],
+      "createdAt": "2026-09-22T09:12:00.000Z",
+      "updatedAt": "2026-09-22T09:12:00.000Z"
+    },
+    {
+      "id": "demo-thread-save-key",
+      "anchor": {
+        "path": "specs/008-taco-host-contract/flows/anonymous-publish.mmd",
+        "position": {
+          "start": 202,
+          "end": 233
+        },
+        "quote": {
+          "exact": "D[\"Store the key safely first\"]",
+          "prefix": "tials\"]\n  C --> ",
+          "suffix": "\n  D --> E\n  E -"
+        }
+      },
+      "status": "open",
+      "messages": [
+        {
+          "id": "demo-thread-save-key-m1",
+          "author": "arcadia",
+          "body": "Missing failure branch: if the key is not persisted, never upload content — fail and exit.",
+          "createdAt": "2026-09-22T09:12:00.000Z"
+        }
+      ],
+      "createdAt": "2026-09-22T09:12:00.000Z",
+      "updatedAt": "2026-09-22T09:12:00.000Z"
+    },
+    {
+      "id": "demo-thread-409",
+      "anchor": {
+        "path": "specs/008-taco-host-contract/contracts/openapi.yaml",
+        "position": {
+          "start": 2490,
+          "end": 2527
+        },
+        "quote": {
+          "exact": "description: Idempotency key conflict",
+          "prefix": "409':\n          ",
+          "suffix": "\n  /v1/tacos/{id"
+        }
+      },
+      "status": "open",
+      "messages": [
+        {
+          "id": "demo-thread-409-m1",
+          "author": "lin",
+          "body": "The 409 body should return the existing tacoId and revisionId so the CLI can recover with the idempotency key.",
+          "createdAt": "2026-09-22T09:12:00.000Z"
+        }
+      ],
+      "createdAt": "2026-09-22T09:12:00.000Z",
+      "updatedAt": "2026-09-22T09:12:00.000Z"
+    }
+  ]
 }
 </script>
 

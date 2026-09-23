@@ -7,7 +7,7 @@
     <meta name="generator" content="taco" />
     <meta name="taco-security-version" content="1" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='15.2' cy='8.8' r='4.8' fill='%233ecf8e'/%3E%3Ccircle cx='7.2' cy='14.4' r='3.2' fill='%233b82f6'/%3E%3Ccircle cx='14.8' cy='18' r='2' fill='%23f97316'/%3E%3C/svg%3E" />
-    <title>API Reference — Taco</title>
+    <title>008-taco-host-contract — Taco</title>
     <!--
       Taco includes code adapted from Bento, MIT licensed.
       https://github.com/nyblnet/bento
@@ -17,50 +17,182 @@
 {
   "format": "taco/files",
   "version": 1,
-  "docId": "api-reference-template",
-  "title": "API Reference",
-  "root": "api",
-  "files": [
-    {
-      "id": "api-overview",
-      "path": "api/overview.md",
-      "mediaType": "text/markdown",
-      "content": "---\ntitle: 'API Overview \u0026 Auth'\nversion: 'v1'\n---\n\n## Base URL\n\n`https://api.example.com/v1`\n\n## Authentication\n\nBearer token via Authorization header.\n"
-    },
-    {
-      "id": "api-endpoints",
-      "path": "api/endpoints.md",
-      "mediaType": "text/markdown",
-      "content": "---\ntitle: 'Endpoints Reference'\n---\n\n## GET /items\n\nReturns list of items.\n\n## POST /items\n\nCreates a new item.\n"
-    },
-    {
-      "id": "api-schemas",
-      "path": "api/schemas.yaml",
-      "mediaType": "application/yaml",
-      "content": "components:\n  schemas:\n    Item:\n      type: object\n      properties:\n        id:\n          type: string\n        name:\n          type: string\n"
-    }
-  ],
+  "docId": "specs-008-taco-host-contract",
+  "title": "008-taco-host-contract",
+  "root": "specs/008-taco-host-contract",
+  "packOptions": {
+    "ignore": []
+  },
   "navigation": {
     "version": 1,
-    "entry": "api/overview.md",
+    "entry": "spec.md",
     "groups": [
       {
-        "id": "group-guide",
-        "title": "Guide \u0026 Auth",
+        "id": "requirements",
+        "title": "需求",
         "paths": [
-          "api/overview.md"
+          "spec.md"
         ]
       },
       {
-        "id": "group-specs",
-        "title": "Endpoints \u0026 Schemas",
+        "id": "design",
+        "title": "设计",
         "paths": [
-          "api/endpoints.md",
-          "api/schemas.yaml"
+          "data-model.mmd",
+          "flows/anonymous-publish.mmd"
+        ]
+      },
+      {
+        "id": "api",
+        "title": "接口",
+        "paths": [
+          "contracts/openapi.yaml"
         ]
       }
     ]
-  }
+  },
+  "files": [
+    {
+      "title": "008-taco-host-contract",
+      "path": "specs/008-taco-host-contract/spec.md",
+      "mediaType": "text/markdown",
+      "content": "## 1. 状态与边界\n\n本文是待评审的使用契约与接口设计，不代表命令或服务已实现。用户已确认的方向与本文提出的接口细节分开记录。本文不是实现计划，也不迁移现有目录。\n\n评审确认：默认 JSON 输出；默认全部公开，无公开配置开关；匿名可发布，最小流程不含登录；Host 默认 `http://localhost:32167` 并支持环境变量；Taco 与 Revision 使用 UUID；首版必须有完整 help 与 binary 内置 skill。OAuth `taco-cli login` 延后，当前走 ApiKey。本文的匿名身份自动发 Key、具体 API、退出码、限制与留存仍是实现建议，不代表已实现。\n\n## User 与 ApiKey\n\nUser 区分 anonymous/registered。匿名 User 是不可冒充实名的持有者身份，不要求注册或 OAuth。将来 provider/subject 唯一，不按可修改名称或邮箱识别用户。首版不实现 OAuth 或网页登录；具体公开字段见 OpenAPI，内部关系见数据模型。\n\nApiKey 是 User 的高熵随机凭据：明文仅创建响应返回一次，服务端只保存摘要；不出现在 URL、日志、分享数据或导出中。首版无 scopes；一个 Key 代表一个用户，Taco 归属 User 而非 Key。\n\n匿名发布的建议实现：CLI 无凭据时自动调用 `POST /v1/anonymous-credentials`，Host 创建 anonymous User 并签发其 ApiKey；CLI 先安全保存 Key，再发布 Taco。用户只运行 publish，不额外执行登录或注册。这仍使用 User/ApiKey 两类数据，不增加每文档管理 token。该引导接口受限流与滥用控制；不接受客户端指定现有 userId。发 Key 响应丢失时最多留下无 Taco 的匿名身份，由回收策略清理；未持久保存凭据就不上传正文。首个 Taco 发布前凭据已保存，响应丢失可用相同 Key 和幂等键恢复。丢失匿名 Key 后不能用公开 UUID 接管；首版无匿名找回或自动认领流程。已有 User/ApiKey 可由 Host 运维初始化，当前无需 OAuth 即可使用。\n",
+      "sourceHash": "c4b2f7fa3f95b16931ac52ae7afdb10328facafb62f5691ca9491b65c38ca7c7"
+    },
+    {
+      "title": "Taco Host 数据模型",
+      "path": "specs/008-taco-host-contract/data-model.mmd",
+      "mediaType": "text/plain",
+      "content": "erDiagram\n  USER ||--o{ API_KEY : \"持有\"\n  USER ||--o{ TACO : \"拥有\"\n  TACO ||--|{ REVISION : \"版本\"\n  REVISION ||--o{ REVIEW_EVENT : \"评审\"\n  USER {\n    uuid id PK\n    string kind \"anonymous | registered\"\n    datetime createdAt\n    datetime reclaimAt \"未发布 Taco 的匿名 User：创建后 24 小时\"\n  }\n  API_KEY {\n    uuid id PK\n    uuid userId FK\n    string secretHash \"SHA-256，明文只返回一次\"\n    datetime createdAt\n    datetime expiresAt \"默认 90 天，每次成功鉴权顺延\"\n    datetime lastUsedAt\n  }\n  TACO {\n    uuid id PK\n    uuid ownerId FK\n    string lifecycle \"open | closed | deleted\"\n    datetime expiresAt\n  }\n  REVISION {\n    uuid id PK\n    uuid tacoId FK\n    string blobKey\n    datetime committedAt\n  }\n  REVIEW_EVENT {\n    uuid id PK\n    uuid revisionId FK\n    string kind \"comment | confirm | feedback-done\"\n    datetime createdAt\n  }\n",
+      "sourceHash": "ea65ebff4c9f3f969edf16c30151936a73af3691b4122074c7cc5aca12a1fee5"
+    },
+    {
+      "title": "匿名发布流程",
+      "path": "specs/008-taco-host-contract/flows/anonymous-publish.mmd",
+      "mediaType": "text/plain",
+      "content": "flowchart TD\n  A[\"taco-cli publish\"] --> B{\"本机有该 Host 的 ApiKey？\"}\n  B -->|有| E[\"POST /v1/uploads 申请直传\"]\n  B -->|没有| C[\"POST /v1/anonymous-credentials\"]\n  C --> D[\"先安全保存 Key\"]\n  D --> E\n  E --> F[\"PUT 私有 Blob\"]\n  F --> G[\"POST /v1/tacos 提交 Revision\"]\n  G --> H[\"返回 tacoId 与分享链接\"]\n",
+      "sourceHash": "5a463f61f8c8b7cc4b09c9dddb8d47734dba796c8ea9b36cc339450bff4f12dc"
+    },
+    {
+      "title": "Taco Host API",
+      "path": "specs/008-taco-host-contract/contracts/openapi.yaml",
+      "mediaType": "application/yaml",
+      "content": "openapi: 3.1.0\ninfo:\n  title: Taco Host API\n  version: 1.0.0-draft\n  description: >-\n    Taco Host 服务端 HTTP 契约（演示节选）。\n    默认全公开访问，管理操作基于 Bearer ApiKey 进行 Owner 鉴权。\nservers:\n  - url: http://localhost:32167\n    description: 本地开发与回环测试默认地址\npaths:\n  /v1/anonymous-credentials:\n    post:\n      summary: 自动自举匿名 User 并签发 ApiKey\n      description: CLI 首次无凭据发布时调用；明文 secret 只在本次响应返回一次。\n      operationId: createAnonymousCredentials\n      responses:\n        '201':\n          description: 成功创建匿名身份与 ApiKey\n          content:\n            application/json:\n              schema:\n                type: object\n                required: [user, apiKey]\n                properties:\n                  user:\n                    type: object\n                    properties:\n                      id: { type: string, format: uuid }\n                      kind: { type: string, enum: [anonymous] }\n                  apiKey:\n                    type: object\n                    properties:\n                      id: { type: string, format: uuid }\n                      secret: { type: string, description: 明文仅返回一次 }\n        '429':\n          description: 触发 IP / 频次限流\n  /v1/uploads:\n    post:\n      summary: 预分配上传预约并获取私有直传签名 URL\n      operationId: createUpload\n      security: [{ bearer: [] }]\n      responses:\n        '201':\n          description: 返回 reservation 与短时有效的 PUT URL\n          content:\n            application/json:\n              schema:\n                type: object\n                properties:\n                  reservationId: { type: string, format: uuid }\n                  putUrl: { type: string, format: uri }\n                  expiresAt: { type: string, format: date-time }\n  /v1/tacos:\n    post:\n      summary: 首次发布新 Taco 及其初始 Revision\n      operationId: createTaco\n      security: [{ bearer: [] }]\n      responses:\n        '201':\n          description: 发布成功\n          content:\n            application/json:\n              schema:\n                type: object\n                properties:\n                  tacoId: { type: string, format: uuid }\n                  revisionId: { type: string, format: uuid }\n                  url: { type: string, format: uri }\n        '409':\n          description: 幂等键冲突\n  /v1/tacos/{id}:\n    get:\n      summary: 获取 Taco 公开元数据\n      operationId: getTaco\n      parameters:\n        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }\n      responses:\n        '200':\n          description: Taco 元数据\n        '404':\n          description: 不存在或已删除\n  /v1/tacos/{id}/reviews:\n    get:\n      summary: 获取指定版本的聚合评审数据\n      operationId: listReviews\n      parameters:\n        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }\n      responses:\n        '200':\n          description: 评论线程与确认状态\n    post:\n      summary: 提交评审操作或状态变更\n      operationId: submitReview\n      parameters:\n        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }\n      responses:\n        '202':\n          description: 已写入事件日志\n  /v1/tacos/{id}/subscribe:\n    get:\n      summary: WebSocket 实时事件订阅\n      operationId: subscribeTaco\n      parameters:\n        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }\n      responses:\n        '101':\n          description: 升级为 WebSocket\ncomponents:\n  securitySchemes:\n    bearer: { type: http, scheme: bearer }\n",
+      "sourceHash": "abefa24e1121bcefb4a9520426222458a9821837499135603e2b4265f076c77b"
+    }
+  ],
+  "comments": [
+    {
+      "id": "demo-thread-anon-key",
+      "anchor": {
+        "path": "specs/008-taco-host-contract/spec.md",
+        "position": {
+          "start": 116,
+          "end": 130
+        },
+        "quote": {
+          "exact": "匿名可发布，最小流程不含登录",
+          "prefix": "默认全部公开，无公开配置开关；",
+          "suffix": "；Host 默认 "
+        }
+      },
+      "status": "resolved",
+      "messages": [
+        {
+          "id": "demo-thread-anon-key-m1",
+          "author": "arcadia",
+          "body": "匿名发布自动发的 ApiKey 有效期多久、怎么回收？请在 data-model.mmd 里把相关字段补上。",
+          "createdAt": "2026-09-22T09:30:00.000Z"
+        },
+        {
+          "id": "demo-msg-2",
+          "author": "Agent",
+          "body": "已在 data-model.mmd 补上：API_KEY.expiresAt（默认 90 天，鉴权顺延）、lastUsedAt，以及 USER.reclaimAt（未发布 Taco 的匿名 User 24 小时后回收）。",
+          "createdAt": "2026-09-22T09:31:12.000Z"
+        }
+      ],
+      "createdAt": "2026-09-22T09:30:00.000Z",
+      "updatedAt": "2026-09-22T09:31:12.000Z"
+    },
+    {
+      "id": "demo-thread-review-kind",
+      "anchor": {
+        "path": "specs/008-taco-host-contract/data-model.mmd",
+        "position": {
+          "start": 729,
+          "end": 776
+        },
+        "quote": {
+          "exact": "string kind \"comment | confirm | feedback-done\"",
+          "prefix": "visionId FK\n    ",
+          "suffix": "\n    datetime cr"
+        }
+      },
+      "status": "open",
+      "messages": [
+        {
+          "id": "demo-thread-review-kind-m1",
+          "author": "lin",
+          "body": "spec 说确认与反馈完成属于评审数据、不冒充正文评论。confirm / feedback-done 和 comment 放在同一个 kind 里合适吗？",
+          "createdAt": "2026-09-22T09:12:00.000Z"
+        }
+      ],
+      "createdAt": "2026-09-22T09:12:00.000Z",
+      "updatedAt": "2026-09-22T09:12:00.000Z"
+    },
+    {
+      "id": "demo-thread-save-key",
+      "anchor": {
+        "path": "specs/008-taco-host-contract/flows/anonymous-publish.mmd",
+        "position": {
+          "start": 160,
+          "end": 174
+        },
+        "quote": {
+          "exact": "D[\"先安全保存 Key\"]",
+          "prefix": "tials\"]\n  C --> ",
+          "suffix": "\n  D --> E\n  E -"
+        }
+      },
+      "status": "open",
+      "messages": [
+        {
+          "id": "demo-thread-save-key-m1",
+          "author": "arcadia",
+          "body": "这里缺失败分支：Key 没落盘就不能继续上传正文，应该直接失败退出。",
+          "createdAt": "2026-09-22T09:12:00.000Z"
+        }
+      ],
+      "createdAt": "2026-09-22T09:12:00.000Z",
+      "updatedAt": "2026-09-22T09:12:00.000Z"
+    },
+    {
+      "id": "demo-thread-409",
+      "anchor": {
+        "path": "specs/008-taco-host-contract/contracts/openapi.yaml",
+        "position": {
+          "start": 2175,
+          "end": 2193
+        },
+        "quote": {
+          "exact": "description: 幂等键冲突",
+          "prefix": "409':\n          ",
+          "suffix": "\n  /v1/tacos/{id"
+        }
+      },
+      "status": "open",
+      "messages": [
+        {
+          "id": "demo-thread-409-m1",
+          "author": "lin",
+          "body": "409 的响应体要带上已存在的 tacoId 和 revisionId，CLI 才能按幂等键恢复。",
+          "createdAt": "2026-09-22T09:12:00.000Z"
+        }
+      ],
+      "createdAt": "2026-09-22T09:12:00.000Z",
+      "updatedAt": "2026-09-22T09:12:00.000Z"
+    }
+  ]
 }
 </script>
 

@@ -1,576 +1,1097 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import React, { useEffect, useRef, useState } from 'react'
+import { Fira_Code, Geist } from 'next/font/google'
+import './home.css'
+import { AgentTerminal, type AgentRun } from '../components/agent-terminal'
 
-type ThemeMode = 'system' | 'light' | 'dark'
+const geist = Geist({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-geist' })
+const firaCode = Fira_Code({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-fira-code' })
+
+// 与 Taco 代码块复制按钮一致（src/tiptap-code-block.ts：iconPaths / codeBlockIcon / copyText）
+const COPY_ICON_PATHS = {
+  copy: <><rect width="14" height="14" x="8" y="8" rx="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></>,
+  check: <path d="m20 6-11 11-5-5" />,
+} as const
+
+const writeClipboard = async (text: string): Promise<void> => {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.append(textarea)
+  textarea.select()
+  const copied = document.execCommand?.('copy')
+  textarea.remove()
+  if (!copied) throw new Error('Clipboard is unavailable')
+}
+
+type CopyLabels = { copy: string; copied: string; copyFailed: string }
+
+function CopyIconButton({ text, labels }: { text: string; labels: CopyLabels }) {
+  const [state, setState] = useState<'idle' | 'success' | 'error'>('idle')
+  const timer = useRef<number | undefined>(undefined)
+  useEffect(() => () => window.clearTimeout(timer.current), [])
+
+  const onClick = () => {
+    window.clearTimeout(timer.current)
+    writeClipboard(text).then(
+      () => setState('success'),
+      () => setState('error'),
+    ).finally(() => {
+      timer.current = window.setTimeout(() => setState('idle'), 1600)
+    })
+  }
+
+  const label = state === 'success' ? labels.copied : state === 'error' ? labels.copyFailed : labels.copy
+  return (
+    <button
+      type="button"
+      className={`tiptap-code-block-button agent-prompt__copy${state === 'success' ? ' is-success' : state === 'error' ? ' is-error' : ''}`}
+      aria-label={label}
+      title={label}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={onClick}
+    >
+      <svg
+        className="tiptap-code-block-icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        {COPY_ICON_PATHS[state === 'success' ? 'check' : 'copy']}
+      </svg>
+    </button>
+  )
+}
+
 type LocaleCode = 'zh-Hans' | 'en'
-type InfoTab = 'installation' | 'skill'
+
+// 每种语言一套演示数据：public/demo/<locale>/…（修改前）与 …/after/…（Agent 改完后）
+const DEMO_TACO = '008-taco-host-contract.taco.html'
+const DEMO_EDITED_FILE = 'specs/008-taco-host-contract/data-model.mmd'
+const TRACE_TACO_ID = '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001'
+const TRACE_HOST = 'https://tacobin.arcadia-han.com'
+// Taco 在 ≤1080px 时收起评论栏：窗口更窄时按 1200px 渲染再等比缩小，否则 1:1
+const DEMO_MIN_WIDTH = 1200
+
+function ScaledTaco({ src, title }: { src: string; title: string }) {
+  const hostRef = useRef<HTMLDivElement | null>(null)
+  const [box, setBox] = useState<{ width: number; height: number } | null>(null)
+
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    const observer = new ResizeObserver(([entry]) => setBox({ width: entry.contentRect.width, height: entry.contentRect.height }))
+    observer.observe(host)
+    return () => observer.disconnect()
+  }, [])
+
+  const scale = box ? Math.min(1, box.width / DEMO_MIN_WIDTH) : 1
+  return (
+    <div ref={hostRef} className="scaled-taco">
+      {box && (
+        <iframe
+          src={src}
+          title={title}
+          onLoad={(event) => {
+            const doc = event.currentTarget.contentDocument
+            if (!doc) return
+            // The landing demo is editable, but must never write or download a copy.
+            doc.addEventListener('click', (click) => {
+              if (!(click.target as Element).closest?.('.save-button, .save-menu button')) return
+              click.preventDefault()
+              click.stopImmediatePropagation()
+            }, true)
+            doc.addEventListener('keydown', (key) => {
+              if (!(key.metaKey || key.ctrlKey) || key.key.toLowerCase() !== 's') return
+              key.preventDefault()
+              key.stopImmediatePropagation()
+            }, true)
+          }}
+          style={{ width: box.width / scale, height: box.height / scale, transform: `scale(${scale})` }}
+        />
+      )}
+    </div>
+  )
+}
 
 const I18N = {
   'zh-Hans': {
-    title: 'Tacobin',
-    tagline: '面向人类与 AI Agent 的单文件工作区协作空间',
-    openHeader: '查看 Taco 空间',
-    openHint: '输入或粘贴 Taco ID 或完整 URL，直接进入阅读与在线协作：',
-    openPlaceholder: '输入 Taco ID (例如: 9d9528b6... 或完整 URL)',
-    openButton: '进入',
-    tabInstallation: '安装',
-    tabSkill: 'Skill',
-    copyTooltip: '复制',
-    copiedTooltip: '已复制！',
-    themeLabel: '切换主题',
-    langLabel: '切换语言',
-    githubLabel: '查看 Taco GitHub 源码仓库',
-    systemTheme: '跟随系统',
-    lightTheme: '明亮模式',
-    darkTheme: '暗黑模式',
-    agentSnippet: `你是工作在当前项目的 AI Agent。请遵循 Tacobin 协同与交付协议：
-1. 本项目的成果与上下文统一沉淀为 Taco 单文件容器 (*.taco.html)。
-2. 使用 taco-cli 独立命令行进行发布与审查，详细命令、帮助及离线技能可直接读取：taco-cli skills read taco
-3. 发布到共享空间：taco-cli publish <path.taco.html> --host https://tacobin.arcadia-han.com
-4. 实时订阅事件流：taco-cli subscribe <tacoId> --host https://tacobin.arcadia-han.com
-5. 更多规范背景与自动化集成规则请参考仓库根目录核心文档：docs/agent-installation.md`,
-    skillCommand: 'npx skills@latest add arcadia822/taco --skill=taco',
+    eyebrow: 'Agent 与人协作',
+    h1: '一个议题的完整设计，一个文件装下。',
+    desc: '人和 Agent 都能顺手地阅读、修改和评论。单个文件放在代码仓库里，跟代码一起做版本管理。',
+    tryBtn: '试用 Taco',
+    tryUrl: 'https://taco-spec-zh-cn.arcadia822.chatgpt.site',
+    downloadBtn: '下载 Taco',
+    comingSoon: '即将推出',
+    forAgent: 'For Agent',
+    forSkill: 'Skill',
+    agentPrompt:
+      '阅读 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md ，按其中步骤为我安装 Taco；安装完成后，向我介绍 Taco 怎么用。',
+    skillCmd: 'npx skills@latest add arcadia822/taco --skill=taco',
+    copy: '复制',
+    copied: '已复制',
+    copyFailed: '复制失败',
+    scrollDown: '向下滚动',
+    section1Eyebrow: '03 / 一个文件',
+    section1Title: '一个文件，带齐所有东西',
+    section1Desc: '一个 .taco.html 就是完整的交接件：文档、阅读应用和评论线程一起入库或发送。审阅者双击即可阅读、编辑、划词评论；保存后，下一位审阅者或 Agent 接手的仍是同一份上下文。本地评审无需安装或登录。',
+    section1FileSize: '478.3 KB',
+    section1Tree: [
+      ['应用', '编辑器、渲染器、样式与运行时全内联', '（466.5 KB）'],
+      ['文件', '4 个文件：spec、data-model、流程图、OpenAPI', '（7.7 KB）'],
+      ['评论', '4 条跨文件评审意见与状态机', '（2.2 KB）'],
+      ['导航', '三组分类与入口映射清单', '（0.3 KB）'],
+    ],
+    section1Online: '可选依赖（需联网）',
+    section1OnlineItems: ['Mermaid 渲染库：打开图表时从 jsDelivr 加载，离线时显示源码', '实时协作中继：可选'],
+    section2Eyebrow: '02 / 评审交接',
+    section2Title: '评审直接在文档里做，Agent 接着就改',
+    section2Lead: '打开 Taco，你可以：',
+    section2Points: [
+      '划词评论，讨论就挂在原文旁边',
+      '直接修改：Markdown 所见即所得，YAML 和 Mermaid 改源码、实时预览',
+      '回复、解决评论线程',
+      '点「交接改动」，把改动和评论整理成一段话交给 Agent',
+    ],
+    section2Tip: '试试窗口右上角的「交接改动」，左边的 Agent 会重跑一遍。',
+    section3Eyebrow: '04 / SPEC KIT 集成',
+    section3Title: '原生支持 GitHub Spec Kit 工作流',
+    section3DescBefore: '已为 ',
+    section3DescAfter: ' 做好完整集成。安装 Taco 扩展插件后，Agent 在每个规范生命周期（specify、plan、tasks 等）自动更新单文件容器，人类审查随时跟进。',
+    section3Cmd: 'specify extension add taco --from https://github.com/Arcadia822/taco/releases/latest/download/taco-extension.zip',
+    section4Eyebrow: '05 / TACOBIN 协作空间',
+    section4Title: 'Tacobin：为团队连接 Taco 与 Agent',
+    section4Desc:
+      '本地单文件适合自洽存档；当需要团队多人在线评审、生成可分享链接，或让终端 Agent 实时订阅评审事件流时，使用 taco-cli 一键推送到 Tacobin 空间。',
+    section4CliTitle: 'CLI',
+    section4CliCmd: 'npm install -g @tacobin/cli',
+    section4AgentTitle: 'FOR AGENT',
+    section4AgentPrompt:
+      '阅读 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md 并安装 taco-cli，再运行 taco-cli skills read taco 获取内置发布与评审指南。将当前 Taco 发布到 Tacobin，使用返回的 tacoId 运行 subscribe 监听评审事件。',
+    section4BackToTop: '回到顶部',
+    section4Star: 'GitHub Star',
+    tracePublish: '发布 Taco，拿到分享地址',
+    traceSubscribe: '用 tacoId 订阅这份文档的评审',
+    traceEvent: '有人评论，事件回到 Agent 的终端',
+    traceComment: '请补充失败分支',
+    agent: {
+      title: 'agent · ~/taco',
+      defaultHandoff: [
+        '我已在 Taco 评审页面完成了修改与评论，请同步以下变更：',
+        '- 文档标题: "008-taco-host-contract"',
+        '',
+        '## 评论',
+        '- [specs/008-taco-host-contract/spec.md:5] 原文: "匿名可发布，最小流程不含登录"',
+        '  - **arcadia**: 匿名发布自动发的 ApiKey 有效期多久、怎么回收？请在 data-model.mmd 里把相关字段补上。',
+        '- [specs/008-taco-host-contract/data-model.mmd:32] 原文: "string kind "comment | confirm | feedback-done""',
+        '  - **lin**: spec 说确认与反馈完成属于评审数据、不冒充正文评论。confirm / feedback-done 和 comment 放在同一个 kind 里合适吗？',
+        '- [specs/008-taco-host-contract/flows/anonymous-publish.mmd:5] 原文: "D["先安全保存 Key"]"',
+        '  - **arcadia**: 这里缺失败分支：Key 没落盘就不能继续上传正文，应该直接失败退出。',
+        '- [specs/008-taco-host-contract/contracts/openapi.yaml:71] 原文: "description: 幂等键冲突"',
+        '  - **lin**: 409 的响应体要带上已存在的 tacoId 和 revisionId，CLI 才能按幂等键恢复。',
+      ].join('\n'),
+      firstHit: '[open] spec.md:5:32 > 匿名可发布，最小流程不含登录',
+      moreHits: '… 另有 3 条：data-model.mmd、anonymous-publish.mmd、openapi.yaml',
+      diffLine: 'datetime expiresAt "默认 90 天，每次成功鉴权顺延"',
+      placeholder: '粘贴 Taco 交接内容…',
+      pasted: (lines: number) => `[已粘贴 ${lines} 行]`,
+      summary: '已在 data-model.mmd 给 ApiKey 补上 expiresAt、lastUsedAt，给匿名 User 补上 reclaimAt，这条评论已解决。另外 3 条涉及设计取舍，留给你拍板。',
+      replay: '重来一次',
+    },
+    demoViewerTitle: 'Taco 演示：008-taco-host-contract',
+    footerLeft: 'Taco Specification & Tacobin Platform',
+    footerRight: '© 2026 STENCIL LABS / ARCADIA',
   },
   en: {
-    title: 'Tacobin',
-    tagline: 'Single-file workspace for humans and AI agents',
-    openHeader: 'Open Taco Workspace',
-    openHint: 'Enter or paste a Taco ID or URL to view and collaborate:',
-    openPlaceholder: 'Enter Taco ID (e.g. 9d9528b6... or full URL)',
-    openButton: 'Open',
-    tabInstallation: 'Installation',
-    tabSkill: 'Skill',
-    copyTooltip: 'Copy',
-    copiedTooltip: 'Copied!',
-    themeLabel: 'Theme',
-    langLabel: 'Language',
-    githubLabel: 'View Taco on GitHub',
-    systemTheme: 'System',
-    lightTheme: 'Light',
-    darkTheme: 'Dark',
-    agentSnippet: `You are an AI Agent working in this repository. Follow the Tacobin delivery protocol:
-1. Deliverables and context in this project are encapsulated in Taco containers (*.taco.html).
-2. Use taco-cli to publish and review workspaces. For offline guidance and command reference, read: taco-cli skills read taco
-3. Publish to shared space: taco-cli publish <path.taco.html> --host https://tacobin.arcadia-han.com
-4. Subscribe to live events: taco-cli subscribe <tacoId> --host https://tacobin.arcadia-han.com
-5. For installation and agent rules refer to: docs/agent-installation.md`,
-    skillCommand: 'npx skills@latest add arcadia822/taco --skill=taco',
+    eyebrow: 'AGENT - HUMAN COLLABORATION',
+    h1: 'The whole design doc, in one file.',
+    desc: 'Easy for humans and agents to read, edit, and comment. Lives in your repo, versioned with your code.',
+    tryBtn: 'Try Taco',
+    tryUrl: 'https://taco-spec-en.arcadia822.chatgpt.site',
+    downloadBtn: 'Download Taco',
+    comingSoon: 'Coming soon',
+    forAgent: 'For Agent',
+    forSkill: 'Skill',
+    agentPrompt:
+      'Read https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and install Taco for me by following it. When done, walk me through how to use Taco.',
+    skillCmd: 'npx skills@latest add arcadia822/taco --skill=taco',
+    copy: 'Copy',
+    copied: 'Copied',
+    copyFailed: 'Could not copy',
+    scrollDown: 'Scroll down',
+    section1Eyebrow: '03 / One file',
+    section1Title: 'One file carries everything.',
+    section1Desc: 'One .taco.html is the whole handoff: docs, the reader app and review threads travel together in your repo or as a shared file. Reviewers double-click to read, edit and comment in context; once saved, the next reviewer or agent gets that same context. No install or account for local review.',
+    section1FileSize: '479.0 KB',
+    section1Tree: [
+      ['App', 'inlined editor, renderers, styling and runtime', '(466.5 KB)'],
+      ['Files', '4 files: spec, data model, flowchart, OpenAPI', '(7.7 KB)'],
+      ['Comments', '4 cross-file review threads and state machine', '(2.2 KB)'],
+      ['Navigation', '3 custom groups and entry manifest', '(0.3 KB)'],
+    ],
+    section1Online: 'OPTIONAL DEPENDENCIES',
+    section1OnlineItems: ['Mermaid renderer — loaded from jsDelivr when a diagram opens; offline shows the source', 'Live collaboration relay — optional'],
+    section2Eyebrow: '02 / Review handoff',
+    section2Title: 'Review right in the doc. Your agent takes it from there.',
+    section2Lead: 'In Taco you can:',
+    section2Points: [
+      'Select text to comment — the discussion stays next to the source',
+      'Edit in place: WYSIWYG Markdown, live-previewed YAML and Mermaid',
+      'Reply to and resolve threads',
+      'Hit Handoff to pack every edit and comment into one message for your agent',
+    ],
+    section2Tip: 'Try Handoff at the window’s top right — the agent on the left replays.',
+    section3Eyebrow: '04 / SPEC KIT INTEGRATION',
+    section3Title: 'Built-in GitHub Spec Kit Integration',
+    section3DescBefore: 'Full integration ready out of the box. Installing the Taco extension equips ',
+    section3DescAfter: ' with automatic single-file container refreshes across all lifecycle hooks.',
+    section3Cmd: 'specify extension add taco --from https://github.com/Arcadia822/taco/releases/latest/download/taco-extension.zip',
+    section4Eyebrow: '05 / TACOBIN SPACE',
+    section4Title: 'Tacobin: Collaborative Relay for Teams & Agents',
+    section4Desc:
+      'While single-file Tacos excel at self-contained local governance, Tacobin provides cloud sharing, web reviews, and live event streaming back to your terminal agent via taco-cli.',
+    section4CliTitle: 'CLI',
+    section4CliCmd: 'npm install -g @tacobin/cli',
+    section4AgentTitle: 'FOR AGENT',
+    section4AgentPrompt:
+      'Read https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and install taco-cli, then run taco-cli skills read taco for its publishing and review guide. Publish the current Taco to Tacobin; use the returned tacoId with subscribe to stream review events.',
+    section4BackToTop: 'Back to Top',
+    section4Star: 'Star on GitHub',
+    tracePublish: 'Publish the Taco and get a share URL',
+    traceSubscribe: 'Subscribe to reviews using its tacoId',
+    traceEvent: 'A review comment lands in the agent terminal',
+    traceComment: 'Please cover the failure path',
+    agent: {
+      title: 'agent · ~/taco',
+      defaultHandoff: [
+        'I have completed modifications and comments in the Taco review page. Please sync the following changes:',
+        '- Document title: "008-taco-host-contract"',
+        '',
+        '## Comments',
+        '- [specs/008-taco-host-contract/spec.md:5] Quote: "anonymous publishing works and the minimal flow has no login"',
+        '  - **arcadia**: How long does the ApiKey issued for anonymous publishing last, and how is it reclaimed? Please add the fields to data-model.mmd.',
+        '- [specs/008-taco-host-contract/data-model.mmd:32] Quote: "string kind "comment | confirm | feedback-done""',
+        '  - **lin**: The spec says confirmations and feedback-done are review data, not body comments. Should confirm / feedback-done really share one kind with comment?',
+        '- [specs/008-taco-host-contract/flows/anonymous-publish.mmd:5] Quote: "D["Store the key safely first"]"',
+        '  - **arcadia**: Missing failure branch: if the key is not persisted, never upload content — fail and exit.',
+        '- [specs/008-taco-host-contract/contracts/openapi.yaml:71] Quote: "description: Idempotency key conflict"',
+        '  - **lin**: The 409 body should return the existing tacoId and revisionId so the CLI can recover with the idempotency key.',
+      ].join('\n'),
+      firstHit: '[open] spec.md:5:106 > anonymous publishing works and the minimal flow has no login',
+      moreHits: '… +3 more: data-model.mmd, anonymous-publish.mmd, openapi.yaml',
+      diffLine: 'datetime expiresAt "90 days by default, extended on each successful auth"',
+      placeholder: 'Paste a Taco handoff…',
+      pasted: (lines: number) => `[Pasted text · ${lines} lines]`,
+      summary: 'Added expiresAt and lastUsedAt to ApiKey and reclaimAt to anonymous Users in data-model.mmd and resolved that thread. The other 3 are design calls — they are yours.',
+      replay: 'Replay',
+    },
+    demoViewerTitle: 'Taco demo: 008-taco-host-contract',
+    footerLeft: 'Taco Specification & Tacobin Platform',
+    footerRight: '© 2026 STENCIL LABS / ARCADIA',
   },
 }
 
 export default function HomePage() {
-  const router = useRouter()
-  const [tacoIdInput, setTacoIdInput] = useState('')
-  const [activeTab, setActiveTab] = useState<InfoTab>('installation')
-  const [copiedText, setCopiedText] = useState(false)
   const [locale, setLocale] = useState<LocaleCode>('zh-Hans')
-  const [themePreference, setThemePreference] = useState<ThemeMode>('system')
-  const [themeMenuOpen, setThemeMenuOpen] = useState(false)
+  const [activeSection, setActiveSection] = useState(0)
   const [langMenuOpen, setLangMenuOpen] = useState(false)
+  const [agentRun, setAgentRun] = useState<AgentRun | null>(null)
+  const [agentDone, setAgentDone] = useState(false)
 
-  // Initialize theme and locale from localStorage
+  // 嵌入的 Taco 点「交接改动」后会同源 postMessage 交接文本；只接受本页 demo iframe 发来的消息
+  const demoFrameHost = useRef<HTMLDivElement | null>(null)
+
+  // 指针在窗框或终端上滚轮时，页面本身不动；终端正文仍可自己滚动
+  const demoStage = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
-    const savedTheme = localStorage.getItem('taco-theme') as ThemeMode | null
-    if (savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'system') {
-      setThemePreference(savedTheme)
+    const stage = demoStage.current
+    if (!stage) return
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      const transcript = (event.target as Element).closest('.mui-terminal__body')
+      if (transcript) transcript.scrollTop += event.deltaMode === WheelEvent.DOM_DELTA_LINE ? event.deltaY * 16 : event.deltaY
     }
+    stage.addEventListener('wheel', onWheel, { passive: false })
+    return () => stage.removeEventListener('wheel', onWheel)
+  }, [])
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== location.origin || event.data?.type !== 'taco:handoff' || typeof event.data.text !== 'string') return
+      if (event.source !== demoFrameHost.current?.querySelector('iframe')?.contentWindow) return
+      setAgentDone(false)
+      setAgentRun({ id: Date.now(), handoff: event.data.text })
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [])
 
+  useEffect(() => {
     const savedLocale = localStorage.getItem('taco-locale')
-    if (savedLocale === 'en' || savedLocale === 'zh-Hans') {
-      setLocale(savedLocale)
-    } else if (navigator.language.startsWith('en')) {
-      setLocale('en')
+    const nextLocale: LocaleCode = savedLocale === 'en' || savedLocale === 'zh-Hans'
+      ? savedLocale
+      : navigator.language.startsWith('en') ? 'en' : 'zh-Hans'
+    setLocale(nextLocale)
+    document.documentElement.lang = nextLocale
+  }, [])
+
+  // The same marker previews a partial wheel gesture and follows real scroll during a page turn.
+  const indicatorRef = useRef<HTMLDivElement | null>(null)
+  const markerRef = useRef<HTMLSpanElement | null>(null)
+  useEffect(() => {
+    let distance = 0
+    let lastWheelAt = 0
+    let locked = false
+    let preview: number | null = null
+    let direction = 0
+    let resetTimer: number | undefined
+
+    const positionMarker = (position: number) => {
+      const dots = indicatorRef.current?.querySelectorAll('.page-dot')
+      const step = dots && dots.length > 1 ? dots[1].offsetTop - dots[0].offsetTop : 21
+      if (markerRef.current) markerRef.current.style.transform = `translateY(${position * step}px) scale(1.45)`
+    }
+    const syncScroll = () => {
+      const actual = Math.min(4, Math.max(0, window.scrollY / window.innerHeight))
+      if (preview !== null && (direction > 0 ? actual >= preview : actual <= preview)) preview = null
+      positionMarker(preview === null ? actual : direction > 0 ? Math.max(actual, preview) : Math.min(actual, preview))
+      if (indicatorRef.current) {
+        const show = actual > 0.05
+        indicatorRef.current.classList.toggle('is-visible', show)
+        indicatorRef.current.setAttribute('aria-hidden', String(!show))
+      }
+      setActiveSection(Math.round(actual))
+    }
+    const onWheel = (event: WheelEvent) => {
+      if (window.matchMedia('(max-width: 900px)').matches || event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY) || (event.target instanceof Node && demoStage.current?.contains(event.target))) return
+      event.preventDefault()
+      const now = performance.now()
+      if (now - lastWheelAt > 380) {
+        distance = 0
+        locked = false
+      }
+      lastWheelAt = now
+      if (locked) return
+      const delta = event.deltaY * (event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? window.innerHeight : 1)
+      if (Math.sign(delta) !== Math.sign(distance)) distance = 0
+      distance += Math.sign(delta) * Math.min(Math.abs(delta), 120)
+      direction = Math.sign(distance)
+      const actual = Math.min(4, Math.max(0, window.scrollY / window.innerHeight))
+      const current = Math.round(actual)
+      preview = Math.min(4, Math.max(0, current + direction * Math.min(Math.abs(distance) / 160, 1)))
+      positionMarker(preview)
+      window.clearTimeout(resetTimer)
+      resetTimer = window.setTimeout(() => {
+        distance = 0
+        preview = null
+        locked = false
+        syncScroll()
+      }, Math.abs(distance) >= 160 ? 900 : 380)
+      if (Math.abs(distance) < 160) return
+      window.scrollTo({ top: Math.min(4, Math.max(0, current + direction)) * window.innerHeight, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+      distance = 0
+      locked = true
+    }
+    syncScroll()
+    window.addEventListener('scroll', syncScroll, { passive: true })
+    window.addEventListener('wheel', onWheel, { passive: false })
+    window.addEventListener('resize', syncScroll)
+    return () => {
+      window.clearTimeout(resetTimer)
+      window.removeEventListener('scroll', syncScroll)
+      window.removeEventListener('wheel', onWheel)
+      window.removeEventListener('resize', syncScroll)
     }
   }, [])
 
-  // Apply appearance whenever themePreference changes
-  useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const apply = () => {
-      const isDark = themePreference === 'system' ? media.matches : themePreference === 'dark'
-      document.documentElement.dataset.theme = isDark ? 'dark' : 'light'
-      document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
-    }
-    apply()
-    media.addEventListener('change', apply)
-    return () => media.removeEventListener('change', apply)
-  }, [themePreference])
-
   const t = I18N[locale]
 
-  const handleOpenTaco = (e: React.FormEvent) => {
-    e.preventDefault()
-    const raw = tacoIdInput.trim()
-    if (!raw) return
-    const match = raw.match(/\/t\/([0-9a-f-]+)/i)
-    const targetId = match ? match[1] : raw
-    router.push(`/t/${targetId}`)
-  }
-
-  const switchTheme = (pref: ThemeMode) => {
-    setThemePreference(pref)
-    localStorage.setItem('taco-theme', pref)
-    setThemeMenuOpen(false)
-  }
-
-  const switchLocale = (loc: LocaleCode) => {
-    setLocale(loc)
-    localStorage.setItem('taco-locale', loc)
-    document.documentElement.lang = loc
+  const switchLocale = (next: LocaleCode) => {
+    setLocale(next)
+    localStorage.setItem('taco-locale', next)
+    document.documentElement.lang = next
     setLangMenuOpen(false)
   }
 
-  const copyPayload = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopiedText(true)
-      setTimeout(() => setCopiedText(false), 2000)
-    })
+  const scrollToPage = (idx: number) => {
+    window.scrollTo({ top: idx * window.innerHeight, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
   }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        boxSizing: 'border-box',
-        background: 'var(--paper)',
-        color: 'var(--ink)',
-      }}
-    >
-      {/* 顶部 Header：与 Taco 内容页 1:1 一致，包含 GitHub 链接 */}
+    <div className={`home-root ${geist.variable} ${firaCode.variable}`}>
+      {/* Continuous page position, including a wheel gesture before the next page turns. */}
+      <div ref={indicatorRef} className="page-indicator" aria-label="Page navigation" aria-hidden="true">
+        <span className="page-indicator__track" aria-hidden="true" />
+        {[0, 1, 2, 3, 4].map((idx) => (
+          <button
+            key={idx}
+            type="button"
+            onClick={() => scrollToPage(idx)}
+            className="page-dot"
+            aria-current={activeSection === idx ? 'step' : undefined}
+            aria-label={`Scroll to page ${idx + 1}`}
+          />
+        ))}
+        <span ref={markerRef} className="page-indicator__marker" aria-hidden="true" />
+      </div>
+      <div className="glow-mesh" aria-hidden="true" />
+      <div className="particle-grid" aria-hidden="true" />
+      <div className="header-cover" aria-hidden="true">
+        <div className="glow-mesh" />
+        <div className="particle-grid" />
+      </div>
+
+      {/* 顶部纯粹 Header */}
       <header
-        className="workspace-header"
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          height: '40px',
-          minHeight: '40px',
-          padding: '0 16px',
-          gap: '8px',
-          borderBottom: '1px solid var(--line)',
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 40,
           background: 'transparent',
-          position: 'relative',
         }}
       >
-        <div
-          style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}
-          onClick={() => router.push('/')}
-        >
-          <svg viewBox="0 0 24 24" style={{ width: '16px', height: '16px', display: 'block' }}>
-            <circle cx="15.2" cy="8.8" r="4.8" fill="var(--brand-bubble-primary, #3ecf8e)" />
-            <circle cx="7.2" cy="14.4" r="3.2" fill="var(--brand-bubble-secondary, #3b82f6)" />
-            <circle cx="14.8" cy="18" r="2" fill="var(--brand-bubble-tertiary, #f97316)" />
-          </svg>
-          <strong style={{ fontSize: '13px', fontWeight: 700, letterSpacing: '-0.01em' }}>Tacobin</strong>
-        </div>
-
-        <div style={{ flex: 1 }} />
-
-        {/* GitHub 官方 Repo 图标链接 */}
-        <a
-          href="https://github.com/Arcadia822/taco"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="control-button control-button-icon"
-          title={t.githubLabel}
-          aria-label={t.githubLabel}
-          style={{ textDecoration: 'none' }}
-        >
-          <svg className="ui-icon" viewBox="0 0 24 24" fill="currentColor">
-            <path
-              fillRule="evenodd"
-              clipRule="evenodd"
-              d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
-            />
-          </svg>
-        </a>
-
-        {/* 语言切换按钮 */}
-        <div style={{ position: 'relative' }}>
-          <button
-            type="button"
-            className="control-button control-button-icon"
-            title={t.langLabel}
-            aria-label={t.langLabel}
-            onClick={() => {
-              setLangMenuOpen(!langMenuOpen)
-              setThemeMenuOpen(false)
-            }}
-          >
-            <svg
-              className="ui-icon"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="12" cy="12" r="9" />
-              <path d="M3 12h18" />
-              <path d="M12 3a15 15 0 0 1 0 18" />
-              <path d="M12 3a15 15 0 0 0 0 18" />
-            </svg>
-          </button>
-
-          {langMenuOpen && (
-            <div className="topbar-popover language-menu" style={{ right: 0, top: '34px', position: 'absolute' }}>
-              <button
-                type="button"
-                className={`popover-action sidebar-row ${locale === 'zh-Hans' ? 'is-active' : ''}`}
-                onClick={() => switchLocale('zh-Hans')}
-              >
-                <span className="lang-badge">简</span>
-                <span className="sidebar-row-label">简体中文</span>
-              </button>
-              <button
-                type="button"
-                className={`popover-action sidebar-row ${locale === 'en' ? 'is-active' : ''}`}
-                onClick={() => switchLocale('en')}
-              >
-                <span className="lang-badge">EN</span>
-                <span className="sidebar-row-label">English</span>
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* 日夜模式切换按钮 */}
-        <div style={{ position: 'relative' }}>
-          <button
-            type="button"
-            className="control-button control-button-icon theme-toggle"
-            title={t.themeLabel}
-            aria-label={t.themeLabel}
-            onClick={() => {
-              setThemeMenuOpen(!themeMenuOpen)
-              setLangMenuOpen(false)
-            }}
-          >
-            {themePreference === 'dark' ? (
-              <svg
-                className="ui-icon"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M20.9 13a9 9 0 0 1-9.9-9.9A9 9 0 1 0 20.9 13Z" />
-              </svg>
-            ) : themePreference === 'light' ? (
-              <svg
-                className="ui-icon"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="12" cy="12" r="4" />
-                <path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
-              </svg>
-            ) : (
-              <svg
-                className="ui-icon"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.75"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect width="20" height="14" x="2" y="3" rx="2" />
-                <line x1="8" x2="16" y1="21" y2="21" />
-                <line x1="12" x2="12" y1="17" y2="21" />
-              </svg>
-            )}
-          </button>
-
-          {themeMenuOpen && (
-            <div className="topbar-popover theme-menu" style={{ right: 0, top: '34px', position: 'absolute' }}>
-              <button
-                type="button"
-                className={`popover-action sidebar-row ${themePreference === 'system' ? 'is-active' : ''}`}
-                onClick={() => switchTheme('system')}
-              >
-                <span className="sidebar-row-icon">
-                  <svg className="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
-                    <rect width="20" height="14" x="2" y="3" rx="2" />
-                    <line x1="8" x2="16" y1="21" y2="21" />
-                    <line x1="12" x2="12" y1="17" y2="21" />
-                  </svg>
-                </span>
-                <span className="sidebar-row-label">{t.systemTheme}</span>
-              </button>
-              <button
-                type="button"
-                className={`popover-action sidebar-row ${themePreference === 'light' ? 'is-active' : ''}`}
-                onClick={() => switchTheme('light')}
-              >
-                <span className="sidebar-row-icon">
-                  <svg className="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
-                    <circle cx="12" cy="12" r="4" />
-                    <path d="M12 2v2m0 16v2M2 12h2m16 0h2" />
-                  </svg>
-                </span>
-                <span className="sidebar-row-label">{t.lightTheme}</span>
-              </button>
-              <button
-                type="button"
-                className={`popover-action sidebar-row ${themePreference === 'dark' ? 'is-active' : ''}`}
-                onClick={() => switchTheme('dark')}
-              >
-                <span className="sidebar-row-icon">
-                  <svg className="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
-                    <path d="M20.9 13a9 9 0 0 1-9.9-9.9A9 9 0 1 0 20.9 13Z" />
-                  </svg>
-                </span>
-                <span className="sidebar-row-label">{t.darkTheme}</span>
-              </button>
-            </div>
-          )}
-        </div>
-      </header>
-
-      {/* 主体区域：极简 Hero in land + 蓝丁胶质感居中布局 */}
-      <main
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '40px 20px',
-          maxWidth: '680px',
-          width: '100%',
-          margin: '0 auto',
-          boxSizing: 'border-box',
-        }}
-      >
-        {/* 蓝丁气泡 Mark 质感图标 */}
-        <div style={{ marginBottom: '20px', display: 'grid', placeItems: 'center' }}>
-          <svg
-            viewBox="0 0 24 24"
-            style={{ width: '56px', height: '56px', filter: 'drop-shadow(0 12px 24px rgba(62,207,142,0.18))' }}
-          >
-            <circle cx="15.2" cy="8.8" r="4.8" fill="#3ecf8e" />
-            <circle cx="7.2" cy="14.4" r="3.2" fill="#3b82f6" />
-            <circle cx="14.8" cy="18" r="2" fill="#f97316" />
-          </svg>
-        </div>
-
-        <h1
-          style={{
-            fontSize: '28px',
-            fontWeight: 700,
-            margin: '0 0 8px',
-            letterSpacing: '-0.02em',
-            textAlign: 'center',
-          }}
-        >
-          {t.title}
-        </h1>
-        <p
-          style={{
-            fontSize: '14px',
-            color: 'var(--muted)',
-            margin: '0 0 36px',
-            textAlign: 'center',
-            lineHeight: 1.5,
-          }}
-        >
-          {t.tagline}
-        </p>
-
-        {/* 极简蓝丁胶质感输入框 */}
-        <form onSubmit={handleOpenTaco} style={{ width: '100%', marginBottom: '40px' }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              width: '100%',
-              background: 'var(--surface)',
-              border: '1px solid var(--line-strong)',
-              borderRadius: '999px',
-              padding: '4px 6px 4px 16px',
-              boxShadow: 'var(--shadow)',
-              boxSizing: 'border-box',
-              transition: 'border-color 160ms ease, box-shadow 160ms ease',
-            }}
-          >
-            <span style={{ fontSize: '14px', color: 'var(--muted)', marginRight: '8px' }}>🔍</span>
-            <input
-              type="text"
-              placeholder={t.openPlaceholder}
-              value={tacoIdInput}
-              onChange={(e) => setTacoIdInput(e.target.value)}
-              style={{
-                flex: 1,
-                border: 'none',
-                background: 'transparent',
-                color: 'var(--ink)',
-                fontSize: '13px',
-                outline: 'none',
-                fontFamily: 'var(--mono)',
-              }}
-            />
-            <button
-              type="submit"
-              style={{
-                height: '32px',
-                padding: '0 16px',
-                borderRadius: '999px',
-                border: 'none',
-                background: 'var(--accent)',
-                color: '#111',
-                fontWeight: 600,
-                fontSize: '12px',
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'opacity 140ms ease',
-              }}
-            >
-              {t.openButton}
-            </button>
-          </div>
-        </form>
-
-        {/* 外部独立选项卡 (Segmented Tab: 安装 vs Skill) */}
-        <div style={{ width: '100%', marginBottom: '8px', paddingLeft: '2px', display: 'flex', gap: '16px', alignItems: 'center' }}>
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('installation')
-              setCopiedText(false)
-            }}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              padding: '2px 0',
-              fontSize: '12px',
-              fontWeight: activeTab === 'installation' ? 700 : 500,
-              color: activeTab === 'installation' ? 'var(--ink)' : 'var(--muted)',
-              borderBottom: activeTab === 'installation' ? '2px solid var(--accent)' : '2px solid transparent',
-              cursor: 'pointer',
-              transition: 'color 140ms ease, border-color 140ms ease',
-            }}
-          >
-            {t.tabInstallation}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('skill')
-              setCopiedText(false)
-            }}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              padding: '2px 0',
-              fontSize: '12px',
-              fontWeight: activeTab === 'skill' ? 700 : 500,
-              color: activeTab === 'skill' ? 'var(--ink)' : 'var(--muted)',
-              borderBottom: activeTab === 'skill' ? '2px solid var(--accent)' : '2px solid transparent',
-              cursor: 'pointer',
-              transition: 'color 140ms ease, border-color 140ms ease',
-            }}
-          >
-            {t.tabSkill}
-          </button>
-        </div>
-
-        {/* Soft 风格卡片内容 */}
         <div
           style={{
             width: '100%',
-            background: 'var(--surface)',
-            border: '1px solid var(--line)',
-            borderRadius: '8px',
-            padding: '10px 14px',
-            boxSizing: 'border-box',
+            padding: '0 10%',
+            height: '56px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: '12px',
+            boxSizing: 'border-box',
           }}
         >
-          {activeTab === 'installation' ? (
-            <p
+          {/* Logo */}
+          <div
+            style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
+            onClick={() => scrollToPage(0)}
+          >
+            <svg viewBox="0 0 24 24" style={{ width: '22px', height: '22px', display: 'block' }}>
+              <circle cx="15.2" cy="8.8" r="4.8" fill="#3ecf8e" />
+              <circle cx="7.2" cy="14.4" r="3.2" fill="#3b82f6" />
+              <circle cx="14.8" cy="18" r="2" fill="#f97316" />
+            </svg>
+            <span
               style={{
-                margin: 0,
-                fontSize: '12px',
-                color: 'var(--muted)',
-                lineHeight: 1.5,
-                fontFamily: 'var(--sans)',
-                flex: 1,
+                fontSize: '15px',
+                fontWeight: 700,
+                letterSpacing: '-0.02em',
+                color: '#fff',
               }}
             >
-              将 <code style={{ color: 'var(--ink)', background: 'var(--surface-2)', padding: '2px 4px', borderRadius: '4px' }}>docs/agent-installation.md</code> 挂载给 AI Agent 即可自动化生成、发布与协作 Taco 单文件工作区。
-            </p>
-          ) : (
-            <div style={{ flex: 1, overflow: 'hidden' }}>
-              <code
-                style={{
-                  display: 'block',
-                  margin: 0,
-                  fontSize: '12px',
-                  color: 'var(--ink)',
-                  fontFamily: 'var(--mono)',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {t.skillCommand}
-              </code>
-            </div>
-          )}
+              Taco
+            </span>
+          </div>
 
-          {/* 结尾单行 ghost icon 复制按钮 */}
-          <button
-            type="button"
-            onClick={() => copyPayload(activeTab === 'installation' ? t.agentSnippet : t.skillCommand)}
-            title={copiedText ? t.copiedTooltip : t.copyTooltip}
-            aria-label={copiedText ? t.copiedTooltip : t.copyTooltip}
-            className="control-button control-button-icon"
+          {/* Right actions (Taco 原生 control-button icon 规范) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {/* GitHub 官方 Repo 图标按钮 */}
+            <a
+              href="https://github.com/Arcadia822/taco"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="control-button"
+              title="GitHub"
+              aria-label="GitHub"
+              style={{ textDecoration: 'none' }}
+            >
+              <svg className="ui-icon" viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  fillRule="evenodd"
+                  clipRule="evenodd"
+                  d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+                />
+              </svg>
+            </a>
+
+            {/* 语言切换 Icon Button 与 Popover */}
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className="control-button"
+                title="Switch Language"
+                aria-label="Switch Language"
+                onClick={() => setLangMenuOpen(!langMenuOpen)}
+              >
+                <svg
+                  className="ui-icon"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M3 12h18" />
+                  <path d="M12 3a15 15 0 0 1 0 18" />
+                  <path d="M12 3a15 15 0 0 0 0 18" />
+                </svg>
+              </button>
+
+              {langMenuOpen && (
+                <div
+                  className="topbar-popover"
+                  style={{
+                    right: 0,
+                    top: '32px',
+                    position: 'absolute',
+                  }}
+                >
+                  <button
+                    type="button"
+                    className={`popover-action ${locale === 'zh-Hans' ? 'is-active' : ''}`}
+                    onClick={() => switchLocale('zh-Hans')}
+                  >
+                    <span className="lang-badge">简</span>
+                    <span>简体中文</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`popover-action ${locale === 'en' ? 'is-active' : ''}`}
+                    onClick={() => switchLocale('en')}
+                  >
+                    <span className="lang-badge">EN</span>
+                    <span>English</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* ================= PAGE 0: HERO 首屏 ================= */}
+      <section className="snap-page snap-page--hero">
+
+        <div style={{ width: '100%', position: 'relative', zIndex: 10 }}>
+          <div style={{ maxWidth: '820px' }}>
+            {/* Eyebrow */}
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '11px',
+                letterSpacing: '0.2em',
+                textTransform: 'uppercase',
+                color: '#3ecf8e',
+                fontFamily: 'var(--mono)',
+                marginBottom: '20px',
+                fontWeight: 600,
+              }}
+            >
+              <span
+                style={{
+                  width: '7px',
+                  height: '7px',
+                  background: '#3ecf8e',
+                  borderRadius: '1px',
+                  display: 'inline-block',
+                }}
+              />
+              <span>{t.eyebrow}</span>
+            </div>
+
+            {/* H1 Display Typography (参考 omp 70px 极简断行与色彩层次) */}
+            <h1
+              style={{
+                fontSize: 'clamp(2rem, 4.2vw, 3.5rem)',
+                fontWeight: 600,
+                lineHeight: 1.12,
+                letterSpacing: '-0.02em',
+                margin: '0 0 20px',
+                color: '#ffffff',
+                width: 'max-content',
+                maxWidth: '80vw',
+              }}
+            >
+              {t.h1}
+            </h1>
+
+            {/* Subtitle */}
+            <p
+              style={{
+                fontSize: 'clamp(15px, 1.8vw, 17px)',
+                lineHeight: 1.65,
+                color: '#a1a1aa',
+                margin: '0 0 36px',
+              }}
+            >
+              {t.desc}
+            </p>
+
+            {/* 主操作：试用 / 下载 */}
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' }}>
+              <a href={t.tryUrl} target="_blank" rel="noopener noreferrer" className="cta-btn cta-btn--primary">
+                {t.tryBtn}
+                <svg className="cta-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M5 12h14m-6-6 6 6-6 6" />
+                </svg>
+              </a>
+              <button type="button" disabled className="cta-btn cta-btn--ghost" title={t.comingSoon}>
+                {t.downloadBtn}
+                <span aria-hidden="true">↓</span>
+              </button>
+            </div>
+
+            {/* 给 Agent 的单行安装 Prompt 与 Skill 安装行 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div className="agent-prompt">
+                <span className="agent-prompt__label">{t.forAgent}</span>
+                <code className="agent-prompt__text">{t.agentPrompt}</code>
+                <CopyIconButton text={t.agentPrompt} labels={t} />
+              </div>
+
+              <div className="agent-prompt">
+                <span className="agent-prompt__label">{t.forSkill}</span>
+                <code className="agent-prompt__text">{t.skillCmd}</code>
+                <CopyIconButton text={t.skillCmd} labels={t} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 底部滚动提示 */}
+        <button type="button" className="scroll-hint" onClick={() => scrollToPage(1)}>
+          <span>{t.scrollDown}</span>
+          <svg className="scroll-hint__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+      </section>
+
+      {/* ================= PAGE 1: 评审交接 —— 真实 Taco + 浮层 Agent ================= */}
+      <section className="snap-page snap-page--demo">
+        <div className="demo-copy">
+          <div
             style={{
-              width: '24px',
-              height: '24px',
-              minWidth: '24px',
-              minHeight: '24px',
-              borderRadius: '4px',
-              border: 'none',
-              background: copiedText ? 'var(--accent-soft)' : 'transparent',
-              color: copiedText ? 'var(--accent-dark)' : 'var(--muted)',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              transition: 'background-color 140ms ease, color 140ms ease',
+              fontSize: '11px',
+              letterSpacing: '0.24em',
+              textTransform: 'uppercase',
+              color: '#3ecf8e',
+              fontFamily: 'var(--mono)',
+              marginBottom: '8px',
             }}
           >
-            {copiedText ? (
-              <svg viewBox="0 0 24 24" style={{ width: '14px', height: '14px', stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" style={{ width: '14px', height: '14px', stroke: 'currentColor', fill: 'none', strokeWidth: 1.75 }}>
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-              </svg>
-            )}
-          </button>
+            {t.section2Eyebrow}
+          </div>
+          <h2
+            style={{
+              fontSize: 'clamp(24px, 2.6vw, 34px)',
+              fontWeight: 600,
+              letterSpacing: '-0.03em',
+              lineHeight: 1.2,
+              margin: '0 0 10px',
+              color: '#fff',
+            }}
+          >
+            {t.section2Title}
+          </h2>
+          <p className="demo-lead">{t.section2Lead}</p>
+          <ul className="demo-points">
+            {t.section2Points.map((point) => <li key={point}>{point}</li>)}
+          </ul>
+          <p className="demo-tip">{t.section2Tip}</p>
         </div>
-      </main>
+
+        <div ref={demoStage} className="demo-stage">
+          <div className="browser-window">
+            <div className="browser-window__bar">
+              <span className="browser-window__dots" aria-hidden="true">
+                <span style={{ background: '#ef4444' }} />
+                <span style={{ background: '#eab308' }} />
+                <span style={{ background: '#22c55e' }} />
+              </span>
+              <span className="browser-window__title">{DEMO_TACO}</span>
+            </div>
+            <div ref={demoFrameHost} className="browser-window__screen">
+              <ScaledTaco
+                key={`${locale}-${agentDone ? 'after' : 'before'}`}
+                src={
+                  agentDone
+                    ? `/demo/${locale}/after/${DEMO_TACO}?embed&theme=dark&lang=${locale}#${encodeURIComponent(DEMO_EDITED_FILE)}`
+                    : `/demo/${locale}/${DEMO_TACO}?embed&pending&theme=dark&lang=${locale}`
+                }
+                title={t.demoViewerTitle}
+              />
+            </div>
+          </div>
+
+          <AgentTerminal
+            run={agentRun ?? { id: 0, handoff: t.agent.defaultHandoff }}
+            animate={agentRun !== null}
+            done={agentDone}
+            tacoFile={DEMO_TACO}
+            labels={t.agent}
+            onDone={() => setAgentDone(true)}
+            onReplay={() => {
+              setAgentRun(null)
+              setAgentDone(false)
+            }}
+          />
+        </div>
+      </section>
+
+      {/* ================= PAGE 2: 特性 01 - 真正单文件自洽 ================= */}
+      <section className="snap-page">
+        <div style={{ width: '100%' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+              gap: '48px',
+              alignItems: 'center',
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: '11px',
+                  letterSpacing: '0.24em',
+                  textTransform: 'uppercase',
+                  color: '#3ecf8e',
+                  fontFamily: 'var(--mono)',
+                  marginBottom: '16px',
+                }}
+              >
+                {t.section1Eyebrow}
+              </div>
+              <h2
+                style={{
+                  fontSize: 'clamp(32px, 4.5vw, 48px)',
+                  fontWeight: 600,
+                  letterSpacing: '-0.035em',
+                  lineHeight: 1.1,
+                  margin: '0 0 20px',
+                  color: '#fff',
+                }}
+              >
+                {t.section1Title}
+              </h2>
+              <p
+                style={{
+                  fontSize: '16px',
+                  lineHeight: 1.7,
+                  color: '#a1a1aa',
+                  margin: 0,
+                  maxWidth: '520px',
+                }}
+              >
+                {t.section1Desc}
+              </p>
+            </div>
+
+            <div
+              style={{
+                background: '#09090b',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '12px',
+                padding: '32px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '20px',
+                fontFamily: 'var(--mono)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span className="bundle-card__dot" aria-hidden="true" />
+                <span style={{ color: '#fff', fontSize: '13px', fontWeight: 600 }}>{DEMO_TACO}</span>
+                <strong className="bundle-card__size" style={{ marginLeft: 'auto', fontSize: '12px' }}>{t.section1FileSize}</strong>
+              </div>
+
+              <div className="bundle-card__tree">
+                {t.section1Tree.map(([key, value, size], index) => (
+                  <div key={key} className="bundle-card__row">
+                    <span className="bundle-card__branch">{index === t.section1Tree.length - 1 ? '└──' : '├──'}</span>
+                    <span className="bundle-card__key">{key}</span>
+                    <span className="bundle-card__value">{value} <strong className="bundle-card__size">{size}</strong></span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bundle-card__online">
+                <div className="bundle-card__online-title">{t.section1Online}</div>
+                {t.section1OnlineItems.map((item) => <div key={item}>· {item}</div>)}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ================= PAGE 3: 特性 03 - 原生 SPEC KIT 路由 ================= */}
+      <section className="snap-page">
+        <div style={{ width: '100%' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+              gap: '48px',
+              alignItems: 'center',
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: '11px',
+                  letterSpacing: '0.24em',
+                  textTransform: 'uppercase',
+                  color: '#3ecf8e',
+                  fontFamily: 'var(--mono)',
+                  marginBottom: '16px',
+                }}
+              >
+                {t.section3Eyebrow}
+              </div>
+              <h2
+                style={{
+                  fontSize: 'clamp(32px, 4.5vw, 48px)',
+                  fontWeight: 600,
+                  letterSpacing: '-0.035em',
+                  lineHeight: 1.1,
+                  margin: '0 0 20px',
+                  color: '#fff',
+                }}
+              >
+                {t.section3Title}
+              </h2>
+              <p
+                style={{
+                  fontSize: '16px',
+                  lineHeight: 1.7,
+                  color: '#a1a1aa',
+                  margin: 0,
+                  maxWidth: '520px',
+                }}
+              >
+                {t.section3DescBefore}
+                <a className="spec-kit-link" href="https://github.com/github/spec-kit" target="_blank" rel="noopener noreferrer">Spec Kit</a>
+                {t.section3DescAfter}
+              </p>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+              }}
+            >
+              {/* Spec Kit 安装组件 (与首页风格严格一致) */}
+              <div className="agent-prompt" style={{ width: '100%', maxWidth: '100%' }}>
+                <span className="agent-prompt__label">SPEC KIT</span>
+                <code className="agent-prompt__text">{t.section3Cmd}</code>
+                <CopyIconButton text={t.section3Cmd} labels={t} />
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                }}
+              >
+                <div
+                  style={{
+                    background: '#09090b',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: '8px',
+                    padding: '12px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontFamily: 'var(--mono)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ color: '#3ecf8e' }}>●</span>
+                    <span style={{ color: '#fff', fontSize: '13px' }}>speckit.taco.update</span>
+                  </div>
+                  <span style={{ fontSize: '11px', color: '#71717a' }}>HOOKS: SPECIFY / PLAN / TASKS</span>
+                </div>
+
+                <div
+                  style={{
+                    background: '#09090b',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: '8px',
+                    padding: '12px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontFamily: 'var(--mono)',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ color: '#3b82f6' }}>●</span>
+                    <span style={{ color: '#fff', fontSize: '13px' }}>speckit.taco.review</span>
+                  </div>
+                  <span style={{ fontSize: '11px', color: '#71717a' }}>DIFF & COMMENT HANDOFF</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ================= PAGE 4: 05 / TACOBIN 介绍与接入 ================= */}
+      <section className="snap-page snap-page--tacobin">
+        <div style={{ width: '100%', margin: 'auto 0' }}>
+          <div className="tacobin-layout"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 3fr) minmax(0, 7fr)',
+              gap: '40px',
+              alignItems: 'center',
+            }}
+          >
+            {/* 说明、Agent 指引与 CLI 安装命令 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div>
+                <div
+                  style={{
+                    fontSize: '11px',
+                    letterSpacing: '0.24em',
+                    textTransform: 'uppercase',
+                    color: '#3ecf8e',
+                    fontFamily: 'var(--mono)',
+                    marginBottom: '12px',
+                  }}
+                >
+                  {t.section4Eyebrow}
+                </div>
+                <h2
+                  style={{
+                    fontSize: 'clamp(26px, 3.6vw, 40px)',
+                    fontWeight: 600,
+                    letterSpacing: '-0.03em',
+                    lineHeight: 1.15,
+                    margin: '0 0 14px',
+                    color: '#fff',
+                  }}
+                >
+                  {t.section4Title}
+                </h2>
+                <p
+                  style={{
+                    fontSize: '14px',
+                    lineHeight: 1.65,
+                    color: '#a1a1aa',
+                    margin: 0,
+                  }}
+                >
+                  {t.section4Desc}
+                </p>
+              </div>
+
+              {/* Agent 指引在前，CLI 命令在后 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="agent-prompt" style={{ width: '100%', maxWidth: '100%' }}>
+                  <span className="agent-prompt__label">{t.section4AgentTitle}</span>
+                  <code className="agent-prompt__text">{t.section4AgentPrompt}</code>
+                  <CopyIconButton text={t.section4AgentPrompt} labels={t} />
+                </div>
+                <div className="agent-prompt" style={{ width: '100%', maxWidth: '100%' }}>
+                  <span className="agent-prompt__label">{t.section4CliTitle}</span>
+                  <code className="agent-prompt__text">{t.section4CliCmd}</code>
+                  <CopyIconButton text={t.section4CliCmd} labels={t} />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  onClick={() => scrollToPage(0)}
+                  style={{
+                    background: '#3ecf8e',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '10px 20px',
+                    color: '#000',
+                    fontWeight: 600,
+                    fontSize: '11px',
+                    fontFamily: 'var(--mono)',
+                    letterSpacing: '0.1em',
+                    cursor: 'pointer',
+                  }}
+                >
+                  ↑ {t.section4BackToTop}
+                </button>
+
+                <a
+                  href="https://github.com/Arcadia822/taco"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid rgba(255, 255, 255, 0.16)',
+                    borderRadius: '4px',
+                    padding: '10px 20px',
+                    color: '#fff',
+                    textDecoration: 'none',
+                    fontSize: '11px',
+                    fontFamily: 'var(--mono)',
+                    letterSpacing: '0.1em',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    style={{ width: '13px', height: '13px', marginRight: '6px', flexShrink: 0 }}
+                    aria-hidden="true"
+                  >
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                  </svg>
+                  {t.section4Star} ↗
+                </a>
+              </div>
+            </div>
+
+            {/* 示例终端：Agent 发起发布与订阅，Shell 输出 URL 和评审事件 */}
+            <div className="workflow-terminal">
+              <div className="workflow-terminal__bar">
+                <span className="browser-window__dots" aria-hidden="true">
+                  <span style={{ background: '#ef4444' }} />
+                  <span style={{ background: '#eab308' }} />
+                  <span style={{ background: '#22c55e' }} />
+                </span>
+              </div>
+              <div className="workflow-terminal__body">
+                <div className="workflow-terminal__env"><span>$</span><code>export TACO_HOST_URL={TRACE_HOST}</code></div>
+                <div className="workflow-terminal__step">
+                  <div className="workflow-terminal__agent"><span>AGENT / 01</span>{t.tracePublish}</div>
+                  <div className="workflow-terminal__command"><span>$</span><code>taco-cli publish design.taco.html</code></div>
+                  <div className="workflow-terminal__output workflow-terminal__output--url"><span>url</span><code>{TRACE_HOST}/t/{TRACE_TACO_ID}</code></div>
+                  <div className="workflow-terminal__output"><span>tacoId</span><code>{TRACE_TACO_ID}</code></div>
+                </div>
+                <div className="workflow-terminal__step">
+                  <div className="workflow-terminal__agent"><span>AGENT / 02</span>{t.traceSubscribe}</div>
+                  <div className="workflow-terminal__command"><span>$</span><code>taco-cli subscribe {TRACE_TACO_ID}</code></div>
+                  <div className="workflow-terminal__log"><span>ready</span><code>{'{"kind":"ready","mode":"live","cursor":"0"}'}</code></div>
+                </div>
+                <div className="workflow-terminal__step">
+                  <div className="workflow-terminal__agent"><span>AGENT / 03</span>{t.traceEvent}</div>
+                  <div className="workflow-terminal__log"><span>event</span><code>{JSON.stringify({ kind: 'event', type: 'comment.created', data: { body: t.traceComment } })}</code></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   )
 }
