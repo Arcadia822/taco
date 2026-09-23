@@ -12,3 +12,6 @@ tests/fixtures/**/*.taco.html
 .vercel
 # npm pack artifacts
 *.tgz
+
+# omp directory
+.omp/
