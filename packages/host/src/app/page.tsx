@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Fira_Code, Geist } from 'next/font/google'
 import './home.css'
 import { AgentTerminal, type AgentRun } from '../components/agent-terminal'
+import { TacoPixelBackground } from '../components/taco-pixel-background'
 
 const geist = Geist({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-geist' })
 const firaCode = Fira_Code({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-fira-code' })
@@ -179,8 +180,12 @@ const I18N = {
     section4AgentTitle: 'FOR AGENT',
     section4AgentPrompt:
       '阅读 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md 并安装 taco-cli，再运行 taco-cli skills read taco 获取内置发布与评审指南。将当前 Taco 发布到 Tacobin，使用返回的 tacoId 运行 subscribe 监听评审事件。',
-    section4BackToTop: '回到顶部',
+    creditsBackToTop: '回到顶部',
     section4Star: 'GitHub Star',
+    creditsTitlePrefix: '感谢',
+    creditsTitleEnd: '。',
+    creditsDescription: 'Taco 的灵感与核心代码来自 Bento 项目。感谢 nyblnet 将它开源，让 Taco 得以在此基础上继续生长。',
+    creditsContact: '保持联系',
     tracePublish: '发布 Taco，拿到分享地址',
     traceSubscribe: '用 tacoId 订阅这份文档的评审',
     traceEvent: '有人评论，事件回到 Agent 的终端',
@@ -266,8 +271,12 @@ const I18N = {
     section4AgentTitle: 'FOR AGENT',
     section4AgentPrompt:
       'Read https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and install taco-cli, then run taco-cli skills read taco for its publishing and review guide. Publish the current Taco to Tacobin; use the returned tacoId with subscribe to stream review events.',
-    section4BackToTop: 'Back to Top',
+    creditsBackToTop: 'Back to Top',
     section4Star: 'Star on GitHub',
+    creditsTitlePrefix: 'Thank you,',
+    creditsTitleEnd: '.',
+    creditsDescription: 'Taco’s inspiration and core code come from Bento. Thank you to nyblnet for making it open source and giving Taco a place to begin.',
+    creditsContact: 'Keep in touch',
     tracePublish: 'Publish the Taco and get a share URL',
     traceSubscribe: 'Subscribe to reviews using its tacoId',
     traceEvent: 'A review comment lands in the agent terminal',
@@ -355,6 +364,7 @@ export default function HomePage() {
     let preview: number | null = null
     let direction = 0
     let resetTimer: number | undefined
+    const sections = document.querySelectorAll<HTMLElement>('.snap-page')
 
     const positionMarker = (position: number) => {
       const dots = indicatorRef.current?.querySelectorAll('.page-dot')
@@ -362,15 +372,22 @@ export default function HomePage() {
       if (markerRef.current) markerRef.current.style.transform = `translateY(${position * step}px) scale(1.45)`
     }
     const syncScroll = () => {
-      const actual = Math.min(4, Math.max(0, window.scrollY / window.innerHeight))
+      const actual = Math.min(5, Math.max(0, window.scrollY / window.innerHeight))
       if (preview !== null && (direction > 0 ? actual >= preview : actual <= preview)) preview = null
       positionMarker(preview === null ? actual : direction > 0 ? Math.max(actual, preview) : Math.min(actual, preview))
+      const viewportCenter = window.scrollY + window.innerHeight / 2
       if (indicatorRef.current) {
-        const show = actual > 0.05
+        const show = actual > 0.05 && viewportCenter < sections[sections.length - 1].offsetTop
         indicatorRef.current.classList.toggle('is-visible', show)
         indicatorRef.current.setAttribute('aria-hidden', String(!show))
+        indicatorRef.current.toggleAttribute('inert', !show)
       }
-      setActiveSection(Math.round(actual))
+      for (let index = sections.length - 1; index >= 0; index--) {
+        if (sections[index].offsetTop <= viewportCenter) {
+          setActiveSection(index)
+          break
+        }
+      }
     }
     const onWheel = (event: WheelEvent) => {
       if (window.matchMedia('(max-width: 900px)').matches || event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY) || (event.target instanceof Node && demoStage.current?.contains(event.target))) return
@@ -386,9 +403,9 @@ export default function HomePage() {
       if (Math.sign(delta) !== Math.sign(distance)) distance = 0
       distance += Math.sign(delta) * Math.min(Math.abs(delta), 120)
       direction = Math.sign(distance)
-      const actual = Math.min(4, Math.max(0, window.scrollY / window.innerHeight))
+      const actual = Math.min(5, Math.max(0, window.scrollY / window.innerHeight))
       const current = Math.round(actual)
-      preview = Math.min(4, Math.max(0, current + direction * Math.min(Math.abs(distance) / 160, 1)))
+      preview = Math.min(5, Math.max(0, current + direction * Math.min(Math.abs(distance) / 160, 1)))
       positionMarker(preview)
       window.clearTimeout(resetTimer)
       resetTimer = window.setTimeout(() => {
@@ -398,7 +415,7 @@ export default function HomePage() {
         syncScroll()
       }, Math.abs(distance) >= 160 ? 900 : 380)
       if (Math.abs(distance) < 160) return
-      window.scrollTo({ top: Math.min(4, Math.max(0, current + direction)) * window.innerHeight, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+      window.scrollTo({ top: Math.min(5, Math.max(0, current + direction)) * window.innerHeight, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
       distance = 0
       locked = true
     }
@@ -428,11 +445,11 @@ export default function HomePage() {
   }
 
   return (
-    <div className={`home-root ${geist.variable} ${firaCode.variable}`}>
+    <div id="top" className={`home-root ${geist.variable} ${firaCode.variable}`} data-background-muted={activeSection > 0 && activeSection < 5}>
       {/* Continuous page position, including a wheel gesture before the next page turns. */}
       <div ref={indicatorRef} className="page-indicator" aria-label="Page navigation" aria-hidden="true">
         <span className="page-indicator__track" aria-hidden="true" />
-        {[0, 1, 2, 3, 4].map((idx) => (
+        {[0, 1, 2, 3, 4, 5].map((idx) => (
           <button
             key={idx}
             type="button"
@@ -444,12 +461,7 @@ export default function HomePage() {
         ))}
         <span ref={markerRef} className="page-indicator__marker" aria-hidden="true" />
       </div>
-      <div className="glow-mesh" aria-hidden="true" />
-      <div className="particle-grid" aria-hidden="true" />
-      <div className="header-cover" aria-hidden="true">
-        <div className="glow-mesh" />
-        <div className="particle-grid" />
-      </div>
+      <TacoPixelBackground />
 
       {/* 顶部纯粹 Header */}
       <header
@@ -1011,25 +1023,6 @@ export default function HomePage() {
               </div>
 
               <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', marginTop: '4px' }}>
-                <button
-                  type="button"
-                  onClick={() => scrollToPage(0)}
-                  style={{
-                    background: '#3ecf8e',
-                    border: 'none',
-                    borderRadius: '4px',
-                    padding: '10px 20px',
-                    color: '#000',
-                    fontWeight: 600,
-                    fontSize: '11px',
-                    fontFamily: 'var(--mono)',
-                    letterSpacing: '0.1em',
-                    cursor: 'pointer',
-                  }}
-                >
-                  ↑ {t.section4BackToTop}
-                </button>
-
                 <a
                   href="https://github.com/Arcadia822/taco"
                   target="_blank"
@@ -1090,6 +1083,28 @@ export default function HomePage() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+      <section className="snap-page snap-page--credits" aria-labelledby="credits-title">
+        <div className="credits-content">
+          <p className="credits-eyebrow">06 / SHOUTOUT</p>
+          <h2 id="credits-title">{t.creditsTitlePrefix} <span className="credits-brand"><img src="/bento-logo.svg" width="112" height="112" alt="" />Bento{t.creditsTitleEnd}</span></h2>
+          <p className="credits-description">{t.creditsDescription}</p>
+          <a className="credits-source" href="https://github.com/nyblnet/bento" target="_blank" rel="noopener noreferrer">nyblnet / bento <span aria-hidden="true">↗</span></a>
+          <footer className="credits-contact">
+            <p>{t.creditsContact}</p>
+            <nav aria-label={t.creditsContact}>
+              <a href="https://x.com/arcadia822" target="_blank" rel="noopener noreferrer" aria-label="X: @arcadia822">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.64 7.584H.47l8.6-9.835L0 1.154h7.594l5.243 6.932 6.064-6.933ZM17.61 20.644h2.039L6.486 3.24H4.298L17.61 20.644Z" /></svg>
+                <span>@arcadia822 ↗</span>
+              </a>
+              <a href="https://github.com/Arcadia822" target="_blank" rel="noopener noreferrer" aria-label="GitHub: @Arcadia822">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" /></svg>
+                <span>@Arcadia822 ↗</span>
+              </a>
+            </nav>
+            <a className="credits-back-to-top" href="#top">↑ {t.creditsBackToTop}</a>
+          </footer>
         </div>
       </section>
     </div>
