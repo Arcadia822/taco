@@ -84,9 +84,12 @@ export function TacoPixelBackground() {
       context.fillStyle = '#000'
       context.fillRect(0, 0, width, height)
       const time = elapsed / 1000
-      // 1. Sweeping 3D perspective particle terrain across the bottom
-      const wavePhase = time * TAU / 48
+      // 1. Sweeping 3D perspective particle terrain shifted toward bottom-right
+      const wavePhase = time * TAU / 54
       const mobile = width < 700
+      const leftSafe = mobile ? width * 0.14 : width * 0.26
+      const cx = width * (mobile ? 0.60 : 0.65)
+      const cy = height * (mobile ? 0.88 : 0.85)
       for (const { points, color } of terrainLayers) {
         context.fillStyle = color
         context.beginPath()
@@ -95,15 +98,17 @@ export function TacoPixelBackground() {
           const v = points[i + 1]
           const phase = points[i + 2]
           const sizeBase = points[i + 3]
-          const x = (u - (mobile ? 0.42 : 0.46)) * width * (mobile ? 1.45 : 1.62)
+          const x = (u - (mobile ? 0.36 : 0.40)) * width * (mobile ? 1.4 : 1.5)
           const z = 220 + v * 780
-          const wave = Math.sin(u * 4.5 - v * 2.2 + wavePhase + phase * 0.1) * 85 + Math.cos(u * 9 + v * 3.5 - wavePhase * 0.7) * 40
-          const ridge = (Math.pow(u, 1.55) * 360) - (v * 140)
-          const y = -(wave + ridge - 80)
+          // Calmer, smaller wave motion amplitude (~75% reduction)
+          const wave = Math.sin(u * 4.5 - v * 2.2 + wavePhase + phase * 0.1) * 20 + Math.cos(u * 9 + v * 3.5 - wavePhase * 0.7) * 10
+          const ridge = (Math.pow(u, 1.55) * 340) - (v * 130)
+          const y = -(wave + ridge - 70)
           const fov = 650
-          const sx = (x * fov) / z + width * (mobile ? 0.54 : 0.52)
-          const sy = (y * fov) / z + height * (mobile ? 0.86 : 0.82)
-          if (sx >= -10 && sx <= width + 10 && sy >= -10 && sy <= height + 10) {
+          const sx = (x * fov) / z + cx
+          const sy = (y * fov) / z + cy
+          // Clear bottom-left space so particles never overlap the scroll-down hint or hero text
+          if (sx >= leftSafe && sx <= width + 10 && sy >= -10 && sy <= height + 10) {
             const size = Math.max(1, (1 - v * 0.55) * sizeBase)
             context.rect(sx - size / 2, sy - size / 2, size, size)
           }
@@ -112,16 +117,14 @@ export function TacoPixelBackground() {
       }
 
       // 2. Three 3D spherical particle clouds orbiting with true depth and mutual occlusion
-      const revolution = time * TAU / 100
-      const orbit = width * (mobile ? 0.15 : 0.095)
+      const revolution = time * TAU / 120
+      const orbit = width * (mobile ? 0.11 : 0.075)
       const camera = orbit * 5
       for (const sphere of spheres) {
         const angle = sphere.phase + revolution
         sphere.x = Math.cos(angle) * orbit
-        // A circular orbit inclined 72 degrees: its shallow screen projection
-        // creates crossings while depth separates the passing spheres.
-        sphere.y = Math.sin(angle) * orbit * 0.3090169944
-        sphere.z = Math.sin(angle) * orbit * 0.9510565163
+        sphere.y = Math.sin(angle) * orbit * 0.28
+        sphere.z = Math.sin(angle) * orbit * 0.85
       }
       spheres.sort((a, b) => a.z - b.z)
       for (const sphere of spheres) {
