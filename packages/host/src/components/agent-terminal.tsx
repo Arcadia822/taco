@@ -18,6 +18,7 @@ export interface AgentTerminalLabels {
   moreHits: string
   /** One added line from the data-model.mmd diff. */
   diffLine: string
+  checkpointHit?: string
   summary: string
   replay: string
 }
@@ -81,6 +82,10 @@ export function AgentTerminal({ run, animate, done, tacoFile, labels, onDone, on
       </AnimatedSpan>
       <AnimatedSpan delay={animate ? 600 : 0} className="agent-tool">
         <span><b>• Resolved</b> comment on spec.md:5</span>
+      </AnimatedSpan>
+      <AnimatedSpan delay={animate ? 600 : 0} className="agent-tool">
+        <span><b>• Checkpoint</b> architecture <span className="agent-add">(data-model.mmd → complete)</span></span>
+        {labels.checkpointHit ? <span className="agent-dim">  └ {labels.checkpointHit}</span> : null}
       </AnimatedSpan>
       <AnimatedSpan delay={animate ? 700 : 0} className="agent-tool">
         <span><b>• Ran</b> taco validate {tacoFile}</span>

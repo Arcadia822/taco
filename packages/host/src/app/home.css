@@ -718,3 +718,205 @@ body {
   cursor: pointer;
 }
 .agent-input__replay:hover { color: #fff; }
+
+/* ================= CHECKPOINTS SECTION STYLES ================= */
+.cp-feature-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+}
+.cp-feature-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.cp-feature-item__bullet {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3ecf8e;
+  margin-top: 8px;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px rgba(62, 207, 142, 0.6);
+}
+.cp-feature-item__title {
+  display: block;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.cp-feature-item__desc {
+  display: block;
+  color: #a1a1aa;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.cp-card {
+  background: #09090b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7);
+}
+.cp-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 16px;
+  font-family: var(--mono);
+}
+.cp-card__badge-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.cp-card__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(62, 207, 142, 0.12);
+  border: 1px solid rgba(62, 207, 142, 0.3);
+  color: #3ecf8e;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+.cp-card__template {
+  color: #d4d4d8;
+  font-size: 13px;
+  font-weight: 500;
+}
+.cp-card__status-summary {
+  color: #71717a;
+  font-size: 12px;
+}
+
+.cp-graph-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  width: 100%;
+}
+.cp-node {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 14px 16px;
+  box-sizing: border-box;
+  transition: border-color 200ms ease, background 200ms ease;
+}
+.cp-node.is-frontier {
+  border-color: rgba(62, 207, 142, 0.4);
+  background: rgba(62, 207, 142, 0.03);
+}
+.cp-node__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-family: var(--mono);
+}
+.cp-node__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.cp-node--freeze .cp-node__dot {
+  background: #38bdf8;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+}
+.cp-node--complete .cp-node__dot {
+  background: #3ecf8e;
+  box-shadow: 0 0 8px rgba(62, 207, 142, 0.6);
+}
+.cp-node--todo .cp-node__dot {
+  background: #71717a;
+}
+.cp-node__title {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+.cp-node__status {
+  margin-left: auto;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.cp-node--freeze .cp-node__status { color: #38bdf8; }
+.cp-node--complete .cp-node__status { color: #3ecf8e; }
+.cp-node--todo .cp-node__status { color: #71717a; }
+
+.cp-node__frontier-tag {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  background: #3ecf8e;
+  color: #000;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 6px;
+}
+
+.cp-node__docs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cp-doc-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: #a1a1aa;
+}
+.cp-doc-item__icon {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+}
+.cp-doc-item__icon--freeze {
+  background: #38bdf8;
+  border-color: #38bdf8;
+}
+.cp-doc-item__icon--complete {
+  background: #3ecf8e;
+  border-color: #3ecf8e;
+}
+.cp-doc-item__icon--todo {
+  background: transparent;
+  border-color: #71717a;
+}
+.cp-doc-item__path {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cp-edge-down {
+  height: 22px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.cp-edge-line {
+  width: 1.5px;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.2);
+}
+.cp-edge-line--dashed {
+  background: transparent;
+  border-left: 1.5px dashed rgba(255, 255, 255, 0.2);
+}
