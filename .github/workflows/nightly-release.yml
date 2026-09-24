@@ -1,0 +1,133 @@
+name: Nightly Auto Release
+
+on:
+  schedule:
+    # 每天 UTC 12:00（即北京时间 20:00）自动执行
+    - cron: '0 12 * * *'
+  # 支持在 GitHub Actions 页面手动点击触发进行测试或立即执行
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (仅检测变动，不实际提交、打 Tag 和发版)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: nightly-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  check-and-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          # 使用 RELEASE_PAT 推送标签可正常触发下游的 release-cli 和 deploy-tacobin 工作流
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure Git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Inspect changes across components
+        id: check
+        run: |
+          node skills/taco-release/scripts/check-changes.mjs --json > /tmp/report.json
+          cat /tmp/report.json
+
+          echo "taco_has_changes=$(jq -r '.components[] | select(.name=="taco") | .hasChanges' /tmp/report.json)" >> "$GITHUB_OUTPUT"
+          echo "cli_has_changes=$(jq -r '.components[] | select(.name=="taco-cli") | .hasChanges' /tmp/report.json)" >> "$GITHUB_OUTPUT"
+          echo "host_has_changes=$(jq -r '.components[] | select(.name=="tacobin") | .hasChanges' /tmp/report.json)" >> "$GITHUB_OUTPUT"
+
+          # 写入 GitHub Actions 页面执行概要
+          echo "### 🌮 Taco 多组件变动检查结果" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/report.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      # ----------------------------------------------------
+      # 1. 发布 taco-cli (如有变动)
+      # ----------------------------------------------------
+      - name: Release taco-cli
+        if: steps.check.outputs.cli_has_changes == 'true' && (github.event.inputs.dry_run != 'true')
+        run: |
+          NEW_VER=$(jq -r '.components[] | select(.name=="taco-cli") | .recommendedVersion' /tmp/report.json)
+          echo "Releasing taco-cli v$NEW_VER ..."
+          npm version "$NEW_VER" --workspace=@tacobin/cli --no-git-tag-version
+          git commit -am "chore(release): taco-cli v$NEW_VER"
+          git tag -a "taco-cli-v$NEW_VER" -m "taco-cli-v$NEW_VER"
+          git push origin main
+          git push origin "taco-cli-v$NEW_VER"
+          echo "✅ Published tag taco-cli-v$NEW_VER (Triggered .github/workflows/release-cli.yml)" >> "$GITHUB_STEP_SUMMARY"
+
+      # ----------------------------------------------------
+      # 2. 发布 tacobin (网页端 / 如有变动)
+      # ----------------------------------------------------
+      - name: Release tacobin
+        if: steps.check.outputs.host_has_changes == 'true' && (github.event.inputs.dry_run != 'true')
+        run: |
+          NEW_VER=$(jq -r '.components[] | select(.name=="tacobin") | .recommendedVersion' /tmp/report.json)
+          echo "Releasing tacobin v$NEW_VER ..."
+          npm version "$NEW_VER" --workspace=packages/host --no-git-tag-version
+          git commit -am "chore(release): tacobin-v$NEW_VER"
+          git tag -a "tacobin-v$NEW_VER" -m "tacobin-v$NEW_VER"
+          git push origin main
+          git push origin "tacobin-v$NEW_VER"
+          echo "✅ Published tag tacobin-v$NEW_VER (Triggered .github/workflows/deploy-tacobin.yml)" >> "$GITHUB_STEP_SUMMARY"
+
+      # ----------------------------------------------------
+      # 3. 发布 taco 本体 (核心规范、单文件包与模板镜像)
+      # ----------------------------------------------------
+      - name: Release taco core
+        if: steps.check.outputs.taco_has_changes == 'true' && (github.event.inputs.dry_run != 'true')
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+        run: |
+          NEW_VER=$(jq -r '.components[] | select(.name=="taco") | .recommendedVersion' /tmp/report.json)
+          LAST_TAG=$(jq -r '.components[] | select(.name=="taco") | .latestTag' /tmp/report.json)
+          echo "Releasing taco v$NEW_VER (previous: $LAST_TAG) ..."
+
+          # 1. 更新版本声明与 Changelog
+          npm version "$NEW_VER" --no-git-tag-version
+          node skills/taco-release/scripts/generate-release-notes.mjs \
+            --from "$LAST_TAG" \
+            --version "$NEW_VER" \
+            --update-changelog \
+            --outfile /tmp/release-notes.md
+
+          # 2. 执行完整验证与构建（包含测试与产物重新构建同步）
+          NODE_OPTIONS="${NODE_OPTIONS:-} --no-experimental-webstorage" npm run check
+
+          # 3. 提交变更与打 Tag
+          git add package.json extensions/taco/extension.yml CHANGELOG.md extensions/taco/CHANGELOG.md dist-single/ extensions/taco/assets/ skills/taco/
+          git commit -m "chore(release): taco v$NEW_VER"
+          git tag -a "v$NEW_VER" -m "Taco v$NEW_VER"
+
+          # 4. 推送到远程仓库
+          git push origin main
+          git push origin "v$NEW_VER"
+
+          # 5. 发布 GitHub Release
+          gh release create "v$NEW_VER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Taco v$NEW_VER" \
+            --notes-file /tmp/release-notes.md
+
+          echo "✅ Published Taco v$NEW_VER GitHub Release" >> "$GITHUB_STEP_SUMMARY"
