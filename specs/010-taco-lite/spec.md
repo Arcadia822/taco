@@ -15,7 +15,7 @@ Offer a smaller initial `.taco.html` for connected review without removing editi
 
 ### Connected review
 
-A reviewer opens a Lite Taco, reads documents, selects text to comment, and edits Markdown. The rich editor's large dependencies load on demand from version-pinned external modules rather than being embedded in the initial HTML. The resulting edits and comments follow the same save and Handoff contracts as the complete shell. Other supported file types retain their current viewing and editing behavior.
+A reviewer opens a Lite Taco, reads documents, selects text to comment, and edits Markdown. On opening, Lite inspects the embedded bundle's file types and starts loading the corresponding external libraries **during initial loading**, in parallel where independent, before a matching document is first rendered; it must not defer the first dependency request until file selection/rendering. Do not fetch libraries for file types absent from the bundle. A bounded failure path keeps the shell responsive if a provider stalls. The resulting edits and comments follow the same save and Handoff contracts as the complete shell. Other supported file types retain their current viewing and editing behavior.
 
 ### Import failure or offline Lite review
 
@@ -37,13 +37,13 @@ Share-related functionality is removed from **both** complete and Lite packs; it
 
 - Build and publish distinct complete and Lite shell artifacts. An `editable: false` configuration does not qualify as Lite: today's read-only Markdown still instantiates Tiptap.
 - Use public ESM CDNs for the external libraries; do not require Taco to host, publish, or operate a dependency artifact or CDN. Pin exact package versions and choose browser-importable URLs whose transitive imports resolve through that provider. Validate the whole import graph, styles, CORS, and security policy from an actual `file:`-opened Taco.
-- A fallback public provider may generate a different module graph; validate each provider independently for the same pinned library versions and supported behavior. On a provider failure, retry the complete editor load through another verified provider rather than mixing modules from both; if neither works, use editable Markdown source. Measure latency and availability in mainland China and overseas before claiming regional performance.
+- A fallback public provider may generate a different module graph; validate each provider independently for the same pinned library versions and supported behavior. On a provider failure, retry the complete editor load through another verified provider rather than mixing modules from both; if neither works, use editable Markdown source. The user-facing target is a fast open in both mainland China and the United States; measure actual Taco open-to-usable time and import success in both locations, rather than optimizing a CDN location or promising a particular provider.
 - The compressed, empty Lite shell target is **under 100 KiB**. Report initial HTML bytes separately from total dynamically transferred bytes, and measure both complete and Lite builds.
 - Only the bundled `#taco-document` data and escaped `<title>` may vary when agents package either shell. Existing `docId`, comments, navigation, canonical HTML `file:` URLs, and saved review state must survive refresh.
 
 ## Verification
 
-- Exercise connected Lite rich editing, text selection/comment anchoring, save, and Handoff in an actual browser.
+- Exercise connected Lite rich editing, text selection/comment anchoring, save, and Handoff in an actual browser. Verify boot starts only the imports required by the embedded file types before the corresponding first render; opening a later file of a type already present in the bundle must not start its first dependency fetch.
 - Block external imports and exercise editable Markdown fallback, comments, save, Handoff, and read-only permissions in an actual browser; verify no user input is lost during failure.
 - Exercise complete-shell rich editing offline. Check that neither pack exposes Share entry points or initializes Share-only services, while local review behavior remains intact.
-- Check the empty Lite size and ensure its JS payload does not contain the large editor/collaboration libraries. Record full import-graph bytes and regional measurements before promising cross-region performance.
+- Check the empty Lite size and ensure its JS payload does not contain the large editor/collaboration libraries. Record full import-graph bytes, failed-provider behavior, and open-to-usable time from mainland China and the United States before claiming that either region opens quickly.
