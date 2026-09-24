@@ -36,8 +36,8 @@ Share-related functionality is removed from **both** complete and Lite packs; it
 ## Delivery constraints
 
 - Build and publish distinct complete and Lite shell artifacts. An `editable: false` configuration does not qualify as Lite: today's read-only Markdown still instantiates Tiptap.
-- Pin the external dependency graph, not only its first URL. Validate browser ESM imports, transitive modules, styles, CORS, and security policy from actual `file:`-opened Taco files before selecting a CDN approach.
-- Prefer a project-controlled, content-versioned module artifact with regional delivery over switching between unrelated npm CDN transformations. Chinese-mainland and overseas latency/availability must be measured for the entire import graph; no provider is assumed to work well everywhere. A second origin must serve compatible bytes for the same version.
+- Use public ESM CDNs for the external libraries; do not require Taco to host, publish, or operate a dependency artifact or CDN. Pin exact package versions and choose browser-importable URLs whose transitive imports resolve through that provider. Validate the whole import graph, styles, CORS, and security policy from an actual `file:`-opened Taco.
+- A fallback public provider may generate a different module graph; validate each provider independently for the same pinned library versions and supported behavior. On a provider failure, retry the complete editor load through another verified provider rather than mixing modules from both; if neither works, use editable Markdown source. Measure latency and availability in mainland China and overseas before claiming regional performance.
 - The compressed, empty Lite shell target is **under 100 KiB**. Report initial HTML bytes separately from total dynamically transferred bytes, and measure both complete and Lite builds.
 - Only the bundled `#taco-document` data and escaped `<title>` may vary when agents package either shell. Existing `docId`, comments, navigation, canonical HTML `file:` URLs, and saved review state must survive refresh.
 
