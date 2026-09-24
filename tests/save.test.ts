@@ -23,6 +23,7 @@ const bundle: TacoBundle = {
   files: [
     { path: 'specs/001-save/spec.md', mediaType: 'text/markdown', content: '# Exact\n\nDo not rewrite.  ' },
     { path: 'specs/001-save/contracts/api.md', mediaType: 'text/markdown', content: '# API\n' },
+    { path: 'specs/001-save/docs/_dir.yaml', mediaType: 'application/yaml', content: 'category: Architecture\n' },
   ],
 }
 
@@ -123,7 +124,13 @@ describe('single-file save serializer', () => {
     const showSaveFilePicker = vi.fn()
     vi.stubGlobal('showSaveFilePicker', showSaveFilePicker)
 
-    await expect(saveAndUnpack(bundle)).resolves.toBe('saved-and-unpacked')
+    await expect(saveAndUnpack({
+      ...bundle,
+      files: [
+        ...bundle.files,
+        { path: 'specs/001-save/.DS_Store', mediaType: 'application/octet-stream', content: 'finder-metadata' },
+      ],
+    })).resolves.toBe('saved-and-unpacked')
     expect(showDirectoryPicker).toHaveBeenCalledWith(expect.objectContaining({ mode: 'readwrite' }))
     expect(writes.get('Save_test.taco.html')?.content).toContain('"format": "taco/files"')
     expect(writes.get('spec.md')).toEqual({
@@ -134,6 +141,11 @@ describe('single-file save serializer', () => {
       content: '# API\n',
       mediaType: 'text/markdown',
     })
+    expect(writes.get('docs/_dir.yaml')).toEqual({
+      content: 'category: Architecture\n',
+      mediaType: 'application/yaml',
+    })
+    expect(writes.has('.DS_Store')).toBe(false)
     expect([...writes.keys()]).not.toContain('specs/001-save/spec.md')
 
     await expect(saveFile(bundle)).resolves.toBe('saved')

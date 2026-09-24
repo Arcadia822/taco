@@ -5,7 +5,6 @@ import { openCheckpointStatusMenu, statusLabel, type CheckpointLabels } from './
 import { defaultFile, fileName, relativePath, type NavigationManifest, type TacoBundle, type TacoFile } from './model.ts'
 import { createControlButton, createFileAttribute, createFileTypeIcon, createStatusIcon, el, showConfirmDialog, showPromptDialog, sidebarRow, svgIcon } from './ui-primitives.ts'
 import { resolveDocumentNavigation } from './navigation.ts'
-import { listCategories } from './category.ts'
 import {
   createInitialManifest,
   moveFileToGroup,
@@ -40,14 +39,6 @@ export interface FileNavigationLabels {
   deleteFileConfirm?: string
   confirm?: string
   cancel?: string
-  manageCategories?: string
-  categoryList?: string
-  renameCategory?: string
-  deleteCategory?: string
-  deleteCategoryConfirm?: string
-  renameCategoryPrompt?: string
-  affectedFiles?: (count: number) => string
-  noCustomCategories?: string
 }
 
 export interface FileNavigationOptions {
@@ -70,9 +61,6 @@ export interface FileNavigationOptions {
   onCreateFile?: (targetGroupId: string | null) => void
   onRenameFile?: (file: TacoFile) => void
   onDeleteFile?: (file: TacoFile) => void
-  onManageCategories?: () => void
-  onRenameCategory?: (oldName: string, newName: string) => Promise<void> | void
-  onDeleteCategory?: (categoryName: string) => Promise<void> | void
 }
 
 const buildTree = (bundle: TacoBundle, files: TacoFile[], categoryDir?: string): DirNode => {
@@ -131,16 +119,6 @@ export class FileNavigation {
       labelClass: 'brand-name',
     })
 
-    if (options.editable && options.onManageCategories) {
-      const manageBtn = createControlButton(
-        'tag',
-        options.labels.manageCategories ?? 'Manage categories',
-        () => { this.options.onManageCategories?.() },
-        'sidebar-action-btn manage-categories-btn',
-      )
-      manageBtn.title = options.labels.manageCategories ?? 'Manage categories'
-      brand.append(manageBtn)
-    }
 
     this.toggle = createControlButton(
       'panel-left',
@@ -286,7 +264,7 @@ export class FileNavigation {
       summary.append(head, spacer)
       if (this.options.editable && (this.options.onUpdateNavigation || this.options.onCreateFile)) {
         const actions = el('span', 'group-actions')
-        if (this.options.onUpdateNavigation) {
+        if (this.options.onUpdateNavigation && this.options.bundle.navigation?.groups.some(({ id }) => id === group.id) && !group.id.startsWith('category-')) {
           const menuBtn = createControlButton(
             'more-horizontal',
             'Actions',
@@ -580,62 +558,29 @@ export class FileNavigation {
     const popover = el('div', 'topbar-popover navigation-popover')
     popover.setAttribute('role', 'menu')
 
-    const isCategory = group.id.startsWith('category-') ||
-      listCategories(this.options.bundle).some((c) => c.name === group.title)
+    const renameBtn = sidebarRow('button', {
+      className: 'popover-action',
+      leading: svgIcon('edit'),
+      label: this.options.labels.renameGroup ?? 'Rename group',
+    }) as HTMLButtonElement
+    renameBtn.type = 'button'
+    renameBtn.addEventListener('click', () => {
+      this.closePopover()
+      void this.promptRenameGroup(group.id, group.title)
+    })
 
-    if (isCategory && (this.options.onRenameCategory || this.options.onDeleteCategory)) {
-      const categoryName = group.title
-      if (this.options.onRenameCategory) {
-        const renameBtn = sidebarRow('button', {
-          className: 'popover-action',
-          leading: svgIcon('edit'),
-          label: this.options.labels.renameCategory ?? 'Rename category',
-        }) as HTMLButtonElement
-        renameBtn.type = 'button'
-        renameBtn.addEventListener('click', () => {
-          this.closePopover()
-          void this.promptRenameCategory(categoryName)
-        })
-        popover.append(renameBtn)
-      }
-      if (this.options.onDeleteCategory) {
-        const deleteBtn = sidebarRow('button', {
-          className: 'popover-action is-destructive',
-          leading: svgIcon('trash'),
-          label: this.options.labels.deleteCategory ?? 'Delete category',
-        }) as HTMLButtonElement
-        deleteBtn.type = 'button'
-        deleteBtn.addEventListener('click', () => {
-          this.closePopover()
-          void this.handleDeleteCategory(categoryName)
-        })
-        popover.append(deleteBtn)
-      }
-    } else {
-      const renameBtn = sidebarRow('button', {
-        className: 'popover-action',
-        leading: svgIcon('edit'),
-        label: this.options.labels.renameGroup ?? 'Rename group',
-      }) as HTMLButtonElement
-      renameBtn.type = 'button'
-      renameBtn.addEventListener('click', () => {
-        this.closePopover()
-        void this.promptRenameGroup(group.id, group.title)
-      })
+    const deleteBtn = sidebarRow('button', {
+      className: 'popover-action is-destructive',
+      leading: svgIcon('trash'),
+      label: this.options.labels.deleteGroup ?? 'Delete group',
+    }) as HTMLButtonElement
+    deleteBtn.type = 'button'
+    deleteBtn.addEventListener('click', () => {
+      this.closePopover()
+      void this.handleDeleteGroup(group.id)
+    })
 
-      const deleteBtn = sidebarRow('button', {
-        className: 'popover-action is-destructive',
-        leading: svgIcon('trash'),
-        label: this.options.labels.deleteGroup ?? 'Delete group',
-      }) as HTMLButtonElement
-      deleteBtn.type = 'button'
-      deleteBtn.addEventListener('click', () => {
-        this.closePopover()
-        void this.handleDeleteGroup(group.id)
-      })
-
-      popover.append(renameBtn, deleteBtn)
-    }
+    popover.append(renameBtn, deleteBtn)
     this.positionPopover(popover, anchor)
   }
 
@@ -730,33 +675,6 @@ export class FileNavigation {
     this.options.onUpdateNavigation?.(next)
   }
 
-  private async promptRenameCategory(oldName: string): Promise<void> {
-    const promptText = this.options.labels.renameCategoryPrompt ?? 'New category name:'
-    const newName = await showPromptDialog({
-      title: this.options.labels.renameCategory ?? 'Rename category',
-      placeholder: promptText,
-      initialValue: oldName,
-      confirmLabel: this.options.labels.confirm ?? 'Confirm',
-      cancelLabel: this.options.labels.cancel ?? 'Cancel',
-    })
-    const trimmed = newName?.trim()
-    if (!trimmed || trimmed === oldName) return
-    await this.options.onRenameCategory?.(oldName, trimmed)
-  }
-
-  private async handleDeleteCategory(categoryName: string): Promise<void> {
-    const confirmText = this.options.labels.deleteCategoryConfirm ??
-      'Delete this category? Its files will be reset to Unclassified. Files will not be deleted.'
-    const confirmed = await showConfirmDialog({
-      title: this.options.labels.deleteCategory ?? 'Delete category',
-      messages: [confirmText],
-      destructive: true,
-      confirmLabel: this.options.labels.deleteCategory ?? 'Delete',
-      cancelLabel: this.options.labels.cancel ?? 'Cancel',
-    })
-    if (!confirmed) return
-    await this.options.onDeleteCategory?.(categoryName)
-  }
 
   private handleMoveFile(filePath: string, targetGroupId: string | null): void {
     const current = createInitialManifest(this.options.bundle)

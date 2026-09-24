@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { FORMAT, type TacoBundle } from '../src/model.ts'
+import { FORMAT, parseBundle, type TacoBundle } from '../src/model.ts'
 import {
-  addCategory,
-  deleteCategory,
-  listCategories,
-  renameCategory,
   resolveFileCategory,
   resolvePathCategory,
   UNCLASSIFIED_CATEGORY,
@@ -110,6 +106,41 @@ describe('Category resolution and directory constraints', () => {
     const res = resolveFileCategory(bundle, modifiedFile)
     expect(res.category).toBe(UNCLASSIFIED_CATEGORY)
   })
+  it.each([
+    ['file:///Users/example/project/specs/sample/design%20notes.html', 'file:///Users/example/project/specs/sample/Guides/design%20notes.html'],
+    ['../specs/sample/design notes.html', '../specs/sample/Guides/design notes.html'],
+  ])('keeps the HTML source reference valid after a category move from %s', (sourceUrl, expectedUrl) => {
+    const bundle = createBundle([{ path: 'specs/sample/design notes.html', content: '<h1>Design</h1>' }])
+    bundle.files[0].mediaType = 'text/html'
+    bundle.files[0].sourceUrl = sourceUrl
+    expect(parseBundle(JSON.stringify(bundle)).ok).toBe(true)
+
+    updateFileCategory(bundle, bundle.files[0], 'Guides')
+    expect(bundle.files[0].sourceUrl).toBe(expectedUrl)
+    expect(parseBundle(JSON.stringify(bundle)).ok).toBe(true)
+  })
+
+  it('keeps comment threads on a file moved back to the root with a filename collision', () => {
+    const bundle = createBundle([
+      { path: 'specs/sample/docs/intro.md', content: '# Intro' },
+      { path: 'specs/sample/intro.md', content: '# Existing' },
+    ])
+    bundle.comments = [{
+      id: 'thread-1',
+      anchor: { path: 'specs/sample/docs/intro.md', position: { start: 0, end: 7 }, quote: { exact: '# Intro', prefix: '', suffix: '' } },
+      status: 'open',
+      messages: [{ id: 'message-1', author: 'Ada', body: 'Clarify', createdAt: '2026-09-24T00:00:00.000Z' }],
+      createdAt: '2026-09-24T00:00:00.000Z',
+      updatedAt: '2026-09-24T00:00:00.000Z',
+    }]
+    expect(parseBundle(JSON.stringify(bundle)).ok).toBe(true)
+
+    updateFileCategory(bundle, bundle.files[0], UNCLASSIFIED_CATEGORY)
+    expect(bundle.files[0].path).toBe('specs/sample/intro-1.md')
+    expect(bundle.comments[0].anchor.path).toBe(bundle.files[0].path)
+    expect(parseBundle(JSON.stringify(bundle)).ok).toBe(true)
+  })
+
 })
 
 describe('Checkpoint category precedence', () => {
@@ -155,187 +186,3 @@ describe('Checkpoint category precedence', () => {
   })
 })
 
-describe('Category management: listCategories, renameCategory, deleteCategory, addCategory', () => {
-  it('listCategories accurately identifies first-level directory categories and counts files', () => {
-    const bundle = createBundle([
-      { path: 'specs/sample/api/v1.md', content: '# API V1' },
-      { path: 'specs/sample/api/v2.md', content: '# API V2' },
-      { path: 'specs/sample/docs/intro.md', content: '# Intro' },
-      { path: 'specs/sample/README.md', content: '# Other' },
-    ])
-
-    const categories = listCategories(bundle)
-    expect(categories).toHaveLength(2)
-
-    const api = categories.find((c) => c.name === 'api')!
-    expect(api).toBeDefined()
-    expect(api.name).toBe('api')
-    expect(api.files.map((f) => f.path)).toEqual([
-      'specs/sample/api/v1.md',
-      'specs/sample/api/v2.md',
-    ])
-    expect(api.isCheckpointOverridden).toBe(false)
-
-    const docs = categories.find((c) => c.name === 'docs')!
-    expect(docs).toBeDefined()
-    expect(docs.files.map((f) => f.path)).toEqual([
-      'specs/sample/docs/intro.md',
-    ])
-    expect(docs.isCheckpointOverridden).toBe(false)
-  })
-
-  it('listCategories properly excludes checkpoint files and tracks isCheckpointOverridden', () => {
-    const bundle = createBundle([
-      { path: 'specs/sample/locked/item.md', content: '# Locked' },
-      { path: 'specs/sample/docs/owned.md', content: '# Owned' },
-      { path: 'specs/sample/docs/free.md', content: '# Free' },
-    ])
-    bundle.checkpoints = {
-      version: 1,
-      nodes: [{
-        id: 'review',
-        title: 'Review',
-        after: [],
-        documents: [
-          { path: 'specs/sample/locked/item.md' },
-          { path: 'specs/sample/docs/owned.md' },
-        ],
-      }],
-      documents: [],
-    }
-
-    const categories = listCategories(bundle)
-    expect(categories).toHaveLength(3)
-    const locked = categories.find((c) => c.name === 'locked')!
-    expect(locked.files).toHaveLength(0)
-    expect(locked.isCheckpointOverridden).toBe(true)
-
-    const docs = categories.find((c) => c.name === 'docs')!
-    expect(docs.files.map((f) => f.path)).toEqual(['specs/sample/docs/free.md'])
-    expect(docs.isCheckpointOverridden).toBe(false)
-  })
-
-  it('renameCategory physically moves files to new directory and updates navigation manifest', () => {
-    const bundle = createBundle([
-      { path: 'specs/sample/OldGuides/step1.md', content: '# Step 1' },
-      { path: 'specs/sample/OldGuides/step2.md', content: '# Step 2' },
-    ])
-    bundle.navigation = {
-      version: 1,
-      groups: [
-        { id: 'category-OldGuides', title: 'OldGuides', paths: ['OldGuides/step1.md', 'OldGuides/step2.md'] },
-        { id: 'custom-other', title: 'Other', paths: [] },
-      ],
-    }
-
-    const { updatedBundle, modifiedFiles } = renameCategory(bundle, 'OldGuides', 'NewGuides')
-
-    // 验证物理路径已移至新目录
-    expect(updatedBundle.files.find((f) => f.path === 'specs/sample/NewGuides/step1.md')).toBeDefined()
-    expect(updatedBundle.files.find((f) => f.path === 'specs/sample/NewGuides/step2.md')).toBeDefined()
-    expect(updatedBundle.files.find((f) => f.path === 'specs/sample/OldGuides/step1.md')).toBeUndefined()
-
-    // 验证 modifiedFiles
-    expect(modifiedFiles.map((f) => f.path)).toEqual([
-      'specs/sample/NewGuides/step1.md',
-      'specs/sample/NewGuides/step2.md',
-    ])
-
-    // 验证导航 manifest 同步更新
-    expect(updatedBundle.navigation?.groups[0]).toEqual({
-      id: 'category-NewGuides',
-      title: 'NewGuides',
-      paths: ['NewGuides/step1.md', 'NewGuides/step2.md'],
-    })
-
-    // 验证重新解析文件类别均已变为 NewGuides
-    expect(resolveFileCategory(updatedBundle, updatedBundle.files[0]).category).toBe('NewGuides')
-  })
-
-  it('renameCategory validates inputs correctly', () => {
-    const bundle = createBundle([
-      { path: 'specs/sample/Test/file.md', content: '# Content' },
-    ])
-
-    expect(() => renameCategory(bundle, 'Test', '')).toThrow(/empty/)
-    expect(() => renameCategory(bundle, 'Test', '   ')).toThrow(/empty/)
-    expect(() => renameCategory(bundle, 'Test', UNCLASSIFIED_CATEGORY)).toThrow(/未分类/)
-
-    const noopResult = renameCategory(bundle, 'Test', 'Test')
-    expect(noopResult.modifiedFiles).toHaveLength(0)
-  })
-
-  it('deleteCategory moves files in category directory back to root (unclassified) without deleting files', () => {
-    const bundle = createBundle([
-      { path: 'specs/sample/Docs/page.md', content: '# Page' },
-      { path: 'specs/sample/Docs/sub/deep.md', content: '# Deep' },
-    ])
-    bundle.navigation = {
-      version: 1,
-      groups: [
-        { id: 'category-Docs', title: 'Docs', paths: ['Docs/page.md'] },
-        { id: 'category-Other', title: 'Other', paths: [] },
-      ],
-    }
-
-    const { updatedBundle, modifiedFiles } = deleteCategory(bundle, 'Docs')
-
-    // 1. 验证文件被安全移回根目录，没有删除文档
-    expect(updatedBundle.files.find((f) => f.path === 'specs/sample/page.md')).toBeDefined()
-    expect(updatedBundle.files.find((f) => f.path === 'specs/sample/deep.md')).toBeDefined()
-
-    // 2. 验证 modifiedFiles
-    expect(modifiedFiles.map((f) => f.path)).toEqual([
-      'specs/sample/page.md',
-      'specs/sample/deep.md',
-    ])
-
-    // 3. 验证导航状态：对应 Docs 分组被移除
-    expect(updatedBundle.navigation?.groups.map((g) => g.title)).toEqual(['Other'])
-
-    // 4. 验证所有原分类文件重新解析均变为 未分类
-    expect(resolveFileCategory(updatedBundle, updatedBundle.files[0]).category).toBe(UNCLASSIFIED_CATEGORY)
-    expect(resolveFileCategory(updatedBundle, updatedBundle.files[1]).category).toBe(UNCLASSIFIED_CATEGORY)
-  })
-
-  it('deleteCategory validates inputs correctly', () => {
-    const bundle = createBundle([
-      { path: 'specs/sample/Test/file.md', content: '# Content' },
-    ])
-
-    expect(() => deleteCategory(bundle, '')).toThrow(/Invalid/)
-    expect(() => deleteCategory(bundle, '  ')).toThrow(/Invalid/)
-    expect(() => deleteCategory(bundle, UNCLASSIFIED_CATEGORY)).toThrow(/Invalid/)
-  })
-
-  it('addCategory records category in navigation manifest without creating dummy _dir.yaml files', () => {
-    const bundle = createBundle([
-      { path: 'specs/sample/README.md', content: '# Readme' },
-    ])
-
-    const { updatedBundle } = addCategory(bundle, 'Architecture')
-
-    // 1. 验证没有创建任何 _dir.yaml 文件
-    expect(updatedBundle.files.some((f) => f.path.includes('_dir.yaml'))).toBe(false)
-
-    // 2. 验证 listCategories 能够在 model 中直接查到该分类
-    const categories = listCategories(updatedBundle)
-    const arch = categories.find((c) => c.name === 'Architecture')
-    expect(arch).toBeDefined()
-    expect(arch?.files).toHaveLength(0)
-
-    // 3. 验证 navigation groups 同步添加
-    expect(updatedBundle.navigation?.groups.some((g) => g.title === 'Architecture')).toBe(true)
-  })
-
-  it('addCategory validates inputs and rejects duplicates', () => {
-    const bundle = createBundle([
-      { path: 'specs/sample/Existing/file.md', content: '# Existing\n' },
-    ])
-
-    expect(() => addCategory(bundle, '')).toThrow(/Invalid/)
-    expect(() => addCategory(bundle, '   ')).toThrow(/Invalid/)
-    expect(() => addCategory(bundle, UNCLASSIFIED_CATEGORY)).toThrow(/Invalid/)
-    expect(() => addCategory(bundle, 'Existing')).toThrow(/already exists/)
-  })
-})

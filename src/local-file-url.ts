@@ -36,3 +36,13 @@ export const localFileUrl = (
   catch { return null }
   return pathname.endsWith(`/${expectedPath}`) ? resolved.href : null
 }
+
+export const relocateLocalFileReference = (value: string, oldPath: string, newPath: string): string => {
+  if (!localFileReference(value, oldPath)) throw new Error(`Invalid local file reference: ${oldPath}`)
+  if (portableLocalFileReference(value, oldPath)) return `../${newPath}`
+
+  const relative = `${'../'.repeat(oldPath.split('/').length - 1)}${newPath.split('/').map(encodeURIComponent).join('/')}`
+  const relocated = new URL(relative, value).href
+  if (!localFileReference(relocated, newPath)) throw new Error(`Invalid relocated file reference: ${newPath}`)
+  return relocated
+}

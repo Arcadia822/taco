@@ -331,7 +331,7 @@ export const fileName = (path: string): string => path.split('/').at(-1) ?? path
 
 export const isInternalFile = (path: string): boolean => {
   const norm = path.replace(/\\/g, '/')
-  return norm.endsWith('/_dir.yaml') || norm === '_dir.yaml' || norm.endsWith('/.DS_Store')
+  return norm.endsWith('/.DS_Store')
 }
 export type FileKind = 'markdown' | 'html' | 'yaml' | 'json' | 'mermaid' | 'text'
 

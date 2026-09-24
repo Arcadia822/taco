@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultFile, fileKind, parseBundle, type TacoBundle } from '../src/model.ts'
+import { defaultFile, fileKind, isInternalFile, parseBundle, type TacoBundle } from '../src/model.ts'
 
 const bundle = (): TacoBundle => ({
   format: 'taco/files',
@@ -56,6 +56,29 @@ describe('file-first Taco bundle', () => {
   it('classifies formats without parsing their contents', () => {
     const files = bundle().files
     expect(files.map(fileKind)).toEqual(['markdown', 'markdown', 'html', 'yaml', 'json', 'mermaid'])
+  })
+
+  it('treats _dir.yaml as an ordinary visible YAML file while keeping .DS_Store internal', () => {
+    const dirYaml = {
+      path: 'specs/001-test/docs/_dir.yaml',
+      mediaType: 'application/yaml',
+      content: 'category: Architecture\n',
+    }
+    const dsStore = {
+      path: 'specs/001-test/.DS_Store',
+      mediaType: 'application/octet-stream',
+      content: '',
+    }
+    expect(isInternalFile(dirYaml.path)).toBe(false)
+    expect(isInternalFile('_dir.yaml')).toBe(false)
+    expect(fileKind(dirYaml)).toBe('yaml')
+    expect(isInternalFile(dsStore.path)).toBe(true)
+
+    const onlyYamlAndDsStore: TacoBundle = {
+      ...bundle(),
+      files: [dsStore, dirYaml],
+    }
+    expect(defaultFile(onlyYamlAndDsStore)).toEqual(dirYaml)
   })
 
   it('rejects path traversal and files outside the declared root', () => {

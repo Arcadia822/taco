@@ -39,7 +39,7 @@ export function getFileCurrentGroup(
 
   return {
     groupId: null,
-    groupTitle: ungroupedTitle ?? 'Ungrouped',
+    groupTitle: ungroupedTitle ?? 'Unassigned',
   }
 }
 
@@ -63,14 +63,12 @@ export interface OpenGroupSelectorOptions {
   currentGroupId: string | null
   labels?: {
     ungrouped: string
-    manageCategories?: string
   }
   onSelectGroup: (groupId: string | null) => void
-  onManageCategories?: () => void
 }
 
 /**
- * 弹出分组下拉选择菜单（包含已有分组列表 + 未分组 + 新建分组选项）
+ * 弹出已有分组与未分配的选择菜单。
  */
 export function openGroupSelectorPopover(options: OpenGroupSelectorOptions): void {
   document.querySelector('.group-selector-popover')?.remove()
@@ -96,11 +94,11 @@ export function openGroupSelectorPopover(options: OpenGroupSelectorOptions): voi
     popover.append(row)
   }
 
-  // 2. 未分组（移出所有分组）
+  // 2. 未分配（移出所有分组）
   const unassignedRow = sidebarRow('button', {
     className: `popover-action${options.currentGroupId === null ? ' is-active' : ''}`,
     leading: options.currentGroupId === null ? svgIcon('check') : undefined,
-    label: options.labels?.ungrouped ?? 'Ungrouped',
+    label: options.labels?.ungrouped ?? 'Unassigned',
   }) as HTMLButtonElement
   unassignedRow.type = 'button'
   unassignedRow.addEventListener('click', () => {
@@ -108,24 +106,6 @@ export function openGroupSelectorPopover(options: OpenGroupSelectorOptions): voi
     options.onSelectGroup(null)
   })
   popover.append(unassignedRow)
-
-  // 3. 管理分类
-  if (options.onManageCategories) {
-    const sep = el('div', 'share-separator')
-    popover.append(sep)
-
-    const manageCategoriesRow = sidebarRow('button', {
-      className: 'popover-action',
-      leading: svgIcon('tag'),
-      label: options.labels?.manageCategories ?? 'Manage categories',
-    }) as HTMLButtonElement
-    manageCategoriesRow.type = 'button'
-    manageCategoriesRow.addEventListener('click', () => {
-      popover.remove()
-      options.onManageCategories?.()
-    })
-    popover.append(manageCategoriesRow)
-  }
 
   // 定位 popover
   document.body.append(popover)

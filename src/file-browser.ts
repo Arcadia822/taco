@@ -56,8 +56,7 @@ import { hasCollabSecrets } from './security.ts'
 import { localFileUrl } from './local-file-url.ts'
 import { frontmatterTitle, parseFrontmatter } from './frontmatter.ts'
 import { setEditorFrontmatterProperty } from './tiptap-document-properties.ts'
-import { addCategory, deleteCategory, findCategoryDir, renameCategory, resolveFileCategory, slugifyCategoryDir, updateFileCategory, UNCLASSIFIED_CATEGORY } from './category.ts'
-import { showCategoryManagerDialog } from './category-manager-dialog.ts'
+import { findCategoryDir, resolveFileCategory, slugifyCategoryDir, updateFileCategory, UNCLASSIFIED_CATEGORY } from './category.ts'
 import { commentLineReference } from './comment-position.ts'
 import { createStructuredFileViewer, structuredFileLabels } from './structured-file-viewer.ts'
 import { createSegmentedControl } from './segmented-control.ts'
@@ -364,21 +363,10 @@ export class FileBrowser {
         newGroupPrompt: this.t.newGroupPrompt,
         newFilePrompt: this.t.newFilePrompt,
         renameFilePrompt: this.t.renameFilePrompt,
-        manageCategories: this.t.manageCategories,
-        categoryList: this.t.categoryList,
-        renameCategory: this.t.renameCategory,
-        deleteCategory: this.t.deleteCategory,
-        deleteCategoryConfirm: this.t.deleteCategoryConfirm,
-        renameCategoryPrompt: this.t.renameCategoryPrompt,
-        affectedFiles: this.t.affectedFiles,
-        noCustomCategories: this.t.noCustomCategories,
         confirm: this.t.save ?? 'Confirm',
         cancel: this.t.cancel ?? 'Cancel',
       },
       editable: bundleCanWrite(this.bundle),
-      onManageCategories: () => this.handleManageCategories(),
-      onRenameCategory: (oldName, newName) => this.handleRenameCategory(oldName, newName),
-      onDeleteCategory: (categoryName) => this.handleDeleteCategory(categoryName),
       onUpdateNavigation: (navigation) => {
         this.store.updateNavigation(navigation)
         this.fileNavigation?.refresh(this.selected)
@@ -1156,11 +1144,10 @@ export class FileBrowser {
       currentGroupId: groupInfo.groupId,
       labels: {
         ungrouped: this.t.ungrouped,
-        manageCategories: this.t.manageCategories,
       },
       onSelectGroup: (targetGroupId) => {
         if (!this.selected) return
-        this.store.commit({ kind: 'document' }, () => {
+        this.store.commit({ kind: 'all' }, () => {
           const targetGroup = getAvailableGroups(this.bundle).find((g) => g.id === targetGroupId)
           const targetCategory = targetGroup ? targetGroup.title : UNCLASSIFIED_CATEGORY
           updateFileCategory(this.bundle, this.selected!, targetCategory)
@@ -1170,9 +1157,6 @@ export class FileBrowser {
         })
         this.syncWorkspaceHeader()
         this.fileNavigation?.refresh(this.selected)
-      },
-      onManageCategories: () => {
-        this.handleManageCategories()
       },
     })
   }
@@ -1376,19 +1360,9 @@ export class FileBrowser {
 
   private openLanguageMenu(anchor: HTMLElement): void {
     const menu = this.openPopover(anchor, 'language-menu')
-    const langBadges: Record<string, string> = {
-      'zh-Hans': '简',
-      en: 'EN',
-      'zh-Hant': '繁',
-      ja: 'JA',
-      es: 'ES',
-      fr: 'FR',
-      de: 'DE',
-      it: 'IT',
-      pt: 'PT',
-    }
+    const langBadges: Record<Locale, string> = { 'zh-Hans': '简', en: 'EN' }
     for (const { code: locale, label } of LOCALE_CHOICES) {
-      const badge = el('span', 'lang-badge', langBadges[locale] || locale.slice(0, 2).toUpperCase())
+      const badge = el('span', 'lang-badge', langBadges[locale])
       const button = this.menuButton(label, () => {
         this.locale = locale
         storageSet('taco-locale', locale)
@@ -1740,60 +1714,6 @@ export class FileBrowser {
     this.fileNavigation?.refresh(this.selected)
   }
 
-  private handleManageCategories(): void {
-    void showCategoryManagerDialog({
-      bundle: this.bundle,
-      title: this.t.manageCategories ?? 'Manage categories',
-      closeLabel: this.t.close ?? 'Close',
-      renameLabel: this.t.renameCategory ?? 'Rename category',
-      deleteLabel: this.t.deleteCategory ?? 'Delete category',
-      deleteConfirm: this.t.deleteCategoryConfirm,
-      renamePrompt: this.t.renameCategoryPrompt,
-      affectedFiles: this.t.affectedFiles,
-      noCustomCategories: this.t.noCustomCategories,
-      addCategoryLabel: this.t.addCategory,
-      addCategoryPrompt: this.t.addCategoryPrompt,
-      confirmLabel: this.t.save ?? 'Confirm',
-      cancelLabel: this.t.cancel ?? 'Cancel',
-      onAddCategory: (catName) => this.handleAddCategory(catName),
-      onRenameCategory: (oldName, newName) => this.handleRenameCategory(oldName, newName),
-      onDeleteCategory: (categoryName) => this.handleDeleteCategory(categoryName),
-    })
-  }
-
-  private handleAddCategory(categoryName: string): void {
-    this.store.commit({ kind: 'document' }, () => {
-      addCategory(this.bundle, categoryName)
-    })
-    this.fileNavigation?.refresh(this.selected)
-    this.syncWorkspaceHeader()
-  }
-
-  private handleRenameCategory(oldName: string, newName: string): void {
-    let modifiedFiles: TacoFile[] = []
-    this.store.commit({ kind: 'document' }, () => {
-      const res = renameCategory(this.bundle, oldName, newName)
-      modifiedFiles = res.modifiedFiles
-    })
-    this.fileNavigation?.refresh(this.selected)
-    this.syncWorkspaceHeader()
-    if (this.selected && modifiedFiles.some((f) => f.path === this.selected?.path)) {
-      this.selectFile(this.selected)
-    }
-  }
-
-  private handleDeleteCategory(categoryName: string): void {
-    let modifiedFiles: TacoFile[] = []
-    this.store.commit({ kind: 'document' }, () => {
-      const res = deleteCategory(this.bundle, categoryName)
-      modifiedFiles = res.modifiedFiles
-    })
-    this.fileNavigation?.refresh(this.selected)
-    this.syncWorkspaceHeader()
-    if (this.selected && modifiedFiles.some((f) => f.path === this.selected?.path)) {
-      this.selectFile(this.selected)
-    }
-  }
 
 
 

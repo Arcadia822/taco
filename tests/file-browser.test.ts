@@ -4,7 +4,7 @@ import { FileBrowser } from '../src/file-browser.ts'
 import { configureApp } from '../src/kernel/app.ts'
 import { capturePristine } from '../src/kernel/save.ts'
 import { extractMermaidThemeFromCode, MermaidRuntime, type MermaidApi } from '../src/mermaid.ts'
-import type { TacoBundle, TacoTextAnchor } from '../src/model.ts'
+import { parseBundle, type TacoBundle, type TacoTextAnchor } from '../src/model.ts'
 
 let mermaidLoader: ReturnType<typeof vi.fn>
 let mermaidInitialize: ReturnType<typeof vi.fn>
@@ -1255,6 +1255,32 @@ describe('FileBrowser', () => {
     expect(document.querySelector<HTMLElement>('.sidebar-scroll')?.scrollTop).toBe(48)
   })
 
+  it('reserves sidebar group actions for explicit Groups, not directory Categories', async () => {
+    const bundle = structuredClone(testBundle)
+    bundle.files.push({ path: 'specs/001-browser/docs/intro.md', mediaType: 'text/markdown', content: '# Intro' })
+    bundle.navigation = { version: 1, groups: [
+      { id: 'category-docs', title: 'docs', paths: ['docs/intro.md'] },
+      { id: 'g1', title: 'Review group', paths: ['interaction-design.md'] },
+    ] }
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+
+    expect(document.querySelector('.manage-categories-btn')).toBeNull()
+    expect(document.querySelector('[data-stage="category-docs"] .group-menu-btn')).toBeNull()
+    const menu = document.querySelector<HTMLButtonElement>('[data-stage="g1"] .group-menu-btn')!
+    expect(menu).not.toBeNull()
+    menu.click()
+    expect(document.querySelector('.navigation-popover')?.textContent).toContain('重命名分组')
+    expect(document.querySelector('.navigation-popover')?.textContent).not.toContain('重命名分类')
+
+    document.querySelector<HTMLButtonElement>('.navigation-popover .popover-action')!.click()
+    const prompt = document.querySelector<HTMLDialogElement>('.prompt-dialog')!
+    prompt.querySelector<HTMLInputElement>('input')!.value = 'Team review'
+    prompt.querySelector<HTMLButtonElement>('.confirmation-dialog-actions button:last-child')!.click()
+    await vi.waitFor(() => expect(bundle.navigation?.groups.find(({ id }) => id === 'g1')?.title).toBe('Team review'))
+    expect(bundle.navigation.groups.find(({ id }) => id === 'category-docs')?.title).toBe('docs')
+    browser.destroy()
+  })
+
   it('creates ordinary files without changing checkpoint membership and keeps category switching available', async () => {
     const bundle = structuredClone(testBundle)
     bundle.checkpoints = {
@@ -1336,6 +1362,40 @@ describe('FileBrowser', () => {
     expect(browser.getCheckpointDocumentAdditions()).toEqual([])
     browser.destroy()
   })
+  it('keeps an HTML preview and its comment thread valid after selecting an existing category', () => {
+    const bundle = structuredClone(testBundle)
+    bundle.files.push(
+      { path: 'specs/001-browser/docs/guide.md', mediaType: 'text/markdown', content: '# Guide' },
+      { path: 'specs/001-browser/preview.html', mediaType: 'text/html', content: '<h1>Proof</h1>',
+        sourceUrl: 'file:///Users/example/project/specs/001-browser/preview.html' },
+    )
+    bundle.navigation = { version: 1, groups: [{ id: 'category-docs', title: 'docs', paths: ['docs/guide.md'] }] }
+    bundle.comments = [{
+      id: 'thread-html',
+      anchor: { path: 'specs/001-browser/preview.html', position: { start: 4, end: 9 },
+        quote: { exact: 'Proof', prefix: '', suffix: '' } },
+      status: 'open',
+      messages: [{ id: 'message-html', author: 'Ada', body: 'Check this', createdAt: '2026-09-24T00:00:00.000Z' }],
+      createdAt: '2026-09-24T00:00:00.000Z',
+      updatedAt: '2026-09-24T00:00:00.000Z',
+    }]
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    document.querySelector<HTMLButtonElement>('.file-row[data-path$="preview.html"]')!.click()
+    document.querySelector<HTMLButtonElement>('.workspace-category-badge')!.click()
+    expect(Array.from(document.querySelectorAll<HTMLButtonElement>('.group-selector-popover .popover-action'))
+      .map((button) => button.textContent?.trim())).toContain('未分配')
+    expect(document.querySelector('.group-selector-popover')?.textContent).not.toContain('未分组')
+    Array.from(document.querySelectorAll<HTMLButtonElement>('.group-selector-popover .popover-action'))
+      .find((button) => button.textContent?.trim() === 'docs')!.click()
+
+    expect(bundle.files.at(-1)?.path).toBe('specs/001-browser/docs/preview.html')
+    expect(bundle.files.at(-1)?.sourceUrl).toBe('file:///Users/example/project/specs/001-browser/docs/preview.html')
+    expect(bundle.comments[0].anchor.path).toBe(bundle.files.at(-1)?.path)
+    expect(parseBundle(JSON.stringify(bundle)).ok).toBe(true)
+    expect(browser.getModifiedReviewFiles().map((file) => file.path)).toContain('docs/preview.html')
+    browser.destroy()
+  })
+
 
   it('keeps owned Checkpoint files non-renamable while ordinary files remain renamable', () => {
     const bundle = structuredClone(testBundle)
@@ -1387,29 +1447,29 @@ describe('FileBrowser', () => {
   })
 
   it('uses the first supported browser language when no choice was saved', () => {
-    Object.defineProperty(navigator, 'languages', { configurable: true, value: ['nl-NL', 'fr-CA', 'de-DE'] })
+    Object.defineProperty(navigator, 'languages', { configurable: true, value: ['nl-NL', 'fr-CA', 'zh-CN', 'en-US'] })
     Object.defineProperty(navigator, 'language', { configurable: true, value: 'nl-NL' })
 
     new FileBrowser(document.getElementById('app')!, structuredClone(testBundle))
 
-    expect(document.documentElement.lang).toBe('fr')
-    expect(document.querySelector('.workspace-header .save-button')?.textContent).toContain('Enregistrer')
+    expect(document.documentElement.lang).toBe('zh-Hans')
+    expect(document.querySelector('.workspace-header .save-button')?.textContent).toContain('保存')
     expect(localStorage.getItem('taco-locale')).toBeNull()
   })
 
   it('keeps a saved language choice ahead of browser preferences', () => {
-    localStorage.setItem('taco-locale', 'de')
-    Object.defineProperty(navigator, 'languages', { configurable: true, value: ['fr-FR'] })
-    Object.defineProperty(navigator, 'language', { configurable: true, value: 'fr-FR' })
+    localStorage.setItem('taco-locale', 'en-GB')
+    Object.defineProperty(navigator, 'languages', { configurable: true, value: ['zh-CN'] })
+    Object.defineProperty(navigator, 'language', { configurable: true, value: 'zh-CN' })
 
     new FileBrowser(document.getElementById('app')!, structuredClone(testBundle))
 
-    expect(document.documentElement.lang).toBe('de')
-    expect(document.querySelector('.workspace-header .save-button')?.textContent).toContain('Speichern')
+    expect(document.documentElement.lang).toBe('en')
+    expect(document.querySelector('.workspace-header .save-button')?.textContent).toContain('Save')
   })
 
   it('lets an embedding page own theme, language and sharing and opens comments first', () => {
-    localStorage.setItem('taco-locale', 'de')
+    localStorage.setItem('taco-locale', 'zh-Hans')
     localStorage.setItem('taco-theme', 'light')
     const previousUrl = location.href
     history.replaceState(null, '', '?embed&lang=en&theme=dark')
@@ -1425,7 +1485,7 @@ describe('FileBrowser', () => {
       }
       expect(document.querySelector('.theme-menu, .share-menu, .language-menu')).toBeNull()
       expect(document.querySelector('[aria-controls="taco-comment-list"]')?.getAttribute('aria-selected')).toBe('true')
-      expect(localStorage.getItem('taco-locale')).toBe('de')
+      expect(localStorage.getItem('taco-locale')).toBe('zh-Hans')
       expect(localStorage.getItem('taco-theme')).toBe('light')
     } finally {
       history.replaceState(null, '', previousUrl)
@@ -1479,10 +1539,10 @@ describe('FileBrowser', () => {
     const language = document.querySelector<HTMLButtonElement>('.workspace-header [aria-label="语言"]')!
     language.click()
     expect(Array.from(document.querySelectorAll('.language-menu .popover-action-label')).map((node) => node.textContent)).toEqual([
-      '简体中文', 'English', '繁體中文', '日本語', 'Español', 'Français', 'Deutsch', 'Italiano', 'Português',
+      '简体中文', 'English',
     ])
-    expect(document.querySelectorAll('.language-menu .popover-action.sidebar-row')).toHaveLength(9)
-    expect(document.querySelectorAll('.language-menu .popover-action-label.sidebar-row-label')).toHaveLength(9)
+    expect(document.querySelectorAll('.language-menu .popover-action.sidebar-row')).toHaveLength(2)
+    expect(document.querySelectorAll('.language-menu .popover-action-label.sidebar-row-label')).toHaveLength(2)
     expect(document.querySelectorAll('.language-menu .popover-check')).toHaveLength(1)
   })
 

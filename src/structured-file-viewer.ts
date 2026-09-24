@@ -75,44 +75,6 @@ const labelOverrides: Record<Locale, Partial<StructuredFileLabels>> = {
     operations: '操作', parameters: '参数', requestBody: '请求体', responses: '响应', schemas: '模式',
     security: '安全声明', required: '必填', description: '描述', type: '类型', properties: '属性', enum: '允许值',
   },
-  'zh-Hant': {
-    viewMode: '檔案檢視', overview: '概覽', preview: '預覽', source: '原始碼',
-    parseError: '無法解析原始碼。', openapiUnavailable: 'OpenAPI 概覽無法使用。',
-    mermaidUnavailable: 'Mermaid 預覽無法使用，原始碼仍可編輯。', yamlWarnings: 'YAML 解析警告',
-    empty: '沒有可顯示的內容。', name: '名稱', location: '位置', status: '狀態碼', contentTypes: '內容類型', title: '標題', version: '版本', metadata: '中繼資料', servers: '伺服器', tags: '標籤',
-    operations: '操作', parameters: '參數', requestBody: '請求內容', responses: '回應', schemas: '結構描述',
-    security: '安全宣告', required: '必填', description: '說明', type: '類型', properties: '屬性', enum: '允許值',
-  },
-  ja: {
-    viewMode: 'ファイル表示', overview: '概要', preview: 'プレビュー', source: 'ソース',
-    parseError: 'ソースを解析できません。', openapiUnavailable: 'OpenAPI 概要を表示できません。', mermaidUnavailable: 'Mermaid プレビューを表示できません。ソースは編集できます。', yamlWarnings: 'YAML 解析警告',
-    empty: '表示する値がありません。', name: '名前', location: '場所', status: 'ステータス', contentTypes: 'コンテンツタイプ', title: 'タイトル', version: 'バージョン', metadata: 'メタデータ', servers: 'サーバー', tags: 'タグ', operations: '操作', parameters: 'パラメーター', requestBody: 'リクエスト本文', responses: 'レスポンス', schemas: 'スキーマ', security: 'セキュリティ', required: '必須', description: '説明', type: '型', properties: 'プロパティ', enum: '許可値',
-  },
-  es: {
-    viewMode: 'Vista del archivo', overview: 'Resumen', preview: 'Vista previa', source: 'Código',
-    parseError: 'No se pudo analizar el código.', openapiUnavailable: 'El resumen de OpenAPI no está disponible.', mermaidUnavailable: 'La vista previa de Mermaid no está disponible. El código sigue siendo editable.', yamlWarnings: 'Advertencia del analizador YAML',
-    empty: 'No hay valores que mostrar.', name: 'Nombre', location: 'Ubicación', status: 'Estado', contentTypes: 'Tipo de contenido', title: 'Título', version: 'Versión', metadata: 'Metadatos', servers: 'Servidores', tags: 'Etiquetas', operations: 'Operaciones', parameters: 'Parámetros', requestBody: 'Cuerpo de solicitud', responses: 'Respuestas', schemas: 'Esquemas', security: 'Seguridad', required: 'Obligatorio', description: 'Descripción', type: 'Tipo', properties: 'Propiedades', enum: 'Valores permitidos',
-  },
-  fr: {
-    viewMode: 'Vue du fichier', overview: 'Aperçu', preview: 'Aperçu', source: 'Source',
-    parseError: 'La source ne peut pas être analysée.', openapiUnavailable: "L’aperçu OpenAPI n’est pas disponible.", mermaidUnavailable: 'Le rendu Mermaid est indisponible. La source reste modifiable.', yamlWarnings: 'Avertissement de l’analyseur YAML',
-    empty: 'Aucune valeur à afficher.', name: 'Nom', location: 'Emplacement', status: 'Statut', contentTypes: 'Type de contenu', title: 'Titre', version: 'Version', metadata: 'Métadonnées', servers: 'Serveurs', tags: 'Étiquettes', operations: 'Opérations', parameters: 'Paramètres', requestBody: 'Corps de requête', responses: 'Réponses', schemas: 'Schémas', security: 'Sécurité', required: 'Obligatoire', description: 'Description', type: 'Type', properties: 'Propriétés', enum: 'Valeurs autorisées',
-  },
-  de: {
-    viewMode: 'Dateiansicht', overview: 'Übersicht', preview: 'Vorschau', source: 'Quelltext',
-    parseError: 'Der Quelltext konnte nicht geparst werden.', openapiUnavailable: 'Die OpenAPI-Übersicht ist nicht verfügbar.', mermaidUnavailable: 'Die Mermaid-Vorschau ist nicht verfügbar. Der Quelltext bleibt bearbeitbar.', yamlWarnings: 'YAML-Parserwarnung',
-    empty: 'Keine Werte zum Anzeigen.', name: 'Name', location: 'Position', status: 'Status', contentTypes: 'Inhaltstyp', title: 'Titel', version: 'Version', metadata: 'Metadaten', servers: 'Server', tags: 'Tags', operations: 'Operationen', parameters: 'Parameter', requestBody: 'Anfrageinhalt', responses: 'Antworten', schemas: 'Schemas', security: 'Sicherheit', required: 'Erforderlich', description: 'Beschreibung', type: 'Typ', properties: 'Eigenschaften', enum: 'Zulässige Werte',
-  },
-  it: {
-    viewMode: 'Vista file', overview: 'Panoramica', preview: 'Anteprima', source: 'Sorgente',
-    parseError: 'Impossibile analizzare il sorgente.', openapiUnavailable: 'La panoramica OpenAPI non è disponibile.', mermaidUnavailable: 'L’anteprima Mermaid non è disponibile. Il sorgente resta modificabile.', yamlWarnings: 'Avviso del parser YAML',
-    empty: 'Nessun valore da mostrare.', name: 'Nome', location: 'Posizione', status: 'Stato', contentTypes: 'Tipo di contenuto', title: 'Titolo', version: 'Versione', metadata: 'Metadati', servers: 'Server', tags: 'Tag', operations: 'Operazioni', parameters: 'Parametri', requestBody: 'Corpo richiesta', responses: 'Risposte', schemas: 'Schemi', security: 'Sicurezza', required: 'Obbligatorio', description: 'Descrizione', type: 'Tipo', properties: 'Proprietà', enum: 'Valori consentiti',
-  },
-  pt: {
-    viewMode: 'Visualização do arquivo', overview: 'Visão geral', preview: 'Prévia', source: 'Código-fonte',
-    parseError: 'Não foi possível analisar o código-fonte.', openapiUnavailable: 'A visão geral OpenAPI não está disponível.', mermaidUnavailable: 'A prévia Mermaid não está disponível. O código-fonte continua editável.', yamlWarnings: 'Aviso do analisador YAML',
-    empty: 'Nenhum valor para mostrar.', name: 'Nome', location: 'Local', status: 'Status', contentTypes: 'Tipo de conteúdo', title: 'Título', version: 'Versão', metadata: 'Metadados', servers: 'Servidores', tags: 'Tags', operations: 'Operações', parameters: 'Parâmetros', requestBody: 'Corpo da solicitação', responses: 'Respostas', schemas: 'Esquemas', security: 'Segurança', required: 'Obrigatório', description: 'Descrição', type: 'Tipo', properties: 'Propriedades', enum: 'Valores permitidos',
-  },
 }
 
 export const structuredFileLabels = (locale: Locale): StructuredFileLabels => ({
