@@ -41,7 +41,8 @@
     "check": "npm run format:check && npm test && npm run build",
     "test": "NODE_OPTIONS=\"${NODE_OPTIONS:-} --no-experimental-webstorage\" vitest run",
     "test:relay": "TACO_RELAY_TEST=1 vitest run tests/relay.integration.test.ts",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepare": "git config core.hooksPath .githooks 2>/dev/null || true"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",
