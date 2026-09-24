@@ -22,3 +22,36 @@ When a user asks an agent to install, use, package, or review Taco, read `README
 - Conflict boundary: when the optional extension CLI is installed, preview every review import with `sync --dry-run --json` and stop on any conflict; never use `--force` without explicit authorization for the exact conflict paths. When importing through Handoff or a saved file without the CLI, diff the received content against the canonical files yourself and stop on any change you cannot attribute. Never resolve a conflict by silently choosing one side.
 - Treat collaboration-enabled Taco files as potentially credential-bearing. Follow `docs/agent-installation.md` before sending their contents to any external model, service, log, or ticket. Local inspection remains allowed, and revocation or key reset is an explicit user action.
 - Tacobin deploys only from a pushed `tacobin-v*` tag. `packages/host/vercel.json` disables Git-triggered Vercel deployments, and the tag drives the Deploy Tacobin workflow, which calls the project's Deploy Hook; a branch push, a pull request, or the tag by itself publishes nothing.
+
+# Semantic commit messages
+
+All commits in this repository MUST follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
+
+```text
+<type>(<scope?>)(!?): <subject>
+```
+
+The nightly automated release workflow and changelog generator rely directly on commit message structure to detect component changes, determine semver version bumps, and generate release notes. Non-compliant commit messages will be rejected by the local Git `commit-msg` hook (`.githooks/commit-msg`).
+
+- Allowed types:
+  - `feat`: A new feature (triggers a `minor` version bump for affected components).
+  - `fix`: A bug fix (triggers a `patch` version bump for affected components).
+  - `perf`: A code change that improves performance (triggers a `patch` version bump).
+  - `docs`: Documentation-only changes.
+  - `style`: Changes that do not affect the meaning of code (formatting, white-space, etc.).
+  - `refactor`: Code changes that neither fix a bug nor add a feature.
+  - `test`: Adding missing tests or correcting existing tests.
+  - `build`: Changes affecting build systems or external dependencies.
+  - `ci`: Changes to CI configuration files and scripts.
+  - `chore`: Other maintenance, tooling, or release commits.
+  - `revert`: Reverting a previous commit.
+
+- Breaking changes:
+  - Append `!` immediately before the colon (e.g. `feat(kernel)!: redesign document format`) or include `BREAKING CHANGE: <description>` in the commit body. This triggers a `major` version bump.
+
+- Recommended scopes:
+  - Scope by affected component or subsystem, e.g. `host`, `cli`, `kernel`, `agents`, `release`, `ui`, `review`. Examples:
+    - `feat(host): add landing page animation (#49)`
+    - `fix(cli): correct self-description output`
+    - `chore(release): bump taco-cli to 0.1.5`
+    - `docs(agents): require semantic commit messages`
