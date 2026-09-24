@@ -21,16 +21,29 @@ permissions:
 
 jobs:
   check-and-release:
+    # 发版只允许 main（SKILL.md 异常处理准则 1）：schedule 天然指向默认分支，
+    # 此守卫拦截从其他分支 workflow_dispatch 的情况。
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
+      # GITHUB_TOKEN 推送不会触发下游 workflow；RELEASE_PAT 是发版链路硬依赖，缺失必须失败而非静默降级
+      - name: Verify release credentials
+        env:
+          RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
+        run: |
+          if [ -z "$RELEASE_PAT" ]; then
+            echo "::error::Repository secret RELEASE_PAT is not set. Tags pushed with GITHUB_TOKEN will not trigger release-cli.yml or deploy-tacobin.yml."
+            exit 1
+          fi
+
       - name: Check out repository
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
           # 使用 RELEASE_PAT 推送标签可正常触发下游的 release-cli 和 deploy-tacobin 工作流
-          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_PAT }}
 
       - name: Use Node.js 22
         uses: actions/setup-node@v4
@@ -98,7 +111,7 @@ jobs:
       - name: Release taco core
         if: steps.check.outputs.taco_has_changes == 'true' && (github.event.inputs.dry_run != 'true')
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_PAT }}
         run: |
           NEW_VER=$(jq -r '.components[] | select(.name=="taco") | .recommendedVersion' /tmp/report.json)
           LAST_TAG=$(jq -r '.components[] | select(.name=="taco") | .latestTag' /tmp/report.json)
@@ -116,7 +129,7 @@ jobs:
           NODE_OPTIONS="${NODE_OPTIONS:-} --no-experimental-webstorage" npm run check
 
           # 3. 提交变更与打 Tag
-          git add package.json extensions/taco/extension.yml CHANGELOG.md extensions/taco/CHANGELOG.md dist-single/ extensions/taco/assets/ skills/taco/
+          git add package.json package-lock.json extensions/ dist-single/ skills/taco/
           git commit -m "chore(release): taco v$NEW_VER"
           git tag -a "v$NEW_VER" -m "Taco v$NEW_VER"
 

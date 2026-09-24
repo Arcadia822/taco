@@ -1,6 +1,6 @@
 ---
 name: taco-release
-description: Taco 多组件自动化发版技能。用于每晚 8 点或手动检查 GitHub main 分支最新提交，对比 taco 本体、taco-cli 与 tacobin 网页端自上次发版以来的代码变动，判定是否触发发版；并在 taco 本体更新时调用 semantic-release / conventional-changelog 工具生成 Release Notes、更新 CHANGELOG 并发布 GitHub Release。
+description: Taco 多组件自动化发版技能。用于每晚 8 点或手动检查 GitHub main 分支最新提交，对比 taco 本体、taco-cli 与 tacobin 网页端自上次发版以来的代码变动，判定是否触发发版；并在 taco 本体更新时通过内置确定性脚本生成 Release Notes、更新 CHANGELOG 并发布 GitHub Release。
 ---
 
 # Taco 多组件自动化发版技能 (Taco Release)
@@ -22,7 +22,7 @@ description: Taco 多组件自动化发版技能。用于每晚 8 点或手动�
   node skills/taco-release/scripts/check-changes.mjs
   # 支持 --ref 指定目标分支（默认 origin/main 或 HEAD），支持 --json 输出结构化数据
   ```
-- **Semantic-Release / Conventional Changelog 生成**：
+- **Release Notes / Changelog 生成**：
   ```bash
   node skills/taco-release/scripts/generate-release-notes.mjs --from <last_tag> --to <ref> --version <new_version> --update-changelog --outfile /tmp/release-notes.md
   ```
@@ -33,7 +33,7 @@ description: Taco 多组件自动化发版技能。用于每晚 8 点或手动�
 
 | 组件名称 | 标签 (Tag) 格式 | 监控路径范围 (Monitored Paths) | 版本声明文件 | 发版与 CI/CD 机制 |
 | :--- | :--- | :--- | :--- | :--- |
-| **taco** (本体) | `v*.*.*`<br>*(例: `v0.9.0`)* | `src/`<br>`extensions/`<br>`skills/taco/`<br>`dist-single/`<br>`package.json`<br>`scripts/` | `package.json`<br>`extensions/taco/extension.yml` | 本地执行构建与校验 (`npm run check`)，打标签推送；调用 semantic-release 工具链生成 Release Notes 并通过 `gh release create` 发布 GitHub Release |
+| **taco** (本体) | `v*.*.*`<br>*(例: `v0.9.0`)* | `src/`<br>`extensions/`<br>`skills/taco/`<br>`dist-single/`<br>`package.json`<br>`scripts/` | `package.json`<br>`extensions/taco/extension.yml` | 本地执行构建与校验 (`npm run check`)，打标签推送；调用 `generate-release-notes.mjs` 生成 Release Notes 并通过 `gh release create` 发布 GitHub Release |
 | **taco-cli** | `taco-cli-v*.*.*`<br>*(例: `taco-cli-v0.1.4`)* | `packages/cli/` | `packages/cli/package.json` | 更新版本并打标签推送；触发 GitHub Actions `.github/workflows/release-cli.yml`，自动构建 4 平台二进制、发布 GitHub Release 并通过 OIDC 推送 npm |
 | **tacobin** (网页端) | `tacobin-v*.*.*`<br>*(例: `tacobin-v0.1.4`)* | `packages/host/`<br>`examples/` | `packages/host/package.json` | 更新版本并打标签推送；触发 GitHub Actions `.github/workflows/deploy-tacobin.yml`，调用 Vercel Deploy Hook 自动部署 `main` 分支生产环境 |
 
@@ -94,7 +94,7 @@ git log "${LATEST_HOST_TAG}..origin/main" --oneline -- packages/host examples
 根据步骤 2 的判定结果，按需执行各组件的发版流程（如果某组件无变动则直接跳过）：
 
 #### 3.1 taco (本体) 发版流程
-> **特别注意**：taco 本体发版必须严格遵循 semantic-release 规范生成 release notes，且构建包含单文件发行包及镜像同步。
+> **特别注意**：taco 本体发版必须严格遵循 Conventional Commits 规范生成 release notes，且构建包含单文件发行包及镜像同步。
 
 1. **更新版本号**：
    - 根目录 `package.json` 中的 `"version": "x.y.z"`
@@ -105,7 +105,7 @@ git log "${LATEST_HOST_TAG}..origin/main" --oneline -- packages/host examples
    NODE_OPTIONS="${NODE_OPTIONS:-} --no-experimental-webstorage" npm run check
    ```
    *说明：`npm run check` 会依次执行 `format:check`、`vitest run` 以及 `build`（重新编译单文件并同步 `extensions/taco/assets/taco-shell.html` 与 `skills/taco/` 模板）。*
-3. **调用 Semantic-Release 工具生成 Release Notes 并更新 CHANGELOG**：
+3. **生成 Release Notes 并更新 CHANGELOG**：
    ```bash
    node skills/taco-release/scripts/generate-release-notes.mjs \
      --from "$LATEST_TACO_TAG" \
@@ -116,7 +116,7 @@ git log "${LATEST_HOST_TAG}..origin/main" --oneline -- packages/host examples
    ```
 4. **提交变更与打标签**：
    ```bash
-   git add package.json extensions/taco/extension.yml CHANGELOG.md extensions/taco/CHANGELOG.md dist-single/ extensions/taco/assets/ skills/taco/
+   git add package.json package-lock.json extensions/ dist-single/ skills/taco/
    git commit -m "chore(release): taco v<new_version>"
    git tag -a "v<new_version>" -m "Taco v<new_version>"
    ```
@@ -137,7 +137,7 @@ git log "${LATEST_HOST_TAG}..origin/main" --oneline -- packages/host examples
    - `packages/cli/package.json` 中的 `"version": "x.y.z"`
 2. **提交与打标签**：
    ```bash
-   git add packages/cli/package.json
+   git add packages/cli/package.json package-lock.json
    git commit -m "chore(release): taco-cli v<new_version>"
    git tag -a "taco-cli-v<new_version>" -m "taco-cli-v<new_version>"
    ```
@@ -158,7 +158,7 @@ git log "${LATEST_HOST_TAG}..origin/main" --oneline -- packages/host examples
    - `packages/host/package.json` 中的 `"version": "x.y.z"`
 2. **提交与打标签**：
    ```bash
-   git add packages/host/package.json
+   git add packages/host/package.json package-lock.json
    git commit -m "chore(release): tacobin-v<new_version>"
    git tag -a "tacobin-v<new_version>" -m "tacobin-v<new_version>"
    ```

@@ -108,14 +108,15 @@ function analyzeCommits(tag, ref, paths) {
   }
 
   const pathFilter = paths.join(' ')
-  const logCmd = `git log ${tag}..${ref} --pretty=format:"%h%x09%s%x09%an" -- ${pathFilter}`
+  // %x1f field / %x1e record separators keep entries intact across multiline commit bodies
+  const logCmd = `git log ${tag}..${ref} --pretty=format:"%h%x1f%s%x1f%b%x1f%an%x1e" -- ${pathFilter}`
   const rawLog = run(logCmd)
 
   if (!rawLog) {
     return { count: 0, commits: [], bump: 'none', breaking: [], feats: [], fixes: [], others: [] }
   }
 
-  const lines = rawLog.split('\n').filter(Boolean)
+  const lines = rawLog.split('\x1e').map(s => s.trim()).filter(Boolean)
   const commits = []
   const breaking = []
   const feats = []
@@ -127,12 +128,12 @@ function analyzeCommits(tag, ref, paths) {
   let hasFixOrOther = false
 
   for (const line of lines) {
-    const [hash, subject, author] = line.split('\t')
+    const [hash, subject, body, author] = line.split('\x1f')
     const item = { hash, subject, author }
     commits.push(item)
 
-    // Check breaking
-    if (/BREAKING CHANGE|!:/i.test(subject)) {
+    // Check breaking: bang marker in subject or explicit BREAKING CHANGE marker in subject/body
+    if (/BREAKING CHANGE|!:/i.test(subject) || /BREAKING CHANGE:/i.test(body || '')) {
       hasBreaking = true
       breaking.push(item)
     } else if (/^feat(\(.*\))?:/i.test(subject)) {

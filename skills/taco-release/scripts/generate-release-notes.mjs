@@ -3,7 +3,7 @@
 /**
  * generate-release-notes.mjs
  * 
- * Generates Conventional Commits / semantic-release compatible release notes
+ * Generates Conventional Commits compatible release notes
  * and changelog entries from git history between tags.
  *
  * Usage:
@@ -171,7 +171,7 @@ if (outfile) {
 }
 
 if (updateChangelog) {
-  const changelogPaths = ['CHANGELOG.md', 'extensions/taco/CHANGELOG.md']
+  const changelogPaths = ['extensions/taco/CHANGELOG.md']
   for (const p of changelogPaths) {
     if (existsSync(p)) {
       const original = readFileSync(p, 'utf8')
