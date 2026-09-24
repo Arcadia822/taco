@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.9.1](https://github.com/Arcadia822/taco/compare/v0.9.0...v0.9.1) (2026-09-24)
+
+### Chores & Maintenance
+
+* chore: **release**: taco-cli v0.1.5 ([c8c4acd](https://github.com/Arcadia822/taco/commit/c8c4acdf1cc25c33e2a20021b9d5e9595770c5ac))
+* ci: align actions/setup-node to v7 across release workflows (#67) ([0b476bc](https://github.com/Arcadia822/taco/commit/0b476bc3ddde9bcbe35c76366829f37324cb1683))
+* ci: add nightly auto-release workflow and taco-release skill (#58) ([6a12fdc](https://github.com/Arcadia822/taco/commit/6a12fdc4b083d86efebea6003702d49c7b4d8602))
+* chore: ignore .omp directory ([a43cbef](https://github.com/Arcadia822/taco/commit/a43cbefcacf741ea732c1d64d23fcacb96070251))
+
 ## 0.8.0 - 2026-09-20
 
 - Classify documents only through Taco's built-in Category — the sidebar group control, first-level directory declarations, and the navigation manifest — and stop reading the deprecated `taco_scope` key and the legacy `**Taco scope**:` form entirely; templates, policy, and Agent guidance no longer emit either, and the document property table carries no classification-specific UI (#32).
