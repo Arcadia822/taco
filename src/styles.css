@@ -283,11 +283,11 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 }
 .group-action-btn:hover, .file-action-btn:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
 .group-action-btn:active, .file-action-btn:active { transform: scale(0.95); }
-.group-action-btn .ui-icon, .file-action-btn .ui-icon { width: 12px; height: 12px; }
+.group-action-btn .ui-icon, .file-action-btn .ui-icon { width: 16px; height: 16px; }
 .sidebar-action-btn { width: 22px; height: 22px; padding: 0; border: 0; background: transparent; color: var(--muted); cursor: pointer; border-radius: 4px; display: inline-grid; place-items: center; margin-right: 2px; transition: transform 160ms ease-out, background-color 140ms ease, color 140ms ease; }
 .sidebar-action-btn:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
 .sidebar-action-btn:active { transform: scale(0.95); }
-.sidebar-action-btn .ui-icon { width: 14px; height: 14px; }
+.sidebar-action-btn .ui-icon { width: 16px; height: 16px; }
 
 .segmented-control { display: inline-flex; align-items: center; gap: 2px; height: var(--chrome-size); min-height: var(--chrome-size); flex: 0 0 auto; }
 .segmented-control-option {
@@ -1353,7 +1353,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .document-property-github-title { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--doc-subtle); }
 
 /* Checkpoints use the existing sidebar, header, popover, and document tokens. */
-.checkpoint-status-icon { width: 14px; height: 14px; flex: 0 0 14px; transition: color 140ms var(--ease-out); }
+.checkpoint-status-icon { width: 16px; height: 16px; flex: 0 0 16px; transition: color 140ms var(--ease-out); }
 .checkpoint-status-icon.status-todo { color: var(--status-todo); }
 .checkpoint-status-icon.status-in_progress { color: var(--status-progress); }
 .checkpoint-status-icon.status-complete { color: var(--status-complete); }
