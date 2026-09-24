@@ -284,25 +284,9 @@ export class FileNavigation {
       head.append(label, caret)
       const spacer = el('span', 'stage-spacer')
       summary.append(head, spacer)
-      if (this.options.editable) {
-        if (this.options.onCreateFile) {
-          const actions = el('span', 'group-actions')
-          const addFileBtn = createControlButton(
-            'plus',
-            this.options.labels.addFile ?? 'Add file',
-            () => this.options.onCreateFile?.(group.id),
-            'group-action-btn add-file-to-group-btn',
-          )
-          addFileBtn.addEventListener('click', (event) => {
-            event.stopPropagation()
-            event.preventDefault()
-          })
-          actions.append(addFileBtn)
-          summary.append(actions)
-        }
-
+      if (this.options.editable && (this.options.onUpdateNavigation || this.options.onCreateFile)) {
+        const actions = el('span', 'group-actions')
         if (this.options.onUpdateNavigation) {
-          const menuWrapper = el('span', 'group-actions-trailing')
           const menuBtn = createControlButton(
             'more-horizontal',
             'Actions',
@@ -315,9 +299,22 @@ export class FileNavigation {
             event.stopPropagation()
             event.preventDefault()
           })
-          menuWrapper.append(menuBtn)
-          summary.append(menuWrapper)
+          actions.append(menuBtn)
         }
+        if (this.options.onCreateFile) {
+          const addFileBtn = createControlButton(
+            'plus',
+            this.options.labels.addFile ?? 'Add file',
+            () => this.options.onCreateFile?.(group.id),
+            'group-action-btn add-file-to-group-btn',
+          )
+          addFileBtn.addEventListener('click', (event) => {
+            event.stopPropagation()
+            event.preventDefault()
+          })
+          actions.append(addFileBtn)
+        }
+        summary.append(actions)
       }
 
       stage.append(summary)

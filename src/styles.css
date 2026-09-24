@@ -235,8 +235,8 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .stage-caret .ui-icon { width: 12px; height: 12px; }
 .stage-summary:hover .stage-caret, .stage-summary:focus-visible .stage-caret { opacity: 1; }
 .stage-group[open] > .stage-summary .stage-caret { transform: rotate(90deg); }
-.group-actions { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; opacity: 0; transition: opacity 120ms ease; }
-.stage-summary:hover .group-actions, .stage-summary:focus-within .group-actions { opacity: 1; }
+.group-actions { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; margin-left: auto; opacity: 0; transition: opacity 120ms ease; }
+.stage-summary:hover .group-actions, .stage-summary:focus-visible .group-actions, .stage-summary:has(:focus-visible) .group-actions { opacity: 1; }
 .stage-group > .tree-list, .stage-group > .file-tree > .tree-list { padding-left: 0; }
 .tree-list { list-style: none; margin: 0; padding: 0; }
 .tree-folder > .tree-list { padding-left: calc(var(--sidebar-icon-size) + var(--chrome-gap)); }
@@ -275,21 +275,6 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .file-row:hover .file-meta .file-actions,
 .file-row:focus-within .file-meta .file-actions {
   opacity: 1; pointer-events: auto;
-}
-.group-actions { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; opacity: 0; transition: opacity 120ms ease; }
-.stage-summary:hover .group-actions, .stage-summary:focus-within .group-actions { opacity: 1; }
-.group-actions-trailing {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-.stage-summary:hover .group-actions-trailing,
-.stage-summary:focus-within .group-actions-trailing {
-  opacity: 1;
 }
 .group-action-btn, .file-action-btn {
   width: 20px; height: 20px; padding: 0; border: 0; background: transparent;
