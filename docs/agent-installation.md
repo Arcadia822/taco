@@ -10,6 +10,10 @@ This is the machine-facing installation guide for an Agent adding Taco to an env
 - Once the skill is installed, the Agent can assemble, present, open, and review `.taco.html` files in any directory, forever, fully offline.
 - `taco-cli` exists only for optional cloud workflows (TacoHub / Tacobin publishing and live review). It is **never** part of the local installation.
 
+### Choosing a shell for the recipient
+
+Today the installed skill ships only the complete, self-contained `taco-shell.html`; use it for every review, especially when the recipient may open the file offline. [TACO-16](../specs/010-taco-lite/spec.md) proposes a second, minimal pack, but it is not available yet. Once it ships, recommend the complete pack when the recipient's opening environment may be offline, and the minimal pack when reliable network access is expected. Choose by the recipient's environment, not the Agent's connectivity during installation. The minimal pack must remain editable in plain-text Markdown mode if external editor dependencies cannot load; do not silently replace an existing complete Taco with a minimal one.
+
 ## Install from a GitHub repo URL
 
 When the user gives the Taco repository URL (e.g. `https://github.com/Arcadia822/taco`), the default action is the **CLI-free skill installation**:
