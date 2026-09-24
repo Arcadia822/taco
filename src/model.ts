@@ -328,6 +328,11 @@ export const relativePath = (bundle: TacoBundle, file: TacoFile): string =>
 
 export const fileName = (path: string): string => path.split('/').at(-1) ?? path
 
+
+export const isInternalFile = (path: string): boolean => {
+  const norm = path.replace(/\\/g, '/')
+  return norm.endsWith('/_dir.yaml') || norm === '_dir.yaml' || norm.endsWith('/.DS_Store')
+}
 export type FileKind = 'markdown' | 'html' | 'yaml' | 'json' | 'mermaid' | 'text'
 
 export function fileKind(file: TacoFile): FileKind {
@@ -351,7 +356,7 @@ export function defaultFile(bundle: TacoBundle): TacoFile | null {
 
   return fileByPath(bundle, `${bundle.root}/README.md`)
     ?? fileByPath(bundle, `${bundle.root}/spec.md`)
-    ?? bundle.files.find((file) => fileKind(file) === 'markdown')
-    ?? bundle.files[0]
+    ?? bundle.files.find((file) => !isInternalFile(file.path) && fileKind(file) === 'markdown')
+    ?? bundle.files.find((file) => !isInternalFile(file.path))
     ?? null
 }

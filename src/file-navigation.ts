@@ -5,8 +5,8 @@ import { openCheckpointStatusMenu, statusLabel, type CheckpointLabels } from './
 import { defaultFile, fileName, relativePath, type NavigationManifest, type TacoBundle, type TacoFile } from './model.ts'
 import { createControlButton, createFileAttribute, createFileTypeIcon, createStatusIcon, el, showConfirmDialog, showPromptDialog, sidebarRow, svgIcon } from './ui-primitives.ts'
 import { resolveDocumentNavigation } from './navigation.ts'
+import { listCategories } from './category.ts'
 import {
-  addNavigationGroup,
   createInitialManifest,
   moveFileToGroup,
   removeNavigationGroup,
@@ -40,6 +40,14 @@ export interface FileNavigationLabels {
   deleteFileConfirm?: string
   confirm?: string
   cancel?: string
+  manageCategories?: string
+  categoryList?: string
+  renameCategory?: string
+  deleteCategory?: string
+  deleteCategoryConfirm?: string
+  renameCategoryPrompt?: string
+  affectedFiles?: (count: number) => string
+  noCustomCategories?: string
 }
 
 export interface FileNavigationOptions {
@@ -62,9 +70,12 @@ export interface FileNavigationOptions {
   onCreateFile?: (targetGroupId: string | null) => void
   onRenameFile?: (file: TacoFile) => void
   onDeleteFile?: (file: TacoFile) => void
+  onManageCategories?: () => void
+  onRenameCategory?: (oldName: string, newName: string) => Promise<void> | void
+  onDeleteCategory?: (categoryName: string) => Promise<void> | void
 }
 
-const buildTree = (bundle: TacoBundle, files: TacoFile[]): DirNode => {
+const buildTree = (bundle: TacoBundle, files: TacoFile[], categoryDir?: string): DirNode => {
   const root: DirNode = {
     name: bundle.root.split('/').at(-1) ?? bundle.root,
     path: bundle.root,
@@ -72,8 +83,12 @@ const buildTree = (bundle: TacoBundle, files: TacoFile[]): DirNode => {
     files: [],
   }
   for (const file of files) {
-    const parts = relativePath(bundle, file).split('/')
+    const rel = relativePath(bundle, file)
+    let parts = rel.split('/')
     parts.pop()
+    if (categoryDir && parts.length > 0 && (parts[0] === categoryDir || parts[0].toLowerCase() === categoryDir.toLowerCase())) {
+      parts = parts.slice(1)
+    }
     let cursor = root
     for (const part of parts) {
       let child = cursor.dirs.get(part)
@@ -116,14 +131,15 @@ export class FileNavigation {
       labelClass: 'brand-name',
     })
 
-    if (options.editable && options.onUpdateNavigation) {
-      const addGroupBtn = createControlButton(
-        'plus',
-        options.labels.addGroup ?? 'Add group',
-        () => { void this.promptAddGroup() },
-        'sidebar-action-btn add-group-btn',
+    if (options.editable && options.onManageCategories) {
+      const manageBtn = createControlButton(
+        'tag',
+        options.labels.manageCategories ?? 'Manage categories',
+        () => { this.options.onManageCategories?.() },
+        'sidebar-action-btn manage-categories-btn',
       )
-      brand.append(addGroupBtn)
+      manageBtn.title = options.labels.manageCategories ?? 'Manage categories'
+      brand.append(manageBtn)
     }
 
     this.toggle = createControlButton(
@@ -269,10 +285,24 @@ export class FileNavigation {
       const spacer = el('span', 'stage-spacer')
       summary.append(head, spacer)
       if (this.options.editable) {
-        const actions = el('span', 'group-actions')
+        if (this.options.onCreateFile) {
+          const actions = el('span', 'group-actions')
+          const addFileBtn = createControlButton(
+            'plus',
+            this.options.labels.addFile ?? 'Add file',
+            () => this.options.onCreateFile?.(group.id),
+            'group-action-btn add-file-to-group-btn',
+          )
+          addFileBtn.addEventListener('click', (event) => {
+            event.stopPropagation()
+            event.preventDefault()
+          })
+          actions.append(addFileBtn)
+          summary.append(actions)
+        }
 
-        // 需求3：把重命名和删除收敛至操作菜单按钮（more-horizontal）中
-        if (this.options.onUpdateNavigation && group.isCustom) {
+        if (this.options.onUpdateNavigation) {
+          const menuWrapper = el('span', 'group-actions-trailing')
           const menuBtn = createControlButton(
             'more-horizontal',
             'Actions',
@@ -285,25 +315,9 @@ export class FileNavigation {
             event.stopPropagation()
             event.preventDefault()
           })
-          actions.append(menuBtn)
+          menuWrapper.append(menuBtn)
+          summary.append(menuWrapper)
         }
-        // 需求3：快捷显式只露出新建文件按钮
-        if (this.options.onCreateFile) {
-          const addFileBtn = createControlButton(
-            'plus',
-            this.options.labels.addFile ?? 'Add file',
-            () => this.options.onCreateFile?.(group.id),
-            'group-action-btn add-file-to-group-btn',
-          )
-          addFileBtn.addEventListener('click', (event) => {
-            event.stopPropagation()
-            event.preventDefault()
-          })
-          actions.append(addFileBtn)
-        }
-
-
-        summary.append(actions)
       }
 
       stage.append(summary)
@@ -324,18 +338,11 @@ export class FileNavigation {
         })
       }
 
-      if (group.isCustom) {
-        if (group.files.length) {
-          const tree = el('div', 'file-tree')
-          this.renderDirectory(buildTree(this.options.bundle, group.files), tree, true)
-          stage.append(tree)
-        }
-      } else {
-        if (group.stage.files.length) {
-          const tree = el('div', 'file-tree')
-          this.renderDirectory(buildTree(this.options.bundle, group.stage.files), tree, true)
-          stage.append(tree)
-        }
+      if (group.files.length) {
+        const tree = el('div', 'file-tree')
+        const categoryDir = group.id.startsWith('category-') ? group.id.slice('category-'.length) : group.title
+        this.renderDirectory(buildTree(this.options.bundle, group.files, categoryDir), tree, true)
+        stage.append(tree)
       }
       navigation.append(stage)
     }
@@ -576,29 +583,62 @@ export class FileNavigation {
     const popover = el('div', 'topbar-popover navigation-popover')
     popover.setAttribute('role', 'menu')
 
-    const renameBtn = sidebarRow('button', {
-      className: 'popover-action',
-      leading: svgIcon('edit'),
-      label: this.options.labels.renameGroup ?? 'Rename group',
-    }) as HTMLButtonElement
-    renameBtn.type = 'button'
-    renameBtn.addEventListener('click', () => {
-      this.closePopover()
-      void this.promptRenameGroup(group.id, group.title)
-    })
+    const isCategory = group.id.startsWith('category-') ||
+      listCategories(this.options.bundle).some((c) => c.name === group.title)
 
-    const deleteBtn = sidebarRow('button', {
-      className: 'popover-action is-destructive',
-      leading: svgIcon('trash'),
-      label: this.options.labels.deleteGroup ?? 'Delete group',
-    }) as HTMLButtonElement
-    deleteBtn.type = 'button'
-    deleteBtn.addEventListener('click', () => {
-      this.closePopover()
-      void this.handleDeleteGroup(group.id)
-    })
+    if (isCategory && (this.options.onRenameCategory || this.options.onDeleteCategory)) {
+      const categoryName = group.title
+      if (this.options.onRenameCategory) {
+        const renameBtn = sidebarRow('button', {
+          className: 'popover-action',
+          leading: svgIcon('edit'),
+          label: this.options.labels.renameCategory ?? 'Rename category',
+        }) as HTMLButtonElement
+        renameBtn.type = 'button'
+        renameBtn.addEventListener('click', () => {
+          this.closePopover()
+          void this.promptRenameCategory(categoryName)
+        })
+        popover.append(renameBtn)
+      }
+      if (this.options.onDeleteCategory) {
+        const deleteBtn = sidebarRow('button', {
+          className: 'popover-action is-destructive',
+          leading: svgIcon('trash'),
+          label: this.options.labels.deleteCategory ?? 'Delete category',
+        }) as HTMLButtonElement
+        deleteBtn.type = 'button'
+        deleteBtn.addEventListener('click', () => {
+          this.closePopover()
+          void this.handleDeleteCategory(categoryName)
+        })
+        popover.append(deleteBtn)
+      }
+    } else {
+      const renameBtn = sidebarRow('button', {
+        className: 'popover-action',
+        leading: svgIcon('edit'),
+        label: this.options.labels.renameGroup ?? 'Rename group',
+      }) as HTMLButtonElement
+      renameBtn.type = 'button'
+      renameBtn.addEventListener('click', () => {
+        this.closePopover()
+        void this.promptRenameGroup(group.id, group.title)
+      })
 
-    popover.append(renameBtn, deleteBtn)
+      const deleteBtn = sidebarRow('button', {
+        className: 'popover-action is-destructive',
+        leading: svgIcon('trash'),
+        label: this.options.labels.deleteGroup ?? 'Delete group',
+      }) as HTMLButtonElement
+      deleteBtn.type = 'button'
+      deleteBtn.addEventListener('click', () => {
+        this.closePopover()
+        void this.handleDeleteGroup(group.id)
+      })
+
+      popover.append(renameBtn, deleteBtn)
+    }
     this.positionPopover(popover, anchor)
   }
 
@@ -665,20 +705,6 @@ export class FileNavigation {
     setTimeout(() => window.addEventListener('click', onOutside, true), 10)
   }
 
-  private async promptAddGroup(): Promise<void> {
-    const title = await showPromptDialog({
-      title: this.options.labels.addGroup ?? 'Add group',
-      placeholder: this.options.labels.newGroupPrompt ?? 'Group title:',
-      confirmLabel: this.options.labels.confirm ?? 'Confirm',
-      cancelLabel: this.options.labels.cancel ?? 'Cancel',
-    })
-    if (title && title.trim()) {
-      const current = createInitialManifest(this.options.bundle)
-      const next = addNavigationGroup(current, title.trim())
-      this.options.onUpdateNavigation?.(next)
-    }
-  }
-
   private async promptRenameGroup(groupId: string, oldTitle: string): Promise<void> {
     const newTitle = await showPromptDialog({
       title: this.options.labels.renameGroup ?? 'Rename group',
@@ -705,6 +731,34 @@ export class FileNavigation {
     const current = createInitialManifest(this.options.bundle)
     const next = removeNavigationGroup(current, groupId)
     this.options.onUpdateNavigation?.(next)
+  }
+
+  private async promptRenameCategory(oldName: string): Promise<void> {
+    const promptText = this.options.labels.renameCategoryPrompt ?? 'New category name:'
+    const newName = await showPromptDialog({
+      title: this.options.labels.renameCategory ?? 'Rename category',
+      placeholder: promptText,
+      initialValue: oldName,
+      confirmLabel: this.options.labels.confirm ?? 'Confirm',
+      cancelLabel: this.options.labels.cancel ?? 'Cancel',
+    })
+    const trimmed = newName?.trim()
+    if (!trimmed || trimmed === oldName) return
+    await this.options.onRenameCategory?.(oldName, trimmed)
+  }
+
+  private async handleDeleteCategory(categoryName: string): Promise<void> {
+    const confirmText = this.options.labels.deleteCategoryConfirm ??
+      'Delete this category? Its files will be reset to Unclassified. Files will not be deleted.'
+    const confirmed = await showConfirmDialog({
+      title: this.options.labels.deleteCategory ?? 'Delete category',
+      messages: [confirmText],
+      destructive: true,
+      confirmLabel: this.options.labels.deleteCategory ?? 'Delete',
+      cancelLabel: this.options.labels.cancel ?? 'Cancel',
+    })
+    if (!confirmed) return
+    await this.options.onDeleteCategory?.(categoryName)
   }
 
   private handleMoveFile(filePath: string, targetGroupId: string | null): void {

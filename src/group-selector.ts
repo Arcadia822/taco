@@ -1,7 +1,6 @@
 import { type TacoBundle, type TacoFile } from './model.ts'
 import { resolveDocumentNavigation } from './navigation.ts'
 import { el, sidebarRow, svgIcon } from './ui-primitives.ts'
-import { showPromptDialog } from './ui-primitives.ts'
 
 export interface GroupSelectOption {
   id: string
@@ -29,27 +28,11 @@ export function getFileCurrentGroup(
   }
 
 
-  if (resolved.mode === 'custom') {
-    for (const group of resolved.groups) {
-      if (group.isCustom && group.files.some((f) => f.path === file.path)) {
-        return {
-          groupId: group.id,
-          groupTitle: group.title,
-        }
-      }
-    }
-  } else {
-    // stage 模式：检查处于哪个阶段
-    for (const group of resolved.groups) {
-      if (!group.isCustom) {
-        const inCore = group.stage.core?.path === file.path
-        const inFiles = group.stage.files.some((f) => f.path === file.path)
-        if (inCore || inFiles) {
-          return {
-            groupId: group.id,
-            groupTitle: group.title,
-          }
-        }
+  for (const group of resolved.groups) {
+    if (group.files.some((f) => f.path === file.path)) {
+      return {
+        groupId: group.id,
+        groupTitle: group.title,
       }
     }
   }
@@ -80,14 +63,10 @@ export interface OpenGroupSelectorOptions {
   currentGroupId: string | null
   labels?: {
     ungrouped: string
-    newGroup: string
-    newGroupTitle: string
-    groupTitlePlaceholder: string
-    create: string
-    cancel: string
+    manageCategories?: string
   }
   onSelectGroup: (groupId: string | null) => void
-  onCreateNewGroup: (newTitle: string) => void
+  onManageCategories?: () => void
 }
 
 /**
@@ -130,30 +109,23 @@ export function openGroupSelectorPopover(options: OpenGroupSelectorOptions): voi
   })
   popover.append(unassignedRow)
 
-  // 分隔线
-  const sep = el('div', 'share-separator')
-  popover.append(sep)
+  // 3. 管理分类
+  if (options.onManageCategories) {
+    const sep = el('div', 'share-separator')
+    popover.append(sep)
 
-  // 3. 新建分组选项
-  const newGroupRow = sidebarRow('button', {
-    className: 'popover-action',
-    leading: svgIcon('plus'),
-    label: options.labels?.newGroup ?? 'New group...',
-  }) as HTMLButtonElement
-  newGroupRow.type = 'button'
-  newGroupRow.addEventListener('click', async () => {
-    popover.remove()
-    const newTitle = await showPromptDialog({
-      title: options.labels?.newGroupTitle ?? 'New group',
-      placeholder: options.labels?.groupTitlePlaceholder ?? 'Group name',
-      confirmLabel: options.labels?.create ?? 'Create',
-      cancelLabel: options.labels?.cancel ?? 'Cancel',
+    const manageCategoriesRow = sidebarRow('button', {
+      className: 'popover-action',
+      leading: svgIcon('tag'),
+      label: options.labels?.manageCategories ?? 'Manage categories',
+    }) as HTMLButtonElement
+    manageCategoriesRow.type = 'button'
+    manageCategoriesRow.addEventListener('click', () => {
+      popover.remove()
+      options.onManageCategories?.()
     })
-    if (newTitle && newTitle.trim()) {
-      options.onCreateNewGroup(newTitle.trim())
-    }
-  })
-  popover.append(newGroupRow)
+    popover.append(manageCategoriesRow)
+  }
 
   // 定位 popover
   document.body.append(popover)

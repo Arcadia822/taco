@@ -1,9 +1,7 @@
 import { checkpointLayout, checkpointMembership, validateCheckpoints } from '@taco/protocol'
-import { type TacoBundle, type TacoFile } from './model.ts'
-import { buildStageNavigation, STAGES, type StageGroup } from './stage-navigation.ts'
+import { isInternalFile, relativePath, type TacoBundle, type TacoFile } from './model.ts'
 import { resolveFileCategory, resolvePathCategory, UNCLASSIFIED_CATEGORY } from './category.ts'
-
-const stageCategories = new Set<string>(STAGES.map(({ id }) => id))
+import { buildStageNavigation } from './stage-navigation.ts'
 
 export interface ResolvedCustomGroup {
   id: string
@@ -12,14 +10,8 @@ export interface ResolvedCustomGroup {
   isCustom: true
 }
 
-export interface ResolvedStageGroup {
-  id: string
-  title: string
-  stage: StageGroup
-  isCustom: false
-}
+export type ResolvedGroup = ResolvedCustomGroup
 
-export type ResolvedGroup = ResolvedCustomGroup | ResolvedStageGroup
 export interface PlaceholderEntry {
   kind: 'placeholder'
   path: string
@@ -44,7 +36,6 @@ export interface NavigationWarning {
   reason: 'manifest-path-owned-by-checkpoint' | 'category-overridden' | 'category-title-collision'
 }
 
-
 export interface ResolvedDocumentNavigation {
   mode: 'custom' | 'stage'
   checkpointGroups: ResolvedCheckpointGroup[]
@@ -59,11 +50,12 @@ export function resolveDocumentNavigation(bundle: TacoBundle): ResolvedDocumentN
     : validateCheckpoints(bundle.checkpoints, bundle.root)
   const state = validated?.ok ? validated.value : null
   const members = state ? checkpointMembership(state) : new Map<string, never>()
-  const ordinaryFiles = bundle.files.filter((file) => !members.has(file.path))
+  const ordinaryFiles = bundle.files.filter((file) => !members.has(file.path) && !isInternalFile(file.path))
   const filesByPath = new Map(bundle.files.map((file) => [file.path, file]))
   const checkpointGroups: ResolvedCheckpointGroup[] = []
   const warnings: NavigationWarning[] = []
   const categoryAssignedPaths = new Set<string>()
+
   if (state) {
     const nodesById = new Map(state.nodes.map((node) => [node.id, node]))
     for (const layer of checkpointLayout(state)) {
@@ -96,8 +88,7 @@ export function resolveDocumentNavigation(bundle: TacoBundle): ResolvedDocumentN
     }
     for (const file of ordinaryFiles) {
       const category = resolveFileCategory(bundle, file)
-      if ((category.source === 'root-file' || category.source === 'first-level-dir')
-        && titles.has(category.category)) {
+      if ((category.source === 'first-level-dir' || category.source === 'root-file') && titles.has(category.category)) {
         warnings.push({ path: file.path, reason: 'category-title-collision' })
       }
     }
@@ -113,6 +104,7 @@ export function resolveDocumentNavigation(bundle: TacoBundle): ResolvedDocumentN
       .sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1
         : a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : 0),
   })
+
   const manifest = bundle.navigation
 
   // 1. 如果有显式 navigation 声明，按声明组织
@@ -134,7 +126,7 @@ export function resolveDocumentNavigation(bundle: TacoBundle): ResolvedDocumentN
           continue
         }
         const file = filesByPath.get(resolvedPath) ?? filesByPath.get(path)
-        if (file && !assignedPaths.has(file.path)) {
+        if (file && !assignedPaths.has(file.path) && !isInternalFile(file.path)) {
           assignedPaths.add(file.path)
           if (checkpoint) {
             checkpoint.entries.push({ kind: 'category-file', file })
@@ -157,14 +149,13 @@ export function resolveDocumentNavigation(bundle: TacoBundle): ResolvedDocumentN
     return result('custom', groups, unassigned)
   }
 
-  // 2. 检查是否有文件或一级目录显式声明了非 stage 的通用自定义 category
-  // 注意：category 的 spec / plan / tasks 三个取值仍由原生 stage 导航承接，
-  // 不会被降级为同名自定义分组；其余取值才形成自定义分组
-  const hasCategoryDeclaration = ordinaryFiles.some((file) => {
-    const { category } = resolveFileCategory(bundle, file)
-    return category !== UNCLASSIFIED_CATEGORY && !stageCategories.has(category)
+  // 2. 检查是否为内置三阶段项目（拥有根目录 spec.md / plan.md / tasks.md）
+  const isStageProject = bundle.files.some((file) => {
+    const rel = relativePath(bundle, file)
+    return rel === 'spec.md' || rel === 'plan.md' || rel === 'tasks.md'
   })
-  if (hasCategoryDeclaration) {
+
+  if (!isStageProject) {
     const categoryMap = new Map<string, TacoFile[]>()
     const unassigned: TacoFile[] = []
 
@@ -182,26 +173,26 @@ export function resolveDocumentNavigation(bundle: TacoBundle): ResolvedDocumentN
       }
     }
 
-    const groups: ResolvedCustomGroup[] = Array.from(categoryMap.entries()).map(([catName, files]) => ({
-      id: `category-${catName}`,
-      title: catName,
-      files,
-      isCustom: true,
-    }))
-
-    return result('custom', groups, unassigned)
+    if (categoryMap.size > 0 || !isStageProject) {
+      const groups: ResolvedCustomGroup[] = Array.from(categoryMap.entries()).map(([catName, files]) => ({
+        id: `category-${catName}`,
+        title: catName,
+        files,
+        isCustom: true,
+      }))
+      return result('custom', groups, unassigned)
+    }
   }
-
-  // 3. 既没有 navigation 也无任何自定义 category，保持原先 Spec Kit 三阶段派生逻辑
+  // 3. 只有当确实存在阶段文件 (spec.md / plan.md / tasks.md) 时才派生阶段分组
   const structure = buildStageNavigation({ ...bundle, files: ordinaryFiles })
-  const groups: ResolvedStageGroup[] = structure.stages
+  const stageGroups: ResolvedCustomGroup[] = structure.stages
     .filter((stage) => !state || stage.files.length > 0)
     .map((stage) => ({
       id: stage.definition.id,
       title: stage.definition.id,
-      stage,
-      isCustom: false,
+      files: [...(stage.core ? [stage.core] : []), ...stage.files],
+      isCustom: true,
     }))
 
-  return result('stage', groups, structure.unassigned)
+  return result('stage', stageGroups, structure.unassigned)
 }

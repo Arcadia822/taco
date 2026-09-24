@@ -30,7 +30,7 @@ export const STAGES: readonly StageDefinition[] = [
  * navigation manifest. No document frontmatter property takes part in routing, and the deprecated
  * Spec-specific scope keys are not read at all.
  */
-const conventionStage = (path: string): StageId | null => {
+export const conventionStage = (path: string): StageId | null => {
   if (path.toLowerCase() === 'readme.md' || path === 'spec.md') return 'spec'
   if (path === 'plan.md') return 'plan'
   if (path === 'tasks.md') return 'tasks'

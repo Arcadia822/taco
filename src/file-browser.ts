@@ -5,6 +5,7 @@ import {
   fileKind,
   fileName,
   relativePath,
+  isInternalFile,
   type TacoBundle,
   type TacoFile,
 } from './model.ts'
@@ -27,7 +28,7 @@ import { createBrandMarkContainer } from './brand.ts'
 import { createSourceEditor, type SourceEditorController } from './source-editor.ts'
 import { FileNavigation } from './file-navigation.ts'
 import { getAvailableGroups, getFileCurrentGroup, openGroupSelectorPopover } from './group-selector.ts'
-import { addNavigationGroup, createInitialManifest, moveFileToGroup } from './navigation-editor.ts'
+import { createInitialManifest, moveFileToGroup } from './navigation-editor.ts'
 import { showNewFileDialog } from './new-file-dialog.ts'
 import {
   createControlButton,
@@ -55,7 +56,8 @@ import { hasCollabSecrets } from './security.ts'
 import { localFileUrl } from './local-file-url.ts'
 import { frontmatterTitle, parseFrontmatter } from './frontmatter.ts'
 import { setEditorFrontmatterProperty } from './tiptap-document-properties.ts'
-import { resolveFileCategory } from './category.ts'
+import { addCategory, deleteCategory, findCategoryDir, renameCategory, resolveFileCategory, slugifyCategoryDir, updateFileCategory, UNCLASSIFIED_CATEGORY } from './category.ts'
+import { showCategoryManagerDialog } from './category-manager-dialog.ts'
 import { commentLineReference } from './comment-position.ts'
 import { createStructuredFileViewer, structuredFileLabels } from './structured-file-viewer.ts'
 import { createSegmentedControl } from './segmented-control.ts'
@@ -163,7 +165,7 @@ export class FileBrowser {
   getModifiedReviewFiles(): Array<{ path: string; mediaType: string; content: string; diff?: string }> {
     const dirtyIds = this.dirtyTracker.getDirtyFileIds()
     return this.bundle.files
-      .filter((file) => dirtyIds.has(file.id ?? file.path))
+      .filter((file) => !isInternalFile(file.path) && dirtyIds.has(file.id ?? file.path))
       .map((file) => {
         const rel = relativePath(this.bundle, file)
         const baseline = this.dirtyTracker.getBaselineContent(file.id ?? file.path) ?? ''
@@ -362,8 +364,21 @@ export class FileBrowser {
         newGroupPrompt: this.t.newGroupPrompt,
         newFilePrompt: this.t.newFilePrompt,
         renameFilePrompt: this.t.renameFilePrompt,
+        manageCategories: this.t.manageCategories,
+        categoryList: this.t.categoryList,
+        renameCategory: this.t.renameCategory,
+        deleteCategory: this.t.deleteCategory,
+        deleteCategoryConfirm: this.t.deleteCategoryConfirm,
+        renameCategoryPrompt: this.t.renameCategoryPrompt,
+        affectedFiles: this.t.affectedFiles,
+        noCustomCategories: this.t.noCustomCategories,
+        confirm: this.t.save ?? 'Confirm',
+        cancel: this.t.cancel ?? 'Cancel',
       },
       editable: bundleCanWrite(this.bundle),
+      onManageCategories: () => this.handleManageCategories(),
+      onRenameCategory: (oldName, newName) => this.handleRenameCategory(oldName, newName),
+      onDeleteCategory: (categoryName) => this.handleDeleteCategory(categoryName),
       onUpdateNavigation: (navigation) => {
         this.store.updateNavigation(navigation)
         this.fileNavigation?.refresh(this.selected)
@@ -1075,8 +1090,9 @@ export class FileBrowser {
       const query = input.value.trim().toLocaleLowerCase()
       if (!query) return
       const matches = this.bundle.files.filter((file) =>
-        relativePath(this.bundle, file).toLocaleLowerCase().includes(query)
-        || file.content.toLocaleLowerCase().includes(query))
+        !isInternalFile(file.path)
+        && (relativePath(this.bundle, file).toLocaleLowerCase().includes(query)
+        || file.content.toLocaleLowerCase().includes(query)))
       for (const file of matches.slice(0, 50)) {
         const button = el('button', 'search-result') as HTMLButtonElement
         button.type = 'button'
@@ -1140,27 +1156,23 @@ export class FileBrowser {
       currentGroupId: groupInfo.groupId,
       labels: {
         ungrouped: this.t.ungrouped,
-        newGroup: this.t.newGroup,
-        newGroupTitle: this.t.newGroupTitle,
-        groupTitlePlaceholder: this.t.groupTitlePlaceholder,
-        create: this.t.create,
-        cancel: this.t.cancel,
+        manageCategories: this.t.manageCategories,
       },
       onSelectGroup: (targetGroupId) => {
-        const current = createInitialManifest(this.bundle)
-        const next = moveFileToGroup(current, this.selected!.path, targetGroupId, this.bundle.root, this.bundle)
-        this.store.updateNavigation(next)
+        if (!this.selected) return
+        this.store.commit({ kind: 'document' }, () => {
+          const targetGroup = getAvailableGroups(this.bundle).find((g) => g.id === targetGroupId)
+          const targetCategory = targetGroup ? targetGroup.title : UNCLASSIFIED_CATEGORY
+          updateFileCategory(this.bundle, this.selected!, targetCategory)
+          const current = createInitialManifest(this.bundle)
+          const next = moveFileToGroup(current, this.selected!.path, targetGroupId, this.bundle.root, this.bundle)
+          this.bundle.navigation = next
+        })
         this.syncWorkspaceHeader()
         this.fileNavigation?.refresh(this.selected)
       },
-      onCreateNewGroup: (newTitle) => {
-        const current = createInitialManifest(this.bundle)
-        const withNewGroup = addNavigationGroup(current, newTitle)
-        const newGroupId = withNewGroup.groups[withNewGroup.groups.length - 1]?.id
-        const next = moveFileToGroup(withNewGroup, this.selected!.path, newGroupId, this.bundle.root, this.bundle)
-        this.store.updateNavigation(next)
-        this.syncWorkspaceHeader()
-        this.fileNavigation?.refresh(this.selected)
+      onManageCategories: () => {
+        this.handleManageCategories()
       },
     })
   }
@@ -1609,14 +1621,21 @@ export class FileBrowser {
       categoryLabel: this.t.newFileCategory,
       ungroupedLabel: this.t.ungrouped,
       groups,
-      initialGroupId: groups.some((group) => group.id === targetGroupId) ? targetGroupId : null,
+      initialGroupId: (targetGroupId && groups.some((group) => group.id === targetGroupId)) ? targetGroupId : (groups[0]?.id ?? null),
       confirmLabel: this.t.create,
       cancelLabel: this.t.cancel,
     })
     if (!result) return
 
     const fileNameClean = result.fileName.trim().replaceAll('\\', '/').split('/').filter(Boolean).join('/')
-    const fullPath = `${this.bundle.root}/${fileNameClean}`
+    let fullPath = `${this.bundle.root}/${fileNameClean}`
+    if (result.groupId) {
+      const selectedGroup = groups.find((g) => g.id === result.groupId)
+      if (selectedGroup && selectedGroup.id.startsWith('category-')) {
+        const targetDir = findCategoryDir(this.bundle, selectedGroup.title) || slugifyCategoryDir(selectedGroup.title, this.bundle)
+        fullPath = `${this.bundle.root}/${targetDir}/${fileNameClean}`
+      }
+    }
     if (fileByPath(this.bundle, fullPath)) return
     if (result.groupId && !groups.some(({ id }) => id === result.groupId)) return
     const navigation = result.groupId ? createInitialManifest(this.bundle) : null
@@ -1719,6 +1738,61 @@ export class FileBrowser {
       if (this.selected) this.selectFile(this.selected)
     }
     this.fileNavigation?.refresh(this.selected)
+  }
+
+  private handleManageCategories(): void {
+    void showCategoryManagerDialog({
+      bundle: this.bundle,
+      title: this.t.manageCategories ?? 'Manage categories',
+      closeLabel: this.t.close ?? 'Close',
+      renameLabel: this.t.renameCategory ?? 'Rename category',
+      deleteLabel: this.t.deleteCategory ?? 'Delete category',
+      deleteConfirm: this.t.deleteCategoryConfirm,
+      renamePrompt: this.t.renameCategoryPrompt,
+      affectedFiles: this.t.affectedFiles,
+      noCustomCategories: this.t.noCustomCategories,
+      addCategoryLabel: this.t.addCategory,
+      addCategoryPrompt: this.t.addCategoryPrompt,
+      confirmLabel: this.t.save ?? 'Confirm',
+      cancelLabel: this.t.cancel ?? 'Cancel',
+      onAddCategory: (catName) => this.handleAddCategory(catName),
+      onRenameCategory: (oldName, newName) => this.handleRenameCategory(oldName, newName),
+      onDeleteCategory: (categoryName) => this.handleDeleteCategory(categoryName),
+    })
+  }
+
+  private handleAddCategory(categoryName: string): void {
+    this.store.commit({ kind: 'document' }, () => {
+      addCategory(this.bundle, categoryName)
+    })
+    this.fileNavigation?.refresh(this.selected)
+    this.syncWorkspaceHeader()
+  }
+
+  private handleRenameCategory(oldName: string, newName: string): void {
+    let modifiedFiles: TacoFile[] = []
+    this.store.commit({ kind: 'document' }, () => {
+      const res = renameCategory(this.bundle, oldName, newName)
+      modifiedFiles = res.modifiedFiles
+    })
+    this.fileNavigation?.refresh(this.selected)
+    this.syncWorkspaceHeader()
+    if (this.selected && modifiedFiles.some((f) => f.path === this.selected?.path)) {
+      this.selectFile(this.selected)
+    }
+  }
+
+  private handleDeleteCategory(categoryName: string): void {
+    let modifiedFiles: TacoFile[] = []
+    this.store.commit({ kind: 'document' }, () => {
+      const res = deleteCategory(this.bundle, categoryName)
+      modifiedFiles = res.modifiedFiles
+    })
+    this.fileNavigation?.refresh(this.selected)
+    this.syncWorkspaceHeader()
+    if (this.selected && modifiedFiles.some((f) => f.path === this.selected?.path)) {
+      this.selectFile(this.selected)
+    }
   }
 
 

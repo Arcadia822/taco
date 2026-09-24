@@ -1,24 +1,17 @@
-import { fileByPath, relativePath, type TacoBundle, type TacoFile } from './model.ts'
+import { fileByPath, isInternalFile, relativePath, type NavigationManifest, type TacoBundle, type TacoFile } from './model.ts'
 import { frontmatterString, replaceFrontmatterProperty } from './frontmatter.ts'
-import { parseDocument } from 'yaml'
 import { checkpointMembership, validateCheckpoints } from '@taco/protocol'
+import { createInitialManifest } from './navigation-editor.ts'
+import { resolveDocumentNavigation } from './navigation.ts'
+import { conventionStage } from './stage-navigation.ts'
 
 export const UNCLASSIFIED_CATEGORY = '未分类'
 
-/** The general classification property, in frontmatter or in a directory's `_dir.yaml`. */
-export const CATEGORY_PROPERTY = 'category'
-
 /**
  * 校验子目录层级：最多限定创建 2 级子目录
- * 例：
- *   specs/root/file.md -> 0 级（根目录文件）
- *   specs/root/docs/file.md -> 1 级子目录（允许）
- *   specs/root/docs/sub/file.md -> 2 级子目录（允许）
- *   specs/root/docs/sub/deep/file.md -> 3 级（超出限制，非法）
  */
 export function validateDirectoryDepth(relPath: string): { valid: boolean; depth: number } {
   const parts = relPath.split('/').filter(Boolean)
-  // parts 最后若是文件名，目录层级数为 parts.length - 1
   const depth = parts.length > 1 ? parts.length - 1 : 0
   return {
     valid: depth <= 2,
@@ -26,29 +19,9 @@ export function validateDirectoryDepth(relPath: string): { valid: boolean; depth
   }
 }
 
-/**
- * 读取某目录下的 _dir.yaml 文件中定义的 category
- */
-export function getDirYamlCategory(bundle: TacoBundle, dirRelPath: string): string | null {
-  const cleanDir = dirRelPath.replace(/^\/+|\/+$/g, '')
-  const dirYamlRel = cleanDir ? `${cleanDir}/_dir.yaml` : '_dir.yaml'
-  const fullPath = `${bundle.root}/${dirYamlRel}`
-  const dirFile = fileByPath(bundle, fullPath)
-  if (!dirFile || !dirFile.content.trim()) return null
-
-  try {
-    const doc = parseDocument(dirFile.content)
-    const val: unknown = doc.get(CATEGORY_PROPERTY)
-    if (typeof val === 'string' && val.trim()) return val.trim()
-  } catch {
-    return null
-  }
-  return null
-}
-
 export interface FileCategoryResolution {
   category: string
-  source: 'checkpoint' | 'root-default' | 'root-file' | 'first-level-dir' | 'inherited-root'
+  source: 'checkpoint' | 'root-default' | 'root-file' | 'first-level-dir'
   canEdit: boolean
   firstLevelDir: string | null
   checkpointId?: string
@@ -57,11 +30,7 @@ export interface FileCategoryResolution {
 
 /**
  * 解析文件的所属 Category：
- * 1. 所有根目录默认在“未分类”category 下，子目录和文件继承父目录的 category，如果仍未定义则向上一层走，直到走到根目录（未分类）
- * 2. 根目录下，一级目录可通过 _dir.yaml 定义 category
- * 3. 所有根目录文件可自己定义 category（通过其 frontmatter 的 category 字段）
- * 4. 子目录和子目录下的文件则不能自定义 category（使用一级目录的，如果没有则继承根目录的未分类）
- * 5. 子目录最多限定创建 2 级
+ * Category 直接与一级目录对齐（一级目录即 Category，根目录即未分类）。
  */
 export function resolveFileCategory(bundle: TacoBundle, file: TacoFile): FileCategoryResolution {
   return resolveCategory(bundle, file.path, file)
@@ -80,9 +49,7 @@ function resolveCategory(bundle: TacoBundle, path: string, file: TacoFile | null
   const member = checkpointMembership(validated.value).get(path)
   if (!member) return original
   const node = validated.value.nodes.find(({ id }) => id === member.nodeId)!
-  const overridden = original.source === 'root-file' || original.source === 'first-level-dir'
-    ? original.category
-    : undefined
+  const overridden = (original.source === 'first-level-dir' || original.source === 'root-file') ? original.category : undefined
   return {
     category: node.title,
     source: 'checkpoint',
@@ -99,7 +66,7 @@ function resolveOrdinaryPathCategory(bundle: TacoBundle, path: string, file: Tac
 
   // 1. 根目录下的文件 (parts.length === 1)
   if (parts.length === 1) {
-    const selfCategory = file ? frontmatterString(file.content, CATEGORY_PROPERTY)?.trim() : undefined
+    const selfCategory = file ? frontmatterString(file.content, 'category')?.trim() : undefined
     if (selfCategory) {
       return {
         category: selfCategory,
@@ -116,31 +83,108 @@ function resolveOrdinaryPathCategory(bundle: TacoBundle, path: string, file: Tac
     }
   }
 
-  // 2. 子目录文件 (parts.length >= 2)
-  const firstLevelDir = parts[0]
-  const dirCat = getDirYamlCategory(bundle, firstLevelDir)
-  if (dirCat) {
+  // 2. 子目录文件 (parts.length >= 2):
+  // 若属于内置阶段路径，按阶段处理；否则一级目录直接即分类名！
+  if (conventionStage(rel) !== null) {
     return {
-      category: dirCat,
+      category: UNCLASSIFIED_CATEGORY,
       source: 'first-level-dir',
-      canEdit: false, // 子目录文件不能自定义 category，必须跟随一级目录
-      firstLevelDir,
+      canEdit: true,
+      firstLevelDir: parts[0],
     }
   }
 
-  // 没有定义则向上一层走，直到走到根目录（未分类）
+  const firstLevelDir = parts[0]
   return {
-    category: UNCLASSIFIED_CATEGORY,
-    source: 'inherited-root',
-    canEdit: false,
+    category: firstLevelDir,
+    source: 'first-level-dir',
+    canEdit: true,
     firstLevelDir,
+  }
+}
+
+export function slugifyCategoryDir(name: string, bundle: TacoBundle): string {
+  let clean = name.trim().replace(/[/\\:*?"<>|]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'category'
+  let dir = clean
+  let counter = 1
+  while (bundle.files.some((f) => {
+    if (isInternalFile(f.path)) return false
+    const rel = relativePath(bundle, f)
+    const parts = rel.split('/').filter(Boolean)
+    return parts.length >= 2 && parts[0] === dir && parts[0].toLowerCase() !== name.toLowerCase()
+  })) {
+    dir = `${clean}-${counter++}`
+  }
+  return dir
+}
+
+export function findCategoryDir(bundle: TacoBundle, categoryName: string): string | null {
+  for (const f of bundle.files) {
+    if (isInternalFile(f.path)) continue
+    const rel = relativePath(bundle, f)
+    const parts = rel.split('/').filter(Boolean)
+    if (parts.length >= 2) {
+      const dir = parts[0]
+      if (dir.toLowerCase() === categoryName.toLowerCase()) {
+        return dir
+      }
+    }
+  }
+  return null
+}
+
+function safeRootPath(bundle: TacoBundle, currentFilePath: string): string {
+  const base = currentFilePath.split('/').pop() || 'document.md'
+  const target = `${bundle.root}/${base}`
+  if (!bundle.files.some((f) => f.path === target && f.path !== currentFilePath)) {
+    return target
+  }
+  const dot = base.lastIndexOf('.')
+  const name = dot > 0 ? base.slice(0, dot) : base
+  const ext = dot > 0 ? base.slice(dot) : ''
+  let counter = 1
+  let candidate = `${bundle.root}/${name}-${counter}${ext}`
+  while (bundle.files.some((f) => f.path === candidate && f.path !== currentFilePath)) {
+    counter += 1
+    candidate = `${bundle.root}/${name}-${counter}${ext}`
+  }
+  return candidate
+}
+
+function safeDirPath(bundle: TacoBundle, targetDir: string, currentFilePath: string): string {
+  const base = currentFilePath.split('/').pop() || 'document.md'
+  const target = `${bundle.root}/${targetDir}/${base}`
+  if (!bundle.files.some((f) => f.path === target && f.path !== currentFilePath)) {
+    return target
+  }
+  const dot = base.lastIndexOf('.')
+  const name = dot > 0 ? base.slice(0, dot) : base
+  const ext = dot > 0 ? base.slice(dot) : ''
+  let counter = 1
+  let candidate = `${bundle.root}/${targetDir}/${name}-${counter}${ext}`
+  while (bundle.files.some((f) => f.path === candidate && f.path !== currentFilePath)) {
+    counter += 1
+    candidate = `${bundle.root}/${targetDir}/${name}-${counter}${ext}`
+  }
+  return candidate
+}
+
+function updateNavigationPath(navigation: NavigationManifest, root: string, oldPath: string, newPath: string): void {
+  const oldRel = oldPath.slice(root.length + 1)
+  const newRel = newPath.slice(root.length + 1)
+  if (Array.isArray(navigation.groups)) {
+    for (const group of navigation.groups) {
+      group.paths = group.paths.map((p) => (p === oldRel ? newRel : p))
+    }
+  }
+  if (navigation.entry === oldRel) {
+    navigation.entry = newRel
   }
 }
 
 /**
  * 修改某文件的所属 Category：
- * - 若为根目录文件：直接修改或设置该文件的 frontmatter category
- * - 若为一级目录下的文件：修改对应的 `<firstLevelDir>/_dir.yaml` 文件中的 category
+ * Category 直接与 Folder 对齐，修改分类将文件物理移动到对应目录下，或移回根目录（未分类）
  */
 export function updateFileCategory(
   bundle: TacoBundle,
@@ -152,41 +196,296 @@ export function updateFileCategory(
   }
   const rel = relativePath(bundle, file)
   const parts = rel.split('/').filter(Boolean)
-  const catTrimmed = newCategory.trim() || UNCLASSIFIED_CATEGORY
+  const catTrimmed = newCategory?.trim() || UNCLASSIFIED_CATEGORY
+  const currentCategory = resolveFileCategory(bundle, file).category
 
-  if (parts.length === 1) {
-    // 根目录文件自建 frontmatter
-    const nextContent = replaceFrontmatterProperty(
-      file.content,
-      CATEGORY_PROPERTY,
-      catTrimmed === UNCLASSIFIED_CATEGORY ? undefined : catTrimmed,
-    )
-    file.content = nextContent
+  if (currentCategory === catTrimmed) {
     return { modifiedFile: file, updatedBundle: bundle }
   }
 
-  // 一级目录或其子文件：写入或更新该一级目录下的 _dir.yaml
-  const firstLevelDir = parts[0]
-  const dirYamlPath = `${bundle.root}/${firstLevelDir}/_dir.yaml`
-  let dirFile = fileByPath(bundle, dirYamlPath)
-
-  if (!dirFile) {
-    dirFile = {
-      id: `file-dir-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      path: dirYamlPath,
-      mediaType: 'application/yaml',
-      content: `category: "${catTrimmed}"\n`,
+  // 1. 若目标是未分类 (移至根目录)
+  if (catTrimmed === UNCLASSIFIED_CATEGORY) {
+    if (parts.length > 1) {
+      const oldPath = file.path
+      const newPath = safeRootPath(bundle, file.path)
+      file.path = newPath
+      file.content = replaceFrontmatterProperty(file.content, 'category', undefined)
+      if (bundle.navigation) {
+        updateNavigationPath(bundle.navigation, bundle.root, oldPath, newPath)
+      }
+    } else {
+      file.content = replaceFrontmatterProperty(file.content, 'category', undefined)
     }
-    bundle.files.push(dirFile)
-  } else {
-    try {
-      const doc = parseDocument(dirFile.content)
-      doc.set(CATEGORY_PROPERTY, catTrimmed)
-      dirFile.content = doc.toString()
-    } catch {
-      dirFile.content = `category: "${catTrimmed}"\n`
+    return { modifiedFile: file, updatedBundle: bundle }
+  }
+
+  // 2. 目标是具体分类 (移至对应一级目录)
+  const targetDir = findCategoryDir(bundle, catTrimmed) || slugifyCategoryDir(catTrimmed, bundle)
+  const oldPath = file.path
+  const newPath = safeDirPath(bundle, targetDir, file.path)
+  file.path = newPath
+  file.content = replaceFrontmatterProperty(file.content, 'category', undefined)
+
+  if (bundle.navigation) {
+    updateNavigationPath(bundle.navigation, bundle.root, oldPath, newPath)
+  }
+
+  return { modifiedFile: file, updatedBundle: bundle }
+}
+
+export interface CategorySource {
+  type: 'first-level-dir'
+  path: string
+  targetDir: string
+}
+
+export interface CategoryDetail {
+  name: string
+  files: TacoFile[]
+  sources: CategorySource[]
+  isCheckpointOverridden: boolean
+}
+
+/**
+ * 列出 Taco 文档中声明的所有 Category 详情
+ */
+export function listCategories(bundle: TacoBundle): CategoryDetail[] {
+  const validated = bundle.checkpoints === undefined ? null : validateCheckpoints(bundle.checkpoints, bundle.root)
+  const state = validated?.ok ? validated.value : null
+  const checkpointMembers = state ? checkpointMembership(state) : new Map<string, unknown>()
+
+  interface CategoryAccumulator {
+    name: string
+    files: Map<string, TacoFile>
+    checkpointFilesCount: number
+    isCheckpointLocked?: boolean
+  }
+
+  const categoryMap = new Map<string, CategoryAccumulator>()
+  const getOrCreate = (name: string): CategoryAccumulator => {
+    let item = categoryMap.get(name)
+    if (!item) {
+      item = {
+        name,
+        files: new Map(),
+        checkpointFilesCount: 0,
+      }
+      categoryMap.set(name, item)
+    }
+    return item
+  }
+
+  // 1. 如果有 Checkpoint，将所有 Checkpoint 节点作为分类纳入列表（标注为锁定，在管理页可见但不能编辑）
+  if (state) {
+    for (const node of state.nodes) {
+      const acc = getOrCreate(node.title)
+      acc.isCheckpointLocked = true
+      for (const doc of node.documents) {
+        const file = fileByPath(bundle, doc.path)
+        if (file && !isInternalFile(file.path)) {
+          acc.files.set(file.path, file)
+        }
+      }
     }
   }
 
-  return { modifiedFile: dirFile, updatedBundle: bundle }
+  // 2. 扫描当前导航中渲染的所有普通分组
+  const resolved = resolveDocumentNavigation(bundle)
+  for (const group of resolved.groups) {
+    if (group.title && group.title !== UNCLASSIFIED_CATEGORY) {
+      const acc = getOrCreate(group.title)
+      for (const file of group.files) {
+        if (!checkpointMembers.has(file.path) && !isInternalFile(file.path)) {
+          acc.files.set(file.path, file)
+        }
+        if (checkpointMembers.has(file.path)) {
+          acc.checkpointFilesCount += 1
+        }
+      }
+    }
+  }
+
+  // 3. 统计被 Checkpoint 锁定的普通物理分类目录
+  for (const file of bundle.files) {
+    if (isInternalFile(file.path)) continue
+    if (checkpointMembers.has(file.path)) {
+      const ordinary = resolveOrdinaryPathCategory(bundle, file.path, file)
+      if (ordinary.category !== UNCLASSIFIED_CATEGORY) {
+        getOrCreate(ordinary.category).checkpointFilesCount += 1
+      }
+    }
+  }
+
+  const details: CategoryDetail[] = []
+  for (const [, acc] of categoryMap) {
+    const files = Array.from(acc.files.values()).sort((a, b) => a.path.localeCompare(b.path))
+    const isCheckpointOverridden = Boolean(acc.isCheckpointLocked) || (files.length === 0 && acc.checkpointFilesCount > 0)
+    details.push({
+      name: acc.name,
+      files,
+      sources: [{ type: 'first-level-dir', path: `${bundle.root}/${acc.name}`, targetDir: acc.name }],
+      isCheckpointOverridden,
+    })
+  }
+
+  return details.sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/**
+ * 重命名 Category：
+ * 物理重命名对应的一级目录，更新文件路径；同步更新导航 manifest 分组
+ */
+export function renameCategory(
+  bundle: TacoBundle,
+  oldName: string,
+  newName: string,
+): { updatedBundle: TacoBundle; modifiedFiles: TacoFile[] } {
+  const fromName = oldName?.trim()
+  const toName = newName?.trim()
+  if (!fromName || !toName) {
+    throw new Error('Category name cannot be empty')
+  }
+  if (toName === UNCLASSIFIED_CATEGORY) {
+    throw new Error(`Cannot rename category to ${UNCLASSIFIED_CATEGORY}`)
+  }
+  if (fromName === toName) {
+    return { updatedBundle: bundle, modifiedFiles: [] }
+  }
+  const categories = listCategories(bundle)
+  const target = categories.find((c) => c.name.toLowerCase() === fromName.toLowerCase())
+  if (target?.isCheckpointOverridden) {
+    throw new Error(`Cannot rename Checkpoint locked category: ${fromName}`)
+  }
+
+
+  // 保证 bundle.navigation 存在，使对初始派生出的 spec/plan/tasks 或一级目录分类重命名持久生效
+  if (!bundle.navigation || !Array.isArray(bundle.navigation.groups)) {
+    bundle.navigation = createInitialManifest(bundle)
+  }
+
+  const modifiedFiles: TacoFile[] = []
+  const modifiedPaths = new Set<string>()
+
+  // 1. 如果存在物理目录，物理重命名对应一级目录及文件路径
+  const oldPrefix = `${bundle.root}/${fromName}/`
+  const targetDir = slugifyCategoryDir(toName, bundle)
+  const newPrefix = `${bundle.root}/${targetDir}/`
+
+  for (const file of bundle.files) {
+    if (file.path.startsWith(oldPrefix)) {
+      const subPath = file.path.slice(oldPrefix.length)
+      const nextPath = `${newPrefix}${subPath}`
+      const previousPath = file.path
+      file.path = nextPath
+
+      if (bundle.navigation) {
+        updateNavigationPath(bundle.navigation, bundle.root, previousPath, nextPath)
+      }
+      if (!modifiedPaths.has(file.path)) {
+        modifiedPaths.add(file.path)
+        modifiedFiles.push(file)
+      }
+    }
+  }
+
+  // 2. 导航状态同步更新分组
+  for (const group of bundle.navigation.groups) {
+    if (group.title === fromName || group.id === fromName || group.id === `category-${fromName}`) {
+      group.title = toName
+      group.id = `category-${toName}`
+    }
+  }
+
+  return { updatedBundle: bundle, modifiedFiles }
+}
+
+/**
+ * 删除 Category：
+ * 将属于该目录的所有文档安全移回根目录（变为未分类），绝不删除文档本身；清理导航分组
+ */
+export function deleteCategory(
+  bundle: TacoBundle,
+  categoryName: string,
+): { updatedBundle: TacoBundle; modifiedFiles: TacoFile[] } {
+  const cat = categoryName?.trim()
+  if (!cat || cat === UNCLASSIFIED_CATEGORY) {
+    throw new Error('Invalid category name to delete')
+  }
+
+  const categories = listCategories(bundle)
+  const target = categories.find((c) => c.name.toLowerCase() === cat.toLowerCase())
+  if (target?.isCheckpointOverridden) {
+    throw new Error(`Cannot delete Checkpoint locked category: ${cat}`)
+  }
+
+  // 保证 bundle.navigation 存在，使删除初始派生出的 spec/plan/tasks 或一级目录分类持久生效
+  if (!bundle.navigation || !Array.isArray(bundle.navigation.groups)) {
+    bundle.navigation = createInitialManifest(bundle)
+  }
+
+  const modifiedFiles: TacoFile[] = []
+  const modifiedPaths = new Set<string>()
+
+  const prefix = `${bundle.root}/${cat}/`
+  const filesToMove = bundle.files.filter((f) => f.path.startsWith(prefix))
+
+  for (const file of filesToMove) {
+    if (isInternalFile(file.path)) {
+      bundle.files = bundle.files.filter((f) => f !== file)
+      continue
+    }
+
+    const oldPath = file.path
+    const newPath = safeRootPath(bundle, file.path)
+    file.path = newPath
+
+    if (bundle.navigation) {
+      updateNavigationPath(bundle.navigation, bundle.root, oldPath, newPath)
+    }
+    if (!modifiedPaths.has(file.path)) {
+      modifiedPaths.add(file.path)
+      modifiedFiles.push(file)
+    }
+  }
+
+  // 导航状态清理
+  bundle.navigation.groups = bundle.navigation.groups.filter(
+    (group) => group.title !== cat && group.id !== cat && group.id !== `category-${cat}`,
+  )
+
+  return { updatedBundle: bundle, modifiedFiles }
+}
+
+/**
+ * 添加新的 Category：
+ * 在导航清单中注册该分类分组，零临时文件
+ */
+export function addCategory(
+  bundle: TacoBundle,
+  categoryName: string,
+): { updatedBundle: TacoBundle } {
+  const catTrimmed = categoryName?.trim()
+  if (!catTrimmed || catTrimmed === UNCLASSIFIED_CATEGORY) {
+    throw new Error('Invalid category name')
+  }
+
+  const existing = listCategories(bundle)
+  if (existing.some((c) => c.name.toLowerCase() === catTrimmed.toLowerCase())) {
+    throw new Error(`Category "${catTrimmed}" already exists`)
+  }
+
+  if (!bundle.navigation || !Array.isArray(bundle.navigation.groups)) {
+    bundle.navigation = createInitialManifest(bundle)
+  }
+
+  const groupId = `category-${catTrimmed}`
+  if (!bundle.navigation.groups.some((g) => g.id === groupId || g.title.toLowerCase() === catTrimmed.toLowerCase())) {
+    bundle.navigation.groups.push({
+      id: groupId,
+      title: catTrimmed,
+      paths: [],
+    })
+  }
+
+  return { updatedBundle: bundle }
 }

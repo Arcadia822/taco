@@ -123,9 +123,7 @@ describe('Checkpoint navigation', () => {
     expect(resolved.checkpointGroups[1].entries).toEqual([{ kind: 'file', file: bundle.files[0] }])
     expect(resolved.checkpointGroups[0]).toMatchObject({ isCheckpoint: true, locked: true })
     const ordinaryPaths = [
-      ...resolved.groups.flatMap((group) => group.isCustom
-        ? group.files.map((file) => file.path)
-        : group.stage.files.map((file) => file.path)),
+      ...resolved.groups.flatMap((group) => group.files.map((file) => file.path)),
       ...resolved.unassigned.map((file) => file.path),
     ]
     expect(ordinaryPaths).toEqual(['specs/sample/extra.md'])

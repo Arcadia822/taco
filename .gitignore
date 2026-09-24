@@ -15,3 +15,6 @@ tests/fixtures/**/*.taco.html
 
 # omp directory
 .omp/
+
+# Temporary directory for local verification files
+tmp/

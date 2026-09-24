@@ -1,5 +1,5 @@
 import { checkpointMembership, validateCheckpoints } from '@taco/protocol'
-import { type NavigationGroup, type NavigationManifest, type TacoBundle, type TacoFile } from './model.ts'
+import { type NavigationGroup, type NavigationManifest, type TacoBundle } from './model.ts'
 import { resolveDocumentNavigation } from './navigation.ts'
 
 export function createInitialManifest(bundle: TacoBundle): NavigationManifest {
@@ -12,14 +12,11 @@ export function createInitialManifest(bundle: TacoBundle): NavigationManifest {
   const groups: NavigationGroup[] = []
 
   for (const g of resolved.groups) {
-    const files: TacoFile[] = g.isCustom
-      ? g.files
-      : [...(g.stage.core ? [g.stage.core] : []), ...g.stage.files]
-    if (files.length > 0) {
+    if (g.files.length > 0) {
       groups.push({
         id: g.id,
         title: g.title,
-        paths: files.map((f) => f.path.slice(bundle.root.length + 1)),
+        paths: g.files.map((f) => f.path.slice(bundle.root.length + 1)),
       })
     }
   }

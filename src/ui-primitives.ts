@@ -36,6 +36,7 @@ export type IconName =
   | 'edit'
   | 'trash'
   | 'more-horizontal'
+  | 'tag'
   | 'status-todo'
   | 'status-in_progress'
   | 'status-complete'
@@ -81,6 +82,7 @@ const iconPaths: Record<IconName, string> = {
   'status-complete': '<circle cx="12" cy="12" r="8.5" fill="currentColor"/><path d="m8.4 12 2.5 2.5 4.8-5" fill="none" stroke="var(--surface)" stroke-width="2"/>',
   'status-freeze': '<rect x="6.5" y="10.5" width="11" height="9" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>',
   workflow: '<rect x="9.5" y="2" width="5" height="5" rx="1"/><rect x="2" y="17" width="5" height="5" rx="1"/><rect x="17" y="17" width="5" height="5" rx="1"/><path d="M12 7v5M4.5 17v-5h15v5"/>',
+  tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8 8a2 2 0 0 0 2.828 0l7.172-7.172a2 2 0 0 0 0-2.828l-8-8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
 }
 export const el = <K extends keyof HTMLElementTagNameMap>(
   tag: K,
