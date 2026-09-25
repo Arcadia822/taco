@@ -112,6 +112,7 @@ export class FileBrowser {
   private workspacePath!: HTMLElement
   private readonly markdownMigrationErrors = new Map<string, string>()
   private richEditorAdapter: RichEditorAdapter | null = null
+  private richEditorLoading = false
   private richEditor: RichEditorHandle | null = null
   private awaitingRichEditor: { path: string; content: string; serial: number } | null = null
   private richEditorFailure: string | null = null
@@ -242,15 +243,19 @@ export class FileBrowser {
     const adapterOption = options.richEditorAdapter ?? getDefaultRichEditorAdapter()
     const adapterPromise = typeof adapterOption === 'function' ? adapterOption() : adapterOption
     if (adapterPromise && typeof (adapterPromise as Promise<RichEditorAdapter>).then === 'function') {
+      this.richEditorLoading = true
       void (adapterPromise as Promise<RichEditorAdapter>).then((adapter) => {
+        this.richEditorLoading = false
         this.richEditorAdapter = adapter
         this.promoteAwaitingMarkdown()
       }).catch((error: unknown) => {
+        this.richEditorLoading = false
         this.richEditorFailure = error instanceof Error ? error.message : String(error)
+        const waiting = this.awaitingRichEditor
         this.awaitingRichEditor = null
-        if (this.selected && fileKind(this.selected) === 'markdown' && this.sourceEditor?.element.isConnected) {
-          const notice = el('p', 'editor-error', `${this.t.editorFailed} ${this.richEditorFailure}`)
-          this.viewer.prepend(notice)
+        if (waiting && this.selected?.path === waiting.path && this.editorMountSerial === waiting.serial) {
+          this.viewer.removeAttribute('aria-busy')
+          this.mountMarkdownFallback(this.viewer, this.selected, this.richEditorFailure)
         }
       })
     } else if (adapterOption) {
@@ -635,6 +640,7 @@ export class FileBrowser {
     this.awaitingRichEditor = null
     this.sourceEditor = null
     this.viewer.innerHTML = ''
+    this.viewer.removeAttribute('aria-busy')
     if (this.checkpointView) {
       this.viewer.append(createCheckpointView(resolveCheckpoints(this.bundle), checkpointCopy(this.locale), {
         readOnly: !bundleCanWrite(this.bundle),
@@ -807,8 +813,15 @@ export class FileBrowser {
 
   private mountMarkdownEditor(file: TacoFile, mountSerial: number): void {
     if (!this.richEditorAdapter) {
-      this.awaitingRichEditor = { path: file.path, content: file.content, serial: mountSerial }
-      this.mountMarkdownFallback(this.viewer, file, this.richEditorFailure ?? undefined)
+      if (this.richEditorLoading) {
+        this.awaitingRichEditor = { path: file.path, content: file.content, serial: mountSerial }
+        this.viewer.setAttribute('aria-busy', 'true')
+        const loading = el('div', 'empty-state', this.t.editorLoading)
+        loading.setAttribute('role', 'status')
+        this.viewer.replaceChildren(loading)
+      } else {
+        this.mountMarkdownFallback(this.viewer, file, this.richEditorFailure ?? undefined)
+      }
       return
     }
     const migrationError = this.markdownMigrationErrors.get(file.path)
@@ -858,6 +871,7 @@ export class FileBrowser {
     this.sourceEditor = null
     delete this.viewer.dataset.editorError
     this.viewer.replaceChildren(shell)
+    this.viewer.removeAttribute('aria-busy')
 
     try {
       this.richEditor = this.richEditorAdapter.mount({

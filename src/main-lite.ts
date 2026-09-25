@@ -31,7 +31,7 @@ if (parsed.ok) {
     richEditorAdapter,
     highlighter,
     mermaidRuntime,
-  })
+  }, richEditorAdapter)
 } else {
   recoveryGate(embedded, parsed.err === 'empty' ? 'The bundle block is empty.' : `${parsed.err}: ${parsed.detail}`)
 }

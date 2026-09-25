@@ -1981,13 +1981,14 @@ describe('FileBrowser', () => {
     }
   })
 
-  it('promotes from source fallback to rich editor when async adapter resolves if content unchanged', async () => {
+  it('keeps Markdown in loading state until the rich editor is ready, without exposing raw source', async () => {
     const bundle = structuredClone(testBundle)
     const { promise, resolve } = deferredAdapter()
     setDefaultRichEditorAdapter(undefined)
     try {
       const browser = new FileBrowser(document.getElementById('app')!, bundle, { richEditorAdapter: promise })
-      expect(document.querySelector('.source-editor-input')).not.toBeNull()
+      expect(document.querySelector('.file-viewer[aria-busy="true"] [role="status"]')).not.toBeNull()
+      expect(document.querySelector('.source-editor-input')).toBeNull()
       const initiallySelected = document.querySelector<HTMLButtonElement>('.file-row.is-selected')
       expect(initiallySelected?.dataset.path).toBe(bundle.files[0].path)
       expect(initiallySelected?.closest('details')?.open).toBe(true)
@@ -1996,6 +1997,8 @@ describe('FileBrowser', () => {
       resolve(completeRichEditorAdapter)
       await vi.waitFor(() => expect(document.querySelector('.tiptap-editor-host .tiptap')).not.toBeNull())
       expect(document.querySelector('.source-editor-input')).toBeNull()
+      expect(document.querySelector('.file-viewer')?.hasAttribute('aria-busy')).toBe(false)
+      expect(document.querySelector('.file-viewer [role="status"]')).toBeNull()
       expect(document.querySelectorAll('.markdown-document-shell')).toHaveLength(1)
       const selected = document.querySelector<HTMLButtonElement>('.file-row.is-selected')
       expect(selected?.dataset.path).toBe(bundle.files[0].path)
@@ -2006,42 +2009,44 @@ describe('FileBrowser', () => {
     }
   })
 
-  it('does not promote to rich editor if user edited content in source mode while adapter was loading', async () => {
+  it('keeps a different selected file visible while the rich editor finishes loading', async () => {
     const bundle = structuredClone(testBundle)
     const { promise, resolve } = deferredAdapter()
     setDefaultRichEditorAdapter(undefined)
     try {
       const browser = new FileBrowser(document.getElementById('app')!, bundle, { richEditorAdapter: promise })
-      const source = document.querySelector<HTMLTextAreaElement>('.source-editor-input')!
-      expect(source).not.toBeNull()
-
-      source.value = '# User Edits Before Load'
-      source.dispatchEvent(new Event('input', { bubbles: true }))
+      document.querySelector<HTMLButtonElement>('[data-path$="api.yaml"]')!.click()
+      expect(document.querySelector<HTMLTextAreaElement>('.source-editor-input')?.getAttribute('aria-label')).toContain('YAML')
 
       resolve(completeRichEditorAdapter)
       await promise
-      await new Promise<void>((r) => queueMicrotask(r))
+      await vi.waitFor(() => expect(document.querySelector('.file-row.is-selected')?.getAttribute('data-path')).toContain('api.yaml'))
       expect(document.querySelector('.tiptap-editor-host .tiptap')).toBeNull()
-      expect(document.querySelector<HTMLTextAreaElement>('.source-editor-input')?.value).toBe('# User Edits Before Load')
+
+      document.querySelector<HTMLButtonElement>('[data-path$="plan.md"]')!.click()
+      await vi.waitFor(() => expect(document.querySelector('.tiptap-editor-host .tiptap')).not.toBeNull())
+      expect(document.querySelector('.source-editor-input')).toBeNull()
       browser.destroy()
     } finally {
       setDefaultRichEditorAdapter(completeRichEditorAdapter)
     }
   })
-  it('keeps the same writable source input and handoff after rich editor loading fails', async () => {
+  it('opens writable Markdown source and preserves handoff only after rich editor loading fails', async () => {
     const bundle = structuredClone(testBundle)
     let rejectAdapter!: (reason: Error) => void
     const adapter = new Promise<typeof completeRichEditorAdapter>((_resolve, reject) => { rejectAdapter = reject })
     setDefaultRichEditorAdapter(undefined)
     try {
       const browser = new FileBrowser(document.getElementById('app')!, bundle, { richEditorAdapter: adapter })
-      const source = document.querySelector<HTMLTextAreaElement>('.source-editor-input')!
-      source.value = '# Unsent draft'
-      source.dispatchEvent(new Event('input', { bubbles: true }))
+      expect(document.querySelector('.file-viewer[aria-busy="true"] [role="status"]')).not.toBeNull()
+      expect(document.querySelector('.source-editor-input')).toBeNull()
       rejectAdapter(new Error('Both CDN providers failed'))
       await vi.waitFor(() => expect(document.querySelector('.editor-error')?.textContent).toContain('Both CDN providers failed'))
-      expect(document.querySelector('.source-editor-input')).toBe(source)
+      const source = document.querySelector<HTMLTextAreaElement>('.source-editor-input')!
       expect(source.readOnly).toBe(false)
+      expect(document.querySelector('.file-viewer')?.hasAttribute('aria-busy')).toBe(false)
+      source.value = '# Unsent draft'
+      source.dispatchEvent(new Event('input', { bubbles: true }))
       expect(browser.getModifiedReviewFiles()[0].content).toBe('# Unsent draft')
       browser.destroy()
     } finally {

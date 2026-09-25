@@ -46,7 +46,7 @@ export const dismissSplashAfterPaint = (): void => {
   requestAnimationFrame(() => requestAnimationFrame(dismissSplash))
 }
 
-export function bootCommon(bundle: TacoBundle, options: FileBrowserOptions = {}): FileBrowser {
+export function bootCommon(bundle: TacoBundle, options: FileBrowserOptions = {}, initialReady?: Promise<unknown>): FileBrowser {
   configureApp({ appId: 'taco', appName: 'Taco' })
   capturePristine()
   const openedName = openedFileName()
@@ -55,7 +55,8 @@ export function bootCommon(bundle: TacoBundle, options: FileBrowserOptions = {})
   const root = document.getElementById('app')
   if (!root) throw new Error('Taco root element is missing')
   const browser = new FileBrowser(root, bundle, options)
-  dismissSplashAfterPaint()
+  if (initialReady) void initialReady.then(dismissSplashAfterPaint, dismissSplashAfterPaint)
+  else dismissSplashAfterPaint()
 
   window.taco = {
     format: 'taco/files',
