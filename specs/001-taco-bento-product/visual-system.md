@@ -53,8 +53,8 @@ The selected file uses a low-contrast neutral surface and medium text. Format is
 
 ## Sidebar Behavior
 
-- The sidebar is divided into the Specify, Plan, and Tasks expansion regions.
-- Within each stage, the core artifact stays first, immediately followed by the rest of the routed documents, with no auxiliary role grouping.
+- The sidebar presents first-level directory Categories and an Unassigned group for root files; an explicit manifest may define other groups.
+- Category labels do not imply workflow stages or prioritize filenames.
 - Real subdirectories keep their expansion behavior but use the same left alignment as every other row; nesting adds no visual indentation.
 - Sidebar sections use no divider lines.
 - The collapse control lives inside its own sidebar Header.
@@ -64,4 +64,4 @@ The selected file uses a low-contrast neutral surface and medium text. Format is
 
 ## Motion
 
-Panel transitions use a restrained drawer curve. File-renderer changes use a quiet 220ms cross-fade with only a 2px vertical shift; the Header path updates immediately, with no spatial motion. Auxiliary-surface changes keep a short opacity-plus-shift transition to preserve context without delaying navigation. Every pointer-operated button has instant, subtle press feedback; high-frequency tree rows use a reduced scale response. Stage and folder expansion animate their caret, icon, and content together as a single state change. Popovers appear from their trigger, and transient surfaces exit faster than they enter. Keyboard tools stay instant. `prefers-reduced-motion` removes spatial motion while keeping the instant state changes.
+Panel transitions use a restrained drawer curve. File-renderer changes use a quiet 220ms cross-fade with only a 2px vertical shift; the Header path updates immediately, with no spatial motion. Auxiliary-surface changes keep a short opacity-plus-shift transition to preserve context without delaying navigation. Every pointer-operated button has instant, subtle press feedback; high-frequency tree rows use a reduced scale response. Category and folder expansion animate their caret, icon, and content together as a single state change. Popovers appear from their trigger, and transient surfaces exit faster than they enter. Keyboard tools stay instant. `prefers-reduced-motion` removes spatial motion while keeping the instant state changes.

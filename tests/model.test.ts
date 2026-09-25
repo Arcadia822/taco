@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultFile, fileKind, parseBundle, type TacoBundle } from '../src/model.ts'
+import { defaultFile, fileKind, isInternalFile, parseBundle, type TacoBundle } from '../src/model.ts'
 
 const bundle = (): TacoBundle => ({
   format: 'taco/files',
@@ -10,12 +10,6 @@ const bundle = (): TacoBundle => ({
   files: [
     { title: 'Project overview', path: 'specs/001-test/README.md', mediaType: 'text/markdown', content: '# Guide' },
     { title: 'Product specification', path: 'specs/001-test/spec.md', mediaType: 'text/markdown', content: '# Spec' },
-    {
-      path: 'specs/001-test/prototype.html',
-      mediaType: 'text/html',
-      content: '<!doctype html><title>Prototype</title>',
-      sourceUrl: 'file:///Users/example/project/specs/001-test/prototype.html',
-    },
     { path: 'specs/001-test/contracts/openapi.yaml', mediaType: 'application/yaml', content: 'openapi: 3.1.0' },
     { path: 'specs/001-test/config.json', mediaType: 'application/json', content: '{"a":1}' },
     { path: 'specs/001-test/diagrams/flow.MMD', mediaType: 'text/plain', content: 'flowchart LR\nA --> B' },
@@ -30,16 +24,19 @@ describe('file-first Taco bundle', () => {
     if (result.ok) expect(result.bundle).toEqual(input)
   })
 
-  it('prefers README.md as the default file', () => {
-    expect(defaultFile(bundle())?.path).toBe('specs/001-test/README.md')
+  it('defaults to the first visible Markdown file', () => {
+    const b = bundle()
+    b.files = [b.files[2], b.files[3], b.files[0], b.files[1], b.files[4]]
+    expect(defaultFile(b)?.path).toBe('specs/001-test/README.md')
   })
 
-  it('falls back to spec.md when README.md is absent', () => {
-    const withoutReadme = bundle()
-    withoutReadme.files = withoutReadme.files.filter(({ path }) => !path.endsWith('/README.md'))
-    expect(defaultFile(withoutReadme)?.path).toBe('specs/001-test/spec.md')
+  it('ignores README.md and spec.md filename precedence', () => {
+    const readmeLast = bundle()
+    readmeLast.files = [...readmeLast.files.slice(1), readmeLast.files[0]]
+    expect(defaultFile(readmeLast)?.path).toBe('specs/001-test/spec.md')
   })
-  it('prioritizes navigation.entry over README.md and falls back when entry is missing', () => {
+
+  it('prioritizes navigation.entry and falls back when the entry is missing', () => {
     const b = bundle()
     b.navigation = {
       version: 1,
@@ -48,14 +45,38 @@ describe('file-first Taco bundle', () => {
     }
     expect(defaultFile(b)?.path).toBe('specs/001-test/contracts/openapi.yaml')
 
-    // 悬空 entry 安全回退至正常 README.md 流程
+    // 悬空 entry 安全回退至第一个可见 Markdown 文件
     b.navigation!.entry = 'non-existent.md'
+    expect(defaultFile(b)?.path).toBe('specs/001-test/README.md')
   })
 
 
   it('classifies formats without parsing their contents', () => {
     const files = bundle().files
-    expect(files.map(fileKind)).toEqual(['markdown', 'markdown', 'html', 'yaml', 'json', 'mermaid'])
+    expect(files.map(fileKind)).toEqual(['markdown', 'markdown', 'yaml', 'json', 'mermaid'])
+  })
+
+  it('treats _dir.yaml as an ordinary visible YAML file while keeping .DS_Store internal', () => {
+    const dirYaml = {
+      path: 'specs/001-test/docs/_dir.yaml',
+      mediaType: 'application/yaml',
+      content: 'category: Architecture\n',
+    }
+    const dsStore = {
+      path: 'specs/001-test/.DS_Store',
+      mediaType: 'application/octet-stream',
+      content: '',
+    }
+    expect(isInternalFile(dirYaml.path)).toBe(false)
+    expect(isInternalFile('_dir.yaml')).toBe(false)
+    expect(fileKind(dirYaml)).toBe('yaml')
+    expect(isInternalFile(dsStore.path)).toBe(true)
+
+    const onlyYamlAndDsStore: TacoBundle = {
+      ...bundle(),
+      files: [dsStore, dirYaml],
+    }
+    expect(defaultFile(onlyYamlAndDsStore)).toEqual(dirYaml)
   })
 
   it('rejects path traversal and files outside the declared root', () => {
@@ -80,27 +101,35 @@ describe('file-first Taco bundle', () => {
     expect(parseBundle(JSON.stringify(invalid))).toMatchObject({ ok: false, err: 'shape' })
   })
 
-  it('requires canonical file URLs for HTML and rejects them on other files', () => {
-    const missing = bundle()
-    delete missing.files[2].sourceUrl
-    expect(parseBundle(JSON.stringify(missing))).toMatchObject({ ok: false, err: 'shape' })
+  it('rejects ordinary HTML source files', () => {
+    const htmlPath = bundle()
+    htmlPath.files.push({
+      path: 'specs/001-test/prototype.html',
+      mediaType: 'text/plain',
+      content: '<!doctype html><title>Prototype</title>',
+    })
+    expect(parseBundle(JSON.stringify(htmlPath))).toMatchObject({
+      ok: false,
+      err: 'shape',
+      detail: 'HTML source files are not supported: specs/001-test/prototype.html',
+    })
 
-    const wrong = bundle()
-    wrong.files[2].sourceUrl = 'data:text/html;base64,PGgxPkJhZDwvaDE+'
-    expect(parseBundle(JSON.stringify(wrong))).toMatchObject({ ok: false, err: 'shape' })
-
-    const nonHtml = bundle()
-    nonHtml.files[0].sourceUrl = 'file:///Users/example/project/specs/001-test/README.md'
-    expect(parseBundle(JSON.stringify(nonHtml))).toMatchObject({ ok: false, err: 'shape' })
+    const htmlMediaType = bundle()
+    htmlMediaType.files[2].mediaType = 'text/html'
+    expect(parseBundle(JSON.stringify(htmlMediaType))).toMatchObject({ ok: false, err: 'shape' })
   })
 
-  it('accepts the exact portable HTML reference used by the reproducible showcase shell', () => {
-    const portable = bundle()
-    portable.files[2].sourceUrl = '../specs/001-test/prototype.html'
-    expect(parseBundle(JSON.stringify(portable))).toMatchObject({ ok: true })
-
-    portable.files[2].sourceUrl = '../specs/001-test/other.html'
-    expect(parseBundle(JSON.stringify(portable))).toMatchObject({ ok: false, err: 'shape' })
+  it('rejects the legacy sourceUrl field on any file', () => {
+    const withSourceUrl = bundle()
+    withSourceUrl.files[0] = {
+      ...withSourceUrl.files[0],
+      sourceUrl: 'file:///Users/example/project/specs/001-test/README.md',
+    }
+    expect(parseBundle(JSON.stringify(withSourceUrl))).toMatchObject({
+      ok: false,
+      err: 'shape',
+      detail: 'sourceUrl is no longer supported: specs/001-test/README.md',
+    })
   })
 
   it('accepts only lowercase SHA-256 source baselines', () => {

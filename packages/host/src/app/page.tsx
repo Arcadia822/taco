@@ -161,7 +161,7 @@ const I18N = {
     sectionCpStage1: '01 规范定义',
     sectionCpStage2: '02 架构与模型',
     sectionCpStage3: '03 接口契约',
-    section1FileSize: '约 743 KB',
+    section1FileSize: '约 719 KB',
     section1Tree: [
       ['应用', '编辑器、渲染器、样式与运行时全内联'],
       ['文件', '4 个文件：spec、data-model、流程图、OpenAPI'],
@@ -270,7 +270,7 @@ const I18N = {
     sectionCpStage1: '01 Specification',
     sectionCpStage2: '02 Architecture & Model',
     sectionCpStage3: '03 API Contract',
-    section1FileSize: 'about 744 KB',
+    section1FileSize: 'about 719 KB',
     section1Tree: [
       ['App', 'inlined editor, renderers, styling and runtime'],
       ['Files', '4 files: spec, data model, flowchart, OpenAPI'],

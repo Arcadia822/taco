@@ -3,7 +3,7 @@ import './styles.css'
 import { capturePristine, openedFileName, readEmbeddedDoc, titleForFileName } from './kernel/save.ts'
 import { configureApp } from './kernel/app.ts'
 import { FileBrowser } from './file-browser.ts'
-import { fileByPath, parseBundle, relativePath, type TacoBundle, type TacoFile } from './model.ts'
+import { fileByPath, isInternalFile, parseBundle, relativePath, type TacoBundle, type TacoFile } from './model.ts'
 import { credentialFreeFile, TACO_SECURITY_VERSION, validateTacoSecurity, type SecurityValidation } from './security.ts'
 
 export interface TacoFileApi {
@@ -61,11 +61,13 @@ function boot(bundle: TacoBundle): void {
     version: __APP_VERSION__,
     securityVersion: TACO_SECURITY_VERSION,
     validate: () => validateTacoSecurity(bundle),
-    listFiles: () => bundle.files.map((file) => ({
-      path: relativePath(bundle, file),
-      mediaType: file.mediaType,
-      bytes: new TextEncoder().encode(file.content).length,
-    })),
+    listFiles: () => bundle.files
+      .filter((file) => !isInternalFile(file.path))
+      .map((file) => ({
+        path: relativePath(bundle, file),
+        mediaType: file.mediaType,
+        bytes: new TextEncoder().encode(file.content).length,
+      })),
     readFile: (path) => {
       const fullPath = path.startsWith(`${bundle.root}/`) ? path : `${bundle.root}/${path}`
       const file = fileByPath(bundle, fullPath)
@@ -75,8 +77,9 @@ function boot(bundle: TacoBundle): void {
       const needle = query.trim().toLocaleLowerCase()
       if (!needle) return []
       return bundle.files
-        .filter((file) => file.path.toLocaleLowerCase().includes(needle)
-          || (file.mediaType !== 'image/png' && file.content.toLocaleLowerCase().includes(needle)))
+        .filter((file) => !isInternalFile(file.path)
+          && (file.path.toLocaleLowerCase().includes(needle)
+          || (file.mediaType !== 'image/png' && file.content.toLocaleLowerCase().includes(needle))))
         .map(credentialFreeFile)
     },
     getCheckpoints: () => resolveCheckpoints(bundle),

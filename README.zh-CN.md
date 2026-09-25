@@ -107,7 +107,7 @@ speckit.taco.review specs/001-example/001-example.taco.html
 
 更严格的“全有或全无”规则属于 extension 的可选 `sync` CLI 工具：它为每个打包文件记录 SHA-256 基线，当 canonical 文件与 Taco 副本自打包后都发生变化时，拒绝任何写入。这两条都不是 skill 离线路径上自动生效的行为 —— 当评审通过 Handoff 或保存文件到达、链路中没有 CLI 时，由 Agent 自己完成同样的比对，并在遇到无法归因的改动时停止。
 
-打包器包含所有可见 UTF-8 普通文件，以及单个不超过 10 MiB、验证通过的本地 PNG 资源。PNG 会嵌入 Taco 以供 Markdown 离线渲染，并在评审往返过程中按二进制数据原样保留。唯一默认排除项是 `*.taco.html` 和隐藏路径；可重复的 `--ignore` 参数用于增加 feature-relative 路径或 glob 排除。其他可见但不受支持的内容会让打包明确失败，不会被静默丢弃。
+打包器包含可见的 UTF-8 普通文件，以及单个不超过 10 MiB、验证通过的本地 PNG 资源。PNG 会嵌入 Taco 以供 Markdown 离线渲染，并在评审往返过程中按二进制数据原样保留。默认只排除 `*.taco.html` 和隐藏路径；可重复的 `--ignore` 参数可以显式排除其他路径。普通 `.html`、`.htm` 源文件不再受支持，未显式忽略时打包会明确报错；作为产品容器的 `.taco.html` 不受此限制。
 
 每次 update 成功后，Agent 都会把对应 Taco 作为原生、可点击的本地文件展示，并在宿主允许本地 HTML 导航时用用户的浏览器打开它。在 Codex 中，由用户点击后交给 Browser 打开；Agent 不会尝试自主导航到 `file://`。headless 启动检查只是内部证据，不会当作面向用户的可视化展示。
 
@@ -128,11 +128,11 @@ CONTRIBUTING.md                       Contributor 开发与验证指南
 vite.config.ts                        默认 bundle 注入与构建配置
 ```
 
-默认规格目录同时是项目的可执行示例。其中的 `README.md` 与项目 README 内容一致，并作为概览首先打开。产品行为写在 `spec.md`，技术方案写在 `plan.md`，任务状态写在 `tasks.md`，容器协议位于 `contracts/taco-document.md`。
+默认规格目录同时是项目的可执行示例。其中的 `README.md` 与项目 README 内容一致；产品行为写在 `spec.md`，技术方案写在 `plan.md`，任务状态写在 `tasks.md`，容器协议位于 `contracts/taco-document.md`。这些文件名均不决定默认打开的文档或侧栏分类。
 
 ## 文档路由与侧栏导航
 
-默认情况下，功能目录根部的 `README.md` 会进入 Specify 并默认打开；没有 README 时回退到 `spec.md`。当 Taco 包含顶层 `navigation` 清单时，侧栏直接根据声明展示自定义分组与排序，未声明的文件自动归入未分配区；在评审页面中还可直接增删分组、拖拽移动文件以及设定主入口。在无配置的 Spec Kit 目录中，`spec.md`、`plan.md` 和 `tasks.md` 仍是核心阶段文件，`contracts/`、`checklists/` 等约定路径随其归入对应阶段，其余文档一律先进入未分配区，直到评审者用文档头部的 Category 控件为其分组。
+没有 `navigation` 清单时，一级目录自动形成分类，根目录文件进入未分配区；文件名与 Spec Kit 路径没有特殊路由。清单可显式为虚拟文件分组并指定可选的入口文档，分类变化既不改写文件路径，也不会同步移动磁盘文件。清单未列出的文件仍归入未分配区。评审者可通过文档头部的 Category 控件分配文件，在侧栏管理普通分组和设置入口文档；不支持拖拽移动。从未分配区新建文件时默认保持未分配。
 
 分类是 Taco 自身的能力，而不是文档属性：没有任何 frontmatter 键会决定文件路由，已废弃的 `taco_scope` 属性也不再被读取。Taco 会用类似 Obsidian 的属性编辑器展示开头的 YAML frontmatter，同时保留 canonical Markdown。新 spec 把标题写入 YAML，正文从 H2 开始，不再用 H1 重复标题。详细约定见 `AGENTS.md`。
 

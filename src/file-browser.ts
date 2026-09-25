@@ -5,6 +5,7 @@ import {
   fileKind,
   fileName,
   relativePath,
+  isInternalFile,
   type TacoBundle,
   type TacoFile,
 } from './model.ts'
@@ -27,7 +28,7 @@ import { createBrandMarkContainer } from './brand.ts'
 import { createSourceEditor, type SourceEditorController } from './source-editor.ts'
 import { FileNavigation } from './file-navigation.ts'
 import { getAvailableGroups, getFileCurrentGroup, openGroupSelectorPopover } from './group-selector.ts'
-import { addNavigationGroup, createInitialManifest, moveFileToGroup } from './navigation-editor.ts'
+import { assignFileToGroup, createInitialManifest } from './navigation-editor.ts'
 import { showNewFileDialog } from './new-file-dialog.ts'
 import {
   createControlButton,
@@ -52,7 +53,6 @@ import { PresenceController } from './presence-controller.ts'
 import { ShareController } from './share-controller.ts'
 import { openPngPreview, resolveEmbeddedMarkdownAssets } from './markdown-assets.ts'
 import { hasCollabSecrets } from './security.ts'
-import { localFileUrl } from './local-file-url.ts'
 import { frontmatterTitle, parseFrontmatter } from './frontmatter.ts'
 import { setEditorFrontmatterProperty } from './tiptap-document-properties.ts'
 import { resolveFileCategory } from './category.ts'
@@ -114,7 +114,6 @@ export class FileBrowser {
   private markdownEditor: Editor | null = null
   private readonly markdownReconstructor = new MarkdownBlockReconstructor()
   private sourceEditor: SourceEditorController | null = null
-  private htmlPreviewUrl: string | null = null
   private editorMountSerial = 0
   private locale: Locale
   private readonly store: TacoStore
@@ -163,7 +162,7 @@ export class FileBrowser {
   getModifiedReviewFiles(): Array<{ path: string; mediaType: string; content: string; diff?: string }> {
     const dirtyIds = this.dirtyTracker.getDirtyFileIds()
     return this.bundle.files
-      .filter((file) => dirtyIds.has(file.id ?? file.path))
+      .filter((file) => !isInternalFile(file.path) && dirtyIds.has(file.id ?? file.path))
       .map((file) => {
         const rel = relativePath(this.bundle, file)
         const baseline = this.dirtyTracker.getBaselineContent(file.id ?? file.path) ?? ''
@@ -315,7 +314,6 @@ export class FileBrowser {
     this.markdownEditor?.destroy()
     this.markdownEditor = null
     this.outline.destroy()
-    this.resetHtmlPreviewUrl()
     this.fileNavigation?.destroy()
     this.fileNavigation = null
     this.comments.destroy()
@@ -362,6 +360,8 @@ export class FileBrowser {
         newGroupPrompt: this.t.newGroupPrompt,
         newFilePrompt: this.t.newFilePrompt,
         renameFilePrompt: this.t.renameFilePrompt,
+        confirm: this.t.save ?? 'Confirm',
+        cancel: this.t.cancel ?? 'Cancel',
       },
       editable: bundleCanWrite(this.bundle),
       onUpdateNavigation: (navigation) => {
@@ -636,7 +636,6 @@ export class FileBrowser {
     this.markdownEditor?.destroy()
     this.markdownEditor = null
     this.sourceEditor = null
-    this.resetHtmlPreviewUrl()
     this.viewer.innerHTML = ''
     if (this.checkpointView) {
       this.viewer.append(createCheckpointView(resolveCheckpoints(this.bundle), checkpointCopy(this.locale), {
@@ -672,8 +671,6 @@ export class FileBrowser {
       this.viewer.append(open, image)
     } else if (kind === 'markdown') {
       this.mountMarkdownEditor(file, mountSerial)
-    } else if (kind === 'html') {
-      this.mountHtmlPrototype(file)
     } else if (kind === 'yaml' || kind === 'json' || kind === 'mermaid') {
       const structured = createStructuredFileViewer({
         file,
@@ -767,43 +764,6 @@ export class FileBrowser {
     })
   }
 
-  private resetHtmlPreviewUrl(): void {
-    this.htmlPreviewUrl = null
-  }
-
-  private mountHtmlPrototype(file: TacoFile): void {
-    const shell = el('section', 'html-preview-shell')
-    const card = el('article', 'html-preview-card')
-    const icon = fileTypeIcon(file)
-    icon.classList.add('html-preview-icon')
-    icon.setAttribute('aria-hidden', 'true')
-
-    const title = el('h1', 'html-preview-title', file.title?.trim() || fallbackFileTitle(file))
-
-    this.htmlPreviewUrl = localFileUrl(file.sourceUrl, file.path)
-    const preview = el('a', 'html-preview-action')
-    if (this.htmlPreviewUrl) {
-      preview.href = this.htmlPreviewUrl
-      preview.target = '_blank'
-      preview.rel = 'noopener noreferrer'
-      preview.referrerPolicy = 'no-referrer'
-      preview.append(el('span', '', this.t.openHtmlPrototype), svgIcon('external-link'))
-    } else {
-      preview.removeAttribute('href')
-      preview.setAttribute('aria-disabled', 'true')
-      preview.append(el('span', '', this.t.openHtmlPrototype))
-      const source = el('pre', 'html-preview-source-fallback')
-      source.textContent = file.content
-      card.append(icon, title, preview, source)
-      shell.append(card)
-      this.viewer.append(shell)
-      return
-    }
-
-    card.append(icon, title, preview)
-    shell.append(card)
-    this.viewer.append(shell)
-  }
 
   private mountMarkdownFallback(host: HTMLElement, file: TacoFile, message: string): void {
     host.dataset.editorError = message
@@ -1075,8 +1035,9 @@ export class FileBrowser {
       const query = input.value.trim().toLocaleLowerCase()
       if (!query) return
       const matches = this.bundle.files.filter((file) =>
-        relativePath(this.bundle, file).toLocaleLowerCase().includes(query)
-        || file.content.toLocaleLowerCase().includes(query))
+        !isInternalFile(file.path)
+        && (relativePath(this.bundle, file).toLocaleLowerCase().includes(query)
+        || file.content.toLocaleLowerCase().includes(query)))
       for (const file of matches.slice(0, 50)) {
         const button = el('button', 'search-result') as HTMLButtonElement
         button.type = 'button'
@@ -1140,25 +1101,14 @@ export class FileBrowser {
       currentGroupId: groupInfo.groupId,
       labels: {
         ungrouped: this.t.ungrouped,
-        newGroup: this.t.newGroup,
-        newGroupTitle: this.t.newGroupTitle,
-        groupTitlePlaceholder: this.t.groupTitlePlaceholder,
-        create: this.t.create,
-        cancel: this.t.cancel,
       },
       onSelectGroup: (targetGroupId) => {
-        const current = createInitialManifest(this.bundle)
-        const next = moveFileToGroup(current, this.selected!.path, targetGroupId, this.bundle.root, this.bundle)
-        this.store.updateNavigation(next)
-        this.syncWorkspaceHeader()
-        this.fileNavigation?.refresh(this.selected)
-      },
-      onCreateNewGroup: (newTitle) => {
-        const current = createInitialManifest(this.bundle)
-        const withNewGroup = addNavigationGroup(current, newTitle)
-        const newGroupId = withNewGroup.groups[withNewGroup.groups.length - 1]?.id
-        const next = moveFileToGroup(withNewGroup, this.selected!.path, newGroupId, this.bundle.root, this.bundle)
-        this.store.updateNavigation(next)
+        if (!this.selected) return
+        this.store.commit({ kind: 'all' }, () => {
+          const current = createInitialManifest(this.bundle)
+          const next = assignFileToGroup(current, this.selected!.path, targetGroupId, this.bundle.root, this.bundle)
+          this.bundle.navigation = next
+        })
         this.syncWorkspaceHeader()
         this.fileNavigation?.refresh(this.selected)
       },
@@ -1364,19 +1314,9 @@ export class FileBrowser {
 
   private openLanguageMenu(anchor: HTMLElement): void {
     const menu = this.openPopover(anchor, 'language-menu')
-    const langBadges: Record<string, string> = {
-      'zh-Hans': '简',
-      en: 'EN',
-      'zh-Hant': '繁',
-      ja: 'JA',
-      es: 'ES',
-      fr: 'FR',
-      de: 'DE',
-      it: 'IT',
-      pt: 'PT',
-    }
+    const langBadges: Record<Locale, string> = { 'zh-Hans': '简', en: 'EN' }
     for (const { code: locale, label } of LOCALE_CHOICES) {
-      const badge = el('span', 'lang-badge', langBadges[locale] || locale.slice(0, 2).toUpperCase())
+      const badge = el('span', 'lang-badge', langBadges[locale])
       const button = this.menuButton(label, () => {
         this.locale = locale
         storageSet('taco-locale', locale)
@@ -1609,7 +1549,7 @@ export class FileBrowser {
       categoryLabel: this.t.newFileCategory,
       ungroupedLabel: this.t.ungrouped,
       groups,
-      initialGroupId: groups.some((group) => group.id === targetGroupId) ? targetGroupId : null,
+      initialGroupId: targetGroupId && groups.some((group) => group.id === targetGroupId) ? targetGroupId : null,
       confirmLabel: this.t.create,
       cancelLabel: this.t.cancel,
     })
@@ -1631,7 +1571,7 @@ export class FileBrowser {
     this.store.commit({ kind: 'all' }, () => {
       this.bundle.files.push(newFile)
       if (navigation) {
-        this.bundle.navigation = moveFileToGroup(navigation, fullPath, result.groupId, this.bundle.root, this.bundle)
+        this.bundle.navigation = assignFileToGroup(navigation, fullPath, result.groupId, this.bundle.root, this.bundle)
       }
     })
 
@@ -1720,6 +1660,7 @@ export class FileBrowser {
     }
     this.fileNavigation?.refresh(this.selected)
   }
+
 
 
 

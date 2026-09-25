@@ -5,7 +5,7 @@ import { decodePng } from '../../extensions/taco/bin/png.mjs'
 
 import type { KernelDoc } from './doc.ts'
 import { appConfig } from './app.ts'
-import { isSafePath, type TacoBundle } from '../model.ts'
+import { isInternalFile, isSafePath, type TacoBundle } from '../model.ts'
 
 const DATA_BLOCK_ID = 'taco-document'
 const TRANSIENT_SELECTOR = '[data-taco-transient]'
@@ -185,6 +185,7 @@ async function directoryForPath(root: DirectoryHandleLike, parts: string[]): Pro
 export async function unpackBundle(directory: DirectoryHandleLike, bundle: TacoBundle): Promise<void> {
   const rootPrefix = `${bundle.root}/`
   for (const file of bundle.files) {
+    if (isInternalFile(file.path)) continue
     if (!isSafePath(file.path) || !file.path.startsWith(rootPrefix)) {
       throw new Error(`Refusing to unpack an unsafe Taco path: ${file.path}`)
     }

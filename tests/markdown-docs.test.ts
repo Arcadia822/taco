@@ -6,7 +6,6 @@ import { parseFrontmatter } from '../src/frontmatter.ts'
 const featureRoot = join(process.cwd(), 'specs/001-taco-bento-product')
 const projectReadme = join(process.cwd(), 'README.md')
 const bundledReadme = join(featureRoot, 'README.md')
-const bundledHtmlPreview = join(featureRoot, 'prototypes/taco-preview.html')
 
 const markdownFiles = (directory: string): string[] => readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
   const path = join(directory, entry.name)
@@ -36,13 +35,5 @@ describe('bundled Markdown documents', () => {
 
   it('uses one identical open-source README in the repository and default Taco', () => {
     expect(readFileSync(bundledReadme, 'utf8')).toBe(readFileSync(projectReadme, 'utf8'))
-  })
-
-  it('ships a self-contained HTML file in the default Taco preview', () => {
-    const html = readFileSync(bundledHtmlPreview, 'utf8')
-    expect(html).toContain('<title>Taco HTML Preview Demo</title>')
-    expect(html).toContain('<style>')
-    expect(html).not.toMatch(/<(?:script|link)\b/i)
-    expect(html).not.toMatch(/(?:src|href)=["']https?:/i)
   })
 })

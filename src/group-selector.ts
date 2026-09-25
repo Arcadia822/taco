@@ -1,7 +1,6 @@
 import { type TacoBundle, type TacoFile } from './model.ts'
 import { resolveDocumentNavigation } from './navigation.ts'
 import { el, sidebarRow, svgIcon } from './ui-primitives.ts'
-import { showPromptDialog } from './ui-primitives.ts'
 
 export interface GroupSelectOption {
   id: string
@@ -29,34 +28,18 @@ export function getFileCurrentGroup(
   }
 
 
-  if (resolved.mode === 'custom') {
-    for (const group of resolved.groups) {
-      if (group.isCustom && group.files.some((f) => f.path === file.path)) {
-        return {
-          groupId: group.id,
-          groupTitle: group.title,
-        }
-      }
-    }
-  } else {
-    // stage 模式：检查处于哪个阶段
-    for (const group of resolved.groups) {
-      if (!group.isCustom) {
-        const inCore = group.stage.core?.path === file.path
-        const inFiles = group.stage.files.some((f) => f.path === file.path)
-        if (inCore || inFiles) {
-          return {
-            groupId: group.id,
-            groupTitle: group.title,
-          }
-        }
+  for (const group of resolved.groups) {
+    if (group.files.some((f) => f.path === file.path)) {
+      return {
+        groupId: group.id,
+        groupTitle: group.title,
       }
     }
   }
 
   return {
     groupId: null,
-    groupTitle: ungroupedTitle ?? 'Ungrouped',
+    groupTitle: ungroupedTitle ?? 'Unassigned',
   }
 }
 
@@ -80,18 +63,12 @@ export interface OpenGroupSelectorOptions {
   currentGroupId: string | null
   labels?: {
     ungrouped: string
-    newGroup: string
-    newGroupTitle: string
-    groupTitlePlaceholder: string
-    create: string
-    cancel: string
   }
   onSelectGroup: (groupId: string | null) => void
-  onCreateNewGroup: (newTitle: string) => void
 }
 
 /**
- * 弹出分组下拉选择菜单（包含已有分组列表 + 未分组 + 新建分组选项）
+ * 弹出已有分组与未分配的选择菜单。
  */
 export function openGroupSelectorPopover(options: OpenGroupSelectorOptions): void {
   document.querySelector('.group-selector-popover')?.remove()
@@ -117,11 +94,11 @@ export function openGroupSelectorPopover(options: OpenGroupSelectorOptions): voi
     popover.append(row)
   }
 
-  // 2. 未分组（移出所有分组）
+  // 2. 未分配（移出所有分组）
   const unassignedRow = sidebarRow('button', {
     className: `popover-action${options.currentGroupId === null ? ' is-active' : ''}`,
     leading: options.currentGroupId === null ? svgIcon('check') : undefined,
-    label: options.labels?.ungrouped ?? 'Ungrouped',
+    label: options.labels?.ungrouped ?? 'Unassigned',
   }) as HTMLButtonElement
   unassignedRow.type = 'button'
   unassignedRow.addEventListener('click', () => {
@@ -129,31 +106,6 @@ export function openGroupSelectorPopover(options: OpenGroupSelectorOptions): voi
     options.onSelectGroup(null)
   })
   popover.append(unassignedRow)
-
-  // 分隔线
-  const sep = el('div', 'share-separator')
-  popover.append(sep)
-
-  // 3. 新建分组选项
-  const newGroupRow = sidebarRow('button', {
-    className: 'popover-action',
-    leading: svgIcon('plus'),
-    label: options.labels?.newGroup ?? 'New group...',
-  }) as HTMLButtonElement
-  newGroupRow.type = 'button'
-  newGroupRow.addEventListener('click', async () => {
-    popover.remove()
-    const newTitle = await showPromptDialog({
-      title: options.labels?.newGroupTitle ?? 'New group',
-      placeholder: options.labels?.groupTitlePlaceholder ?? 'Group name',
-      confirmLabel: options.labels?.create ?? 'Create',
-      cancelLabel: options.labels?.cancel ?? 'Cancel',
-    })
-    if (newTitle && newTitle.trim()) {
-      options.onCreateNewGroup(newTitle.trim())
-    }
-  })
-  popover.append(newGroupRow)
 
   // 定位 popover
   document.body.append(popover)

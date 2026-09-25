@@ -26,11 +26,9 @@ title: "Research: Taco File Browser"
 
 ## Decision 4 — Derived Navigation
 
-**Decision**: Stage navigation, the in-group directory tree, headings, and the search index are derived at load time.
+**Decision**: Category navigation, the in-group directory tree, headings, and the search index are derived at load time; an explicit navigation manifest records intentional virtual grouping.
 
-**Reason**: Persisting them creates drift. They are cheap to recompute and carry no authorial intent.
-
-The stage projection uses `spec.md`, `plan.md`, and `tasks.md` as core anchors. A feature-root `README.md` routes to Specify by convention and becomes the preferred opening document, with `spec.md` as the fallback. Known Spec Kit paths route by convention, and the entire `checklists/` directory sits under Plan because the official workflow runs Checklist after Plan and before Tasks. Other Markdown selects one of these stages through YAML `taco_scope`. Only `spec`, `plan`, and `tasks` route; other text remains visible and invalid. There is no Custom or Extensions group.
+**Reason**: Files and comment anchors keep stable paths while reviewers change group membership. Root files start Unassigned; first-level directories form Categories. `spec.md`, `plan.md`, `tasks.md`, and `README.md` have no special routing, and frontmatter (including legacy `taco_scope`) does not classify files.
 
 ## Decision 5 — Keep Bento at the Container Layer
 

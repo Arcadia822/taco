@@ -6,9 +6,7 @@ import { defaultFile, fileName, relativePath, type NavigationManifest, type Taco
 import { createControlButton, createFileAttribute, createFileTypeIcon, createStatusIcon, el, showConfirmDialog, showPromptDialog, sidebarRow, svgIcon } from './ui-primitives.ts'
 import { resolveDocumentNavigation } from './navigation.ts'
 import {
-  addNavigationGroup,
   createInitialManifest,
-  moveFileToGroup,
   removeNavigationGroup,
   renameNavigationGroup,
   setNavigationEntry,
@@ -64,7 +62,7 @@ export interface FileNavigationOptions {
   onDeleteFile?: (file: TacoFile) => void
 }
 
-const buildTree = (bundle: TacoBundle, files: TacoFile[]): DirNode => {
+const buildTree = (bundle: TacoBundle, files: TacoFile[], categoryDir?: string): DirNode => {
   const root: DirNode = {
     name: bundle.root.split('/').at(-1) ?? bundle.root,
     path: bundle.root,
@@ -72,8 +70,12 @@ const buildTree = (bundle: TacoBundle, files: TacoFile[]): DirNode => {
     files: [],
   }
   for (const file of files) {
-    const parts = relativePath(bundle, file).split('/')
+    const rel = relativePath(bundle, file)
+    let parts = rel.split('/')
     parts.pop()
+    if (categoryDir && parts.length > 0 && (parts[0] === categoryDir || parts[0].toLowerCase() === categoryDir.toLowerCase())) {
+      parts = parts.slice(1)
+    }
     let cursor = root
     for (const part of parts) {
       let child = cursor.dirs.get(part)
@@ -116,15 +118,6 @@ export class FileNavigation {
       labelClass: 'brand-name',
     })
 
-    if (options.editable && options.onUpdateNavigation) {
-      const addGroupBtn = createControlButton(
-        'plus',
-        options.labels.addGroup ?? 'Add group',
-        () => { void this.promptAddGroup() },
-        'sidebar-action-btn add-group-btn',
-      )
-      brand.append(addGroupBtn)
-    }
 
     this.toggle = createControlButton(
       'panel-left',
@@ -268,11 +261,9 @@ export class FileNavigation {
       head.append(label, caret)
       const spacer = el('span', 'stage-spacer')
       summary.append(head, spacer)
-      if (this.options.editable) {
+      if (this.options.editable && (this.options.onUpdateNavigation || this.options.onCreateFile)) {
         const actions = el('span', 'group-actions')
-
-        // 需求3：把重命名和删除收敛至操作菜单按钮（more-horizontal）中
-        if (this.options.onUpdateNavigation && group.isCustom) {
+        if (this.options.onUpdateNavigation && this.options.bundle.navigation?.groups.some(({ id }) => id === group.id) && !group.id.startsWith('category-')) {
           const menuBtn = createControlButton(
             'more-horizontal',
             'Actions',
@@ -287,7 +278,6 @@ export class FileNavigation {
           })
           actions.append(menuBtn)
         }
-        // 需求3：快捷显式只露出新建文件按钮
         if (this.options.onCreateFile) {
           const addFileBtn = createControlButton(
             'plus',
@@ -301,41 +291,17 @@ export class FileNavigation {
           })
           actions.append(addFileBtn)
         }
-
-
         summary.append(actions)
       }
 
       stage.append(summary)
 
-      if (this.options.editable && this.options.onUpdateNavigation) {
-        stage.addEventListener('dragover', (e) => {
-          e.preventDefault()
-          stage.classList.add('is-drag-over')
-        })
-        stage.addEventListener('dragleave', () => stage.classList.remove('is-drag-over'))
-        stage.addEventListener('drop', (e) => {
-          e.preventDefault()
-          stage.classList.remove('is-drag-over')
-          const filePath = e.dataTransfer?.getData('text/plain')
-          if (filePath) {
-            this.handleMoveFile(filePath, group.id)
-          }
-        })
-      }
 
-      if (group.isCustom) {
-        if (group.files.length) {
-          const tree = el('div', 'file-tree')
-          this.renderDirectory(buildTree(this.options.bundle, group.files), tree, true)
-          stage.append(tree)
-        }
-      } else {
-        if (group.stage.files.length) {
-          const tree = el('div', 'file-tree')
-          this.renderDirectory(buildTree(this.options.bundle, group.stage.files), tree, true)
-          stage.append(tree)
-        }
+      if (group.files.length) {
+        const tree = el('div', 'file-tree')
+        const categoryDir = group.id.startsWith('category-') ? group.id.slice('category-'.length) : group.title
+        this.renderDirectory(buildTree(this.options.bundle, group.files, categoryDir), tree, true)
+        stage.append(tree)
       }
       navigation.append(stage)
     }
@@ -368,21 +334,6 @@ export class FileNavigation {
 
       other.append(otherSummary)
 
-      if (this.options.editable && this.options.onUpdateNavigation) {
-        other.addEventListener('dragover', (e) => {
-          e.preventDefault()
-          other.classList.add('is-drag-over')
-        })
-        other.addEventListener('dragleave', () => other.classList.remove('is-drag-over'))
-        other.addEventListener('drop', (e) => {
-          e.preventDefault()
-          other.classList.remove('is-drag-over')
-          const filePath = e.dataTransfer?.getData('text/plain')
-          if (filePath) {
-            this.handleMoveFile(filePath, null)
-          }
-        })
-      }
 
       const tree = el('div', 'file-tree')
       this.renderDirectory(buildTree(this.options.bundle, resolved.unassigned), tree, true)
@@ -534,10 +485,6 @@ export class FileNavigation {
     const fileMeta = el('span', 'file-meta')
 
     if (this.options.editable) {
-      button.draggable = true
-      button.addEventListener('dragstart', (e) => {
-        e.dataTransfer?.setData('text/plain', file.path)
-      })
 
       // 需求3：文件行收敛为操作菜单按钮
       const fileActions = el('span', 'file-actions')
@@ -665,20 +612,6 @@ export class FileNavigation {
     setTimeout(() => window.addEventListener('click', onOutside, true), 10)
   }
 
-  private async promptAddGroup(): Promise<void> {
-    const title = await showPromptDialog({
-      title: this.options.labels.addGroup ?? 'Add group',
-      placeholder: this.options.labels.newGroupPrompt ?? 'Group title:',
-      confirmLabel: this.options.labels.confirm ?? 'Confirm',
-      cancelLabel: this.options.labels.cancel ?? 'Cancel',
-    })
-    if (title && title.trim()) {
-      const current = createInitialManifest(this.options.bundle)
-      const next = addNavigationGroup(current, title.trim())
-      this.options.onUpdateNavigation?.(next)
-    }
-  }
-
   private async promptRenameGroup(groupId: string, oldTitle: string): Promise<void> {
     const newTitle = await showPromptDialog({
       title: this.options.labels.renameGroup ?? 'Rename group',
@@ -707,11 +640,7 @@ export class FileNavigation {
     this.options.onUpdateNavigation?.(next)
   }
 
-  private handleMoveFile(filePath: string, targetGroupId: string | null): void {
-    const current = createInitialManifest(this.options.bundle)
-    const next = moveFileToGroup(current, filePath, targetGroupId, this.options.bundle.root, this.options.bundle)
-    this.options.onUpdateNavigation?.(next)
-  }
+
 
   private handleSetEntry(filePath: string): void {
     const current = createInitialManifest(this.options.bundle)

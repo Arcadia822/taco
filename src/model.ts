@@ -1,6 +1,5 @@
 import { decodePng } from '../extensions/taco/bin/png.mjs'
 import { MAX_BLOCK_HTML, SUPPORTED_BLOCK_TYPES } from './security.ts'
-import { localFileReference } from './local-file-url.ts'
 import { normalizeCommentMessage, sortCommentMessages } from './comments.ts'
 
 export const FORMAT = 'taco/files'
@@ -12,7 +11,6 @@ export interface TacoFile {
   path: string
   mediaType: string
   content: string
-  sourceUrl?: string
   sourceHash?: string
   blocks?: TacoBlock[]
   [extra: string]: unknown
@@ -169,12 +167,11 @@ export function parseBundle(json: string): ParseResult {
       try { decodePng(value.content, value.path) }
       catch (error) { return { ok: false, err: 'shape', detail: (error as Error).message } }
     }
-    const html = value.mediaType === 'text/html' || /\.html?$/i.test(value.path)
-    if (html && !localFileReference(value.sourceUrl, value.path)) {
-      return { ok: false, err: 'shape', detail: `HTML file requires a valid local file reference: ${value.path}` }
+    if (value.mediaType === 'text/html' || /\.html?$/i.test(value.path)) {
+      return { ok: false, err: 'shape', detail: `HTML source files are not supported: ${value.path}` }
     }
-    if (!html && value.sourceUrl !== undefined) {
-      return { ok: false, err: 'shape', detail: `sourceUrl is only valid for HTML files: ${value.path}` }
+    if ('sourceUrl' in value) {
+      return { ok: false, err: 'shape', detail: `sourceUrl is no longer supported: ${value.path}` }
     }
     if (value.blocks !== undefined && (!Array.isArray(value.blocks) || !value.blocks.every(isBlock))) {
       return { ok: false, err: 'shape', detail: `file blocks are invalid: ${value.path}` }
@@ -328,13 +325,17 @@ export const relativePath = (bundle: TacoBundle, file: TacoFile): string =>
 
 export const fileName = (path: string): string => path.split('/').at(-1) ?? path
 
-export type FileKind = 'markdown' | 'html' | 'yaml' | 'json' | 'mermaid' | 'text'
+
+export const isInternalFile = (path: string): boolean => {
+  const norm = path.replace(/\\/g, '/')
+  return norm.endsWith('/.DS_Store')
+}
+export type FileKind = 'markdown' | 'yaml' | 'json' | 'mermaid' | 'text'
 
 export function fileKind(file: TacoFile): FileKind {
   const lower = file.path.toLowerCase()
   const mediaType = file.mediaType.toLowerCase()
   if (mediaType === 'text/markdown' || lower.endsWith('.md')) return 'markdown'
-  if (mediaType === 'text/html' || lower.endsWith('.html') || lower.endsWith('.htm')) return 'html'
   if (lower.endsWith('.mmd')) return 'mermaid'
   if (mediaType.includes('yaml') || /\.ya?ml$/.test(lower)) return 'yaml'
   if (mediaType.includes('json') || lower.endsWith('.json')) return 'json'
@@ -349,9 +350,7 @@ export function defaultFile(bundle: TacoBundle): TacoFile | null {
     if (declared) return declared
   }
 
-  return fileByPath(bundle, `${bundle.root}/README.md`)
-    ?? fileByPath(bundle, `${bundle.root}/spec.md`)
-    ?? bundle.files.find((file) => fileKind(file) === 'markdown')
-    ?? bundle.files[0]
+  return bundle.files.find((file) => !isInternalFile(file.path) && fileKind(file) === 'markdown')
+    ?? bundle.files.find((file) => !isInternalFile(file.path))
     ?? null
 }

@@ -107,7 +107,7 @@ speckit.taco.review specs/001-example/001-example.taco.html
 
 The stricter all-or-nothing rule belongs to the extension's optional `sync` CLI utility: it records a SHA-256 baseline for every packed file and refuses every write when both the canonical file and the Taco copy changed since packaging. Neither behavior is applied automatically on the skill's offline path — when a review arrives through Handoff or a saved file with no CLI in the loop, the Agent performs the same comparison itself and stops on any change it cannot attribute.
 
-The packer includes every visible UTF-8 regular file plus validated local PNG assets up to 10 MiB. PNGs are embedded for offline Markdown rendering and preserved as binary data during review round trips. Its only default exclusions are `*.taco.html` and hidden paths; repeatable `--ignore` parameters add explicit feature-relative path or glob exclusions. Visible unsupported content fails packaging instead of disappearing silently.
+The packer includes visible UTF-8 regular files plus validated local PNG assets up to 10 MiB. PNGs are embedded for offline Markdown rendering and preserved as binary data during review round trips. Its only default exclusions are `*.taco.html` and hidden paths; repeatable `--ignore` parameters add explicit feature-relative exclusions. Ordinary `.html` and `.htm` source files are unsupported and cause a clear packaging error unless explicitly ignored; the `.taco.html` product container remains supported.
 
 After each successful update, the Agent presents the exact generated Taco as a native clickable local file, and opens it in the user's browser whenever the host permits local HTML navigation. In Codex, the user click opens it in Browser; the Agent does not attempt autonomous `file://` navigation. A headless boot check is internal evidence and is never reported as user-visible presentation.
 
@@ -128,11 +128,11 @@ CONTRIBUTING.md                       Contributor development and validation gui
 vite.config.ts                        Default bundle injection and build configuration
 ```
 
-The default specification directory is also the project's executable example. Its `README.md` mirrors this project README and opens first as the overview. Product behavior is in `spec.md`, technical design is in `plan.md`, task state is in `tasks.md`, and the container protocol is in `contracts/taco-document.md`.
+The default specification directory is also the project's executable example. Its `README.md` mirrors this project README; product behavior is in `spec.md`, technical design in `plan.md`, task state in `tasks.md`, and the container protocol in `contracts/taco-document.md`. None of these names controls the initial document or sidebar category.
 
 ## Document routing and navigation
 
-By default, a feature-root `README.md` routes to Specify and opens first; `spec.md` is the fallback when no README exists. When a Taco contains a top-level `navigation` manifest, files are grouped and ordered directly according to its declarations, and undeclared files appear under Unassigned. You can also organize groups, drag files, and set entry documents directly in the sidebar during review. In unconfigured Spec Kit trees, `spec.md`, `plan.md`, and `tasks.md` remain the core stage files, known convention paths such as `contracts/` and `checklists/` route with them, and every other document appears under Unassigned until you group it with the Category control in the document header.
+Without a `navigation` manifest, first-level directories form Categories and root files appear under Unassigned; no filename or Spec Kit path has a special route. A manifest explicitly groups virtual files and sets an optional entry document without changing file paths or synchronizing a category change to disk. Files not listed in the manifest remain Unassigned. Reviewers can assign files through the document header's Category control, manage ordinary groups, and set an entry document in the sidebar. Drag-and-drop movement is not supported; a new file created from Unassigned defaults to Unassigned.
 
 Classification is a Taco capability rather than a document property: no frontmatter key routes a file, and the deprecated `taco_scope` property is no longer read. Taco presents all leading YAML frontmatter as an Obsidian-style property editor while preserving it in canonical Markdown. New specs store their title in YAML and begin the body at H2 instead of repeating the title as H1. See `AGENTS.md` for the complete convention.
 

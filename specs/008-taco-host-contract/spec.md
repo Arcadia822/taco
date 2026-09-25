@@ -51,7 +51,7 @@ CLI 和 Host 复用 taco 的纯协议/校验与必要阅读能力；不互相导
 
 目标分发：GitHub Release 提供 macOS/Linux 的 arm64/x64 binary 与 SHA-256 校验文件，命令名统一 `taco-cli`。binary 内嵌必要 shell、协议能力和帮助资源，无需 Node 或 Spec Kit 才能运行。实现语言/打包工具在实现计划中选定，不凭本文声称已有安装 URL。Windows 支持另行决定。Spec Kit 插件作为集成消费者，后续切换到同一 CLI 能力而不是复制一套业务逻辑；本轮只改设计，不删除现有入口。
 
-不能直接当作 Host 校验器的原因：CLI 通用校验只检查正整数版本；浏览器模型允许未来版本冻结阅读，且对非法 navigation 有丢弃行为。Host 发布必须拒绝不支持的版本及无效 navigation，不能静默降级。现有 HTML 文件校验要求本地 `sourceUrl`；Host 必须以显式发布投影处理此差异，不伪造本地 URL，不放宽离线文件校验。
+不能直接当作 Host 校验器的原因：CLI 通用校验只检查正整数版本；浏览器模型允许未来版本冻结阅读，且对非法 navigation 有丢弃行为。Host 发布必须拒绝不支持的版本及无效 navigation，不能静默降级。普通 HTML/HTM 源文件与旧 `sourceUrl` 字段已不受本地 Taco 支持，Host 也必须拒绝，不能通过发布投影重新放宽校验。
 
 ## 3. 最小使用流程与自带指南
 
@@ -202,8 +202,8 @@ actor 来源为 ApiKey 识别的 User 或网页访客会话，服务器赋予标
 - file 仅 id、title、path、mediaType、content、sourceHash、blocks；可选字段仍需严格校验。blocks 只承接现有协议允许的结构与锚点，不能把上传 HTML 当运行代码。
 - navigation 保留 version、entry、groups 的 id/title/paths，逐项校验，不静默丢组或文件。
 - importedComments 仅接收既有线程/消息/锚点协议字段，包括删除墓碑；所有本地作者标记为 imported/unverified，原 authorId 不绑定 Host User。相同本地线程 ID 在不同 revision 下不会覆盖已有 Host 线程；导入反馈不触发版本确认或反馈完成。
-- collab 整体、access、packOptions、本地 sourceUrl 和其他未声明字段不发送；未知扩展字段默认拒绝发布并指出 JSON 路径，不能静默删掉可能的内容。已知本地元数据剥离在 dry-run 中报告。
-- HTML 文件先通过本地容器校验，再移除 sourceUrl，上传原始文本；Host 用代码视图显示，绝不执行或提供同源 HTML 预览。其他非主动执行的 UTF-8 格式保留源码查看。
+- collab 整体、access、packOptions 等已知本地元数据不发送；未知扩展字段默认拒绝发布并指出 JSON 路径，不能静默删掉可能的内容。已知本地元数据剥离在 dry-run 中报告。
+- 普通 HTML/HTM 源文件及旧 `sourceUrl` 字段在本地校验和 Host 发布投影中均明确拒绝；其他非主动执行的 UTF-8 格式保留源码查看。
 - PNG 继续使用已有 base64 data URL，校验真实二进制与现有 10 MiB 单图上限。首版不另设任意资源 URL 上传接口，不抓取用户给定远程地址。
 - Markdown/blocks/Mermaid 的危险 HTML、URL、外部脚本和上传 CSS 被隔离或清洗。正文源码保留不变；渲染净化不能改写快照。
 - 本地与服务端均验证；仅信任 CLI 校验不构成安全边界。协议未来版本拒绝，不能按 v1 猜测。
@@ -297,7 +297,7 @@ open → closed 为只读；open/closed → expired/deleted 停止服务并清�
 
 1. 含协作密钥的合法容器：dry-run 只报告剥离类别，发布请求及日志不含 secret；文件中的主动脚本从未执行。
 2. 未知协议、无效 navigation、非法路径、未知扩展和超限 PNG/总包：精确失败，不静默遗漏文件。
-3. Markdown、目录、PNG、代码块锚点和 HTML 源码在 Host 语义保真；HTML 不执行，sourceUrl 不泄漏。
+3. Markdown、目录、PNG 与代码块锚点在 Host 语义保真；普通 HTML/HTM 源文件及 `sourceUrl` 被拒绝，而非执行或静默剥离。
 4. 无身份可读当前/旧版本、资源与事件；错误 Key 或另一用户不能管理 Taco；撤销 Key 立即影响新管理请求。
 5. 两个不同更新基于同一版本：只有一个成功。响应丢失同键重试：只返回一个 revision；首次发布同键不创建两个 Taco。
 6. 用户停留旧版时提交评论/确认：保持旧版归属。导入本地作者不能冒充登录用户，导入评论不能充当审批。

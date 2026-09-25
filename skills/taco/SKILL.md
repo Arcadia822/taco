@@ -88,7 +88,7 @@ Bundle fields:
 - `docId`: stable identity. Preserve it when refreshing an existing Taco; for a brand-new document mint a **unique** id (`crypto.randomUUID()`, not the directory slug — same-named directories and copies would collide).
 - `title`: document title. The runtime normalizes it to the persisted `.taco.html` filename stem, so name the file after the title.
 - `root`: the directory the bundle covers, as a safe relative POSIX path (no leading `/`, no `\`, no empty, `.`, or `..` segments). Every `path` must sit under `root/`.
-- `files`: `{ id?, title?, path, mediaType, content, sourceUrl?, sourceHash?, blocks? }[]`, `path` safe, unique, and starting with `root/`.
+- `files`: `{ id?, title?, path, mediaType, content, sourceHash?, blocks? }[]`, `path` safe, unique, and starting with `root/`. Ordinary `.html` and `.htm` source entries and the legacy `sourceUrl` field are unsupported.
 - `comments`, `navigation`, `checkpoints`, `access`, `collab`, `packOptions`, and any other field: carry over from the previous bundle when present.
 
 ### Checkpoints and document status
@@ -106,14 +106,12 @@ When creating, modifying, inspecting, or reporting a Checkpoint graph or its doc
 | `.yaml` / `.yml` | `application/yaml` | source view                                                           |
 | `diagrams/*.mmd` | `text/plain`       | Mermaid source; the runtime routes it by extension, not by media type |
 | `.png`           | `image/png`        | `content` is a `data:image/png;base64,…` URI                          |
-| `.html` / `.htm` | `text/html`        | requires `sourceUrl`                                                  |
-| any other text   | `text/plain`       | plain-text source                                                     |
+| any other UTF-8 text | `text/plain` | plain-text source; excludes `.html` and `.htm` |
 
 Per-file fields:
 
 - `id`: preserve the previous file's id — it is the stable key for comment anchors and block identity.
 - `title`: optional in-file display title; if kept it must be a non-empty string and must not change the `path`.
-- `sourceUrl`: HTML/HTM only. Derive it from the existing source file's canonical absolute path using a file-URL API, not string concatenation. Require a `file:` URL with no host, credentials, query, or fragment whose decoded pathname ends with the file's `path`. Never set it on non-HTML files.
 - `sourceHash`: optional sha256 hex (64 chars) of the file bytes at pack time; recompute it whenever `content` changes.
 - `blocks`: optional runtime cache of per-block HTML. Keep it only when that file's `content` is byte-identical to the previous bundle's; drop it when the content changed and let the runtime rebuild it.
 
@@ -137,7 +135,7 @@ Writing rules:
 
 1. If a `.taco.html` already exists at the destination, **read its bundle first** — before you copy or overwrite anything, or you will read your own fresh copy instead of the reviewed document.
 2. Read the shell into memory; do not copy it over the destination. For a refresh, retain the old bundle in memory separately.
-3. Enumerate the document directory and build `files[]` from regular source files. Exclude dotfiles and every `*.taco.html`. Preserve the existing `packOptions.ignore` rules unless new exclusions were requested. Report exclusions; stop on unhandled symlinks, non-UTF-8 files, invalid PNGs or unsupported entries instead of following or silently skipping them.
+3. Enumerate the document directory and build `files[]` from regular source files. Exclude dotfiles and every `*.taco.html`. Preserve the existing `packOptions.ignore` rules unless new exclusions were requested. Report exclusions; stop on unhandled symlinks, non-UTF-8 files, invalid PNGs or unsupported entries, including ordinary `.html`/`.htm` files, instead of following or silently skipping them. Explicitly ignore unsupported source paths when their omission is intended.
 4. For a new document, set `format: "taco/files"`, `version: 1`, a fresh unique `docId`, `title`, `root` and `files`. Choose the Checkpoint definition from the user's or project's review requirements, if any; otherwise omit `checkpoints`, even if a starter pack contains one. The bundled `spec/` SDD graph is an example to adapt only if it fits; its stage names, document paths, and display template are not defaults that override project conventions. For a refresh, preserve the previous bundle wholesale—including `checkpoints.nodes`, `checkpoints.documents`, and any unknown fields—and replace only intended fields; keep `root`, format/version and identity unchanged. Stop on an unsupported format/version rather than downgrading it. Match existing file entries by path, preserve unknown fields and stable ids, and update content-dependent fields using the rules above.
 5. Serialize into the in-memory shell, validate the exact result, then write a temporary sibling and rename it to `<DOC_DIR>/<name>.taco.html`. Until this succeeds, leave the previous destination untouched.
 

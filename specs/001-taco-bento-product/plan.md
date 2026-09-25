@@ -4,7 +4,7 @@ title: "Implementation Plan: Taco File Browser"
 
 ## Overview
 
-Build a self-contained browser for a single Spec Kit feature directory. At build time Vite reads the real directory and injects a generic file bundle. The runtime derives stage projections, edits Markdown as stable Tiptap blocks, and syncs replicas through a Bento-derived CRDT using a local `BroadcastChannel` plus an optional encrypted WebSocket relay.
+Build a self-contained browser for a single Spec Kit feature directory. At build time Vite reads the real directory and injects a generic file bundle. The runtime derives Category navigation from virtual paths or an explicit manifest, edits Markdown as stable Tiptap blocks, and syncs replicas through a Bento-derived CRDT using a local `BroadcastChannel` plus an optional encrypted WebSocket relay.
 
 ## Technical Context
 
@@ -76,7 +76,7 @@ src/
 ├── model.ts          # transport validation only
 ├── identity.ts       # per-tab collaboration/comment identity
 ├── store.ts          # bundle ↔ CRDT projection
-├── stage-navigation.ts # derived Specify/Plan/Tasks projection
+├── navigation.ts     # derived Categories and manifest grouping
 ├── render.ts         # Markdown renderer and heading slugs
 ├── tiptap-editor.ts  # shared Tiptap extension composition
 ├── tiptap-code-block.ts # code-block Node View and Mermaid-only preview
@@ -109,8 +109,8 @@ extensions/taco/
 3. The bundle is injected into `#taco-document`.
 4. `vite-plugin-singlefile` inlines the runtime and CSS.
 5. The browser parser validates path boundaries before rendering.
-6. Stage navigation recognizes core and conventional Spec Kit paths, routes HTML/HTM prototype paths to Specify, then reads the YAML `taco_scope` open enum from other Markdown documents; physical subdirectories stay nested inside one of the three default stages.
-7. CLI packaging records each HTML file's canonical absolute `file:` URL after verifying that it matches the validated project-relative path. The committed showcase build instead records the exact `../<project-relative-path>` reference so CI and local checkout builds are identical, then resolves it only from a local `file:` Taco. Selecting a valid file opens its resolved URL directly; missing or mismatched references fail validation and never fall back to embedded HTML execution.
+6. Navigation derives Categories from first-level directories; root files remain Unassigned, with no special treatment of Spec Kit filenames or frontmatter. A manifest can assign files to groups without rewriting paths.
+7. Ordinary HTML/HTM source files are not embedded; the CLI rejects them unless explicitly ignored. The self-contained `.taco.html` container remains the review artifact.
 
 ## Spec Kit Review Round-Trip
 

@@ -31,15 +31,14 @@ There is no generated Overview page and no dashboard. Opening a Taco prefers the
 
 This follows Castrel's AppShell composition: the outer split first, then the workspace-local composition. Header controls use compact 24px ghost icon buttons.
 
-## 3. Stage Navigation
+## 3. Category Navigation
 
-- Route files into exactly three top-level groups: Requirements, Technical Plan, and Task Breakdown.
-- The sidebar contains Specify, Plan, and Tasks plus Unassigned; documents classified by path or grouped through the Category control appear in their group.
-- A feature-root `README.md` enters Specify by convention and is the preferred opening document, so it needs no declaration at all.
-- All `checklists/` files sit under Technical Plan, matching the official Plan → Checklist → Tasks quality-gate order.
-- Group titles use secondary text and have no leading icon slot. A centered right chevron appears only on hover or keyboard focus and rotates when expanded.
-- Physical folders such as `contracts/` and `checklists/` and custom subdirectories remain navigable. Their leading icon toggles between closed-folder and open-folder states.
-- HTML and HTM files are treated as spec prototypes and automatically routed to Specify; no Markdown property declares where any file lives.
+- With no manifest, first-level directories form Categories; root files start Unassigned. An explicit manifest groups virtual files without rewriting their paths.
+- The Category control in the document header assigns a file to a group; drag-and-drop movement and Category CRUD controls are not supported.
+- The first visible Markdown file opens by default unless a valid `navigation.entry` selects another document. Filenames and frontmatter have no routing privilege.
+- Group titles use secondary text without a leading icon slot; a right chevron appears on hover or keyboard focus.
+- Nested directories remain navigable with open/closed folder icons.
+- Ordinary HTML/HTM source files are unsupported; `.taco.html` remains the review container.
 - The selected file is indicated by text/background, not by color alone.
 - The file icon conveys file identity without implying that a format renderer exists.
 - Mobile and narrow-screen layouts start with the drawer closed.

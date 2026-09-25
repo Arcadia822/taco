@@ -23,7 +23,6 @@ classDiagram
     +string path
     +string mediaType
     +string content
-    +string sourceUrl
   }
 
   class TacoCommentThread {
@@ -101,13 +100,12 @@ The display name is stored locally by the browser and sent through encrypted pre
 | `path` | string | must sit under `root/`; no absolute paths, backslashes, empty segments, `.`, or `..` |
 | `mediaType` | string | a content format hint that grants no semantic interpretation |
 | `content` | string | the file's raw UTF-8 text |
-| `sourceUrl` | string? | required only for HTML/HTM; CLI packages use the canonical absolute `file:` URL whose decoded pathname ends in `path`; the committed showcase shell alone uses the exact portable `../<path>` reference so builds are reproducible across checkout locations |
 
 ## Derived State
 
 The following is derived only at runtime and is not written to the bundle:
 
-- stage navigation and role grouping
+- Category navigation from first-level directories and an optional explicit manifest
 - the in-group directory tree such as `contracts/`
 - the current file and viewport state
 - Markdown HTML
@@ -118,11 +116,9 @@ The following is derived only at runtime and is not written to the bundle:
 
 Future task counts, requirement coverage, or readiness may likewise only be parsed from files, and must not become a parallel source of truth.
 
-## Stage Projection
+## Category Projection
 
-Taco recognizes three core files: `spec.md`, `plan.md`, and `tasks.md`. A feature-root `README.md` enters Specify by convention and is preferred as the opening document, with `spec.md` as the fallback. Known Spec Kit artifacts enter their corresponding stage by path; every other document appears under Unassigned until a reviewer groups it with the built-in Category control. No frontmatter key routes a file, and the deprecated `taco_scope` property is preserved as canonical Markdown without being read.
-
-Stages, directories, and explicit grouping are derived from `files[]` paths and the optional top-level `navigation` manifest; no document property routes a file.
+Without a `navigation` manifest, first-level directories form Categories and root files remain Unassigned. `spec.md`, `plan.md`, `tasks.md`, `README.md`, and other Spec Kit paths have no special routing or opening priority. An explicit manifest assigns virtual files to groups and may select an entry document; an assignment changes neither file paths nor comment anchors. Document frontmatter, including legacy `taco_scope`, does not route files.
 
 ## Local Comments
 
