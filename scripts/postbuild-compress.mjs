@@ -26,7 +26,27 @@ if (!moduleMatch) throw new Error('inline module script not found')
 const styleMatch = html.match(/<style[^>]*\brel="stylesheet"[^>]*>([\s\S]*?)<\/style>/)
 if (!styleMatch) throw new Error('inline application stylesheet not found')
 
-const encode = (value) => deflateRawSync(Buffer.from(value, 'utf8'), { level: 9 }).toString('base64')
+const COMPRESSION_CONFIGS = [
+  { level: 9, memLevel: 8 }, // zlib default
+  { level: 9, memLevel: 6 }, // optimal for JS Lite, Adapter, Mermaid
+  { level: 8, memLevel: 7 }, // optimal for JS Complete
+  { level: 7, memLevel: 8 }, // optimal for CSS
+]
+
+const encode = (value, fixedOptions = null) => {
+  const buf = Buffer.isBuffer(value) ? value : Buffer.from(value, 'utf8')
+  if (fixedOptions) {
+    return deflateRawSync(buf, fixedOptions).toString('base64')
+  }
+  let best = deflateRawSync(buf, COMPRESSION_CONFIGS[0])
+  for (let i = 1; i < COMPRESSION_CONFIGS.length; i++) {
+    const candidate = deflateRawSync(buf, COMPRESSION_CONFIGS[i])
+    if (candidate.length < best.length) {
+      best = candidate
+    }
+  }
+  return best.toString('base64')
+}
 const jsPayload = encode(moduleMatch[1])
 const cssPayload = encode(styleMatch[1])
 
@@ -46,10 +66,11 @@ if (!isLite) {
     minify: true,
     format: 'esm',
     target: 'es2022',
+    treeShaking: true,
     write: false,
   })
   const mermaidCode = mermaidResult.outputFiles[0].text
-  mermaidPayload = `    <script id="taco-asset-mermaid" type="taco/deflate-b64">${encode(mermaidCode)}</script>\n`
+  mermaidPayload = `<script id="taco-asset-mermaid" type="taco/deflate-b64">${encode(mermaidCode, { level: 9, memLevel: 6 })}</script>`
 } else {
   // Lite shell gets standalone embedded compressed rich editor adapter module
   // with npm dependencies externalized and local Taco sources bundled.
@@ -62,6 +83,7 @@ if (!isLite) {
     target: 'es2022',
     platform: 'browser',
     packages: 'external',
+    treeShaking: true,
     write: false,
     alias: {
       '@taco/protocol': resolve(process.cwd(), 'packages/protocol/src/index.ts'),
@@ -73,60 +95,59 @@ if (!isLite) {
     },
   })
   const adapterCode = adapterResult.outputFiles[0].text
-  richAdapterPayload = `    <script type="application/taco+base64" id="taco-asset-rich-adapter">${encode(adapterCode)}</script>\n`
+  richAdapterPayload = `<script type="application/taco+base64" id="taco-asset-rich-adapter">${encode(adapterCode)}</script>`
 }
 
 const loader = `
 (async () => {
-  var fail = function (message) {
-    var node = document.createElement('div')
+  const fail = (message) => {
+    const node = document.createElement('div')
     node.style.cssText = 'position:fixed;inset:0;display:grid;place-items:center;background:#f4f1ea;color:#20211f;font:15px/1.6 system-ui,sans-serif;text-align:center;padding:40px;z-index:99999'
     node.textContent = message
     document.body.appendChild(node)
-    var splash = document.getElementById('taco-splash')
-    if (splash) splash.remove()
+    document.getElementById('taco-splash')?.remove()
   }
   if (typeof DecompressionStream === 'undefined') {
     fail('Taco requires a browser with DecompressionStream support.')
     return
   }
-  var inflate = async function (id) {
-    var el = document.getElementById(id)
+  const inflate = async (id) => {
+    const el = document.getElementById(id)
     if (!el) return ''
-    var text = el.textContent.trim()
-    var bytes = Uint8Array.from(atob(text), function (character) { return character.charCodeAt(0) })
-    var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
+    const bytes = Uint8Array.from(atob(el.textContent.trim()), (c) => c.charCodeAt(0))
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
     return await new Response(stream).text()
   }
-  var moduleUrl = ''
+  let moduleUrl = ''
   try {
-    var css = await inflate('taco-rt-css')
-    var stale = document.querySelectorAll('style[data-taco-transient]')
-    for (var index = 0; index < stale.length; index++) stale[index].remove()
-    var style = document.createElement('style')
+    const css = await inflate('taco-rt-css')
+    document.querySelectorAll('style[data-taco-transient]').forEach((s) => s.remove())
+    const style = document.createElement('style')
     style.id = 'taco-rt-style'
     style.setAttribute('data-taco-transient', '')
     style.textContent = css
     document.head.appendChild(style)
-    var javascript = await inflate('taco-rt')
+    const javascript = await inflate('taco-rt')
     moduleUrl = URL.createObjectURL(new Blob([javascript], { type: 'text/javascript' }))
     await import(moduleUrl)
   } catch (error) {
-    fail('Taco could not start: ' + (error && error.message ? error.message : error))
+    fail('Taco could not start: ' + (error?.message || error))
   } finally {
     if (moduleUrl) URL.revokeObjectURL(moduleUrl)
   }
 })()
 `
 
-const minLoader = transformSync(loader, { minify: true }).code
+const minLoader = transformSync(loader, { minify: true, target: 'es2022' }).code
 if (minLoader.includes('</scr' + 'ipt>')) throw new Error('loader contains a script close sequence')
 
-const payloads = `
-    <script id="taco-rt-css" type="taco/deflate-b64">${cssPayload}</script>
-    <script id="taco-rt" type="taco/deflate-b64">${jsPayload}</script>
-${mermaidPayload}${richAdapterPayload}    <script>${minLoader}</script>
-`
+const payloads = [
+  `<script id="taco-rt-css" type="taco/deflate-b64">${cssPayload}</script>`,
+  `<script id="taco-rt" type="taco/deflate-b64">${jsPayload}</script>`,
+  mermaidPayload,
+  richAdapterPayload,
+  `<script>${minLoader}</script>`,
+].filter(Boolean).join('\n')
 
 const stripCommentsOutsideDataBlock = (source) => {
   const docStart = source.search(/<script\b[^>]*\bid=["']taco-document["'][^>]*>/i)
@@ -140,10 +161,28 @@ const stripCommentsOutsideDataBlock = (source) => {
   const after = source.slice(afterDoc).replace(/<!--[\s\S]*?-->/g, '')
   return before + docBlock + after
 }
+const collapseBlankLinesOutsideDataBlock = (source) => {
+  const docStart = source.search(/<script\b[^>]*\bid=["']taco-document["'][^>]*>/i)
+  if (docStart === -1) return source.replace(/\n{2,}/g, '\n')
+  const docEndTag = '</script>'
+  const docEnd = source.indexOf(docEndTag, docStart)
+  if (docEnd === -1) return source.replace(/\n{2,}/g, '\n')
+  const afterDoc = docEnd + docEndTag.length
+  const before = source.slice(0, docStart).replace(/\n{2,}/g, '\n')
+  const docBlock = source.slice(docStart, afterDoc)
+  const after = source.slice(afterDoc).replace(/\n{2,}/g, '\n')
+  return before + docBlock + after
+}
+
 
 let withoutRuntime = stripCommentsOutsideDataBlock(html)
   .replace(moduleMatch[0], '')
   .replace(styleMatch[0], '')
+withoutRuntime = withoutRuntime.replace(/<style\b(?![^>]*\brel="stylesheet")>([\s\S]*?)<\/style>/i, (_, css) => {
+  const minCss = transformSync(css, { loader: 'css', minify: true }).code.trim()
+  return `<style>${minCss}</style>`
+})
+
 
 if (isLite) {
   // jsDelivr's +esm resolver can select different ProseMirror patch versions for
@@ -163,12 +202,14 @@ if (isLite) {
       imports[`https://cdn.jsdelivr.net/npm/${name}@${version}/`] = canonicalUrl
     }
   }
-  const importMap = `    <script type="importmap">${JSON.stringify({ imports })}</script>\n`
-  withoutRuntime = withoutRuntime.replace('</head>', `${importMap}  </head>`)
+  const importMap = `<script type="importmap">${JSON.stringify({ imports })}</script>`
+  withoutRuntime = withoutRuntime.replace(/\s*<\/head>/i, () => `\n${importMap}\n</head>`)
 }
 
+withoutRuntime = collapseBlankLinesOutsideDataBlock(withoutRuntime)
+
 const output = withoutRuntime
-  .replace('</body>', `${payloads}  </body>`)
+  .replace(/\s*<\/body>/i, () => `\n${payloads}\n</body>`)
   .replace(/[\t ]+$/gm, '')
 if (output === withoutRuntime) throw new Error('closing body tag not found')
 

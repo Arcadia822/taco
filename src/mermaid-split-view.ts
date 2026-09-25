@@ -14,7 +14,7 @@ import {
 } from './mermaid.ts'
 import { createSourceEditor, type SourceEditorController, type SourceCommentRange } from './source-editor.ts'
 
-export type CodeBlockIcon = 'check' | 'copy' | 'maximize' | 'message-square' | 'minus' | 'pencil' | 'plus' | 'rotate-ccw' | 'x' | 'panel-left'
+export type CodeBlockIcon = 'check' | 'copy' | 'maximize' | 'message-square' | 'minus' | 'plus' | 'rotate-ccw' | 'x' | 'panel-left'
 
 const iconPaths: Record<CodeBlockIcon, string> = {
   check: '<path d="m20 6-11 11-5-5"/>',
@@ -22,7 +22,6 @@ const iconPaths: Record<CodeBlockIcon, string> = {
   maximize: '<path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>',
   'message-square': '<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/>',
   minus: '<path d="M5 12h14"/>',
-  pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   'rotate-ccw': '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
   'panel-left': '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>',

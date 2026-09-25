@@ -40,23 +40,44 @@ const lowlight = createLowlight({
 })
 lowlight.registerAlias('plaintext', ['text', 'txt', 'mermaid'])
 
-export {
-  iconButton,
-  setIcon,
+import {
   bindMermaidCanvasDrag,
   createMermaidSplitView,
+  iconButton,
+  setIcon,
   type CodeBlockIcon,
   type MermaidSplitViewController,
   type TacoCodeBlockCommentTarget,
 } from './mermaid-split-view.ts'
-import {
-  bindMermaidCanvasDrag,
-  iconButton,
-  setIcon,
-  createMermaidSplitView,
-  type MermaidSplitViewController,
-  type TacoCodeBlockCommentTarget,
-} from './mermaid-split-view.ts'
+export type { CodeBlockIcon, MermaidSplitViewController, TacoCodeBlockCommentTarget }
+
+const createThemeSelect = (selectedTheme: string, label: string, extraClass = ''): HTMLSelectElement => {
+  const select = document.createElement('select')
+  select.className = `tiptap-code-block-theme-select ${extraClass}`.trim()
+  select.setAttribute('aria-label', label)
+  for (const { id, label: name } of MERMAID_THEMES) {
+    const option = document.createElement('option')
+    option.value = id
+    option.textContent = name
+    if (id === selectedTheme) option.selected = true
+    select.append(option)
+  }
+  return select
+}
+
+const createDirectionSelect = (selectedDirection: string, label: string): HTMLSelectElement => {
+  const select = document.createElement('select')
+  select.className = 'tiptap-code-block-theme-select tiptap-code-block-direction-select'
+  select.setAttribute('aria-label', label)
+  for (const { id, label: name } of MERMAID_DIRECTIONS) {
+    const option = document.createElement('option')
+    option.value = id
+    option.textContent = name.split(' ')[0]
+    if (id === selectedDirection) option.selected = true
+    select.append(option)
+  }
+  return select
+}
 
 const languageNames: Record<string, string> = {
   bash: 'Bash',
@@ -147,31 +168,13 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
 
       const actions = document.createElement('div')
       actions.className = 'tiptap-code-block-actions'
-      const themeSelect = document.createElement('select')
-      themeSelect.className = 'tiptap-code-block-theme-select'
-      themeSelect.setAttribute('aria-label', labels.theme || 'Theme')
-      MERMAID_THEMES.forEach(({ id, label }) => {
-        const option = document.createElement('option')
-        option.value = id
-        option.textContent = label
-        if (id === currentTheme) option.selected = true
-        themeSelect.append(option)
-      })
+      const themeSelect = createThemeSelect(currentTheme, labels.theme || 'Theme')
       const handleThemeChange = () => {
         currentTheme = themeSelect.value as MermaidTheme
         splitController?.setTheme(currentTheme)
       }
       themeSelect.addEventListener('change', handleThemeChange)
-      const directionSelect = document.createElement('select')
-      directionSelect.className = 'tiptap-code-block-theme-select tiptap-code-block-direction-select'
-      directionSelect.setAttribute('aria-label', labels.direction || 'Direction')
-      MERMAID_DIRECTIONS.forEach(({ id, label }) => {
-        const option = document.createElement('option')
-        option.value = id
-        option.textContent = label.split(' ')[0]
-        if (id === currentDirection) option.selected = true
-        directionSelect.append(option)
-      })
+      const directionSelect = createDirectionSelect(currentDirection, labels.direction || 'Direction')
       directionSelect.addEventListener('change', () => {
         currentDirection = directionSelect.value as MermaidDirection
         splitController?.setDirection(currentDirection)
@@ -246,31 +249,13 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
         const controls = document.createElement('div')
         controls.className = 'mermaid-zoom-controls'
 
-        const zoomThemeSelect = document.createElement('select')
-        zoomThemeSelect.className = 'tiptap-code-block-theme-select mermaid-zoom-theme-select'
-        zoomThemeSelect.setAttribute('aria-label', labels.theme || 'Theme')
         const detectedZoomTheme = extractMermaidThemeFromCode(currentNode.textContent) ?? currentTheme
-        MERMAID_THEMES.forEach(({ id, label }) => {
-          const option = document.createElement('option')
-          option.value = id
-          option.textContent = label
-          if (id === detectedZoomTheme) option.selected = true
-          zoomThemeSelect.append(option)
-        })
-        const zoomDirectionSelect = document.createElement('select')
-        zoomDirectionSelect.className = 'tiptap-code-block-theme-select tiptap-code-block-direction-select'
-        zoomDirectionSelect.setAttribute('aria-label', labels.direction || 'Direction')
+        const zoomThemeSelect = createThemeSelect(detectedZoomTheme, labels.theme || 'Theme', 'mermaid-zoom-theme-select')
         const detectedZoomDir = extractMermaidDirectionFromCode(currentNode.textContent)
+        const zoomDirectionSelect = createDirectionSelect(detectedZoomDir, labels.direction || 'Direction')
         zoomDirectionSelect.hidden = !isMermaidDirectionSupported(currentNode.textContent)
         zoomDirectionSelect.disabled = !editor.isEditable
         zoomThemeSelect.disabled = !editor.isEditable
-        MERMAID_DIRECTIONS.forEach(({ id, label }) => {
-          const option = document.createElement('option')
-          option.value = id
-          option.textContent = label.split(' ')[0]
-          if (id === detectedZoomDir) option.selected = true
-          zoomDirectionSelect.append(option)
-        })
         zoomDirectionSelect.addEventListener('change', () => {
           currentDirection = zoomDirectionSelect.value as MermaidDirection
           directionSelect.value = currentDirection

@@ -341,51 +341,26 @@ const resolveLook = (theme: MermaidTheme): 'neo' | 'classic' =>
   /^(redux|neo)/.test(theme) ? 'neo' : 'classic'
 
 export const highlightNode = (host: HTMLElement, nodeId: string | null): void => {
-  const allNodes = host.querySelectorAll<SVGElement>('.interactive-mermaid-node')
-  allNodes.forEach((node) => {
-    if (!nodeId) {
-      node.classList.remove('is-node-hovered')
-    } else if (node.getAttribute('data-node-id') === nodeId) {
-      node.classList.add('is-node-hovered')
-    } else {
-      node.classList.remove('is-node-hovered')
-    }
+  host.querySelectorAll<SVGElement>('.interactive-mermaid-node').forEach((node) => {
+    node.classList.toggle('is-node-hovered', Boolean(nodeId && node.getAttribute('data-node-id') === nodeId))
   })
 }
 
 export const focusNode = (host: HTMLElement, nodeId: string | null): void => {
-  const allNodes = host.querySelectorAll<SVGElement>('.interactive-mermaid-node')
-  allNodes.forEach((node) => {
-    if (!nodeId) {
-      node.classList.remove('is-node-active')
-    } else if (node.getAttribute('data-node-id') === nodeId) {
-      node.classList.add('is-node-active')
-      node.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
-    } else {
-      node.classList.remove('is-node-active')
-    }
+  host.querySelectorAll<SVGElement>('.interactive-mermaid-node').forEach((node) => {
+    const active = Boolean(nodeId && node.getAttribute('data-node-id') === nodeId)
+    node.classList.toggle('is-node-active', active)
+    if (active) node.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
   })
 }
 
 export const focusEdge = (host: HTMLElement, edgeSelector: string | null, fromNodeId?: string | null, toNodeId?: string | null): void => {
-  const allEdges = host.querySelectorAll<SVGElement>('.interactive-mermaid-edge, .flowchart-link, path.relation')
-  allEdges.forEach((edge) => {
-    if (!edgeSelector) {
-      edge.classList.remove('is-edge-active')
-    } else if (edge.getAttribute('data-edge-id') === edgeSelector || edge.id === edgeSelector) {
-      edge.classList.add('is-edge-active')
-    } else {
-      edge.classList.remove('is-edge-active')
-    }
+  host.querySelectorAll<SVGElement>('.interactive-mermaid-edge, .flowchart-link, path.relation').forEach((edge) => {
+    edge.classList.toggle('is-edge-active', Boolean(edgeSelector && (edge.getAttribute('data-edge-id') === edgeSelector || edge.id === edgeSelector)))
   })
-  const allNodes = host.querySelectorAll<SVGElement>('.interactive-mermaid-node')
-  allNodes.forEach((node) => {
+  host.querySelectorAll<SVGElement>('.interactive-mermaid-node').forEach((node) => {
     const id = node.getAttribute('data-node-id')
-    if (fromNodeId && (id === fromNodeId || id === toNodeId)) {
-      node.classList.add('is-node-endpoint')
-    } else {
-      node.classList.remove('is-node-endpoint')
-    }
+    node.classList.toggle('is-node-endpoint', Boolean(fromNodeId && (id === fromNodeId || id === toNodeId)))
   })
 }
 const bindSvgNodeInteractions = (
@@ -494,15 +469,9 @@ const bindSvgNodeInteractions = (
       edgeEl.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
     const hitArea = edgeEl.cloneNode(false) as SVGElement
-    hitArea.removeAttribute('id')
-    hitArea.removeAttribute('data-edge-id')
-    hitArea.removeAttribute('role')
-    hitArea.removeAttribute('tabindex')
-    hitArea.removeAttribute('aria-label')
+    for (const attr of ['id', 'data-edge-id', 'role', 'tabindex', 'aria-label', 'marker-start', 'marker-end']) hitArea.removeAttribute(attr)
     hitArea.setAttribute('aria-hidden', 'true')
     hitArea.setAttribute('class', 'mermaid-edge-hit-area')
-    hitArea.removeAttribute('marker-start')
-    hitArea.removeAttribute('marker-end')
     hitArea.style.setProperty('stroke', 'transparent', 'important')
     hitArea.style.setProperty('stroke-width', '14px', 'important')
     hitArea.style.setProperty('fill', 'none', 'important')
