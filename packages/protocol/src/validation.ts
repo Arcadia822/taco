@@ -180,6 +180,13 @@ export const validateSnapshotFile = (
     return { ok: false, err: `File mediaType is required: ${file.path}` }
   }
 
+  if (file.mediaType === 'text/html' || /\.html?$/i.test(file.path)) {
+    return { ok: false, err: `HTML source files are not supported: ${file.path}` }
+  }
+  if ((file as Record<string, unknown>).sourceUrl !== undefined) {
+    return { ok: false, err: `sourceUrl is no longer supported: ${file.path}` }
+  }
+
   if (typeof file.content !== 'string') {
     return { ok: false, err: `File content must be string: ${file.path}` }
   }

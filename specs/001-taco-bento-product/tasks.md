@@ -41,12 +41,12 @@ title: "Tasks: Taco File Browser"
 - [ ] T026 Verify direct `file://` loading, offline browsing, and zero resource requests
 - [ ] T027 Run responsive-browser and WCAG 2 A/AA checks (responsive-browser checks pass; the automated WCAG audit is still pending)
 
-## Phase 5 — Stage Navigation
+## Phase 5 — Category Navigation
 
-- [x] T031 Replace the undifferentiated physical file tree with Specify, Plan, and Tasks stage groups
-- [x] T032 Put each stage's core file first, immediately followed by all other routed documents
-- [x] T033 Preserve physical subdirectories such as `contracts/` within their stage
-- [x] T034 Route other Markdown documents through the YAML `taco_scope` open enum; only `spec | plan | tasks` are valid routes
+- [x] T031 Derive Categories from first-level directories and leave root files Unassigned
+- [x] T032 Remove built-in `spec.md` / `plan.md` / `tasks.md` and Spec Kit path routing
+- [x] T033 Keep nested subdirectories navigable within their Category
+- [x] T034 Assign virtual files through the navigation manifest without changing paths, comments, or frontmatter
 
 ## Phase 10 — YAML Document Properties
 
@@ -76,12 +76,12 @@ title: "Tasks: Taco File Browser"
 - [x] T043 Add CRDT convergence tests for same-block edits and concurrent comments
 - [x] T044 Verify that two live browser tabs editing the same file see each other's cursors
 
-## Phase 7 — Standalone HTML Prototypes
+## Phase 7 — HTML Source Cutover
 
-- [x] T045 Classify `.html` / `.htm` files and route them to the Specify stage
-- [x] T046 Render an HTML prototype card instead of an inline preview or source editor
-- [x] T047 Record and open each CLI-packaged HTML prototype's canonical absolute `file:` URL with `noopener noreferrer`; keep the committed showcase build reproducible with an exact local-only portable reference
-- [x] T048 Reject HTML without a matching canonical file URL and test classification, routing, validation, and the absence of `data:` or Blob preview fallbacks
+- [x] T045 Reject ordinary `.html` / `.htm` source entries during parsing and CLI validation
+- [x] T046 Remove HTML prototype previews and file URL handling while retaining `.taco.html` as the product container
+- [x] T047 Fail packaging visibly for unignored ordinary HTML source files
+- [x] T048 Exclude the old showcase HTML prototype explicitly and validate the refreshed artifact
 
 ## Phase 8 — Spec Kit Review Extension
 

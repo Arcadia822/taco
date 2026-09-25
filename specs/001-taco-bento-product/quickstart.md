@@ -12,23 +12,22 @@ npm run build
 
 Open `dist-single/Taco_Spec.taco.html` directly from the file system.
 
-## Scenario A — Stage Projection and Directory Fidelity
+## Scenario A — Category Navigation and Directory Fidelity
 
-1. Count the number of files under `specs/001-taco-bento-product/`.
-2. Compare it with `window.taco.listFiles()`.
-3. Confirm the sidebar exposes only Specify, Plan, and Tasks, with each stage's core file first.
-4. Open `contracts/` and other physical subdirectories in the left navigation.
-5. In a temporary copy, assign a document to another group with the Category control in the document header, then clear the assignment; verify the grouping follows the manifest and that the document's frontmatter is untouched.
+1. Count supported files under `specs/001-taco-bento-product/`, excluding the explicitly ignored HTML prototype and the `.taco.html` container.
+2. Compare the paths with `window.taco.listFiles()`.
+3. Confirm first-level directories such as `contracts/` and `checklists/` form Categories; root files, including `README.md`, `spec.md`, `plan.md`, and `tasks.md`, appear under Unassigned.
+4. In a temporary copy, assign a root document to another Category in the document header, then clear the assignment. Confirm its virtual path and comment anchors stay unchanged while the manifest membership changes.
 
-Expected: the file count and relative paths match exactly; real directories stay nested; a grouped document moves into the selected group without creating an extension group, and clearing the assignment returns it to Unassigned. A document carrying the legacy `taco_scope` property stays where its path or grouping places it, and the property remains unchanged.
+Expected: each supported file appears exactly once; nested directories remain navigable, and filename and frontmatter conventions do not determine a group. No drag-and-drop file movement is available.
 
 ## Scenario B — Markdown Reading
 
-1. Open `README.md` and confirm it appears under Specify; if the feature has no README, confirm Taco opens `spec.md` instead.
-2. Use `On this page` to jump to Requirements.
-3. Switch between WYSIWYG and Markdown, and edit in both modes.
+1. Open `README.md` from Unassigned; its filename does not give it opening priority over the first Markdown file unless `navigation.entry` explicitly names it.
+2. Use the outline to jump to a heading.
+3. Edit in the WYSIWYG surface and save.
 
-Expected: heading navigation is correct, and the source is raw Markdown.
+Expected: heading navigation is correct and the saved content remains canonical Markdown.
 
 ## Scenario C — Editable YAML/JSON Source
 

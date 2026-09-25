@@ -13,10 +13,10 @@ title: "Specification Quality Checklist: Taco File Browser"
 ## File Behavior
 
 - [x] Default file, directory hierarchy, and source behavior are testable.
-- [x] The sidebar exposes only Specify, Plan, and Tasks, with each stage's core file first.
-- [x] Other Markdown files select a stage via an exact `spec | plan | tasks` scope enum.
-- [x] Physical subdirectories stay visible within their derived stage.
-- [x] Files without a valid scope declaration create no custom or extension group.
+- [x] First-level directories form Categories and root files appear under Unassigned without special handling of `README.md`, `spec.md`, `plan.md`, or `tasks.md`.
+- [x] A navigation manifest changes virtual grouping without moving files or rewriting comment anchors.
+- [x] Frontmatter keys such as `taco_scope` and `category` do not route files.
+- [x] Ordinary HTML/HTM source files are unsupported while the `.taco.html` review container remains supported.
 - [x] Path containment and duplicate-path behavior are specified.
 - [x] Markdown sanitization and relative-link behavior are specified.
 - [x] Unknown formats fall back to source without fabricating semantics.

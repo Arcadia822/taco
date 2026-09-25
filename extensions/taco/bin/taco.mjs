@@ -15,7 +15,7 @@ import {
   writeFile,
 } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 
 const FORMAT = 'taco/files'
 const FORMAT_VERSION = 1
@@ -85,7 +85,6 @@ const assertNoSymlinkPath = async (root, target) => {
 const mediaType = (path) => {
   const lower = path.toLowerCase()
   if (lower.endsWith('.md')) return 'text/markdown'
-  if (/\.html?$/.test(lower)) return 'text/html'
   if (/\.ya?ml$/.test(lower)) return 'application/yaml'
   if (lower.endsWith('.json')) return 'application/json'
   if (lower.endsWith('.csv')) return 'text/csv'
@@ -94,18 +93,6 @@ const mediaType = (path) => {
   if (lower.endsWith('.toml')) return 'application/toml'
   if (lower.endsWith('.png')) return 'image/png'
   return 'text/plain'
-}
-
-const canonicalFileUrl = (value, expectedPath) => {
-  if (typeof value !== 'string' || !value) return null
-  let url
-  try { url = new URL(value) }
-  catch { return null }
-  if (url.protocol !== 'file:' || url.host || url.username || url.password || url.search || url.hash) return null
-  let pathname
-  try { pathname = decodeURIComponent(url.pathname) }
-  catch { return null }
-  return pathname.endsWith(`/${expectedPath}`) ? url.href : null
 }
 
 const yamlTitleFrom = (content) => {
@@ -156,14 +143,10 @@ const tacoFileBase = (path) =>
     .replace(/\.taco\.html$/i, '')
     .replace(/\.html$/i, '')
 
-// Mirror of the runtime's defaultFile fallback order (README.md, spec.md,
-// first Markdown, first file) so pack infers the bundle title from the
-// document the shell will open by default.
-const headingEntry = (files, rootPath) => {
-  const byPath = (name) => files.find((file) => file.path === `${rootPath}/${name}`)
-  const firstMarkdown = () => files.find((file) => /\.md$/i.test(file.path))
-  return byPath('README.md') ?? byPath('spec.md') ?? firstMarkdown() ?? files[0] ?? null
-}
+// Mirror of the runtime's defaultFile fallback (first Markdown, then first
+// file) so pack infers the bundle title from the document the shell will
+// open by default.
+const headingEntry = (files) => files.find((file) => /\.md$/i.test(file.path)) ?? files[0] ?? null
 
 const parseOptions = (argv) => {
   const positional = []
@@ -250,7 +233,7 @@ const ignoreMatcher = (patterns) => {
     )?.pattern ?? null
 }
 
-export const parseTacoHtml = (html, options = {}) => {
+export const parseTacoHtml = (html) => {
   const match = html.match(DATA_CONTENT)
   if (!match) throw new Error('Taco data block #taco-document was not found')
   let bundle
@@ -259,7 +242,7 @@ export const parseTacoHtml = (html, options = {}) => {
   } catch (error) {
     throw new Error(`Taco data block is not valid JSON: ${error.message}`)
   }
-  validateBundle(bundle, options)
+  validateBundle(bundle)
   return bundle
 }
 
@@ -274,7 +257,7 @@ export const validateTacoHtml = (html) => {
   return { command: 'validate', format: bundle.format, version: bundle.version, securityVersion, issues, files: bundle.files.length }
 }
 
-export const validateBundle = (bundle, { allowLegacyHtmlSourceUrl = false } = {}) => {
+export const validateBundle = (bundle) => {
   if (!bundle || typeof bundle !== 'object' || Array.isArray(bundle))
     throw new Error('Taco bundle must be an object')
   if (bundle.format !== FORMAT) throw new Error(`Expected Taco format ${FORMAT}`)
@@ -298,12 +281,11 @@ export const validateBundle = (bundle, { allowLegacyHtmlSourceUrl = false } = {}
       throw new Error(`File escapes Taco root: ${file.path}`)
     }
     if (paths.has(file.path)) throw new Error(`Duplicate Taco path: ${file.path}`)
-    const html = file.mediaType === 'text/html' || /\.html?$/i.test(file.path)
-    if (html && !allowLegacyHtmlSourceUrl && !canonicalFileUrl(file.sourceUrl, file.path)) {
-      throw new Error(`HTML file requires its canonical file URL: ${file.path}`)
+    if (file.mediaType === 'text/html' || /\.html?$/i.test(file.path)) {
+      throw new Error(`HTML source files are not supported: ${file.path}`)
     }
-    if (!html && file.sourceUrl !== undefined) {
-      throw new Error(`sourceUrl is only valid for HTML files: ${file.path}`)
+    if ('sourceUrl' in file) {
+      throw new Error(`sourceUrl is no longer supported: ${file.path}`)
     }
     if (file.mediaType === 'image/png') decodePng(file.content, file.path)
     paths.add(file.path)
@@ -386,6 +368,11 @@ const collectFiles = async (featureDir, rootPath, existingByPath, ignorePatterns
           `Unsupported filesystem entry in feature directory: ${relativePath}; exclude it with --ignore`,
         )
       }
+      if (/\.html?$/i.test(entry.name)) {
+        throw new Error(
+          `HTML source files are not supported: ${relativePath}; exclude it with --ignore`,
+        )
+      }
       const type = mediaType(relativePath)
       const isPng = type === 'image/png'
       let content
@@ -415,7 +402,6 @@ const collectFiles = async (featureDir, rootPath, existingByPath, ignorePatterns
         path,
         mediaType: type,
         content,
-        ...(type === 'text/html' ? { sourceUrl: pathToFileURL(absolute).href } : {}),
         sourceHash: sha256(rawBuffer || content),
       })
     }
@@ -470,7 +456,7 @@ export const pack = async ({
     }
   }
   const priorBundle = fromPath
-    ? parseTacoHtml(await readFile(fromPath, 'utf8'), { allowLegacyHtmlSourceUrl: true })
+    ? parseTacoHtml(await readFile(fromPath, 'utf8'))
     : null
   if (priorBundle && priorBundle.root !== rootPath) {
     throw new Error(
@@ -491,7 +477,7 @@ export const pack = async ({
 
   const outputBase = tacoFileBase(outputPath)
   const fallbackTitle =
-    titleFrom(headingEntry(files, rootPath)?.content ?? '', featureDir.split(sep).at(-1))
+    titleFrom(headingEntry(files)?.content ?? '', featureDir.split(sep).at(-1))
   const inheritedTitle = priorBundle?.title || fallbackTitle
   if (title && portableTitleBase(title) !== outputBase) {
     throw new Error(

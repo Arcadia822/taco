@@ -250,7 +250,7 @@ describe('FileBrowser', () => {
     browser.destroy()
   })
 
-  it('starts with linked README badges and inline images in another document', async () => {
+  it('renders linked README badges after selecting that document', async () => {
     const bundle = structuredClone(testBundle)
     bundle.files[0].content = 'text ![x](image.png) text'
     bundle.files.push({
@@ -258,6 +258,7 @@ describe('FileBrowser', () => {
       content: '[![Badge](badge.svg)](https://example.invalid)\n[![Other](other.svg)](https://example.invalid)',
     })
     const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    document.querySelector<HTMLButtonElement>('[data-path$="/README.md"]')!.click()
     const editor = await waitForEditor()
     expect(editor.querySelectorAll('a[href="https://example.invalid"] img[data-taco-source]')).toHaveLength(2)
     expect(bundle.files[0].blocks?.[0].html).toContain('data-taco-source="image.png"')
@@ -326,46 +327,28 @@ describe('FileBrowser', () => {
       .toEqual([logo, screenshot])
   })
 
-  it('places files directly in the three default stages', async () => {
-    const readmeBundle = structuredClone(testBundle)
-    readmeBundle.files.push({ title: 'Project overview', path: 'specs/001-browser/README.md', mediaType: 'text/markdown', content: '# Guide' })
-    new FileBrowser(document.getElementById('app')!, readmeBundle)
-    const editor = await waitForEditor()
-    await new Promise((resolve) => requestAnimationFrame(resolve))
-    expect(document.querySelectorAll('.file-row')).toHaveLength(7)
-    expect(Array.from(document.querySelectorAll('.stage-name')).map((node) => node.textContent)).toEqual(['spec', 'plan', 'tasks', '未分配文件'])
-    const specRows = document.querySelectorAll('[data-stage="spec"] .file-row')
-    expect(Array.from(specRows).map((node) => node.getAttribute('data-role'))).toEqual([null, null])
-    expect(document.querySelector('[data-stage="spec"] [data-path$="spec.md"]')).not.toBeNull()
-    expect(document.querySelector('[data-stage="plan"] [data-path$="checklists/requirements.md"]')).not.toBeNull()
-    expect(Array.from(document.querySelectorAll('[data-stage="plan"] .tree-folder .folder-name')).map((node) => node.textContent)).toEqual(['checklists', 'contracts'])
-    expect(document.querySelector('[data-stage="spec"] [data-path$="README.md"]')).not.toBeNull()
-    expect(document.querySelector('[data-stage="plan"] [data-path$="interaction-design.md"]')).toBeNull()
-    expect(document.querySelector('[data-stage="custom"]')).toBeNull()
-    expect(document.querySelector('[data-stage="other"] [data-path$="interaction-design.md"]')).not.toBeNull()
-    expect(document.querySelector('.other-files-group')).not.toBeNull()
-    expect(document.querySelector('[data-role]')).toBeNull()
-    expect(document.querySelectorAll('.stage-summary .sidebar-row-icon')).toHaveLength(0)
-    expect(document.querySelectorAll('.stage-summary .stage-caret [data-icon="chevron-right"]')).toHaveLength(4)
-    expect(document.querySelector('.tree-folder[open] > .folder-row [data-icon="folder-open"]')).not.toBeNull()
-    expect(document.querySelectorAll('.sidebar-row')).toHaveLength(14)
-    expect(editor.querySelector('h1')?.textContent).toBe('Guide')
-    await new Promise((resolve) => requestAnimationFrame(resolve))
-    expect(Array.from(document.querySelectorAll('.outline-link')).map((node) => node.textContent)).toEqual(['Guide'])
-    expect(document.querySelector('.right-panel-tabs')).not.toBeNull()
-    expect(document.querySelector<HTMLButtonElement>('.right-panel-tabs [aria-selected="true"]')?.textContent).toBe('大纲')
-    expect(document.querySelector('.tiptap-editor-host')).not.toBeNull()
-    expect(document.querySelector('.document-inline-title-text')?.textContent).toBe('Project overview')
-    expect(document.querySelector('.document-inline-title [data-icon="file-text"]')).not.toBeNull()
+  it('does not route README or spec/plan/tasks filenames into built-in stages', () => {
+    const bundle = structuredClone(testBundle)
+    bundle.files.push({ path: `${bundle.root}/README.md`, mediaType: 'text/markdown', content: '# Guide' })
+    new FileBrowser(document.getElementById('app')!, bundle)
+
+    for (const stage of ['spec', 'plan', 'tasks']) {
+      expect(document.querySelector(`[data-stage="${stage}"]`)).toBeNull()
+    }
+    for (const name of ['README.md', 'spec.md', 'plan.md', 'tasks.md']) {
+      expect(document.querySelector(`.other-files-group .file-row[data-path$="/${name}"]`)).not.toBeNull()
+    }
+    expect(document.querySelectorAll('.file-row')).toHaveLength(bundle.files.length)
   })
 
-  it('renders every bundled file exactly once, including a nested Other files fallback', () => {
+  it('renders every bundled file exactly once, including nested explicitly Unassigned files', () => {
     const completeBundle = structuredClone(testBundle)
     completeBundle.files.push(
       { path: 'specs/001-browser/notes/readme.txt', mediaType: 'text/plain', content: 'Review note' },
       { path: 'specs/001-browser/diagrams/data-model.mmd', mediaType: 'text/plain', content: 'flowchart LR\nA --> B' },
       { path: 'specs/001-browser/notes/custom.xyz', mediaType: 'text/plain', content: 'Unknown but readable' },
     )
+    completeBundle.navigation = { version: 1, groups: [] }
     new FileBrowser(document.getElementById('app')!, completeBundle, { mermaidRuntime })
 
     const rows = Array.from(document.querySelectorAll<HTMLElement>('.file-row')).map((row) => row.dataset.path)
@@ -374,7 +357,7 @@ describe('FileBrowser', () => {
     expect(new Set(rows)).toEqual(new Set(completeBundle.files.map(({ path }) => path)))
     expect(document.querySelector('[data-stage="other"]')).not.toBeNull()
     expect(document.querySelector('[data-stage="other"] [data-path$="data-model.mmd"]')).not.toBeNull()
-    expect(Array.from(document.querySelectorAll('[data-stage="other"] .folder-name')).map((node) => node.textContent)).toEqual(['diagrams', 'notes'])
+    expect(Array.from(document.querySelectorAll('[data-stage="other"] .folder-name')).map((node) => node.textContent)).toEqual(['checklists', 'contracts', 'diagrams', 'notes'])
     const unknown = document.querySelector<HTMLButtonElement>('[data-stage="other"] [data-path$="custom.xyz"]')!
     unknown.click()
     expect(document.querySelector<HTMLTextAreaElement>('.source-editor-input')?.value).toBe('Unknown but readable')
@@ -557,60 +540,6 @@ describe('FileBrowser', () => {
     browser.destroy()
   })
 
-  it('shows HTML prototypes as cards that open standalone in a new page', () => {
-    const prototypeBundle = structuredClone(testBundle)
-    const content = '<!doctype html><html><head><title>Checkout</title></head><body>Prototype</body></html>'
-    prototypeBundle.files.push({
-      title: 'Checkout prototype',
-      path: 'specs/001-browser/prototypes/checkout.html',
-      mediaType: 'text/html',
-      content,
-      sourceUrl: 'file:///Users/example/project/specs/001-browser/prototypes/checkout.html',
-    })
-    const browser = new FileBrowser(document.getElementById('app')!, prototypeBundle)
-
-    const row = document.querySelector<HTMLButtonElement>('[data-path$="prototypes/checkout.html"]')!
-    expect(row.closest('[data-stage]')?.getAttribute('data-stage')).toBe('spec')
-    expect(row.querySelector('[data-icon="file-code"]')).not.toBeNull()
-    row.click()
-
-    const preview = document.querySelector<HTMLAnchorElement>('.html-preview-action')!
-    expect(document.querySelector('.html-preview-title')?.textContent).toBe('Checkout prototype')
-    expect(document.querySelector('.html-preview-path')).toBeNull()
-    expect(document.querySelector('.html-preview-kind')).toBeNull()
-    expect(document.querySelector('.html-preview-hint')).toBeNull()
-    expect(preview.textContent).toContain('打开预览')
-    expect(preview.href).toBe('file:///Users/example/project/specs/001-browser/prototypes/checkout.html')
-    expect(preview.target).toBe('_blank')
-    expect(preview.rel).toBe('noopener noreferrer')
-    expect(preview.referrerPolicy).toBe('no-referrer')
-    expect(document.querySelector('.html-preview-card iframe')).toBeNull()
-    expect(document.querySelector('.source-editor-input')).toBeNull()
-    expect(document.querySelector<HTMLButtonElement>('.right-panel-tabs [role="tab"]')?.hidden).toBe(true)
-    browser.destroy()
-  })
-
-  it('refuses HTML without a canonical file URL and exposes inert source', () => {
-    const prototypeBundle = structuredClone(testBundle)
-    const content = '<script>window.pwned = true</script>'
-    prototypeBundle.files.push({
-      title: 'Oversized prototype',
-      path: 'specs/001-browser/prototypes/oversized.html',
-      mediaType: 'text/html',
-      content,
-    })
-    const browser = new FileBrowser(document.getElementById('app')!, prototypeBundle)
-
-    document.querySelector<HTMLButtonElement>('[data-path$="prototypes/oversized.html"]')!.click()
-
-    const preview = document.querySelector<HTMLAnchorElement>('.html-preview-action')!
-    const source = document.querySelector<HTMLElement>('.html-preview-source-fallback')!
-    expect(preview.hasAttribute('href')).toBe(false)
-    expect(preview.getAttribute('aria-disabled')).toBe('true')
-    expect(source.textContent).toBe(content)
-    expect(source.querySelector('script')).toBeNull()
-    browser.destroy()
-  })
 
   it('derives an H1–H3 outline from the Markdown document', async () => {
     new FileBrowser(document.getElementById('app')!, structuredClone(testBundle))
@@ -1222,14 +1151,16 @@ describe('FileBrowser', () => {
   })
 
   it('keeps sidebar UI state independent from language and file selection', () => {
-    new FileBrowser(document.getElementById('app')!, structuredClone(testBundle))
+    const bundle = structuredClone(testBundle)
+    bundle.navigation = { version: 1, groups: [{ id: 'review', title: 'Review', paths: ['spec.md'] }] }
+    new FileBrowser(document.getElementById('app')!, bundle)
     const app = document.getElementById('app')!
     const sidebarScroll = document.querySelector<HTMLElement>('.sidebar-scroll')!
-    const plan = document.querySelector<HTMLDetailsElement>('[data-stage="plan"]')!
+    const unassigned = document.querySelector<HTMLDetailsElement>('[data-stage="other"]')!
     const folder = document.querySelector<HTMLDetailsElement>('.tree-folder[data-path$="/checklists"]')!
 
-    plan.open = false
-    plan.dispatchEvent(new Event('toggle'))
+    unassigned.open = false
+    unassigned.dispatchEvent(new Event('toggle'))
     folder.open = false
     folder.dispatchEvent(new Event('toggle'))
     sidebarScroll.scrollTop = 48
@@ -1237,7 +1168,7 @@ describe('FileBrowser', () => {
 
     document.querySelector<HTMLButtonElement>('[data-path$="tasks.md"]')!.click()
     expect(document.querySelector<HTMLElement>('.sidebar-scroll')).toBe(sidebarScroll)
-    expect(document.querySelector<HTMLDetailsElement>('[data-stage="plan"]')?.open).toBe(false)
+    expect(document.querySelector<HTMLDetailsElement>('[data-stage="other"]')?.open).toBe(false)
     expect(document.querySelector<HTMLDetailsElement>('.tree-folder[data-path$="/checklists"]')?.open).toBe(false)
     expect(document.querySelector<HTMLElement>('.sidebar-scroll')?.scrollTop).toBe(48)
 
@@ -1250,7 +1181,7 @@ describe('FileBrowser', () => {
 
     expect(app.classList.contains('sidebar-closed')).toBe(true)
     expect(document.querySelector('.file-sidebar')?.hasAttribute('inert')).toBe(true)
-    expect(document.querySelector<HTMLDetailsElement>('[data-stage="plan"]')?.open).toBe(false)
+    expect(document.querySelector<HTMLDetailsElement>('[data-stage="other"]')?.open).toBe(false)
     expect(document.querySelector<HTMLDetailsElement>('.tree-folder[data-path$="/checklists"]')?.open).toBe(false)
     expect(document.querySelector<HTMLElement>('.sidebar-scroll')?.scrollTop).toBe(48)
   })
@@ -1278,6 +1209,24 @@ describe('FileBrowser', () => {
     prompt.querySelector<HTMLButtonElement>('.confirmation-dialog-actions button:last-child')!.click()
     await vi.waitFor(() => expect(bundle.navigation?.groups.find(({ id }) => id === 'g1')?.title).toBe('Team review'))
     expect(bundle.navigation.groups.find(({ id }) => id === 'category-docs')?.title).toBe('docs')
+    browser.destroy()
+  })
+
+  it('creates from Unassigned without selecting the first category or enabling drag', async () => {
+    const bundle = structuredClone(testBundle)
+    bundle.navigation = { version: 1, groups: [{ id: 'group-docs', title: 'Docs', paths: ['spec.md'] }] }
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    const unassigned = document.querySelector<HTMLElement>('.other-files-group')!
+    expect(unassigned).not.toBeNull()
+    expect(document.querySelector('.file-row[draggable]')).toBeNull()
+    unassigned.querySelector<HTMLButtonElement>('.add-file-to-group-btn')!.click()
+    const dialog = document.querySelector<HTMLDialogElement>('.new-file-dialog')!
+    expect(dialog.querySelector<HTMLSelectElement>('.new-file-category')!.value).toBe('')
+    dialog.querySelector<HTMLInputElement>('.new-file-input')!.value = 'unassigned-proof'
+    dialog.querySelector<HTMLButtonElement>('.new-file-confirm')!.click()
+    await vi.waitFor(() => expect(bundle.files.some(({ path }) => path.endsWith('/unassigned-proof.md'))).toBe(true))
+    expect(bundle.navigation.groups[0].paths).not.toContain('unassigned-proof.md')
+    expect(document.querySelector('.other-files-group .file-row[data-path$="unassigned-proof.md"]')).not.toBeNull()
     browser.destroy()
   })
 
@@ -1358,41 +1307,37 @@ describe('FileBrowser', () => {
     dialog.querySelector<HTMLInputElement>('.new-file-input')!.value = 'category-only'
     dialog.querySelector<HTMLButtonElement>('.new-file-confirm')!.click()
     await vi.waitFor(() => expect(document.querySelector('.checkpoint-group .file-row[data-path$="category-only.md"]')).not.toBeNull())
+    expect(bundle.files.find(({ path }) => path.endsWith('/category-only.md'))?.path).toBe(`${bundle.root}/category-only.md`)
     expect(bundle.checkpoints).toEqual(original)
     expect(browser.getCheckpointDocumentAdditions()).toEqual([])
     browser.destroy()
   })
-  it('keeps an HTML preview and its comment thread valid after selecting an existing category', () => {
+  it('reassigns a file without moving its virtual path or comment anchor', () => {
     const bundle = structuredClone(testBundle)
-    bundle.files.push(
-      { path: 'specs/001-browser/docs/guide.md', mediaType: 'text/markdown', content: '# Guide' },
-      { path: 'specs/001-browser/preview.html', mediaType: 'text/html', content: '<h1>Proof</h1>',
-        sourceUrl: 'file:///Users/example/project/specs/001-browser/preview.html' },
-    )
+    const file = bundle.files.find(({ path }) => path.endsWith('/plan.md'))!
+    const originalPath = file.path
+    bundle.files.push({ path: 'specs/001-browser/docs/guide.md', mediaType: 'text/markdown', content: '# Guide' })
     bundle.navigation = { version: 1, groups: [{ id: 'category-docs', title: 'docs', paths: ['docs/guide.md'] }] }
     bundle.comments = [{
-      id: 'thread-html',
-      anchor: { path: 'specs/001-browser/preview.html', position: { start: 4, end: 9 },
-        quote: { exact: 'Proof', prefix: '', suffix: '' } },
+      id: 'thread-category',
+      anchor: { path: originalPath, position: { start: 0, end: 4 },
+        quote: { exact: file.content.slice(0, 4), prefix: '', suffix: '' } },
       status: 'open',
-      messages: [{ id: 'message-html', author: 'Ada', body: 'Check this', createdAt: '2026-09-24T00:00:00.000Z' }],
+      messages: [{ id: 'message-category', author: 'Ada', body: 'Check this', createdAt: '2026-09-24T00:00:00.000Z' }],
       createdAt: '2026-09-24T00:00:00.000Z',
       updatedAt: '2026-09-24T00:00:00.000Z',
     }]
     const browser = new FileBrowser(document.getElementById('app')!, bundle)
-    document.querySelector<HTMLButtonElement>('.file-row[data-path$="preview.html"]')!.click()
+    document.querySelector<HTMLButtonElement>('.file-row[data-path$="plan.md"]')!.click()
     document.querySelector<HTMLButtonElement>('.workspace-category-badge')!.click()
-    expect(Array.from(document.querySelectorAll<HTMLButtonElement>('.group-selector-popover .popover-action'))
-      .map((button) => button.textContent?.trim())).toContain('未分配')
-    expect(document.querySelector('.group-selector-popover')?.textContent).not.toContain('未分组')
     Array.from(document.querySelectorAll<HTMLButtonElement>('.group-selector-popover .popover-action'))
       .find((button) => button.textContent?.trim() === 'docs')!.click()
 
-    expect(bundle.files.at(-1)?.path).toBe('specs/001-browser/docs/preview.html')
-    expect(bundle.files.at(-1)?.sourceUrl).toBe('file:///Users/example/project/specs/001-browser/docs/preview.html')
-    expect(bundle.comments[0].anchor.path).toBe(bundle.files.at(-1)?.path)
+    expect(file.path).toBe(originalPath)
+    expect(bundle.comments[0].anchor.path).toBe(originalPath)
+    expect(bundle.navigation.groups.find(({ id }) => id === 'category-docs')?.paths).toContain('plan.md')
+    expect(document.querySelector('[data-stage="category-docs"] .file-row[data-path$="plan.md"]')).not.toBeNull()
     expect(parseBundle(JSON.stringify(bundle)).ok).toBe(true)
-    expect(browser.getModifiedReviewFiles().map((file) => file.path)).toContain('docs/preview.html')
     browser.destroy()
   })
 

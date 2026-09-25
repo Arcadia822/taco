@@ -28,7 +28,7 @@ import { createBrandMarkContainer } from './brand.ts'
 import { createSourceEditor, type SourceEditorController } from './source-editor.ts'
 import { FileNavigation } from './file-navigation.ts'
 import { getAvailableGroups, getFileCurrentGroup, openGroupSelectorPopover } from './group-selector.ts'
-import { createInitialManifest, moveFileToGroup } from './navigation-editor.ts'
+import { assignFileToGroup, createInitialManifest } from './navigation-editor.ts'
 import { showNewFileDialog } from './new-file-dialog.ts'
 import {
   createControlButton,
@@ -53,10 +53,9 @@ import { PresenceController } from './presence-controller.ts'
 import { ShareController } from './share-controller.ts'
 import { openPngPreview, resolveEmbeddedMarkdownAssets } from './markdown-assets.ts'
 import { hasCollabSecrets } from './security.ts'
-import { localFileUrl } from './local-file-url.ts'
 import { frontmatterTitle, parseFrontmatter } from './frontmatter.ts'
 import { setEditorFrontmatterProperty } from './tiptap-document-properties.ts'
-import { findCategoryDir, resolveFileCategory, slugifyCategoryDir, updateFileCategory, UNCLASSIFIED_CATEGORY } from './category.ts'
+import { resolveFileCategory } from './category.ts'
 import { commentLineReference } from './comment-position.ts'
 import { createStructuredFileViewer, structuredFileLabels } from './structured-file-viewer.ts'
 import { createSegmentedControl } from './segmented-control.ts'
@@ -115,7 +114,6 @@ export class FileBrowser {
   private markdownEditor: Editor | null = null
   private readonly markdownReconstructor = new MarkdownBlockReconstructor()
   private sourceEditor: SourceEditorController | null = null
-  private htmlPreviewUrl: string | null = null
   private editorMountSerial = 0
   private locale: Locale
   private readonly store: TacoStore
@@ -316,7 +314,6 @@ export class FileBrowser {
     this.markdownEditor?.destroy()
     this.markdownEditor = null
     this.outline.destroy()
-    this.resetHtmlPreviewUrl()
     this.fileNavigation?.destroy()
     this.fileNavigation = null
     this.comments.destroy()
@@ -639,7 +636,6 @@ export class FileBrowser {
     this.markdownEditor?.destroy()
     this.markdownEditor = null
     this.sourceEditor = null
-    this.resetHtmlPreviewUrl()
     this.viewer.innerHTML = ''
     if (this.checkpointView) {
       this.viewer.append(createCheckpointView(resolveCheckpoints(this.bundle), checkpointCopy(this.locale), {
@@ -675,8 +671,6 @@ export class FileBrowser {
       this.viewer.append(open, image)
     } else if (kind === 'markdown') {
       this.mountMarkdownEditor(file, mountSerial)
-    } else if (kind === 'html') {
-      this.mountHtmlPrototype(file)
     } else if (kind === 'yaml' || kind === 'json' || kind === 'mermaid') {
       const structured = createStructuredFileViewer({
         file,
@@ -770,43 +764,6 @@ export class FileBrowser {
     })
   }
 
-  private resetHtmlPreviewUrl(): void {
-    this.htmlPreviewUrl = null
-  }
-
-  private mountHtmlPrototype(file: TacoFile): void {
-    const shell = el('section', 'html-preview-shell')
-    const card = el('article', 'html-preview-card')
-    const icon = fileTypeIcon(file)
-    icon.classList.add('html-preview-icon')
-    icon.setAttribute('aria-hidden', 'true')
-
-    const title = el('h1', 'html-preview-title', file.title?.trim() || fallbackFileTitle(file))
-
-    this.htmlPreviewUrl = localFileUrl(file.sourceUrl, file.path)
-    const preview = el('a', 'html-preview-action')
-    if (this.htmlPreviewUrl) {
-      preview.href = this.htmlPreviewUrl
-      preview.target = '_blank'
-      preview.rel = 'noopener noreferrer'
-      preview.referrerPolicy = 'no-referrer'
-      preview.append(el('span', '', this.t.openHtmlPrototype), svgIcon('external-link'))
-    } else {
-      preview.removeAttribute('href')
-      preview.setAttribute('aria-disabled', 'true')
-      preview.append(el('span', '', this.t.openHtmlPrototype))
-      const source = el('pre', 'html-preview-source-fallback')
-      source.textContent = file.content
-      card.append(icon, title, preview, source)
-      shell.append(card)
-      this.viewer.append(shell)
-      return
-    }
-
-    card.append(icon, title, preview)
-    shell.append(card)
-    this.viewer.append(shell)
-  }
 
   private mountMarkdownFallback(host: HTMLElement, file: TacoFile, message: string): void {
     host.dataset.editorError = message
@@ -1148,11 +1105,8 @@ export class FileBrowser {
       onSelectGroup: (targetGroupId) => {
         if (!this.selected) return
         this.store.commit({ kind: 'all' }, () => {
-          const targetGroup = getAvailableGroups(this.bundle).find((g) => g.id === targetGroupId)
-          const targetCategory = targetGroup ? targetGroup.title : UNCLASSIFIED_CATEGORY
-          updateFileCategory(this.bundle, this.selected!, targetCategory)
           const current = createInitialManifest(this.bundle)
-          const next = moveFileToGroup(current, this.selected!.path, targetGroupId, this.bundle.root, this.bundle)
+          const next = assignFileToGroup(current, this.selected!.path, targetGroupId, this.bundle.root, this.bundle)
           this.bundle.navigation = next
         })
         this.syncWorkspaceHeader()
@@ -1595,21 +1549,14 @@ export class FileBrowser {
       categoryLabel: this.t.newFileCategory,
       ungroupedLabel: this.t.ungrouped,
       groups,
-      initialGroupId: (targetGroupId && groups.some((group) => group.id === targetGroupId)) ? targetGroupId : (groups[0]?.id ?? null),
+      initialGroupId: targetGroupId && groups.some((group) => group.id === targetGroupId) ? targetGroupId : null,
       confirmLabel: this.t.create,
       cancelLabel: this.t.cancel,
     })
     if (!result) return
 
     const fileNameClean = result.fileName.trim().replaceAll('\\', '/').split('/').filter(Boolean).join('/')
-    let fullPath = `${this.bundle.root}/${fileNameClean}`
-    if (result.groupId) {
-      const selectedGroup = groups.find((g) => g.id === result.groupId)
-      if (selectedGroup && selectedGroup.id.startsWith('category-')) {
-        const targetDir = findCategoryDir(this.bundle, selectedGroup.title) || slugifyCategoryDir(selectedGroup.title, this.bundle)
-        fullPath = `${this.bundle.root}/${targetDir}/${fileNameClean}`
-      }
-    }
+    const fullPath = `${this.bundle.root}/${fileNameClean}`
     if (fileByPath(this.bundle, fullPath)) return
     if (result.groupId && !groups.some(({ id }) => id === result.groupId)) return
     const navigation = result.groupId ? createInitialManifest(this.bundle) : null
@@ -1624,7 +1571,7 @@ export class FileBrowser {
     this.store.commit({ kind: 'all' }, () => {
       this.bundle.files.push(newFile)
       if (navigation) {
-        this.bundle.navigation = moveFileToGroup(navigation, fullPath, result.groupId, this.bundle.root, this.bundle)
+        this.bundle.navigation = assignFileToGroup(navigation, fullPath, result.groupId, this.bundle.root, this.bundle)
       }
     })
 

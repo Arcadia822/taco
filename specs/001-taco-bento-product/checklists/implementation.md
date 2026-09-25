@@ -7,8 +7,8 @@ title: "Implementation Audit: Taco File Browser"
 - [x] The build reads the real feature directory, not a duplicated starter document.
 - [x] The canonical bundle stores only the path, media type, and raw content.
 - [x] The runtime exposes the directory tree and the file viewer.
-- [x] The sidebar projects only routed files into Requirements, Technical Plan, and Task Breakdown.
-- [x] The `checklists/` directory stays intact under Technical Plan; the sidebar exposes only the three default stages, with no custom or extension group.
+- [x] The sidebar derives directory Categories and Unassigned root files without filename-specific stages.
+- [x] Category assignment changes only virtual manifest membership; file paths and comment anchors stay stable.
 - [x] Group titles use secondary text with right-side hover expansion and no leading icon; folders toggle open/closed icons, and the Taco mark is exactly 24×24px.
 - [x] Markdown supports safe WYSIWYG editing, exact source editing, and in-file heading navigation.
 - [x] YAML, JSON, and unknown text keep exact source in the generic editor; JSON highlighting introduces no structured model.
@@ -34,7 +34,7 @@ title: "Implementation Audit: Taco File Browser"
 
 ## Browser Evidence
 
-- [x] The local HTTP preview opens `README.md` under Specify with 15 files, including the self-contained HTML preview demo, and no leftover entity cards.
+- [x] The standalone local Taco opens with 14 supported source files; the ordinary HTML prototype is explicitly excluded.
 - [x] `tasks.md` navigation, the exact-source toggle, and full-text search work.
 - [x] The browser console reports no errors.
 - [ ] In-app browser automation cannot occupy a `file://` tab because of the local-file security policy; direct file reload is still a manual check.

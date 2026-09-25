@@ -54,10 +54,14 @@ export function renameNavigationGroup(manifest: NavigationManifest, groupId: str
   return next
 }
 
-export function moveFileToGroup(
+/**
+ * 将文件分配到 manifest 分组（或置为未分配）：
+ * 只修改 manifest 的分组归属，绝不改动任何文件路径、评论或文件记录。
+ */
+export function assignFileToGroup(
   manifest: NavigationManifest,
   filePath: string,
-  targetGroupId: string | null, // null 表示移出所有组，回到未分配
+  targetGroupId: string | null, // null 表示退出所有分组，回到未分配
   bundleRoot: string,
   bundle: TacoBundle,
 ): NavigationManifest {
@@ -69,7 +73,7 @@ export function moveFileToGroup(
   const next = structuredClone(manifest)
   const relPath = filePath.startsWith(`${bundleRoot}/`) ? filePath.slice(bundleRoot.length + 1) : filePath
 
-  // 先从所有组中移除该文件
+  // 先移除该文件在所有分组中的归属
   for (const group of next.groups) {
     group.paths = group.paths.filter((p) => {
       const pRel = p.startsWith(`${bundleRoot}/`) ? p.slice(bundleRoot.length + 1) : p

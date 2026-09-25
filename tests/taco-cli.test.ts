@@ -1,6 +1,7 @@
 import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -11,7 +12,6 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const cli = resolve('extensions/taco/bin/taco.mjs')
@@ -29,7 +29,6 @@ interface CliBundle {
     mediaType: string
     title?: string
     content: string
-    sourceUrl?: string
     sourceHash?: string
   }>
   packOptions?: { ignore: string[] }
@@ -155,7 +154,6 @@ describe('Taco extension CLI', () => {
     )
     writeFileSync(join(feature, 'contracts/api.json'), '{"ok":true}\n')
     writeFileSync(join(feature, 'diagrams/flow.mmd'), 'flowchart LR\n  A --> B\n')
-    writeFileSync(join(feature, 'prototype.html'), '<!doctype html><title>Prototype</title>\n')
 
     const result = runJson<{ files: number; root: string; output: string }>(
       ['pack', feature, '--project-root', project, '--output', output, '--shell', shell],
@@ -163,12 +161,11 @@ describe('Taco extension CLI', () => {
     )
     const bundle = readBundle(output)
 
-    expect(result).toMatchObject({ files: 4, root: 'specs/001-demo', output })
+    expect(result).toMatchObject({ files: 3, root: 'specs/001-demo', output })
     expect(bundle.title).toBe('001-demo')
     expect(bundle.files.map((file) => file.path)).toEqual([
       'specs/001-demo/contracts/api.json',
       'specs/001-demo/diagrams/flow.mmd',
-      'specs/001-demo/prototype.html',
       'specs/001-demo/spec.md',
     ])
     expect(bundle.files.find((file) => file.path.endsWith('/flow.mmd'))?.mediaType).toBe(
@@ -178,14 +175,31 @@ describe('Taco extension CLI', () => {
     expect(bundle.files.find((file) => file.path.endsWith('/spec.md'))?.title).toBe(
       'Demo from YAML',
     )
-    expect(bundle.files.find((file) => file.path.endsWith('/prototype.html'))?.sourceUrl).toBe(
-      pathToFileURL(realpathSync(join(feature, 'prototype.html'))).href,
-    )
+  })
 
-    const legacy = structuredClone(bundle)
-    delete legacy.files.find((file) => file.path.endsWith('/prototype.html'))?.sourceUrl
-    writeBundle(output, legacy)
-    runJson(
+  it('fails closed on ordinary HTML sources unless they are explicitly ignored', () => {
+    const project = mkdtempSync(join(tmpdir(), 'taco-html-reject-'))
+    const feature = join(project, 'specs/008-html-reject')
+    const output = join(feature, '008-html-reject.taco.html')
+    mkdirSync(feature, { recursive: true })
+    writeFileSync(join(feature, 'spec.md'), '# HTML reject\n')
+    writeFileSync(join(feature, 'prototype.html'), '<!doctype html><title>Prototype</title>\n')
+
+    const failed = spawnSync(
+      process.execPath,
+      [cli, 'pack', feature, '--project-root', project, '--output', output, '--shell', shell, '--json'],
+      { cwd: project, encoding: 'utf8' },
+    )
+    expect(failed.status).toBe(1)
+    expect(`${failed.stdout}${failed.stderr}`).toContain(
+      'HTML source files are not supported: prototype.html',
+    )
+    expect(existsSync(output)).toBe(false)
+
+    const result = runJson<{
+      files: number
+      explicitIgnored: Array<{ path: string; pattern: string }>
+    }>(
       [
         'pack',
         feature,
@@ -193,16 +207,63 @@ describe('Taco extension CLI', () => {
         project,
         '--output',
         output,
-        '--from',
-        output,
         '--shell',
         shell,
+        '--ignore',
+        'prototype.html',
       ],
       project,
     )
-    expect(
-      readBundle(output).files.find((file) => file.path.endsWith('/prototype.html'))?.sourceUrl,
-    ).toBe(pathToFileURL(realpathSync(join(feature, 'prototype.html'))).href)
+    expect(result.files).toBe(1)
+    expect(result.explicitIgnored).toEqual([{ path: 'prototype.html', pattern: 'prototype.html' }])
+    expect(readBundle(output).files.map((file) => file.path)).toEqual([
+      'specs/008-html-reject/spec.md',
+    ])
+  })
+
+  it('rejects HTML entries and legacy sourceUrl metadata in validate', () => {
+    const project = mkdtempSync(join(tmpdir(), 'taco-validate-html-'))
+    const taco = join(project, 'legacy.taco.html')
+    const baseFile = { path: 'specs/legacy/spec.md', mediaType: 'text/markdown', content: '# Legacy' }
+    const base = {
+      format: 'taco/files',
+      version: 1,
+      docId: 'legacy-html',
+      title: 'Legacy',
+      root: 'specs/legacy',
+      files: [baseFile],
+    }
+    const writeTaco = (bundle: unknown): void =>
+      writeFileSync(
+        taco,
+        `<!doctype html><meta name="taco-security-version" content="1"><script id="taco-document" type="application/taco+json">${JSON.stringify(bundle)}</script>`,
+      )
+
+    writeTaco({
+      ...base,
+      files: [
+        baseFile,
+        { path: 'specs/legacy/preview.html', mediaType: 'text/plain', content: '<!doctype html>' },
+      ],
+    })
+    const htmlFailed = spawnSync(process.execPath, [cli, 'validate', taco, '--json'], {
+      cwd: project,
+      encoding: 'utf8',
+    })
+    expect(htmlFailed.status).toBe(1)
+    expect(`${htmlFailed.stdout}${htmlFailed.stderr}`).toContain(
+      'HTML source files are not supported',
+    )
+
+    writeTaco({ ...base, files: [{ ...baseFile, sourceUrl: 'file:///local/specs/legacy/spec.md' }] })
+    const sourceUrlFailed = spawnSync(process.execPath, [cli, 'validate', taco, '--json'], {
+      cwd: project,
+      encoding: 'utf8',
+    })
+    expect(sourceUrlFailed.status).toBe(1)
+    expect(`${sourceUrlFailed.stdout}${sourceUrlFailed.stderr}`).toContain(
+      'sourceUrl is no longer supported',
+    )
   })
 
   it('refreshes an existing Taco with the latest shell while preserving its bundle state', () => {
@@ -527,22 +588,22 @@ describe('Taco extension CLI', () => {
     expect(sync.files.every((file) => file.state === 'unchanged')).toBe(true)
   })
 
-  it('infers the bundle title from README.md over the first Markdown file', () => {
+  it('infers the bundle title from the first Markdown file instead of README.md', () => {
     const project = mkdtempSync(join(tmpdir(), 'taco-readme-entry-'))
     const docs = join(project, 'docs/rfc')
     const output = join(docs, 'RFC_Overview.taco.html')
     mkdirSync(docs, { recursive: true })
-    writeFileSync(join(docs, 'README.md'), '---\ntitle: "RFC Overview"\n---\n\n## Index\n')
-    writeFileSync(join(docs, 'details.md'), '---\ntitle: "Details"\n---\n\n## Detail\n')
+    writeFileSync(join(docs, 'README.md'), '---\ntitle: "Readme Should Not Win"\n---\n\n## Index\n')
+    writeFileSync(join(docs, 'a-overview.md'), '---\ntitle: "RFC Overview"\n---\n\n## Overview\n')
 
     runJson(
       ['pack', docs, '--project-root', project, '--output', output, '--shell', shell],
       project,
     )
-    // No --title: inference resolves through headingEntry. README.md wins over
-    // details.md, yielding "RFC Overview" (matches the RFC_Overview output base, so
-    // the human-form title is kept). Without the README fallback the dir-name path
-    // would instead surface the output base "RFC_Overview".
+    // No --title: inference mirrors the runtime defaultFile fallback — the first
+    // Markdown file in bundle order wins. a-overview.md sorts before README.md,
+    // so its human-form title is kept; README.md filename precedence would have
+    // surfaced "Readme Should Not Win" or the plain output base instead.
     expect(readBundle(output).title).toBe('RFC Overview')
   })
 

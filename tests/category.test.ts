@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { FORMAT, parseBundle, type TacoBundle } from '../src/model.ts'
+import { FORMAT, type TacoBundle } from '../src/model.ts'
 import {
   resolveFileCategory,
   resolvePathCategory,
   UNCLASSIFIED_CATEGORY,
-  updateFileCategory,
-  validateDirectoryDepth,
 } from '../src/category.ts'
 
 const createBundle = (files: Array<{ path: string; content?: string }>): TacoBundle => ({
@@ -22,108 +20,114 @@ const createBundle = (files: Array<{ path: string; content?: string }>): TacoBun
   })),
 })
 
-describe('Category resolution and directory constraints', () => {
-  it('enforces directory depth limit of at most 2 levels', () => {
-    expect(validateDirectoryDepth('file.md')).toEqual({ valid: true, depth: 0 })
-    expect(validateDirectoryDepth('docs/file.md')).toEqual({ valid: true, depth: 1 })
-    expect(validateDirectoryDepth('docs/api/file.md')).toEqual({ valid: true, depth: 2 })
-    expect(validateDirectoryDepth('docs/api/v1/file.md')).toEqual({ valid: false, depth: 3 })
-  })
-
-  it('root files default to 未分类', () => {
+describe('Category resolution', () => {
+  it('keeps root files in 未分类 regardless of file name or frontmatter', () => {
     const bundle = createBundle([
       { path: 'specs/sample/README.md', content: '# Hello' },
       { path: 'specs/sample/spec.md', content: '# Spec' },
+      { path: 'specs/sample/brief.md', content: '---\ncategory: Guides\n---\n# Brief' },
     ])
 
-    const res1 = resolveFileCategory(bundle, bundle.files[0])
-    expect(res1.category).toBe(UNCLASSIFIED_CATEGORY)
-    expect(res1.canEdit).toBe(true)
-
-    const res2 = resolveFileCategory(bundle, bundle.files[1])
-    expect(res2.category).toBe(UNCLASSIFIED_CATEGORY)
-    expect(res2.canEdit).toBe(true)
+    expect(resolveFileCategory(bundle, bundle.files[0])).toMatchObject({
+      category: UNCLASSIFIED_CATEGORY,
+      source: 'root-default',
+      canEdit: true,
+    })
+    expect(resolveFileCategory(bundle, bundle.files[1])).toMatchObject({
+      category: UNCLASSIFIED_CATEGORY,
+      source: 'root-default',
+      canEdit: true,
+    })
+    expect(resolveFileCategory(bundle, bundle.files[2])).toMatchObject({
+      category: UNCLASSIFIED_CATEGORY,
+      source: 'root-default',
+      canEdit: true,
+    })
   })
 
-  it('first-level directories automatically become categories', () => {
+  it('derives categories from the first-level directory with no convention-path exceptions', () => {
     const bundle = createBundle([
       { path: 'specs/sample/models/user.md' },
       { path: 'specs/sample/models/sub/order.md' },
       { path: 'specs/sample/architecture/overview.md' },
-    ])
-
-    const userRes = resolveFileCategory(bundle, bundle.files[0])
-    expect(userRes.category).toBe('models')
-    expect(userRes.source).toBe('first-level-dir')
-    expect(userRes.canEdit).toBe(true)
-
-    const subOrderRes = resolveFileCategory(bundle, bundle.files[1])
-    expect(subOrderRes.category).toBe('models')
-    expect(subOrderRes.source).toBe('first-level-dir')
-    expect(subOrderRes.canEdit).toBe(true)
-
-    const archRes = resolveFileCategory(bundle, bundle.files[2])
-    expect(archRes.category).toBe('architecture')
-    expect(archRes.source).toBe('first-level-dir')
-    expect(archRes.canEdit).toBe(true)
-  })
-
-  it('all first-level directories automatically become categories', () => {
-    const bundle = createBundle([
-      { path: 'specs/sample/guides/requirements.md' },
       { path: 'specs/sample/api/v1.yaml' },
+      { path: 'specs/sample/checklists/requirements.md' },
+      { path: 'specs/sample/notes/spec.md' },
+      { path: 'specs/sample/notes/plan.md' },
     ])
 
-    const res1 = resolveFileCategory(bundle, bundle.files[0])
-    expect(res1.category).toBe('guides')
-    expect(res1.source).toBe('first-level-dir')
-
-    const res2 = resolveFileCategory(bundle, bundle.files[1])
-    expect(res2.category).toBe('api')
-    expect(res2.source).toBe('first-level-dir')
+    expect(resolveFileCategory(bundle, bundle.files[0])).toMatchObject({
+      category: 'models',
+      source: 'first-level-dir',
+      canEdit: true,
+    })
+    expect(resolveFileCategory(bundle, bundle.files[1])).toMatchObject({
+      category: 'models',
+      source: 'first-level-dir',
+      canEdit: true,
+    })
+    expect(resolveFileCategory(bundle, bundle.files[2])).toMatchObject({
+      category: 'architecture',
+      source: 'first-level-dir',
+      canEdit: true,
+    })
+    expect(resolveFileCategory(bundle, bundle.files[3])).toMatchObject({
+      category: 'api',
+      source: 'first-level-dir',
+    })
+    // Stage-era special filenames are ordinary files: their directory decides the category.
+    expect(resolveFileCategory(bundle, bundle.files[4])).toMatchObject({
+      category: 'checklists',
+      source: 'first-level-dir',
+    })
+    expect(resolveFileCategory(bundle, bundle.files[5])).toMatchObject({
+      category: 'notes',
+      source: 'first-level-dir',
+    })
+    expect(resolveFileCategory(bundle, bundle.files[6])).toMatchObject({
+      category: 'notes',
+      source: 'first-level-dir',
+    })
   })
 
-  it('updates file category by moving file to category directory', () => {
+  it('honors explicit manifest assignment ahead of directory inference', () => {
     const bundle = createBundle([
-      { path: 'specs/sample/file.md', content: '# Content\n' },
+      { path: 'specs/sample/brief.md' },
+      { path: 'specs/sample/docs/plan.md' },
+      { path: 'specs/sample/docs/other.md' },
     ])
+    bundle.navigation = {
+      version: 1,
+      groups: [
+        { id: 'category-Reviews', title: 'Reviews', paths: ['brief.md', 'docs/plan.md'] },
+      ],
+    }
 
-    const { modifiedFile } = updateFileCategory(bundle, bundle.files[0], 'Architecture')
-    expect(modifiedFile.path).toBe('specs/sample/Architecture/file.md')
-
-    const res = resolveFileCategory(bundle, modifiedFile)
-    expect(res.category).toBe('Architecture')
+    // A root-path file assigned through the manifest reports the group, not 未分类.
+    expect(resolveFileCategory(bundle, bundle.files[0])).toMatchObject({
+      category: 'Reviews',
+      source: 'manifest',
+      canEdit: true,
+      firstLevelDir: null,
+    })
+    // Manifest assignment outranks the directory category.
+    expect(resolveFileCategory(bundle, bundle.files[1])).toMatchObject({
+      category: 'Reviews',
+      source: 'manifest',
+      canEdit: true,
+      firstLevelDir: 'docs',
+    })
+    // Files the manifest does not list keep directory inference.
+    expect(resolveFileCategory(bundle, bundle.files[2])).toMatchObject({
+      category: 'docs',
+      source: 'first-level-dir',
+    })
   })
 
-  it('updates file category back to root when reset to 未分类', () => {
-    const bundle = createBundle([
-      { path: 'specs/sample/Architecture/file.md', content: '# Architecture\n' },
-    ])
-
-    const { modifiedFile } = updateFileCategory(bundle, bundle.files[0], UNCLASSIFIED_CATEGORY)
-    expect(modifiedFile.path).toBe('specs/sample/file.md')
-
-    const res = resolveFileCategory(bundle, modifiedFile)
-    expect(res.category).toBe(UNCLASSIFIED_CATEGORY)
-  })
-  it.each([
-    ['file:///Users/example/project/specs/sample/design%20notes.html', 'file:///Users/example/project/specs/sample/Guides/design%20notes.html'],
-    ['../specs/sample/design notes.html', '../specs/sample/Guides/design notes.html'],
-  ])('keeps the HTML source reference valid after a category move from %s', (sourceUrl, expectedUrl) => {
-    const bundle = createBundle([{ path: 'specs/sample/design notes.html', content: '<h1>Design</h1>' }])
-    bundle.files[0].mediaType = 'text/html'
-    bundle.files[0].sourceUrl = sourceUrl
-    expect(parseBundle(JSON.stringify(bundle)).ok).toBe(true)
-
-    updateFileCategory(bundle, bundle.files[0], 'Guides')
-    expect(bundle.files[0].sourceUrl).toBe(expectedUrl)
-    expect(parseBundle(JSON.stringify(bundle)).ok).toBe(true)
-  })
-
-  it('keeps comment threads on a file moved back to the root with a filename collision', () => {
+  it('resolves without mutating any bundle state', () => {
     const bundle = createBundle([
       { path: 'specs/sample/docs/intro.md', content: '# Intro' },
-      { path: 'specs/sample/intro.md', content: '# Existing' },
+      { path: 'specs/sample/root.md' },
     ])
     bundle.comments = [{
       id: 'thread-1',
@@ -133,18 +137,23 @@ describe('Category resolution and directory constraints', () => {
       createdAt: '2026-09-24T00:00:00.000Z',
       updatedAt: '2026-09-24T00:00:00.000Z',
     }]
-    expect(parseBundle(JSON.stringify(bundle)).ok).toBe(true)
+    bundle.navigation = {
+      version: 1,
+      groups: [{ id: 'category-Docs', title: 'Docs', paths: ['docs/intro.md'] }],
+    }
+    const before = structuredClone(bundle)
 
-    updateFileCategory(bundle, bundle.files[0], UNCLASSIFIED_CATEGORY)
-    expect(bundle.files[0].path).toBe('specs/sample/intro-1.md')
-    expect(bundle.comments[0].anchor.path).toBe(bundle.files[0].path)
-    expect(parseBundle(JSON.stringify(bundle)).ok).toBe(true)
+    resolveFileCategory(bundle, bundle.files[0])
+    resolvePathCategory(bundle, 'specs/sample/docs/intro.md')
+    resolvePathCategory(bundle, 'specs/sample/docs/never-created.md')
+
+    expect(bundle).toEqual(before)
+    expect(bundle.files.map((file) => file.path)).toEqual(before.files.map((file) => file.path))
   })
-
 })
 
 describe('Checkpoint category precedence', () => {
-  it('overrides declared file and directory categories without changing their content', () => {
+  it('overrides manifest assignment and directory categories without changing their content', () => {
     const bundle = createBundle([
       { path: 'specs/sample/intro.md', content: '# Intro' },
       { path: 'specs/sample/docs/owned.md' },
@@ -159,6 +168,10 @@ describe('Checkpoint category precedence', () => {
       ] }],
       documents: [],
     }
+    bundle.navigation = {
+      version: 1,
+      groups: [{ id: 'g1', title: 'Elsewhere', paths: ['docs/owned.md'] }],
+    }
 
     expect(resolveFileCategory(bundle, bundle.files[0])).toMatchObject({
       category: 'Review', source: 'checkpoint', canEdit: false, checkpointId: 'review',
@@ -169,11 +182,13 @@ describe('Checkpoint category precedence', () => {
     expect(resolvePathCategory(bundle, 'specs/sample/docs/missing.md')).toMatchObject({
       category: 'Review', source: 'checkpoint', canEdit: false, checkpointId: 'review', overridden: 'docs',
     })
-    expect(resolveFileCategory(bundle, bundle.files[2]).category).toBe('docs')
-    expect(() => updateFileCategory(bundle, bundle.files[0], 'Other')).toThrow(/Checkpoint/)
+    // An ordinary sibling keeps its own directory category.
+    expect(resolveFileCategory(bundle, bundle.files[2])).toMatchObject({
+      category: 'docs', source: 'first-level-dir',
+    })
   })
 
-  it('ignores invalid definitions while preserving the original category', () => {
+  it('ignores invalid checkpoint definitions while preserving directory inference', () => {
     const bundle = createBundle([
       { path: 'specs/sample/guides/doc.md', content: '# Doc' },
     ])
@@ -181,8 +196,5 @@ describe('Checkpoint category precedence', () => {
     expect(resolveFileCategory(bundle, bundle.files[0])).toMatchObject({
       category: 'guides', source: 'first-level-dir', canEdit: true,
     })
-    const { modifiedFile } = updateFileCategory(bundle, bundle.files[0], 'Other')
-    expect(modifiedFile.path).toBe('specs/sample/Other/doc.md')
   })
 })
-

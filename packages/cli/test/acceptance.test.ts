@@ -10,6 +10,7 @@ import {
   sha256Hex,
   validateDocumentSnapshot,
   validateImportedThread,
+  validateSnapshotFile,
   validateStagedUploadContent,
 } from '../../protocol/src/index.ts'
 import {
@@ -41,7 +42,7 @@ class MockMemoryCredentialStore implements CredentialStore {
 
 describe('008-taco-host-contract 21 Acceptance Scenarios (spec.md Section 10)', () => {
   // Scenario 1: Strip collaboration credentials from bundle; no secrets in logs
-  it('Scenario 1: strips collaboration secrets and local URLs during projection', () => {
+  it('Scenario 1: strips collaboration secrets and rejects local URLs during projection', () => {
     const bundleWithSecrets = {
       format: 'taco/files',
       version: 1,
@@ -56,7 +57,6 @@ describe('008-taco-host-contract 21 Acceptance Scenarios (spec.md Section 10)', 
           path: 'specs/sample/spec.md',
           mediaType: 'text/markdown',
           content: '# Safe',
-          sourceUrl: 'file:///private/local/path/spec.md',
         },
       ],
     }
@@ -65,11 +65,21 @@ describe('008-taco-host-contract 21 Acceptance Scenarios (spec.md Section 10)', 
     if (!projected.ok) return
 
     expect(projected.strippedCategories).toEqual(
-      expect.arrayContaining(['access', 'collab', 'packOptions', 'sourceUrl']),
+      expect.arrayContaining(['access', 'collab', 'packOptions']),
     )
     const jsonStr = JSON.stringify(projected.content)
     expect(jsonStr).not.toContain('sensitive-room-token-123')
-    expect(jsonStr).not.toContain('file:///private/local/path/spec.md')
+
+    const legacyLocalUrl = projectLocalBundleToUploadContent({
+      ...bundleWithSecrets,
+      files: [{
+        path: 'specs/sample/spec.md',
+        mediaType: 'text/markdown',
+        content: '# Safe',
+        sourceUrl: 'file:///private/local/path/spec.md',
+      }],
+    })
+    expect(legacyLocalUrl.ok).toBe(false)
   })
 
   // Scenario 2: Unknown protocol, invalid navigation, illegal path, oversized items fail cleanly
@@ -90,16 +100,15 @@ describe('008-taco-host-contract 21 Acceptance Scenarios (spec.md Section 10)', 
   })
 
   // Scenario 3: Markdown, files, assets semantic fidelity without executing code
-  it('Scenario 3: preserves raw HTML source without executing script tags', () => {
+  it('Scenario 3: rejects ordinary HTML source entries instead of projecting them', () => {
     const rawContent = '<script>alert(1)</script><p>Hello</p>'
     const file = {
       path: 'view.html',
       mediaType: 'text/html',
       content: rawContent,
     }
-    // Validation passes as plain text/html source
     expect(isSafePath(file.path)).toBe(true)
-    expect(file.content).toBe(rawContent) // Source preserved verbatim
+    expect(validateSnapshotFile(file, '.').ok).toBe(false)
   })
 
   // Scenario 4: Public read without key, invalid key fails, key revocation takes effect

@@ -7,7 +7,6 @@ import { createControlButton, createFileAttribute, createFileTypeIcon, createSta
 import { resolveDocumentNavigation } from './navigation.ts'
 import {
   createInitialManifest,
-  moveFileToGroup,
   removeNavigationGroup,
   renameNavigationGroup,
   setNavigationEntry,
@@ -297,21 +296,6 @@ export class FileNavigation {
 
       stage.append(summary)
 
-      if (this.options.editable && this.options.onUpdateNavigation) {
-        stage.addEventListener('dragover', (e) => {
-          e.preventDefault()
-          stage.classList.add('is-drag-over')
-        })
-        stage.addEventListener('dragleave', () => stage.classList.remove('is-drag-over'))
-        stage.addEventListener('drop', (e) => {
-          e.preventDefault()
-          stage.classList.remove('is-drag-over')
-          const filePath = e.dataTransfer?.getData('text/plain')
-          if (filePath) {
-            this.handleMoveFile(filePath, group.id)
-          }
-        })
-      }
 
       if (group.files.length) {
         const tree = el('div', 'file-tree')
@@ -350,21 +334,6 @@ export class FileNavigation {
 
       other.append(otherSummary)
 
-      if (this.options.editable && this.options.onUpdateNavigation) {
-        other.addEventListener('dragover', (e) => {
-          e.preventDefault()
-          other.classList.add('is-drag-over')
-        })
-        other.addEventListener('dragleave', () => other.classList.remove('is-drag-over'))
-        other.addEventListener('drop', (e) => {
-          e.preventDefault()
-          other.classList.remove('is-drag-over')
-          const filePath = e.dataTransfer?.getData('text/plain')
-          if (filePath) {
-            this.handleMoveFile(filePath, null)
-          }
-        })
-      }
 
       const tree = el('div', 'file-tree')
       this.renderDirectory(buildTree(this.options.bundle, resolved.unassigned), tree, true)
@@ -516,10 +485,6 @@ export class FileNavigation {
     const fileMeta = el('span', 'file-meta')
 
     if (this.options.editable) {
-      button.draggable = true
-      button.addEventListener('dragstart', (e) => {
-        e.dataTransfer?.setData('text/plain', file.path)
-      })
 
       // 需求3：文件行收敛为操作菜单按钮
       const fileActions = el('span', 'file-actions')
@@ -676,11 +641,6 @@ export class FileNavigation {
   }
 
 
-  private handleMoveFile(filePath: string, targetGroupId: string | null): void {
-    const current = createInitialManifest(this.options.bundle)
-    const next = moveFileToGroup(current, filePath, targetGroupId, this.options.bundle.root, this.options.bundle)
-    this.options.onUpdateNavigation?.(next)
-  }
 
   private handleSetEntry(filePath: string): void {
     const current = createInitialManifest(this.options.bundle)

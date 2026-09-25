@@ -109,7 +109,6 @@ describe('@taco/protocol', () => {
           path: 'specs/test/spec.md',
           mediaType: 'text/markdown',
           content: '# Header\n\nBody content',
-          sourceUrl: 'file:///local/path/spec.md',
         },
       ],
     }
@@ -121,7 +120,6 @@ describe('@taco/protocol', () => {
     expect(projection.strippedCategories).toContain('access')
     expect(projection.strippedCategories).toContain('collab')
     expect(projection.strippedCategories).toContain('packOptions')
-    expect(projection.strippedCategories).toContain('sourceUrl')
 
     // Verify projected snapshot matches validation rules
     const validated = validateStagedUploadContent(projection.content)
@@ -139,6 +137,25 @@ describe('@taco/protocol', () => {
     const hostileProjection = projectLocalBundleToUploadContent(hostileBundle)
     expect(hostileProjection.ok).toBe(false)
     expect(hostileProjection.err).toContain('Undeclared top-level property rejected')
+
+    // Unsupported HTML source entries and legacy sourceUrl fail closed
+    const htmlProjection = projectLocalBundleToUploadContent({
+      ...localBundle,
+      files: [{ path: 'specs/test/view.html', mediaType: 'text/html', content: '<p>hi</p>' }],
+    })
+    expect(htmlProjection.ok).toBe(false)
+    if (!htmlProjection.ok) expect(htmlProjection.err).toContain('HTML source files are not supported')
+    const sourceUrlProjection = projectLocalBundleToUploadContent({
+      ...localBundle,
+      files: [{
+        path: 'specs/test/spec.md',
+        mediaType: 'text/markdown',
+        content: '# Header',
+        sourceUrl: 'file:///local/path/spec.md',
+      }],
+    })
+    expect(sourceUrlProjection.ok).toBe(false)
+    if (!sourceUrlProjection.ok) expect(sourceUrlProjection.err).toContain('sourceUrl')
   })
   it('preserves valid checkpoints in projected and validated Host snapshots', () => {
     const checkpoints = {

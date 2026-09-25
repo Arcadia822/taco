@@ -3,8 +3,8 @@ import { FORMAT, parseBundle, type NavigationManifest, type TacoBundle } from '.
 import { resolveDocumentNavigation } from '../src/navigation.ts'
 import {
   addNavigationGroup,
+  assignFileToGroup,
   createInitialManifest,
-  moveFileToGroup,
   removeFileFromManifest,
   removeNavigationGroup,
   renameFileInManifest,
@@ -27,18 +27,30 @@ const createBundle = (files: { path: string; content?: string }[]): TacoBundle =
 })
 
 describe('resolveDocumentNavigation', () => {
-  it('falls back to standard stage navigation when navigation field is absent', () => {
+  it('groups by first-level directory and leaves root files unassigned without a manifest', () => {
     const bundle = createBundle([
       { path: 'specs/sample/spec.md' },
       { path: 'specs/sample/plan.md' },
       { path: 'specs/sample/tasks.md' },
       { path: 'specs/sample/extra.md' },
+      { path: 'specs/sample/docs/guide.md' },
+      { path: 'specs/sample/docs/api/reference.md' },
+      { path: 'specs/sample/checklists/requirements.md' },
+      { path: 'specs/sample/notes/spec.md' },
     ])
 
     const res = resolveDocumentNavigation(bundle)
-    expect(res.mode).toBe('stage')
-    expect(res.groups.map((g) => g.id)).toEqual(['spec', 'plan', 'tasks'])
-    expect(res.unassigned.map((f) => f.path)).toEqual(['specs/sample/extra.md'])
+    expect(res.groups.map((g) => [g.id, g.files.map((f) => f.path)])).toEqual([
+      ['category-docs', ['specs/sample/docs/guide.md', 'specs/sample/docs/api/reference.md']],
+      ['category-checklists', ['specs/sample/checklists/requirements.md']],
+      ['category-notes', ['specs/sample/notes/spec.md']],
+    ])
+    expect(res.unassigned.map((f) => f.path)).toEqual([
+      'specs/sample/spec.md',
+      'specs/sample/plan.md',
+      'specs/sample/tasks.md',
+      'specs/sample/extra.md',
+    ])
     expect(res.checkpointGroups).toEqual([])
     expect(res.warnings).toEqual([])
   })
@@ -58,7 +70,6 @@ describe('resolveDocumentNavigation', () => {
     }
 
     const res = resolveDocumentNavigation(bundle)
-    expect(res.mode).toBe('custom')
     expect(res.groups.length).toBe(2)
     expect(res.groups[0].title).toBe('Architecture')
     if (res.groups[0].isCustom) {
@@ -69,6 +80,29 @@ describe('resolveDocumentNavigation', () => {
       expect(res.groups[1].files.map((f) => f.path)).toEqual(['specs/sample/api.md'])
     }
     expect(res.unassigned.map((f) => f.path)).toEqual(['specs/sample/misc.md'])
+  })
+
+  it('renders a root-path file assigned through the manifest inside its category group', () => {
+    const bundle = createBundle([
+      { path: 'specs/sample/brief.md' },
+      { path: 'specs/sample/docs/spec.md' },
+      { path: 'specs/sample/loose.md' },
+    ])
+    bundle.navigation = {
+      version: 1,
+      groups: [
+        { id: 'category-Reviews', title: 'Reviews', paths: ['brief.md'] },
+      ],
+    }
+
+    const res = resolveDocumentNavigation(bundle)
+    expect(res.groups.map((group) => [group.id, group.files.map((file) => file.path)]))
+      .toEqual([['category-Reviews', ['specs/sample/brief.md']]])
+    // With an explicit manifest, files it does not list stay unassigned even under a directory.
+    expect(res.unassigned.map((file) => file.path))
+      .toEqual(['specs/sample/docs/spec.md', 'specs/sample/loose.md'])
+    expect(res.checkpointGroups).toEqual([])
+    expect(res.warnings).toEqual([])
   })
 
   it('safely skips dangling paths without error', () => {
@@ -83,7 +117,6 @@ describe('resolveDocumentNavigation', () => {
     }
 
     const res = resolveDocumentNavigation(bundle)
-    expect(res.mode).toBe('custom')
     if (res.groups[0].isCustom) {
       expect(res.groups[0].files.map((f) => f.path)).toEqual(['specs/sample/real.md'])
     }
@@ -113,7 +146,6 @@ describe('Checkpoint navigation', () => {
     }
 
     const resolved = resolveDocumentNavigation(bundle)
-    expect(resolved.mode).toBe('stage')
     expect(resolved.checkpointGroups.map((group) => group.checkpointId)).toEqual(['first', 'later'])
     expect(resolved.checkpointGroups[0].entries).toEqual([
       { kind: 'placeholder', path: 'specs/sample/required.md', checkpointId: 'first', optional: false },
@@ -161,7 +193,6 @@ describe('Checkpoint navigation', () => {
     ] }
     const original = structuredClone(bundle.navigation)
     const resolved = resolveDocumentNavigation(bundle)
-    expect(resolved.mode).toBe('custom')
     expect(resolved.groups[0].isCustom && resolved.groups[0].files.map((file) => file.path))
       .toEqual(['specs/sample/ordinary.md'])
     expect(resolved.unassigned).toEqual([])
@@ -173,7 +204,7 @@ describe('Checkpoint navigation', () => {
     expect(createInitialManifest(bundle)).toEqual(original)
   })
 
-  it('does not switch to category mode solely because an owned file declares a category', () => {
+  it('does not treat a document frontmatter category as a Checkpoint override', () => {
     const bundle = createBundle([
       { path: 'specs/sample/spec.md', content: '---\ncategory: Guides\n---\n# Spec' },
       { path: 'specs/sample/extra.md' },
@@ -184,15 +215,15 @@ describe('Checkpoint navigation', () => {
       documents: [],
     }
     const resolved = resolveDocumentNavigation(bundle)
-    expect(resolved.mode).toBe('stage')
-    expect(resolved.warnings).toEqual([{ path: 'specs/sample/spec.md', reason: 'category-overridden' }])
+    expect(resolved.groups).toEqual([])
+    expect(resolved.warnings).toEqual([])
     expect(resolved.unassigned.map((file) => file.path)).toEqual(['specs/sample/extra.md'])
   })
 
   it('separates an ordinary category with the same title and warns of the collision', () => {
     const bundle = createBundle([
       { path: 'specs/sample/owned.md' },
-      { path: 'specs/sample/other.md', content: '---\ncategory: Gate\n---\n# Other' },
+      { path: 'specs/sample/Gate/other.md' },
     ])
     bundle.checkpoints = {
       version: 1,
@@ -200,19 +231,18 @@ describe('Checkpoint navigation', () => {
       documents: [],
     }
     const resolved = resolveDocumentNavigation(bundle)
-    expect(resolved.mode).toBe('custom')
     expect(resolved.checkpointGroups[0].id).toBe('checkpoint-gate')
     expect(resolved.groups[0].id).toBe('category-Gate')
     expect(resolved.groups[0].isCustom && resolved.groups[0].files).toEqual([bundle.files[1]])
     expect(resolved.warnings).toEqual([
-      { path: 'specs/sample/other.md', reason: 'category-title-collision' },
+      { path: 'specs/sample/Gate/other.md', reason: 'category-title-collision' },
     ])
   })
 
   it('keeps category-only files in a Checkpoint sidebar group without adding tracked documents', () => {
     const bundle = createBundle([
       { path: 'specs/sample/owned.md' },
-      { path: 'specs/sample/other.md', content: '---\ncategory: Gate\n---\n# Other' },
+      { path: 'specs/sample/other.md' },
     ])
     bundle.checkpoints = {
       version: 1,
@@ -221,7 +251,7 @@ describe('Checkpoint navigation', () => {
     }
     const original = structuredClone(bundle.checkpoints)
     const initial = createInitialManifest(bundle)
-    const assigned = moveFileToGroup(initial, 'other.md', 'checkpoint-gate', bundle.root, bundle)
+    const assigned = assignFileToGroup(initial, 'other.md', 'checkpoint-gate', bundle.root, bundle)
     bundle.navigation = assigned
 
     const resolved = resolveDocumentNavigation(bundle)
@@ -234,7 +264,7 @@ describe('Checkpoint navigation', () => {
     expect(resolved.warnings).toEqual([])
     expect(bundle.checkpoints).toEqual(original)
 
-    bundle.navigation = moveFileToGroup(assigned, 'other.md', null, bundle.root, bundle)
+    bundle.navigation = assignFileToGroup(assigned, 'other.md', null, bundle.root, bundle)
     expect(resolveDocumentNavigation(bundle).checkpointGroups[0].entries).toEqual([{ kind: 'file', file: bundle.files[0] }])
     expect(bundle.checkpoints).toEqual(original)
   })
@@ -248,21 +278,33 @@ describe('Checkpoint navigation', () => {
     expect(parsed.bundle.checkpoints).toEqual(raw.checkpoints)
     const resolved = resolveDocumentNavigation(parsed.bundle)
     expect(resolved.checkpointGroups).toEqual([])
-    expect(resolved.groups.map((group) => group.id)).toEqual(['spec', 'plan', 'tasks'])
+    expect(resolved.groups).toEqual([])
+    expect(resolved.unassigned.map((file) => file.path)).toEqual(['specs/sample/spec.md'])
     expect(resolved.warnings).toEqual([])
   })
 })
 
 
 describe('navigation-editor operations', () => {
-  it('creates initial manifest from unconfigured bundle', () => {
+  it('derives an initial manifest from first-level directory groups', () => {
+    const bundle = createBundle([
+      { path: 'specs/sample/docs/arch.md' },
+      { path: 'specs/sample/guides/setup.md' },
+    ])
+    const manifest = createInitialManifest(bundle)
+    expect(manifest.version).toBe(1)
+    expect(manifest.groups.map((group) => group.id)).toEqual(['category-docs', 'category-guides'])
+    expect(manifest.groups.map((group) => group.paths)).toEqual([['docs/arch.md'], ['guides/setup.md']])
+  })
+
+  it('creates an empty manifest when every file sits at the root', () => {
     const bundle = createBundle([
       { path: 'specs/sample/spec.md' },
       { path: 'specs/sample/plan.md' },
     ])
     const manifest = createInitialManifest(bundle)
     expect(manifest.version).toBe(1)
-    expect(manifest.groups.length).toBeGreaterThanOrEqual(2)
+    expect(manifest.groups).toEqual([])
   })
 
   it('adds, renames, and removes groups cleanly', () => {
@@ -285,7 +327,7 @@ describe('navigation-editor operations', () => {
     expect(removed.groups.map((g) => g.id)).toEqual([g2Id])
   })
 
-  it('moves files between groups and unassigned', () => {
+  it('assigns files between groups and unassigned', () => {
     const initial: NavigationManifest = {
       version: 1,
       groups: [
@@ -294,14 +336,37 @@ describe('navigation-editor operations', () => {
       ],
     }
 
-    const moved = moveFileToGroup(initial, 'specs/sample/a.md', 'g2', 'specs/sample', createBundle([]))
-    expect(moved.groups[0].paths).toEqual([])
-    expect(moved.groups[1].paths).toEqual(['a.md'])
+    const assigned = assignFileToGroup(initial, 'specs/sample/a.md', 'g2', 'specs/sample', createBundle([]))
+    expect(assigned.groups[0].paths).toEqual([])
+    expect(assigned.groups[1].paths).toEqual(['a.md'])
 
-    // 移入 null 则从所有组移除（归入未分配）
-    const unassigned = moveFileToGroup(moved, 'specs/sample/a.md', null, 'specs/sample', createBundle([]))
+    // Assigning to null removes the membership from every group (back to unassigned).
+    const unassigned = assignFileToGroup(assigned, 'specs/sample/a.md', null, 'specs/sample', createBundle([]))
     expect(unassigned.groups[0].paths).toEqual([])
     expect(unassigned.groups[1].paths).toEqual([])
+  })
+
+  it('assigning a file changes only the manifest, never the file record', () => {
+    const bundle = createBundle([{ path: 'specs/sample/brief.md', content: '# Brief' }])
+    bundle.comments = [{
+      id: 'thread-1',
+      anchor: { path: 'specs/sample/brief.md', position: { start: 0, end: 7 }, quote: { exact: '# Brief', prefix: '', suffix: '' } },
+      status: 'open',
+      messages: [{ id: 'message-1', author: 'Ada', body: 'Clarify', createdAt: '2026-09-24T00:00:00.000Z' }],
+      createdAt: '2026-09-24T00:00:00.000Z',
+      updatedAt: '2026-09-24T00:00:00.000Z',
+    }]
+    const before = structuredClone(bundle)
+
+    const withGroup = addNavigationGroup(createInitialManifest(bundle), 'Reviews')
+    bundle.navigation = assignFileToGroup(withGroup, 'brief.md', withGroup.groups[0].id, bundle.root, bundle)
+
+    expect(bundle.files).toEqual(before.files)
+    expect(bundle.comments).toEqual(before.comments)
+    const resolved = resolveDocumentNavigation(bundle)
+    expect(resolved.groups.map((group) => [group.title, group.files.map((file) => file.path)]))
+      .toEqual([['Reviews', ['specs/sample/brief.md']]])
+    expect(resolved.unassigned).toEqual([])
   })
 
   it('renames and removes file references from manifest', () => {
@@ -337,7 +402,7 @@ describe('navigation-editor operations', () => {
 })
 
 describe('Checkpoint navigation editing', () => {
-  it('refuses to move an owned path without changing its manifest', () => {
+  it('refuses to reassign an owned path without changing its manifest', () => {
     const bundle = createBundle([{ path: 'specs/sample/owned.md' }])
     bundle.checkpoints = {
       version: 1,
@@ -348,8 +413,8 @@ describe('Checkpoint navigation editing', () => {
       version: 1,
       groups: [{ id: 'other', title: 'Other', paths: ['owned.md'] }],
     }
-    expect(moveFileToGroup(manifest, 'specs/sample/owned.md', null, bundle.root, bundle)).toBe(manifest)
-    expect(moveFileToGroup(manifest, 'owned.md', 'other', bundle.root, bundle)).toBe(manifest)
+    expect(assignFileToGroup(manifest, 'specs/sample/owned.md', null, bundle.root, bundle)).toBe(manifest)
+    expect(assignFileToGroup(manifest, 'owned.md', 'other', bundle.root, bundle)).toBe(manifest)
     expect(manifest.groups[0].paths).toEqual(['owned.md'])
   })
 })

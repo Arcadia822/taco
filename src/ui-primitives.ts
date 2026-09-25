@@ -312,7 +312,6 @@ export const createFileTypeIcon = (file: TacoFile): SVGSVGElement => {
   const kind = fileKind(file)
   const icon: Record<typeof kind, IconName> = {
     markdown: 'file-text',
-    html: 'file-code',
     yaml: 'file-code',
     json: 'braces',
     mermaid: 'presentation',

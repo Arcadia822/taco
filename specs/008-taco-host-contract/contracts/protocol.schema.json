@@ -181,7 +181,7 @@
     },
     "Snapshot": {
       "type": "object",
-      "description": "只读文档快照投影。由本地 .taco.html 安全投影生成。本地 sourceUrl、collab 凭据等已知敏感数据在投影时被剥离；未知扩展字段一律被拒绝发布并指出 JSON 路径，严禁服务端静默删除。严禁包含 credentials、access、packOptions 或任意未知字段",
+      "description": "只读文档快照投影。由本地 .taco.html 安全投影生成。普通 HTML/HTM 源文件与旧 sourceUrl 字段一律拒绝；collab 凭据等已知敏感数据在投影时被剥离；未知扩展字段一律被拒绝发布并指出 JSON 路径，严禁服务端静默删除。严禁包含 credentials、access、packOptions 或任意未知字段",
       "required": ["format", "version", "docId", "title", "root", "files"],
       "additionalProperties": false,
       "properties": {

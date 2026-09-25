@@ -20,7 +20,6 @@
   --brand-bubble-tertiary: #f97316;
   --icon-folder: #b7791f;
   --icon-markdown: #16805b;
-  --icon-html: #7c3aed;
   --icon-yaml: #c2410c;
   --icon-json: #2563eb;
   --icon-text: #7c3aed;
@@ -252,7 +251,6 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .file-row.is-featured { margin-block: 4px; }
 .file-type { position: relative; display: block; width: var(--sidebar-icon-size); height: var(--sidebar-icon-size); flex: 0 0 var(--sidebar-icon-size); stroke-width: 2; }
 .file-type.type-markdown { color: var(--icon-markdown); }
-.file-type.type-html { color: var(--icon-html); }
 .file-type.type-yaml { color: var(--icon-yaml); }
 .file-type.type-json { color: var(--icon-json); }
 .file-type.type-mermaid { color: var(--accent-dark); }
@@ -304,33 +302,6 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .document-inline-title-icon { width: 24px; height: 24px; flex: 0 0 24px; margin-top: 7px; stroke-width: 1.75; }
 .document-inline-title-text { min-width: 0; margin: 0; padding: 0; border: 0; outline: 0; background: transparent; color: var(--doc-ink); caret-color: var(--accent-dark); font: 600 34px/1.11 var(--heading); letter-spacing: -.018em; overflow-wrap: anywhere; }
 .document-inline-title-text:focus, .document-inline-title-text:focus-visible { border: 0; border-radius: 0; outline: 0; background: transparent; box-shadow: none; }
-.html-preview-shell { display: grid; place-items: start center; width: min(100%, 760px); min-height: 100%; margin: 0 auto; padding: 40px 0 120px; }
-.html-preview-card {
-  display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; gap: 18px; width: min(100%, 600px); padding: 18px;
-  border: 1px solid var(--doc-line); border-radius: 12px; background: var(--surface); box-shadow: 0 8px 28px rgba(0, 0, 0, .06);
-}
-.html-preview-icon { width: 48px; height: 48px; padding: 11px; border-radius: 10px; background: color-mix(in srgb, var(--icon-html) 10%, var(--surface)); color: var(--icon-html); }
-.html-preview-title { min-width: 0; margin: 0; color: var(--doc-ink); font: 600 18px/1.3 var(--heading); letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.html-preview-action {
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 36px; padding: 0 13px;
-  border-radius: 7px; background: var(--ink); color: var(--surface); font-size: 12px; font-weight: 650; text-decoration: none;
-  transition: background-color 140ms ease, color 140ms ease, transform 140ms var(--ease-out);
-}
-.html-preview-action .ui-icon { width: 14px; height: 14px; }
-.html-preview-source-fallback {
-  grid-column: 1 / -1;
-  max-width: min(72ch, calc(100vw - 96px));
-  max-height: 420px;
-  overflow: auto;
-  padding: 14px;
-  border: 1px solid var(--doc-line);
-  border-radius: 8px;
-  background: var(--doc-soft);
-  color: var(--doc-ink);
-  text-align: left;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
 .tiptap-editor-host { position: relative; min-width: 0; }
 .remote-cursor-layer { position: absolute; inset: 0; z-index: 20; overflow: visible; pointer-events: none; }
 .remote-selection { position: absolute; border-radius: 2px; }
@@ -1107,7 +1078,6 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
   .stage-summary:hover, .folder-row:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); color: var(--ink); }
   .stage-summary:hover .stage-caret { opacity: 1; }
   .file-row:hover { background: var(--surface-2); }
-  .html-preview-action:hover { background: color-mix(in srgb, var(--ink) 84%, var(--accent-dark)); }
   .segmented-control-option:hover { background: color-mix(in srgb, var(--ink) 8%, var(--surface)); color: var(--ink); }
   .tiptap-editor-host .tiptap a:hover { color: color-mix(in srgb, var(--accent-dark) 82%, #000); }
   .tiptap-code-block-button:hover { background: var(--surface-2); color: var(--doc-ink); }
@@ -1120,7 +1090,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 
 @media (prefers-reduced-motion: no-preference) {
   .control-button:active, .segmented-control-option:active, .tiptap-code-block-button:active,
-  .comment-action:active, .comment-submit:active, .selection-comment-button:active, .popover-action:active, .html-preview-action:active,
+  .comment-action:active, .comment-submit:active, .selection-comment-button:active, .popover-action:active,
   .search-result:active, .share-person-remove:active, .comment-quote-button:active {
     transform: scale(.97);
   }
@@ -1168,8 +1138,6 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 @media (max-width: 560px) {
   .bundle-title, .share-button { display: none; }
   .taco-shell { --right-panel: 100vw; }
-  .html-preview-card { grid-template-columns: 40px minmax(0, 1fr) auto; gap: 12px; padding: 14px; }
-  .html-preview-icon { width: 40px; height: 40px; padding: 9px; }
 }
 
 @media (pointer: coarse) {
@@ -1181,7 +1149,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 }
 
 :root[data-theme="dark"] {
-  color-scheme: dark; --paper:#171717; --surface:#1c1c1c; --sidebar-surface:#1c1c1c; --surface-2:#262626; --ink:#ededed; --muted:#a3a3a3; --line:rgba(255,255,255,.10); --line-strong:rgba(255,255,255,.18); --accent:#3ecf8e; --accent-dark:#6ee7b7; --accent-soft:#173b2b; --icon-folder:#f2b84b; --icon-markdown:#55d6a0; --icon-html:#c4b5fd; --icon-yaml:#fb923c; --icon-json:#60a5fa; --icon-text:#a78bfa; --shadow:0 18px 50px rgba(0,0,0,.34); --doc-ink:#f5f5f5; --doc-muted:#d4d4d4; --doc-subtle:#a3a3a3; --doc-line:rgba(255,255,255,.10); --doc-soft:#222222; --doc-code:#ededed;
+  color-scheme: dark; --paper:#171717; --surface:#1c1c1c; --sidebar-surface:#1c1c1c; --surface-2:#262626; --ink:#ededed; --muted:#a3a3a3; --line:rgba(255,255,255,.10); --line-strong:rgba(255,255,255,.18); --accent:#3ecf8e; --accent-dark:#6ee7b7; --accent-soft:#173b2b; --icon-folder:#f2b84b; --icon-markdown:#55d6a0; --icon-yaml:#fb923c; --icon-json:#60a5fa; --icon-text:#a78bfa; --shadow:0 18px 50px rgba(0,0,0,.34); --doc-ink:#f5f5f5; --doc-muted:#d4d4d4; --doc-subtle:#a3a3a3; --doc-line:rgba(255,255,255,.10); --doc-soft:#222222; --doc-code:#ededed;
 }
 :root[data-theme="dark"] { --status-freeze: #67d5ed; }
 :root[data-theme="dark"] :is(.hljs-comment, .hljs-quote) { color: #a3a3a3; }

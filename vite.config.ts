@@ -24,7 +24,6 @@ const fileTitles: Record<string, string> = {
   'data-model.md': 'Data Model: File-first Taco Bundle',
   'interaction-design.md': 'Interaction Design: Taco File Browser',
   'plan.md': 'Implementation Plan: Taco File Browser',
-  'prototypes/taco-preview.html': 'Taco HTML Preview Demo',
   'quickstart.md': 'Quickstart: Validate Taco File Browsing',
   'research.md': 'Research: Spec Kit Artifact Boundary and Bento Mapping',
   'spec.md': 'Feature Specification: Taco File Browser',
@@ -34,7 +33,6 @@ const fileTitles: Record<string, string> = {
 
 const mediaType = (path: string): string => {
   if (path.endsWith('.md')) return 'text/markdown'
-  if (/\.html?$/i.test(path)) return 'text/html'
   if (/\.ya?ml$/.test(path)) return 'application/yaml'
   if (path.endsWith('.json')) return 'application/json'
   return 'text/plain'
@@ -45,7 +43,6 @@ interface EmbeddedFile {
   mediaType: string
   content: string
   title?: string
-  sourceUrl?: string
 }
 
 const readFiles = (directory: string): EmbeddedFile[] => {
@@ -55,17 +52,15 @@ const readFiles = (directory: string): EmbeddedFile[] => {
     const absolute = join(directory, entry.name)
     if (entry.isDirectory()) files.push(...readFiles(absolute))
     else if (entry.isFile()) {
+      // Ordinary HTML source files are unsupported; only the .taco.html container ships.
+      if (/\.html?$/i.test(entry.name)) continue
       const relativePath = relative(specRoot, absolute).split(sep).join('/')
       const path = `${bundleRoot}/${relativePath}`
-      const type = mediaType(path)
       files.push({
         path,
-        mediaType: type,
+        mediaType: mediaType(path),
         content: readFileSync(absolute, 'utf8'),
         ...(fileTitles[relativePath] ? { title: fileTitles[relativePath] } : {}),
-        // The committed showcase shell must be byte-identical across checkout locations.
-        // Runtime resolves this exact portable reference to a canonical file: URL.
-        ...(type === 'text/html' ? { sourceUrl: `../${path}` } : {}),
       })
     }
   }
