@@ -33,10 +33,30 @@ const COMPRESSION_CONFIGS = [
   { level: 7, memLevel: 8 }, // optimal for CSS
 ]
 
+// The custom radix-85 alphabet is ASCII 33..118 excluding '<'. Script raw
+// text cannot form a closing tag, and four compressed bytes take five chars.
+const encodeRadix85 = (bytes) => {
+  let output = ''
+  for (let offset = 0; offset < bytes.length; offset += 4) {
+    const remaining = Math.min(4, bytes.length - offset)
+    let value = 0
+    for (let i = 0; i < 4; i++) value = value * 256 + (i < remaining ? bytes[offset + i] : 0)
+    let word = ''
+    for (let i = 0; i < 5; i++) {
+      const digit = value % 85
+      word = String.fromCharCode(33 + digit + (digit >= 27 ? 1 : 0)) + word
+      value = Math.floor(value / 85)
+    }
+    output += word.slice(0, remaining + 1)
+  }
+  return output
+}
+const isLite = /<meta\b[^>]*name=["']taco-shell-variant["'][^>]*content=["']lite["']/i.test(html)
 const encode = (value, fixedOptions = null) => {
   const buf = Buffer.isBuffer(value) ? value : Buffer.from(value, 'utf8')
   if (fixedOptions) {
-    return deflateRawSync(buf, fixedOptions).toString('base64')
+    const compressed = deflateRawSync(buf, fixedOptions)
+    return isLite ? encodeRadix85(compressed) : compressed.toString('base64')
   }
   let best = deflateRawSync(buf, COMPRESSION_CONFIGS[0])
   for (let i = 1; i < COMPRESSION_CONFIGS.length; i++) {
@@ -45,7 +65,7 @@ const encode = (value, fixedOptions = null) => {
       best = candidate
     }
   }
-  return best.toString('base64')
+  return isLite ? encodeRadix85(best) : best.toString('base64')
 }
 let jsPayload = ''
 const cssPayload = encode(styleMatch[1])
@@ -53,7 +73,6 @@ const cssPayload = encode(styleMatch[1])
 let mermaidPayload = ''
 let richAdapterPayload = ''
 let sharedPayload = ''
-const isLite = /<meta\b[^>]*name=["']taco-shell-variant["'][^>]*content=["']lite["']/i.test(html)
 
 if (!isLite) {
   jsPayload = encode(moduleMatch[1])
@@ -124,8 +143,8 @@ if (!isLite) {
     }
   }
   jsPayload = encode(main)
-  sharedPayload = `<script id="taco-rt-shared" type="taco/deflate-b64">${encode(shared)}</script>`
-  richAdapterPayload = `<script type="application/taco+base64" id="taco-asset-rich-adapter">${encode(adapter)}</script>`
+  sharedPayload = `<script id="taco-rt-shared" type="taco/deflate-85">${encode(shared)}</script>`
+  richAdapterPayload = `<script type="application/taco+base85" id="taco-asset-rich-adapter">${encode(adapter)}</script>`
 }
 
 const loader = `
@@ -141,10 +160,30 @@ const loader = `
     fail('Taco requires a browser with DecompressionStream support.')
     return
   }
+  ${isLite ? `const decode85 = (text) => {
+    const remainder = text.length % 5
+    if (remainder === 1) throw new Error('Invalid Lite payload length')
+    const bytes = new Uint8Array(Math.floor(text.length / 5) * 4 + (remainder ? remainder - 1 : 0))
+    let output = 0
+    for (let offset = 0; offset < text.length; offset += 5) {
+      const count = Math.min(5, text.length - offset)
+      let value = 0
+      for (let i = 0; i < 5; i++) {
+        const code = i < count ? text.charCodeAt(offset + i) : 118
+        if (code < 33 || code > 118 || code === 60) throw new Error('Invalid Lite payload character')
+        value = value * 85 + code - 33 - (code > 60 ? 1 : 0)
+      }
+      if (value > 0xffffffff) throw new Error('Invalid Lite payload word')
+      for (let i = 0; i < Math.min(4, count - 1); i++) {
+        bytes[output++] = Math.floor(value / 256 ** (3 - i)) % 256
+      }
+    }
+    return bytes
+  }` : ''}
   const inflate = async (id) => {
     const el = document.getElementById(id)
     if (!el) return ''
-    const bytes = Uint8Array.from(atob(el.textContent.trim()), (c) => c.charCodeAt(0))
+    const bytes = ${isLite ? 'decode85(el.textContent.trim())' : 'Uint8Array.from(atob(el.textContent.trim()), (c) => c.charCodeAt(0))'}
     const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
     return await new Response(stream).text()
   }
@@ -180,8 +219,8 @@ const minLoader = transformSync(loader, { minify: true, target: 'es2022' }).code
 if (minLoader.includes('</scr' + 'ipt>')) throw new Error('loader contains a script close sequence')
 
 const payloads = [
-  `<script id="taco-rt-css" type="taco/deflate-b64">${cssPayload}</script>`,
-  `<script id="taco-rt" type="taco/deflate-b64">${jsPayload}</script>`,
+  `<script id="taco-rt-css" type="${isLite ? 'taco/deflate-85' : 'taco/deflate-b64'}">${cssPayload}</script>`,
+  `<script id="taco-rt" type="${isLite ? 'taco/deflate-85' : 'taco/deflate-b64'}">${jsPayload}</script>`,
   sharedPayload,
   mermaidPayload,
   richAdapterPayload,

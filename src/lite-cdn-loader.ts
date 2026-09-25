@@ -186,13 +186,35 @@ const cdnModuleUrl = (specifier: string, provider: CdnProvider): string => {
   return `https://cdn.jsdelivr.net/npm/${name}@${version}${path ? `${path}.js` : ''}/+esm`
 }
 
+// Matches the Lite shell's radix-85 alphabet: ASCII 33..118 excluding '<'.
+const decodeEmbeddedAsset = (text: string): Uint8Array => {
+  const remainder = text.length % 5
+  if (remainder === 1) throw new Error('Invalid Lite payload length')
+  const bytes = new Uint8Array(Math.floor(text.length / 5) * 4 + (remainder ? remainder - 1 : 0))
+  let output = 0
+  for (let offset = 0; offset < text.length; offset += 5) {
+    const count = Math.min(5, text.length - offset)
+    let value = 0
+    for (let i = 0; i < 5; i++) {
+      const code = i < count ? text.charCodeAt(offset + i) : 118
+      if (code < 33 || code > 118 || code === 60) throw new Error('Invalid Lite payload character')
+      value = value * 85 + code - 33 - (code > 60 ? 1 : 0)
+    }
+    if (value > 0xffffffff) throw new Error('Invalid Lite payload word')
+    for (let i = 0; i < Math.min(4, count - 1); i++) {
+      bytes[output++] = Math.floor(value / 256 ** (3 - i)) % 256
+    }
+  }
+  return bytes
+}
+
 export const loadLiteRichEditorAdapter = (): Promise<RichEditorAdapter> => {
   const element = document.getElementById('taco-asset-rich-adapter')
   const encoded = element?.textContent?.trim()
   const sharedUrl = (document.getElementById('taco-rt-shared') as (HTMLElement & { tacoSharedModuleUrl?: string }) | null)?.tacoSharedModuleUrl
   if (!encoded || !sharedUrl) return Promise.reject(new Error('The Lite rich editor asset is missing'))
   return loadWithHedging(async (provider) => {
-    const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0))
+    const bytes = decodeEmbeddedAsset(encoded)
     const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
     const source = await new Response(stream).text()
     const rewritten = source.replace(/\b(from\s*|import\s*)["']([^"']+)["']/g, (_match, prefix: string, specifier: string) => {

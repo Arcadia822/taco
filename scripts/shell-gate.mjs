@@ -48,12 +48,31 @@ if (documentBlocks.length !== 1) fail(`expected one taco document block, found $
 try { JSON.parse(documentBlocks[0][1]) }
 catch (error) { fail(`document block is not valid JSON: ${error.message}`) }
 
-const inflate = (id, type = 'taco/deflate-b64') => {
-  const pattern = new RegExp(`<script\\b[^>]*\\bid=["']${id}["'][^>]*>([A-Za-z0-9+/=]+)<\\/script>|<script\\b[^>]*\\btype=["']${type}["'][^>]*\\bid=["']${id}["'][^>]*>([A-Za-z0-9+/=]+)<\\/script>`)
+const decodeRadix85 = (text) => {
+  const remainder = text.length % 5
+  if (remainder === 1) fail('invalid Lite payload length')
+  const bytes = Buffer.alloc(Math.floor(text.length / 5) * 4 + (remainder ? remainder - 1 : 0))
+  let output = 0
+  for (let offset = 0; offset < text.length; offset += 5) {
+    const count = Math.min(5, text.length - offset)
+    let value = 0
+    for (let i = 0; i < 5; i++) {
+      const code = i < count ? text.charCodeAt(offset + i) : 118
+      if (code < 33 || code > 118 || code === 60) fail('invalid Lite payload character')
+      value = value * 85 + code - 33 - (code > 60 ? 1 : 0)
+    }
+    if (value > 0xffffffff) fail('invalid Lite payload word')
+    for (let i = 0; i < Math.min(4, count - 1); i++) {
+      bytes[output++] = Math.floor(value / 256 ** (3 - i)) % 256
+    }
+  }
+  return bytes
+}
+const inflate = (id, type = variant === 'lite' ? 'taco/deflate-85' : 'taco/deflate-b64') => {
+  const pattern = new RegExp(`<script\\b(?=[^>]*\\bid=["']${id}["'])([^>]*)>([^<]*)<\\/script>`)
   const match = html.match(pattern)
-  if (!match) fail(`${id} payload is missing`)
-  const b64 = match[1] || match[2]
-  return inflateRawSync(Buffer.from(b64, 'base64')).toString('utf8')
+  if (!match || !match[1].includes(`type="${type}"`)) fail(`${id} payload is missing`)
+  return inflateRawSync(variant === 'lite' ? decodeRadix85(match[2]) : Buffer.from(match[2], 'base64')).toString('utf8')
 }
 
 const css = inflate('taco-rt-css')
@@ -75,7 +94,7 @@ if (variant === 'complete') {
   if (!html.includes('id="taco-asset-rich-adapter"')) fail('Lite shell is missing embedded #taco-asset-rich-adapter')
   if (!html.includes('type="importmap"')) fail('Lite shell is missing importmap')
   if (!javascript.includes('./taco-shared.js')) fail('Lite runtime is missing its shared import')
-  const adapterCode = inflate('taco-asset-rich-adapter', 'application/taco\\+base64')
+  const adapterCode = inflate('taco-asset-rich-adapter', 'application/taco+base85')
   if (!adapterCode.includes('./taco-shared.js')) fail('Lite adapter is missing its shared import')
   if (!adapterCode.trim()) fail('Lite rich-adapter asset is empty')
   if (!adapterCode.includes('TiptapRichEditorAdapter')) {
