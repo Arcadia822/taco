@@ -855,7 +855,9 @@ export class FileBrowser {
     titleRow.append(titleIcon, title)
     const editorHost = el('div', 'tiptap-editor-host')
     shell.append(titleRow, editorHost)
-    this.viewer.append(shell)
+    this.sourceEditor = null
+    delete this.viewer.dataset.editorError
+    this.viewer.replaceChildren(shell)
 
     try {
       this.richEditor = this.richEditorAdapter.mount({

@@ -308,6 +308,8 @@ export class FileNavigation {
 
     if (resolved.unassigned.length) {
       const other = el('details', 'stage-group other-files-group') as HTMLDetailsElement
+      this.bindDisclosureState(other, 'other', this.options.stageOpenState,
+        resolved.unassigned.some((file) => file.path === this.selected?.path))
       other.dataset.stage = 'other'
       const otherSummary = el('summary', 'stage-summary sidebar-row')
       const otherHead = el('span', 'stage-head')
@@ -354,8 +356,8 @@ export class FileNavigation {
     this.scroll = null
   }
 
-  private bindDisclosureState(details: HTMLDetailsElement, key: string, state: Map<string, boolean>): void {
-    details.open = state.get(key) ?? true
+  private bindDisclosureState(details: HTMLDetailsElement, key: string, state: Map<string, boolean>, defaultOpen = true): void {
+    details.open = state.get(key) ?? defaultOpen
     details.addEventListener('toggle', () => state.set(key, details.open))
   }
 

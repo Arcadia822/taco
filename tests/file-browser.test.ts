@@ -1988,10 +1988,18 @@ describe('FileBrowser', () => {
     try {
       const browser = new FileBrowser(document.getElementById('app')!, bundle, { richEditorAdapter: promise })
       expect(document.querySelector('.source-editor-input')).not.toBeNull()
+      const initiallySelected = document.querySelector<HTMLButtonElement>('.file-row.is-selected')
+      expect(initiallySelected?.dataset.path).toBe(bundle.files[0].path)
+      expect(initiallySelected?.closest('details')?.open).toBe(true)
       expect(document.querySelector('.tiptap-editor-host .tiptap')).toBeNull()
 
       resolve(completeRichEditorAdapter)
       await vi.waitFor(() => expect(document.querySelector('.tiptap-editor-host .tiptap')).not.toBeNull())
+      expect(document.querySelector('.source-editor-input')).toBeNull()
+      expect(document.querySelectorAll('.markdown-document-shell')).toHaveLength(1)
+      const selected = document.querySelector<HTMLButtonElement>('.file-row.is-selected')
+      expect(selected?.dataset.path).toBe(bundle.files[0].path)
+      expect(selected?.closest('details')?.open).toBe(true)
       browser.destroy()
     } finally {
       setDefaultRichEditorAdapter(completeRichEditorAdapter)
