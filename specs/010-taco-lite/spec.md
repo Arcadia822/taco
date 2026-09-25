@@ -9,7 +9,7 @@ input: |-
 
 ## Goal
 
-Offer a smaller initial `.taco.html` for connected review without removing editing or comments. Keep the complete shell as the offline-capable choice. The Lite shell and its external dependency service do not exist yet; this document defines the intended behavior, not a shipped capability.
+Offer a smaller initial `.taco.html` for connected review without removing editing or comments. Keep the complete shell as the offline-capable choice. The two distinct shell builds preserve the same local review workflow.
 
 ## User scenarios and acceptance
 
@@ -27,7 +27,7 @@ An agent preparing a Taco for a recipient who may open it without network access
 
 ### Pack selection guidance
 
-The installation documentation and installable agent skill must recommend the complete pack when the **recipient's opening environment** may be offline and the minimal Lite pack when reliable network access is expected. Installation-time connectivity alone is not a valid selector. The guide must explain Lite's editable source fallback and the complete pack's size/offline trade-off; it must not claim Lite ships before it does.
+The installation documentation and installable agent skill must recommend the complete pack when the **recipient's opening environment** may be offline and the Lite pack when reliable network access is expected. Installation-time connectivity alone is not a valid selector. The guide must explain Lite's editable source fallback and the complete pack's size/offline trade-off; do not silently replace an existing complete Taco with a Lite one.
 
 ## Shared functionality boundary
 
@@ -38,7 +38,7 @@ Share-related functionality is removed from **both** complete and Lite packs; it
 - Build and publish distinct complete and Lite shell artifacts. An `editable: false` configuration does not qualify as Lite: today's read-only Markdown still instantiates Tiptap.
 - Use public ESM CDNs for the external libraries; do not require Taco to host, publish, or operate a dependency artifact or CDN. Pin exact package versions and choose browser-importable URLs whose transitive imports resolve through that provider. Validate the whole import graph, styles, CORS, and security policy from an actual `file:`-opened Taco.
 - A fallback public provider may generate a different module graph; validate each provider independently for the same pinned library versions and supported behavior. On a provider failure, retry the complete editor load through another verified provider rather than mixing modules from both; if neither works, use editable Markdown source. The user-facing target is a fast open in both mainland China and the United States; measure actual Taco open-to-usable time and import success in both locations, rather than optimizing a CDN location or promising a particular provider.
-- The compressed, empty Lite shell target is **under 100 KiB**. Report initial HTML bytes separately from total dynamically transferred bytes, and measure both complete and Lite builds.
+- Preserve full review behavior over an aggressive size target. After the empty Lite shell measured 222,792 bytes (217.6 KiB), the user chose to relax the former <100 KiB target rather than remove functionality. Enforce **<225 KiB (230,400 bytes)** on the compressed, empty Lite shell; report initial HTML bytes separately from total dynamically transferred bytes, and measure both complete and Lite builds.
 - Only the bundled `#taco-document` data and escaped `<title>` may vary when agents package either shell. Existing `docId`, comments, navigation, canonical HTML `file:` URLs, and saved review state must survive refresh.
 
 ## Verification
@@ -46,4 +46,10 @@ Share-related functionality is removed from **both** complete and Lite packs; it
 - Exercise connected Lite rich editing, text selection/comment anchoring, save, and Handoff in an actual browser. Verify boot starts only the imports required by the embedded file types before the corresponding first render; opening a later file of a type already present in the bundle must not start its first dependency fetch.
 - Block external imports and exercise editable Markdown fallback, comments, save, Handoff, and read-only permissions in an actual browser; verify no user input is lost during failure.
 - Exercise complete-shell rich editing offline. Check that neither pack exposes Share entry points or initializes Share-only services, while local review behavior remains intact.
-- Check the empty Lite size and ensure its JS payload does not contain the large editor/collaboration libraries. Record full import-graph bytes, failed-provider behavior, and open-to-usable time from mainland China and the United States before claiming that either region opens quickly.
+- Check the empty Lite size against the revised 225 KiB limit and ensure its JS payload does not contain the large editor/collaboration libraries. Record full import-graph bytes, failed-provider behavior, and open-to-usable time from mainland China and the United States before claiming that either region opens quickly.
+
+## Verification evidence (2026-09-25, rebased onto main)
+
+- `npm run check`: 39 Vitest files / 385 tests passed; TypeScript, format check, dual builds, and shell gates passed. The empty Lite shell is **201,332 bytes** (<230,400); the built Lite shell with its sample document is 306,022 bytes; the built Complete shell is 2,836,266 bytes.
+- Local Chromium opened both variants via `file:`. Complete edited Markdown and rendered Mermaid with the network disabled and no external requests. Lite edited Markdown, anchored a comment, saved a serialized bundle containing the edit, and performed Handoff; with CDN imports blocked it exposed writable Markdown source, preserved comments and Handoff, and displayed a failure notice. A sealed reader copy kept that source read-only.
+- A stalled jsDelivr request started the esm.sh backup after **748 ms** in Chromium, and the rich editor loaded. After rebasing, with one provider permitted and cache disabled, the Markdown fixture loaded through jsDelivr in 1,491 ms with 1,021,999 CDN response bytes (276 requests), or through esm.sh in 2,081 ms with 941,104 bytes (576 requests). Those bytes exclude the initial HTML; these timings are from the local test environment, **not** measurements from mainland China or the United States. No regional speed claim is established.

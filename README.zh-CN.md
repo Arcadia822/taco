@@ -14,7 +14,7 @@
 
 Taco 把规格目录变成一个可携带的评审工作区。人可以在浏览器中打开一个 `.taco.html` 文件，阅读完整 spec、直接编辑原始 Markdown，并留下锚定到具体文本的评论；Agent 随后可以把修改与评论安全导回 canonical files，处理反馈，再生成下一轮评审文件。
 
-这个文件本身就是交接物。它同时携带 spec、真实目录结构、阅读器、编辑器、评论和可选的协作状态。接收者只需要浏览器，不需要 Taco 账号、服务端 workspace 或专有需求数据库。
+这个文件本身就是交接物。它同时携带 spec、真实目录结构、阅读器、编辑器和评论。接收者只需要浏览器，不需要 Taco 账号、服务端 workspace 或专有需求数据库。
 
 Taco 在此向 [Bento](https://github.com/nyblnet/bento)——“装进一个文件的办公套件”——致敬。Bento 证明了完整的创作工作区可以随一个可携带文件同行；Taco 将这一理念带入规格评审。
 
@@ -78,7 +78,7 @@ Agent 只复制 skill 的 shell、把文档写入其数据块，目录中的其�
 - 将完整规格目录打包成一个可携带的 `.taco.html` 文件，在浏览器中打开并离线使用。
 - 在保留真实目录结构的同时，浏览、搜索和编辑 canonical Markdown 与其他文本文件。
 - 通过锚定评论线程评审规格，可原位编辑自己的消息，也可将单条消息删除为保留回复的占位记录；随后保存更新后的 Taco，或把修改写回原始目录。
-- 支持同机或跨设备实时协作，并提供加密分享、编辑与只读副本及访问控制。
+- 收件环境可能离线时选择自包含的 Complete；联网评审可选择更小的 Lite。Lite 的 CDN 编辑器不可用时仍可编辑 Markdown 源码。
 - 可选地（需显式请求）集成 Spec Kit，持续更新每个 feature 的 Taco，并通过冲突检测安全导入人类修改与评论。
 
 ## Agent 安装说明
@@ -114,14 +114,13 @@ speckit.taco.review specs/001-example/001-example.taco.html
 ## 项目结构
 
 ```text
-src/                                  浏览器、编辑器、评论、保存与协作运行时
+src/                                  浏览器、编辑器、评论与保存运行时
 skills/taco/                          可安装的 Taco skill：指南、shell、按需加载的参考文档、脚本与示例
 extensions/taco/                      可选的 Spec Kit manifest、Agent 命令、离线 CLI 与项目政策
 examples/checkpoint-scroll/           独立的大型 Checkpoint 演示；不作为安装模板发布
-tests/                                数据模型、渲染、交互、协作和 CLI 往返测试
+tests/                                数据模型、渲染、交互与 CLI 往返测试
 specs/001-taco-bento-product/         默认 Taco 与产品规格
 specs/002-taco-speckit-plugin/        可安装 Spec Kit plugin 规格与验收流程
-server/sync-worker/                    可选的端到端加密协作 relay
 docs/agent-installation.md            面向 Agent 的安装与评审流程
 AGENTS.md                             Agent 在本仓库参与贡献时的工作规则
 CONTRIBUTING.md                       Contributor 开发与验证指南
@@ -139,11 +138,11 @@ vite.config.ts                        默认 bundle 注入与构建配置
 ## 设计原则
 
 1. **Files first**：文件内容是唯一事实来源。
-2. **Portable by default**：核心阅读、编辑和保存能力必须离线工作。
+2. **Portable by default**：Complete 可离线使用；Lite 的联网依赖失败时仍可编辑源码。
 3. **Derived UI**：阶段、目录、Outline 和搜索索引不成为第二份持久化状态。
 4. **Graceful degradation**：未知格式显示源码，不猜测业务语义。
 5. **No invisible rewrite**：渲染结果不能反向格式化或替换用户的 canonical Markdown。
-6. **Honest scope**：同机协作无需服务；跨设备协作需要用户显式配置 relay。角色由文件内密码学能力执行，不把自填显示名描述为账号身份。
+6. **Honest scope**：Taco 文件支持本地评审与交接，不提供跨设备实时协作。
 
 ## 参与贡献
 
@@ -153,11 +152,11 @@ vite.config.ts                        默认 bundle 注入与构建配置
 npm run check
 ```
 
-适合贡献的方向包括可访问性、编辑器体验、更多离线文本渲染器、跨浏览器验证、性能、导入导出、relay 运维和协议审计。企业账号与 SSO 身份仍是独立边界，不能把自填显示名包装成已验证身份。
+适合贡献的方向包括可访问性、编辑器体验、更多离线文本渲染器、跨浏览器验证、性能、导入导出与协议审计。
 
 ## 项目状态
 
-Taco 当前处于 v0.3 原型阶段。文件浏览、Markdown 编辑、YAML frontmatter 属性、通用源码编辑、JSON 语法高亮、Mermaid、评论、单文件保存、同源协作和可选的跨设备加密 relay 已经实现；独立 YAML/JSON 文件的结构化编辑、版本历史、账号与 SSO 仍未实现。
+Taco 当前处于原型阶段。文件浏览、Markdown 编辑、YAML frontmatter 属性、通用源码编辑、JSON 语法高亮、Mermaid、评论和单文件保存已实现。Complete 支持离线评审；Lite 从公共 CDN 加载锁定版本的编辑器依赖，加载失败时仍可编辑 Markdown 源码。实时协作、独立 YAML/JSON 文件的结构化编辑、版本历史、账号与 SSO 尚未实现。
 
 Taco v0.3 是可运行、可测试的原型，不构成生产稳定性承诺。
 

@@ -8,14 +8,13 @@ import { localId } from './local-id.ts'
 import { commentPrincipal, type CommentPrincipal } from './identity.ts'
 import type { SourceEditorController } from './source-editor.ts'
 import type { TacoStore } from './store.ts'
-import type { TacoSyncSession } from './sync/session.ts'
-import type { TacoCodeBlockCommentTarget } from './tiptap-code-block.ts'
+import type { TacoCodeBlockCommentTarget } from './mermaid-split-view.ts'
 import { el } from './ui-primitives.ts'
 
 export interface CommentsControllerOptions {
   bundle: TacoBundle
   store: TacoStore
-  sync: TacoSyncSession
+
   getSelected: () => TacoFile | null
   getViewer: () => HTMLElement
   getSourceEditor: () => SourceEditorController | null
@@ -697,7 +696,6 @@ export class CommentsController {
         updatedAt: timestamp,
       }
       this.options.store.commit({ kind: 'comments', path: anchor.path }, () => { (this.options.bundle.comments ??= []).push(thread) })
-      this.options.sync.setPresence({ name: author })
       this.pendingAnchor = null
       this.removeSelectionButton()
       this.paint()
@@ -729,7 +727,6 @@ export class CommentsController {
           thread.messages.push({ id: localId('message'), author, authorId: this.getPrincipal().id, body, createdAt: timestamp })
           thread.updatedAt = timestamp
         })
-        this.options.sync.setPresence({ name: author })
         // A submitted reply is no longer a draft: drop its live form before the rebuild restores it.
         this.dropDraftForm(`reply:${thread.id}`)
         this.paint()

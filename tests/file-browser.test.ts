@@ -5,7 +5,13 @@ import { configureApp } from '../src/kernel/app.ts'
 import { capturePristine } from '../src/kernel/save.ts'
 import { extractMermaidThemeFromCode, MermaidRuntime, type MermaidApi } from '../src/mermaid.ts'
 import { parseBundle, type TacoBundle, type TacoTextAnchor } from '../src/model.ts'
+import { setDefaultHighlighter } from '../src/source-editor.ts'
+import { completeHighlighter } from '../src/highlighter-lowlight.ts'
+import { setDefaultRichEditorAdapter } from '../src/rich-editor.ts'
+import { completeRichEditorAdapter } from '../src/rich-editor-tiptap.ts'
 
+setDefaultHighlighter(completeHighlighter)
+setDefaultRichEditorAdapter(completeRichEditorAdapter)
 let mermaidLoader: ReturnType<typeof vi.fn>
 let mermaidInitialize: ReturnType<typeof vi.fn>
 let mermaidRuntime: MermaidRuntime
@@ -34,6 +40,15 @@ const waitForEditor = async (): Promise<HTMLElement> => {
   }
   throw new Error(`Tiptap editor did not initialize: ${document.querySelector('.tiptap-editor-host')?.getAttribute('data-editor-error') ?? 'unknown error'}`)
 }
+const deferredAdapter = (): {
+  promise: Promise<typeof completeRichEditorAdapter>
+  resolve: (adapter: typeof completeRichEditorAdapter) => void
+} => {
+  let resolve!: (adapter: typeof completeRichEditorAdapter) => void
+  const promise = new Promise<typeof completeRichEditorAdapter>((ready) => { resolve = ready })
+  return { promise, resolve }
+}
+
 
 describe('FileBrowser', () => {
   beforeEach(() => {
@@ -233,20 +248,17 @@ describe('FileBrowser', () => {
       }
     }
     clickHandoff()
-    expect(document.querySelector('.taco-toast')?.textContent).toBe('无法复制链接')
     expect(document.querySelector('.copy-review-main [data-icon="check"]')).toBeNull()
     const writeText = vi.fn().mockRejectedValue(new Error('NotAllowedError'))
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
     clickHandoff()
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
     await Promise.resolve()
-    expect(document.querySelector('.taco-toast')?.textContent).toBe('无法复制链接')
     expect(document.querySelector('.copy-review-main [data-icon="check"]')).toBeNull()
     writeText.mockResolvedValue(undefined)
     clickHandoff()
-    await vi.waitFor(() => expect(document.querySelector('.taco-toast')?.textContent).toBe('已复制给 Agent'))
+    await vi.waitFor(() => expect(document.querySelector('.copy-review-main [data-icon="check"]')).not.toBeNull())
     expect(writeText).toHaveBeenCalledTimes(2)
-    expect(document.querySelector('.copy-review-main [data-icon="check"]')).not.toBeNull()
     browser.destroy()
   })
 
@@ -286,7 +298,7 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.editor-error')?.textContent).toContain('unsupported document')
     const source = document.querySelector<HTMLTextAreaElement>('textarea')
     expect(source?.value).toBe(failingFile.content)
-    expect(source?.readOnly).toBe(true)
+    expect(source?.readOnly).toBe(false)
     browser.destroy()
   })
 
@@ -961,21 +973,7 @@ describe('FileBrowser', () => {
     expect(editableBundle.files[0].content).toContain('title: Title from properties')
   })
 
-  it('preserves untouched Markdown while applying remote block updates', async () => {
-    const bundle = structuredClone(testBundle)
-    const original = '# Product\r\n\r\nReadable Markdown.\r\n\r\nUntouched & plain.\r\n'
-    bundle.files[0].content = original
-    const browser = new FileBrowser(document.getElementById('app')!, bundle)
-    await waitForEditor()
-    const remote = browser as unknown as { applyRemoteState: () => void }
-    remote.applyRemoteState()
-    expect(bundle.files[0].content).toBe(original)
-    const block = bundle.files[0].blocks!.find((item) => item.html.includes('Readable'))!
-    block.html = block.html.replace('Readable', 'Remote')
-    remote.applyRemoteState()
-    expect(bundle.files[0].content).toBe(original.replace('Readable', 'Remote'))
-    browser.destroy()
-  })
+
 
   it('clears the modified marker after an editor change is undone', async () => {
     const editableBundle = structuredClone(testBundle)
@@ -1423,12 +1421,12 @@ describe('FileBrowser', () => {
 
       expect(document.documentElement.lang).toBe('en')
       expect(document.documentElement.dataset.theme).toBe('dark')
-      for (const selector of ['.theme-toggle', '.share-button', '[aria-label="Language"]']) {
+      for (const selector of ['.theme-toggle', '[aria-label="Language"]']) {
         const button = document.querySelector<HTMLButtonElement>(`.workspace-header ${selector}`)!
         expect(button.disabled).toBe(false)
         button.click()
       }
-      expect(document.querySelector('.theme-menu, .share-menu, .language-menu')).toBeNull()
+      expect(document.querySelector('.theme-menu, .language-menu')).toBeNull()
       expect(document.querySelector('[aria-controls="taco-comment-list"]')?.getAttribute('aria-selected')).toBe('true')
       expect(localStorage.getItem('taco-locale')).toBe('zh-Hans')
       expect(localStorage.getItem('taco-theme')).toBe('light')
@@ -1464,9 +1462,9 @@ describe('FileBrowser', () => {
     }
   })
 
-  it('provides share, save and language actions in the header', () => {
+  it('provides save and language actions in the header', () => {
     new FileBrowser(document.getElementById('app')!, structuredClone(testBundle))
-    expect(document.querySelector('.workspace-header .share-button')).not.toBeNull()
+    expect(document.querySelector('.workspace-header .share-button')).toBeNull()
     expect(document.querySelector('.workspace-header .save-group.v2-button-group')).not.toBeNull()
     expect(document.querySelector('.workspace-header .copy-review-group.v2-button-group')).not.toBeNull()
     expect(document.querySelector('.workspace-header .save-button')?.textContent).toContain('保存')
@@ -1491,33 +1489,7 @@ describe('FileBrowser', () => {
     expect(document.querySelectorAll('.language-menu .popover-check')).toHaveLength(1)
   })
 
-  it('opens the Bento-style sharing panel with standard menu rows', () => {
-    const browser = new FileBrowser(document.getElementById('app')!, structuredClone(testBundle))
-    const sync = (browser as unknown as { sync: { isActive(): boolean } }).sync
 
-    expect(sync.isActive()).toBe(false)
-    expect(document.querySelector<HTMLElement>('.presence-strip')?.hidden).toBe(true)
-
-    document.querySelector<HTMLButtonElement>('.workspace-header .share-button')!.click()
-    expect(document.querySelector('.share-live-status')?.textContent).toContain('尚未实时共享 — 分享时开启')
-    const nameLabel = document.querySelector<HTMLLabelElement>('.collab-name-label')!
-    const nameInput = document.querySelector<HTMLInputElement>('.collab-name-input')!
-    expect(nameInput.id).not.toBe('')
-    expect(nameLabel.htmlFor).toBe(nameInput.id)
-    const actions = document.querySelectorAll('.share-menu .popover-action.sidebar-row')
-    expect(Array.from(actions).map((node) => node.textContent)).toEqual([
-      '邀请编辑…',
-      '只读副本…',
-      '开始实时共享',
-      '重置访问权限…',
-    ])
-    expect(Array.from(actions).map((node) => node.querySelector('.ui-icon')?.getAttribute('data-icon'))).toEqual([
-      'share', 'presentation', 'radio', 'key',
-    ])
-    expect(document.querySelector('.share-menu input[type="url"]')).toBeNull()
-    expect(document.querySelector('.share-menu')?.textContent).not.toContain('Relay')
-    expect(document.querySelector('.share-menu')?.getAttribute('role')).toBe('dialog')
-  })
 
   it('keeps sealed reader copies read-only in every editing surface', async () => {
     const reader = structuredClone(testBundle)
@@ -1530,9 +1502,7 @@ describe('FileBrowser', () => {
     expect(document.querySelector<HTMLElement>('.document-inline-title-text')?.contentEditable).toBe('false')
     expect(editor.getAttribute('contenteditable')).toBe('false')
 
-    document.querySelector<HTMLButtonElement>('.workspace-header .share-button')!.click()
-    expect(document.querySelectorAll('.share-menu .popover-action')).toHaveLength(0)
-    expect(document.querySelector('.share-readonly-note')?.textContent).toContain('只读副本')
+
 
     document.querySelector<HTMLButtonElement>('.file-row[data-path$="api.yaml"]')!.click()
     expect(document.querySelector('[data-segmented-value="structure"]')).toBeNull()
@@ -1716,8 +1686,7 @@ describe('FileBrowser', () => {
       messages: [{ author: 'Ada', body: 'Keep this pending.' }],
     })
     expect(sessionStorage.getItem('taco-session-author')).toBe('Ada')
-    document.querySelector<HTMLButtonElement>('.workspace-header .share-button')!.click()
-    expect(document.querySelector<HTMLInputElement>('.collab-name-input')?.value).toBe('Ada')
+
   })
 
   it('uses the same application-owned identity step for a first reply', () => {
@@ -1988,4 +1957,88 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.comment-message-actions')).toBeNull()
     expect(document.querySelector('.comment-thread-actions')).toBeNull()
   })
+
+  it('mounts writable markdown source editor when rich adapter is absent, with frontmatter title derivation, dirty tracking, and handoff', () => {
+    const bundle = structuredClone(testBundle)
+    setDefaultRichEditorAdapter(undefined)
+    try {
+      const browser = new FileBrowser(document.getElementById('app')!, bundle, { richEditorAdapter: undefined })
+      const source = document.querySelector<HTMLTextAreaElement>('.source-editor-input')!
+      expect(source).not.toBeNull()
+      expect(source.readOnly).toBe(false)
+      expect(document.querySelector('.document-inline-title-text')).toBeNull()
+
+      source.value = '---\ntitle: "Fallback Title"\n---\n\n# Fallback\n\nFallback content.'
+      source.dispatchEvent(new Event('input', { bubbles: true }))
+
+      expect(bundle.files[0].title).toBe('Fallback Title')
+      const modified = browser.getModifiedReviewFiles()
+      expect(modified).toHaveLength(1)
+      expect(modified[0].diff).toContain('+Fallback content.')
+      browser.destroy()
+    } finally {
+      setDefaultRichEditorAdapter(completeRichEditorAdapter)
+    }
+  })
+
+  it('promotes from source fallback to rich editor when async adapter resolves if content unchanged', async () => {
+    const bundle = structuredClone(testBundle)
+    const { promise, resolve } = deferredAdapter()
+    setDefaultRichEditorAdapter(undefined)
+    try {
+      const browser = new FileBrowser(document.getElementById('app')!, bundle, { richEditorAdapter: promise })
+      expect(document.querySelector('.source-editor-input')).not.toBeNull()
+      expect(document.querySelector('.tiptap-editor-host .tiptap')).toBeNull()
+
+      resolve(completeRichEditorAdapter)
+      await vi.waitFor(() => expect(document.querySelector('.tiptap-editor-host .tiptap')).not.toBeNull())
+      browser.destroy()
+    } finally {
+      setDefaultRichEditorAdapter(completeRichEditorAdapter)
+    }
+  })
+
+  it('does not promote to rich editor if user edited content in source mode while adapter was loading', async () => {
+    const bundle = structuredClone(testBundle)
+    const { promise, resolve } = deferredAdapter()
+    setDefaultRichEditorAdapter(undefined)
+    try {
+      const browser = new FileBrowser(document.getElementById('app')!, bundle, { richEditorAdapter: promise })
+      const source = document.querySelector<HTMLTextAreaElement>('.source-editor-input')!
+      expect(source).not.toBeNull()
+
+      source.value = '# User Edits Before Load'
+      source.dispatchEvent(new Event('input', { bubbles: true }))
+
+      resolve(completeRichEditorAdapter)
+      await promise
+      await new Promise<void>((r) => queueMicrotask(r))
+      expect(document.querySelector('.tiptap-editor-host .tiptap')).toBeNull()
+      expect(document.querySelector<HTMLTextAreaElement>('.source-editor-input')?.value).toBe('# User Edits Before Load')
+      browser.destroy()
+    } finally {
+      setDefaultRichEditorAdapter(completeRichEditorAdapter)
+    }
+  })
+  it('keeps the same writable source input and handoff after rich editor loading fails', async () => {
+    const bundle = structuredClone(testBundle)
+    let rejectAdapter!: (reason: Error) => void
+    const adapter = new Promise<typeof completeRichEditorAdapter>((_resolve, reject) => { rejectAdapter = reject })
+    setDefaultRichEditorAdapter(undefined)
+    try {
+      const browser = new FileBrowser(document.getElementById('app')!, bundle, { richEditorAdapter: adapter })
+      const source = document.querySelector<HTMLTextAreaElement>('.source-editor-input')!
+      source.value = '# Unsent draft'
+      source.dispatchEvent(new Event('input', { bubbles: true }))
+      rejectAdapter(new Error('Both CDN providers failed'))
+      await vi.waitFor(() => expect(document.querySelector('.editor-error')?.textContent).toContain('Both CDN providers failed'))
+      expect(document.querySelector('.source-editor-input')).toBe(source)
+      expect(source.readOnly).toBe(false)
+      expect(browser.getModifiedReviewFiles()[0].content).toBe('# Unsent draft')
+      browser.destroy()
+    } finally {
+      setDefaultRichEditorAdapter(completeRichEditorAdapter)
+    }
+  })
+
 })

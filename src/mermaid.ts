@@ -169,9 +169,17 @@ interface MermaidModule {
 
 export type MermaidLoader = () => Promise<MermaidApi>
 
-const defaultMermaidLoader: MermaidLoader = () => import(/* @vite-ignore */ MERMAID_CDN_URL)
-  .then((module) => (module as MermaidModule).default)
+let globalMermaidLoader: MermaidLoader | undefined
 
+export const setGlobalMermaidLoader = (loader: MermaidLoader | undefined): void => {
+  globalMermaidLoader = loader
+}
+
+const defaultMermaidLoader: MermaidLoader = () => {
+  if (globalMermaidLoader) return globalMermaidLoader()
+  return import(/* @vite-ignore */ MERMAID_CDN_URL)
+    .then((module) => (module as MermaidModule).default)
+}
 export class MermaidRuntime {
   private mermaidPromise: Promise<MermaidApi> | undefined
   private renderQueue = Promise.resolve()

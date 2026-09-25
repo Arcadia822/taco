@@ -90,6 +90,27 @@ export default defineConfig({
   },
   plugins: [
     {
+      name: 'taco-entry-and-variant',
+      transformIndexHtml: {
+        order: 'pre',
+        handler(html: string) {
+          const variant = process.env.TACO_VARIANT === 'lite' ? 'lite' : 'complete'
+          const entrySrc = variant === 'lite' ? '/src/main-lite.ts' : '/src/main-complete.ts'
+          let transformed = html
+          if (!transformed.includes('name="taco-shell-variant"')) {
+            transformed = transformed.replace(
+              '<meta name="taco-security-version" content="1" />',
+              `<meta name="taco-security-version" content="1" />\n    <meta name="taco-shell-variant" content="${variant}" />`,
+            )
+          }
+          return transformed.replace(
+            /<script\s+type="module"\s+src="\/src\/main(?:\.ts|-complete\.ts|-lite\.ts)"><\/script>/,
+            `<script type="module" src="${entrySrc}"></script>`,
+          )
+        },
+      },
+    },
+    {
       name: 'taco-external-mermaid',
       apply: 'build',
       moduleParsed({ id }) {

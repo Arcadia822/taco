@@ -6,13 +6,13 @@ This is the machine-facing installation guide for an Agent adding Taco to an env
 
 **Installing Taco means installing the `taco` skill.** There is no package manager step, no daemon, no build, no project modification, and no CLI requirement for the core workflow:
 
-- The skill directory (`skills/taco/`) is self-sufficient: `SKILL.md` (the agent guide), `taco-shell.html` (the production browser shell, whose `#taco-document` data block is empty), `references/` (loaded only for the relevant Checkpoint or hosted workflow), `scripts/` (the optional saved-Checkpoint reader), and `templates/` (optional examples).
-- Once the skill is installed, the Agent can assemble, present, open, and review `.taco.html` files in any directory, forever, fully offline.
+- The skill directory (`skills/taco/`) is self-sufficient: `SKILL.md` (the agent guide), `taco-shell.html` (the complete offline browser shell), `taco-shell-lite.html` (the connected Lite shell), `references/` (loaded only for the relevant Checkpoint or hosted workflow), `scripts/` (the optional saved-Checkpoint reader), and `templates/` (optional examples).
+- Once installed, the Agent can assemble, present, open, and review `.taco.html` files in any directory. Complete needs no network; Lite loads public CDN editor dependencies and remains editable in plain-text Markdown mode if those libraries fail.
 - `taco-cli` exists only for optional cloud workflows (TacoHub / Tacobin publishing and live review). It is **never** part of the local installation.
 
 ### Choosing a shell for the recipient
 
-Today the installed skill ships only the complete, self-contained `taco-shell.html`; use it for every review, especially when the recipient may open the file offline. [TACO-16](../specs/010-taco-lite/spec.md) proposes a second, minimal pack, but it is not available yet. Once it ships, recommend the complete pack when the recipient's opening environment may be offline, and the minimal pack when reliable network access is expected. Choose by the recipient's environment, not the Agent's connectivity during installation. The minimal pack must remain editable in plain-text Markdown mode if external editor dependencies cannot load; do not silently replace an existing complete Taco with a minimal one.
+Select by the **recipient's opening environment**, not the Agent's installation-time connectivity. Use the default self-contained `taco-shell.html` whenever the recipient might be offline; it includes the editor and diagram renderer and is larger. Use `taco-shell-lite.html` only when reliable network access is expected; it loads pinned public CDN libraries for rich editing, syntax highlighting, and Mermaid and falls back to writable Markdown source when the rich editor fails. Lite must not silently replace an existing Complete Taco during a refresh.
 
 ## Install from a GitHub repo URL
 
@@ -20,15 +20,15 @@ When the user gives the Taco repository URL (e.g. `https://github.com/Arcadia822
 
 1. Fetch the raw skill directory from the repo (or a local clone):
    - `skills/taco/SKILL.md`
-   - `skills/taco/taco-shell.html`
+   - `skills/taco/taco-shell.html` and `skills/taco/taco-shell-lite.html`
    - `skills/taco/templates/**`
    - `skills/taco/references/**`
    - `skills/taco/scripts/**`
 2. Copy them into the harness's skill location (for example `~/.claude/skills/taco/` or the equivalent for the active agent harness), keeping the files together in one `taco/` directory.
 3. Verify before reporting success. Every check below is required:
-   - `SKILL.md`, `taco-shell.html`, `references/`, `scripts/`, and `templates/` live in that one skill directory. The `SKILL.md` routes Checkpoint work to `references/checkpoints.md` and hosted publication/review to their own references; each template example keeps its `README.md`, `template.md`, `bundle.json`, and `empty.taco.html` beside one another.
-   - `taco-shell.html` is the **production shell, not a demo document**. Its single `#taco-document` block is empty — exactly `<script type="application/taco+json" id="taco-document"></script>` — the `<title>` is generic, and the block carries no `docId`, `files`, `comments`, `navigation`, `access`, or `packOptions`. A block that still contains a bundled document means you copied the wrong file; replace it before use.
-   - The shell and the template packs are **self-contained**. Every script, style, font, and image is inline or a `data:` URI, and nothing resolves to an external `http(s)://` script, stylesheet, or asset or to a sibling asset directory shipped beside the skill. That is what keeps a produced `.taco.html` portable and offline on any machine.
+   - `SKILL.md`, both `taco-shell.html` and `taco-shell-lite.html`, `references/`, `scripts/`, and `templates/` live in that one skill directory. The `SKILL.md` routes Checkpoint work to `references/checkpoints.md` and hosted publication/review to their own references; each template example keeps its `README.md`, `template.md`, `bundle.json`, and `empty.taco.html` beside one another.
+   - Each shell's single `#taco-document` block is empty — exactly `<script type="application/taco+json" id="taco-document"></script>` — the `<title>` is generic, and the block carries no `docId`, `files`, `comments`, `navigation`, `access`, or `packOptions`. A block that still contains a bundled document means you copied the wrong file; replace it before use.
+   - Complete and template packs are self-contained: every script, style, font, and image is inline or a `data:` URI. Lite likewise embeds its own runtime but loads only the external libraries required by bundled file types from pinned public CDNs; do not promise offline rich editing in Lite.
    - `SKILL.md` states that the data block is filled before the file is opened; only that block and the escaped HTML title may change.
    - Read `SKILL.md` once to confirm it describes the shell and routes optional references that exist in the installed directory. The bundled `spec/` SDD graph is an example, not a required Checkpoint policy; project-owned review rules take precedence.
 4. Done. Report the installed skill path. Running the packaging flow once against a scratch directory is useful internal evidence, but it is not required, and a headless load is never user-visible presentation (see below).

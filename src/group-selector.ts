@@ -107,6 +107,7 @@ export function openGroupSelectorPopover(options: OpenGroupSelectorOptions): voi
   })
   popover.append(unassignedRow)
 
+
   // 定位 popover
   document.body.append(popover)
   const rect = options.anchor.getBoundingClientRect()

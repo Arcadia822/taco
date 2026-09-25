@@ -42,7 +42,6 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
   // SaaS UI Bridge:
   // - 品牌名 Tacobin 国际化与链接回主页
   // - 隐藏只读模式下的添加文档/分组按钮
-  // - 彻底移除 Share 分享按钮
   // - 全语种国际化支持保存 -> 导出语义 (主按钮、快捷键提示、下拉菜单选项全面替换)
   const saasBridge = `
 <style id="taco-saas-clean">
@@ -60,19 +59,6 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
     display: none !important;
   }
 
-  /* 彻底移除分享按钮 */
-  .share-button {
-    display: none !important;
-  }
-
-  /* 隐藏 P2P 弹窗与多人协同残留 */
-  .collab-identity,
-  .share-people,
-  .share-section-label,
-  .share-separator,
-  .presence-strip {
-    display: none !important;
-  }
 
   /* 品牌行手势：只有 Logo 和文字为 pointer */
   .sidebar-brand-row,

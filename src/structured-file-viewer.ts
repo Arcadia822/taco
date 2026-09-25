@@ -12,7 +12,7 @@ import {
   type MermaidRuntime,
   type MermaidTheme,
 } from './mermaid.ts'
-import { bindMermaidCanvasDrag, createMermaidSplitView, iconButton, type MermaidSplitViewController } from './tiptap-code-block.ts'
+import { bindMermaidCanvasDrag, createMermaidSplitView, iconButton, type MermaidSplitViewController } from './mermaid-split-view.ts'
 import { createSegmentedControl } from './segmented-control.ts'
 import { createSourceEditor, type SourceEditorController } from './source-editor.ts'
 import { fileName, type TacoFile } from './model.ts'
@@ -613,6 +613,7 @@ export const createStructuredFileViewer = (options: StructuredFileViewerOptions)
   const sourceEditor: SourceEditorController = {
     element: rawSource.element,
     input: rawSource.input,
+    refreshHighlight: rawSource.refreshHighlight,
     setCommentRanges: rawSource.setCommentRanges,
     highlightRange: rawSource.highlightRange,
     activateRange: (range) => {

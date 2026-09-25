@@ -84,6 +84,16 @@ const syncSkillTemplates = async (generated) => {
 async function buildTemplateHtmls() {
   const shell = await readFile(shellPath, 'utf8')
   const skillShell = await readFile(skillShellPath, 'utf8')
+  const shellVariant = (html) =>
+    html.match(/<meta\b(?=[^>]*\bname=["']taco-shell-variant["'])[^>]*>/i)?.[0]?.match(/\bcontent=["'](complete|lite)["']/i)?.[1]
+  const vShell = shellVariant(shell)
+  if (vShell && vShell !== 'complete') {
+    throw new Error(`Template shell must be complete variant, got ${vShell}`)
+  }
+  const vSkill = shellVariant(skillShell)
+  if (vSkill && vSkill !== 'complete') {
+    throw new Error(`Skill template shell must be complete variant, got ${vSkill}`)
+  }
   const generated = new Set()
 
   for (const entry of await readdir(templatesDir, { withFileTypes: true })) {
