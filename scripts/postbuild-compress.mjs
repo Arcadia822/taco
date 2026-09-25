@@ -5,7 +5,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { deflateRawSync } from 'node:zlib'
-import { resolve } from 'node:path'
+import { basename, resolve } from 'node:path'
 import { buildSync, transformSync } from 'esbuild'
 
 const path = process.argv[2]
@@ -47,14 +47,16 @@ const encode = (value, fixedOptions = null) => {
   }
   return best.toString('base64')
 }
-const jsPayload = encode(moduleMatch[1])
+let jsPayload = ''
 const cssPayload = encode(styleMatch[1])
 
 let mermaidPayload = ''
 let richAdapterPayload = ''
+let sharedPayload = ''
 const isLite = /<meta\b[^>]*name=["']taco-shell-variant["'][^>]*content=["']lite["']/i.test(html)
 
 if (!isLite) {
+  jsPayload = encode(moduleMatch[1])
   // Complete shell gets standalone embedded compressed Mermaid module for 100% offline diagram rendering
   const mermaidResult = buildSync({
     stdin: {
@@ -72,30 +74,58 @@ if (!isLite) {
   const mermaidCode = mermaidResult.outputFiles[0].text
   mermaidPayload = `<script id="taco-asset-mermaid" type="taco/deflate-b64">${encode(mermaidCode, { level: 9, memLevel: 6 })}</script>`
 } else {
-  // Lite shell gets standalone embedded compressed rich editor adapter module
-  // with npm dependencies externalized and local Taco sources bundled.
+  // Build both Lite entries together so esbuild emits one offline-safe shared
+  // module instead of bundling Taco's source/editor helpers twice.
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
-  const adapterResult = buildSync({
-    entryPoints: [resolve(process.cwd(), 'src/rich-editor-tiptap.ts')],
+  const result = buildSync({
+    entryPoints: {
+      'taco-rt': resolve(process.cwd(), 'src/main-lite.ts'),
+      'taco-asset-rich-adapter': resolve(process.cwd(), 'src/rich-editor-tiptap.ts'),
+    },
+    outdir: resolve(process.cwd(), 'dist-single/.lite-chunks'),
+    entryNames: '[name]',
+    chunkNames: 'taco-shared',
+    splitting: true,
     bundle: true,
     minify: true,
     format: 'esm',
     target: 'es2022',
     platform: 'browser',
-    packages: 'external',
+    external: ['@tiptap/*', 'lowlight', 'highlight.js/*', 'marked'],
+    loader: { '.css': 'empty' }, // Vite's existing inline stylesheet remains authoritative.
     treeShaking: true,
     write: false,
+    metafile: true,
     alias: {
       '@taco/protocol': resolve(process.cwd(), 'packages/protocol/src/index.ts'),
     },
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version),
       __DEFAULT_LOCALE__: JSON.stringify(process.env.TACO_DEFAULT_LOCALE ?? ''),
-      __EMBEDDED_ASSETS__: JSON.stringify({}),
+      __EMBEDDED_ASSETS__: JSON.stringify({}), // Also empty in the prior Lite adapter; unused by main.
     },
   })
-  const adapterCode = adapterResult.outputFiles[0].text
-  richAdapterPayload = `<script type="application/taco+base64" id="taco-asset-rich-adapter">${encode(adapterCode)}</script>`
+  const chunks = new Map(result.outputFiles.map((file) => [basename(file.path), file.text]))
+  const main = chunks.get('taco-rt.js')
+  const shared = chunks.get('taco-shared.js')
+  const adapter = chunks.get('taco-asset-rich-adapter.js')
+  if (chunks.size !== 3 || !main || !shared || !adapter) {
+    throw new Error(`Unexpected Lite chunks: ${[...chunks.keys()].join(', ')}`)
+  }
+  const sharedImport = '"./taco-shared.js"'
+  if (!main.includes(sharedImport) || !adapter.includes(sharedImport)) {
+    throw new Error('Lite runtime and adapter must both import the shared module')
+  }
+  for (const [outputPath, output] of Object.entries(result.metafile.outputs)) {
+    if (outputPath.endsWith('/taco-rt.js') || outputPath.endsWith('/taco-shared.js')) {
+      if (output.imports.some((entry) => entry.external)) {
+        throw new Error(`Offline Lite core has external imports: ${outputPath}`)
+      }
+    }
+  }
+  jsPayload = encode(main)
+  sharedPayload = `<script id="taco-rt-shared" type="taco/deflate-b64">${encode(shared)}</script>`
+  richAdapterPayload = `<script type="application/taco+base64" id="taco-asset-rich-adapter">${encode(adapter)}</script>`
 }
 
 const loader = `
@@ -119,6 +149,7 @@ const loader = `
     return await new Response(stream).text()
   }
   let moduleUrl = ''
+  ${isLite ? "let sharedUrl = ''" : ''}
   try {
     const css = await inflate('taco-rt-css')
     document.querySelectorAll('style[data-taco-transient]').forEach((s) => s.remove())
@@ -127,10 +158,17 @@ const loader = `
     style.setAttribute('data-taco-transient', '')
     style.textContent = css
     document.head.appendChild(style)
-    const javascript = await inflate('taco-rt')
+    ${isLite ? `const shared = document.getElementById('taco-rt-shared')
+    sharedUrl = URL.createObjectURL(new Blob([await inflate('taco-rt-shared')], { type: 'text/javascript' }))
+    Object.defineProperty(shared, 'tacoSharedModuleUrl', { value: sharedUrl })` : ''}
+    ${isLite ? 'let' : 'const'} javascript = await inflate('taco-rt')
+    ${isLite ? `const specifier = '"./taco-shared.js"'
+    if (!javascript.includes(specifier)) throw new Error('Shared Lite runtime import is missing')
+    javascript = javascript.replace(specifier, JSON.stringify(sharedUrl))` : ''}
     moduleUrl = URL.createObjectURL(new Blob([javascript], { type: 'text/javascript' }))
     await import(moduleUrl)
   } catch (error) {
+    ${isLite ? 'if (sharedUrl) URL.revokeObjectURL(sharedUrl)' : ''}
     fail('Taco could not start: ' + (error?.message || error))
   } finally {
     if (moduleUrl) URL.revokeObjectURL(moduleUrl)
@@ -144,6 +182,7 @@ if (minLoader.includes('</scr' + 'ipt>')) throw new Error('loader contains a scr
 const payloads = [
   `<script id="taco-rt-css" type="taco/deflate-b64">${cssPayload}</script>`,
   `<script id="taco-rt" type="taco/deflate-b64">${jsPayload}</script>`,
+  sharedPayload,
   mermaidPayload,
   richAdapterPayload,
   `<script>${minLoader}</script>`,

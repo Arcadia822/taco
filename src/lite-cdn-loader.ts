@@ -189,13 +189,14 @@ const cdnModuleUrl = (specifier: string, provider: CdnProvider): string => {
 export const loadLiteRichEditorAdapter = (): Promise<RichEditorAdapter> => {
   const element = document.getElementById('taco-asset-rich-adapter')
   const encoded = element?.textContent?.trim()
-  if (!encoded) return Promise.reject(new Error('The Lite rich editor asset is missing'))
+  const sharedUrl = (document.getElementById('taco-rt-shared') as (HTMLElement & { tacoSharedModuleUrl?: string }) | null)?.tacoSharedModuleUrl
+  if (!encoded || !sharedUrl) return Promise.reject(new Error('The Lite rich editor asset is missing'))
   return loadWithHedging(async (provider) => {
     const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0))
     const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
     const source = await new Response(stream).text()
     const rewritten = source.replace(/\b(from\s*|import\s*)["']([^"']+)["']/g, (_match, prefix: string, specifier: string) => {
-      return `${prefix}"${cdnModuleUrl(specifier, provider)}"`
+      return `${prefix}"${specifier === './taco-shared.js' ? sharedUrl : cdnModuleUrl(specifier, provider)}"`
     })
     const url = URL.createObjectURL(new Blob([rewritten], { type: 'text/javascript' }))
     try {

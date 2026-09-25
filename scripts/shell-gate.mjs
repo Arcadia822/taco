@@ -58,12 +58,14 @@ const inflate = (id, type = 'taco/deflate-b64') => {
 
 const css = inflate('taco-rt-css')
 const javascript = inflate('taco-rt')
+const shared = variant === 'lite' ? inflate('taco-rt-shared') : ''
+const runtime = javascript + shared
 if (!css.trim()) fail('inflated CSS is empty')
-if (!javascript.trim()) fail('inflated JavaScript is empty')
+if (!javascript.trim() || (variant === 'lite' && !shared.trim())) fail('inflated JavaScript is empty')
 if (css.includes('@font-face') || /data:font\//.test(css)) fail('runtime contains a bundled font')
-if (!javascript.includes('collab-secrets-present')) fail('runtime is missing collaboration-secret detection')
+if (!runtime.includes('collab-secrets-present')) fail('runtime is missing collaboration-secret detection')
 for (const member of ['securityVersion', 'validate', 'listFiles', 'readFile', 'search']) {
-  if (!javascript.includes(member)) fail(`runtime is missing bounded Agent API member: ${member}`)
+  if (!runtime.includes(member)) fail(`runtime is missing bounded Agent API member: ${member}`)
 }
 if (!/\.setAttribute\(["']data-taco-transient["'],\s*["']["']\)/.test(html)) fail('runtime style is not marked transient')
 
@@ -72,12 +74,14 @@ if (variant === 'complete') {
 } else if (variant === 'lite') {
   if (!html.includes('id="taco-asset-rich-adapter"')) fail('Lite shell is missing embedded #taco-asset-rich-adapter')
   if (!html.includes('type="importmap"')) fail('Lite shell is missing importmap')
+  if (!javascript.includes('./taco-shared.js')) fail('Lite runtime is missing its shared import')
   const adapterCode = inflate('taco-asset-rich-adapter', 'application/taco\\+base64')
+  if (!adapterCode.includes('./taco-shared.js')) fail('Lite adapter is missing its shared import')
   if (!adapterCode.trim()) fail('Lite rich-adapter asset is empty')
   if (!adapterCode.includes('TiptapRichEditorAdapter')) {
     fail('Lite rich-adapter asset is missing TiptapRichEditorAdapter export')
   }
-  if (javascript.includes('TiptapBlockIdentity') || javascript.includes('createTacoEditorExtensions')) {
+  if (runtime.includes('TiptapBlockIdentity') || runtime.includes('createTacoEditorExtensions')) {
     fail('Lite shell must not bundle the npm rich editor graph')
   }
   const emptyReplacement = JSON.stringify({ format: 'taco/files', version: 1, docId: 'gate', title: 'Gate', root: 'specs/gate', files: [] })
@@ -92,4 +96,4 @@ const replacement = JSON.stringify({ format: 'taco/files', version: 1, docId: 'g
 const spliced = html.replace(documentBlocks[0][0], `<script type="application/taco+json" id="taco-document">${replacement}${close}`)
 if (!spliced.includes(replacement)) fail('document block cannot be replaced safely')
 
-console.log(`shell gate passed: [${variant}] ${Math.round(Buffer.byteLength(html) / 1024)}KB, runtime ${Math.round((Buffer.byteLength(css) + Buffer.byteLength(javascript)) / 1024)}KB inflated`)
+console.log(`shell gate passed: [${variant}] ${Math.round(Buffer.byteLength(html) / 1024)}KB, runtime ${Math.round((Buffer.byteLength(css) + Buffer.byteLength(runtime)) / 1024)}KB inflated`)
