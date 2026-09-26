@@ -23,6 +23,12 @@ const DATA_BLOCK = /<script\b(?=[^>]*\bid=["']taco-document["'])[^>]*>[\s\S]*?<\
 const DATA_CONTENT = /(<script\b(?=[^>]*\bid=["']taco-document["'])[^>]*>)([\s\S]*?)(<\/script>)/i
 const here = dirname(fileURLToPath(import.meta.url))
 const defaultShell = resolve(here, '../assets/taco-shell.html')
+const defaultLiteShell = resolve(here, '../assets/taco-shell-lite.html')
+
+const shellVariant = (html) => {
+  const match = html.match(/<meta\b(?=[^>]*\bname=["']taco-shell-variant["'])[^>]*>/i)?.[0]
+  return match?.match(/\bcontent=["'](complete|lite)["']/i)?.[1] ?? null
+}
 const defaultSpecTemplate = resolve(here, '../templates/spec-template.md')
 const LEGACY_SPEC_TEMPLATE_HEADER =
   /^# Feature Specification: \[FEATURE NAME\]\r?\n\r?\n\*\*Feature Branch\*\*: `\[###-feature-name\]`\r?\n\r?\n\*\*Created\*\*: \[DATE\]\r?\n\r?\n\*\*Status\*\*: Draft\r?\n\r?\n\*\*Input\*\*: User description: "\$ARGUMENTS"\r?\n\r?\n/
@@ -34,7 +40,7 @@ Usage:
   taco prepare-policy [--project-root <dir>] [--dry-run] [--json]
   taco pack <feature-directory> [--output <file>] [--project-root <dir>]
             [--title <title>] [--from <existing.taco.html>] [--shell <file>]
-            [--ignore <relative-path-or-glob>]... [--json]
+            [--lite | --complete] [--ignore <relative-path-or-glob>]... [--json]
   taco sync <file.taco.html> [--project-root <dir>] [--dry-run] [--force] [--json]
   taco comments <file.taco.html> [--status open|resolved|all] [--json]
   taco validate <file.taco.html> [--json]
@@ -158,7 +164,7 @@ const parseOptions = (argv) => {
       positional.push(token)
       continue
     }
-    if (['--json', '--dry-run', '--force', '--help'].includes(token)) {
+    if (['--json', '--dry-run', '--force', '--help', '--lite', '--complete'].includes(token)) {
       flags.add(token.slice(2))
       continue
     }
@@ -417,9 +423,17 @@ export const pack = async ({
   output,
   title,
   from,
-  shell = defaultShell,
+  shell,
+  lite = false,
+  complete = false,
   ignore = [],
 }) => {
+  if (lite && complete) {
+    throw new Error('Conflicting variant flags: specify either --lite or --complete, not both')
+  }
+  if ((lite || complete) && shell) {
+    throw new Error('Conflicting options: custom --shell cannot be combined with --lite or --complete')
+  }
   const rootDirectory = await realpath(resolve(projectRoot))
   const featureDir = await realpath(resolve(featureDirectory))
   if (!isWithin(rootDirectory, featureDir) || featureDir === rootDirectory) {
@@ -439,6 +453,40 @@ export const pack = async ({
   const outputExists = await pathExists(outputPath)
   if (outputExists && (await lstat(outputPath)).isSymbolicLink()) {
     throw new Error(`Refusing to write Taco through a symbolic link: ${outputPath}`)
+  }
+
+  let existingVariant = null
+  if (outputExists) {
+    const existingHtml = await readFile(outputPath, 'utf8')
+    existingVariant = shellVariant(existingHtml) || 'complete'
+  }
+
+  let targetVariant
+  if (lite) {
+    targetVariant = 'lite'
+  } else if (complete) {
+    targetVariant = 'complete'
+  } else if (existingVariant) {
+    // Refresh preserves existing variant (unmarked legacy = Complete) unless explicitly overridden
+    targetVariant = existingVariant
+  } else {
+    // New-pack default Complete
+    targetVariant = 'complete'
+  }
+
+  let shellPath
+  if (shell) {
+    shellPath = resolve(shell)
+    const customShellHtml = await readFile(shellPath, 'utf8')
+    const customShellVariant = shellVariant(customShellHtml) || 'complete'
+    if (outputExists && !lite && !complete && customShellVariant !== existingVariant) {
+      throw new Error(
+        `Custom --shell variant (${customShellVariant}) conflicts with existing Taco variant (${existingVariant})`,
+      )
+    }
+    targetVariant = customShellVariant
+  } else {
+    shellPath = targetVariant === 'lite' ? defaultLiteShell : defaultShell
   }
   const fromPath = from ? resolve(from) : outputExists ? outputPath : null
   if (fromPath) {
@@ -502,13 +550,17 @@ export const pack = async ({
   // `--from` supplies the previous canonical bundle, not the runtime shell.
   // Always render that bundle into the requested (latest by default) shell so
   // refreshing a Taco also upgrades bug fixes in its embedded application.
-  const shellPath = resolve(shell)
   const shellHtml = await readFile(shellPath, 'utf8')
+  const actualVariant = shellVariant(shellHtml) || 'complete'
+  if (!shell && actualVariant !== targetVariant) {
+    throw new Error(`Resolved shell ${shellPath} has variant ${actualVariant}, but expected ${targetVariant}`)
+  }
   await mkdir(dirname(outputPath), { recursive: true })
   await writeFile(outputPath, embedBundle(shellHtml, bundle), 'utf8')
   return {
     command: 'pack',
     output: outputPath,
+    variant: targetVariant,
     root: rootPath,
     files: files.length,
     ignored: [...defaultIgnored, ...explicitIgnored.map(({ path }) => path)],
@@ -1079,6 +1131,8 @@ const main = async () => {
       title: parsed.option('title'),
       from: parsed.option('from'),
       shell: parsed.option('shell'),
+      lite: parsed.flag('lite'),
+      complete: parsed.flag('complete'),
       ignore: parsed.options('ignore'),
     })
     printResult(result, parsed.flag('json'))

@@ -185,8 +185,8 @@ export const blockHtml = (blocks: TacoBlock[] | undefined): string =>
       }
     }
     const html = container.innerHTML
-    // Older Taco files stored standalone images as top-level blocks. Keep their
-    // collaboration identity on the paragraph required by the inline schema.
+    // Older Taco files stored standalone images as top-level blocks. Keep the
+    // stable block ID for comments on the paragraph required by the inline schema.
     if (block.type !== 'image') return html
     const paragraph = document.createElement('p')
     paragraph.setAttribute('data-taco-block-id', block.id)
@@ -194,11 +194,7 @@ export const blockHtml = (blocks: TacoBlock[] | undefined): string =>
     return paragraph.outerHTML
   }).join('')
 
-/**
- * Upgrade legacy Markdown before a collaboration session adopts the bundle.
- * Doing this lazily after peers connect makes identical deterministic blocks
- * look like concurrent insert operations, which can duplicate their IDs.
- */
+/** Upgrade legacy Markdown blocks before mounting the rich editor. */
 export interface TacoBlockMigrationFailure {
   path: string
   message: string

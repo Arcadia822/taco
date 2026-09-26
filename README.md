@@ -14,7 +14,7 @@
 
 Taco turns a specification directory into a portable review workspace. A human can open one `.taco.html` file in a browser, read the complete spec, edit the original Markdown, and leave anchored comments. An agent can then import those edits and comments back into the canonical files, handle the feedback, and produce the next review copy.
 
-The file is the handoff. It carries the spec, its directory structure, the reader, the editor, comments, and optional collaboration state. The recipient needs a browser—not a Taco account, hosted workspace, or proprietary requirements database.
+The file is the handoff. It carries the spec, its directory structure, the reader, the editor, and comments. The recipient needs a browser—not a Taco account, hosted workspace, or proprietary requirements database.
 
 Taco is built with gratitude to [Bento](https://github.com/nyblnet/bento), the office suite that fits in a file. Bento showed that a complete creative workspace could travel as one portable document; Taco carries that idea into specification review.
 
@@ -76,9 +76,10 @@ The project is licensed under the MIT License. You can study the implementation,
 ## Current capabilities
 
 - Package a complete specification directory into one portable `.taco.html` file that opens in a browser and works offline.
-- Browse, search, and edit the canonical Markdown and text files while preserving their real directory structure.
+- Browse, search, and edit the canonical Markdown and text files while preserving their real directory structure. Standalone JSON/YAML have syntax-highlighted source editors; Mermaid diagrams have an editable source and preview.
 - Review specs with anchored comment threads, including in-place editing of your own messages and tombstone deletion of individual messages without removing their replies; then save an updated Taco or write the changes back to the original directory.
-- Collaborate in real time on the same machine or across devices with encrypted sharing, editor and reader copies, and access controls.
+- Track document readiness with optional Checkpoints. Renaming or deleting a required file leaves its original Checkpoint path visible as uncreated rather than silently rewriting the requirement.
+- Choose the self-contained Complete shell for offline review or the smaller Lite shell for connected review, with editable Markdown source fallback when Lite's CDN editor is unavailable.
 - Integrate with Spec Kit, optionally and on explicit request, to keep each feature's Taco current and safely import human edits and comments with conflict detection.
 
 ## Agent installation
@@ -114,14 +115,13 @@ After each successful update, the Agent presents the exact generated Taco as a n
 ## Project structure
 
 ```text
-src/                                  Browser, editor, comments, save, and collaboration runtime
+src/                                  Browser, editor, comments, and save runtime
 skills/taco/                          Installable Taco skill: guide, shell, routed references, script, and examples
 extensions/taco/                      Optional Spec Kit manifest, agent commands, offline CLI, and project policy
 examples/checkpoint-scroll/           Standalone dense Checkpoint demo; not a shipped template
-tests/                                Data model, rendering, interaction, collaboration, and CLI round-trip tests
+tests/                                Data model, rendering, interaction, and CLI round-trip tests
 specs/001-taco-bento-product/         Default Taco content and product specification
 specs/002-taco-speckit-plugin/        Installable Spec Kit plugin specification and acceptance flow
-server/sync-worker/                    Optional end-to-end encrypted collaboration relay
 docs/agent-installation.md            Agent installation and review workflow
 AGENTS.md                             Instructions for Agents contributing in this repository
 CONTRIBUTING.md                       Contributor development and validation guide
@@ -139,11 +139,11 @@ Classification is a Taco capability rather than a document property: no frontmat
 ## Design principles
 
 1. **Files first:** File content is the only source of truth.
-2. **Portable by default:** Core reading, editing, and saving must work offline.
+2. **Portable by default:** Complete works offline; Lite keeps source editing available when network libraries fail.
 3. **Derived UI:** Stages, directories, the outline, and the search index must not become a second persistent state.
 4. **Graceful degradation:** Unknown formats show their source without guessed business semantics.
 5. **No invisible rewrite:** Rendered output must never reformat or replace canonical Markdown.
-6. **Honest scope:** Same-machine collaboration requires no service. Cross-device collaboration requires an explicitly configured relay. Roles are enforced by file-held cryptographic capabilities; self-declared display names are not presented as account identities.
+6. **Honest scope:** Taco files provide local review and handoff, not real-time cross-device collaboration.
 
 ## Contributing
 
@@ -153,11 +153,11 @@ Issues and pull requests are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) f
 npm run check
 ```
 
-Useful contribution areas include accessibility, editing, more offline text renderers, cross-browser verification, performance, import and export, relay operations, and protocol audits. Enterprise accounts and SSO identities remain a separate boundary; a self-declared display name must not be presented as verified identity.
+Useful contribution areas include accessibility, editing, offline text renderers, cross-browser verification, performance, import and export, and protocol audits.
 
 ## Project status
 
-Taco is currently a v0.3 prototype. File browsing, Markdown editing, YAML frontmatter properties, generic source editing, JSON syntax highlighting, Mermaid, comments, single-file saving, same-origin collaboration, and optional cross-device encrypted relay collaboration are implemented. Standalone structured YAML/JSON editing, version history, accounts, and SSO are not.
+Taco is currently a prototype. File browsing, Markdown editing, YAML frontmatter properties, standalone YAML/JSON source editing with syntax highlighting, Mermaid diagrams, Categories, Checkpoints, comments, and single-file saving are implemented. When the initial file is a Mermaid diagram, the startup splash remains visible until its first preview renders or reports an error. The Complete shell supports offline review; Lite loads pinned editor libraries from public CDNs and keeps Markdown source writable when they fail. Real-time collaboration, version history, accounts, and SSO are not implemented.
 
 Taco v0.3 is a testable prototype, not a production-stability commitment.
 

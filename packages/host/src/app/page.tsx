@@ -148,8 +148,8 @@ const I18N = {
     section1Title: '一个文件，带齐所有东西',
     section1Desc: '一个 .taco.html 就是完整的交接件：文档、阅读应用和评论线程一起入库或发送。审阅者双击即可阅读、编辑、划词评论；保存后，下一位审阅者或 Agent 接手的仍是同一份上下文。本地评审无需安装或登录。',
     sectionCpEyebrow: '03 / 阶段进度',
-    sectionCpTitle: 'Checkpoints：文档状态与依赖图',
-    sectionCpDesc: '为项目定义文档依赖关系，查看每个阶段的进度和下一步建议。状态随 Taco 文件一起交接，方便人与 Agent 对齐工作；它不会锁定内容或阻止跨阶段编辑。',
+    sectionCpTitle: '检查点：文档状态与依赖图',
+    sectionCpDesc: '为项目定义文档依赖关系，查看每个阶段的进度和下一步建议。状态随 Taco 文件一起交接；重命名或删除必需文件后，原要求会显示为未创建。检查点不会锁定内容或阻止跨阶段编辑。',
     sectionCpPoints: [
       ['依赖图 (DAG)', '定义规范到任务的串并行阶段依赖，支持多分支与汇合'],
       ['4 级生命周期', 'todo、in_progress、complete 与 freeze 状态追踪'],
@@ -161,21 +161,24 @@ const I18N = {
     sectionCpStage1: '01 规范定义',
     sectionCpStage2: '02 架构与模型',
     sectionCpStage3: '03 接口契约',
-    section1FileSize: '约 719 KB',
+    section1FileSize: 'Lite 示例',
+    section1BreakdownTitle: 'Lite shell + 当前示例内容',
     section1Tree: [
-      ['应用', '编辑器、渲染器、样式与运行时全内联'],
-      ['文件', '4 个文件：spec、data-model、流程图、OpenAPI'],
-      ['评论', '跨文件评审意见与状态'],
-      ['导航', '分类与入口映射清单'],
+      ['应用', '约 178 KB'],
+      ['文件', '约 8.1 KB'],
+      ['评论', '约 3.3 KB'],
+      ['导航', '约 0.5 KB'],
     ],
-    section1Online: '可选依赖（需联网）',
-    section1OnlineItems: ['Mermaid 渲染库：打开图表时从 jsDelivr 加载，离线时显示源码', '实时协作中继：可选'],
+    section1ShellSizeTitle: 'Shell 大小（不含文档）',
+    section1ShellSizes: ['Lite：约 180 KB', 'Complete：约 2.7 MB（内嵌 Tiptap、highlight.js/lowlight、Mermaid 渲染库及样式）'],
+    section1Online: '联网依赖',
+    section1OnlineItems: ['Lite：所需编辑器、语法高亮和 Mermaid 库在启动时从公共 CDN 加载；Complete 无需联网'],
     section2Eyebrow: '02 / 评审交接',
     section2Title: '评审直接在文档里做，Agent 接着就改',
     section2Lead: '打开 Taco，你可以：',
     section2Points: [
       '划词评论，讨论就挂在原文旁边',
-      '直接修改：Markdown 所见即所得，YAML 和 Mermaid 改源码、实时预览',
+      '直接修改：Markdown 所见即所得，JSON/YAML 编辑高亮源码，Mermaid 编辑源码并预览图表',
       '回复、解决评论线程',
       '点「交接改动」，把改动和评论整理成一段话交给 Agent',
     ],
@@ -258,7 +261,7 @@ const I18N = {
     section1Desc: 'One .taco.html is the whole handoff: docs, the reader app and review threads travel together in your repo or as a shared file. Reviewers double-click to read, edit and comment in context; once saved, the next reviewer or agent gets that same context. No install or account for local review.',
     sectionCpEyebrow: '03 / DOCUMENT PROGRESS',
     sectionCpTitle: 'Checkpoints: Document Status & Dependencies',
-    sectionCpDesc: 'Define document dependencies for a project and see each stage’s progress and suggested next steps. Status travels with the Taco file so people and agents can coordinate; it does not lock content or block out-of-order edits.',
+    sectionCpDesc: 'Define document dependencies and see stage progress and suggested next steps. A renamed or deleted required file remains visible as uncreated. Status travels with the Taco file; checkpoints do not lock content or block out-of-order edits.',
     sectionCpPoints: [
       ['DAG Stages', 'Define serial and parallel dependencies from spec to tasks with fan-in'],
       ['4-State Lifecycle', 'Track documents through todo, in_progress, complete, and freeze'],
@@ -270,21 +273,24 @@ const I18N = {
     sectionCpStage1: '01 Specification',
     sectionCpStage2: '02 Architecture & Model',
     sectionCpStage3: '03 API Contract',
-    section1FileSize: 'about 719 KB',
+    section1FileSize: 'Lite example',
+    section1BreakdownTitle: 'LITE SHELL + CURRENT DEMO CONTENT',
     section1Tree: [
-      ['App', 'inlined editor, renderers, styling and runtime'],
-      ['Files', '4 files: spec, data model, flowchart, OpenAPI'],
-      ['Comments', 'cross-file review threads and status'],
-      ['Navigation', 'categories and entry manifest'],
+      ['App', 'about 178 KB'],
+      ['Files', 'about 8.8 KB'],
+      ['Comments', 'about 3.4 KB'],
+      ['Navigation', 'about 0.5 KB'],
     ],
-    section1Online: 'OPTIONAL DEPENDENCIES',
-    section1OnlineItems: ['Mermaid renderer — loaded from jsDelivr when a diagram opens; offline shows the source', 'Live collaboration relay — optional'],
+    section1ShellSizeTitle: 'SHELL SIZE (EXCLUDES DOCUMENTS)',
+    section1ShellSizes: ['Lite: about 180 KB', 'Complete: about 2.7 MB (bundles Tiptap, highlight.js/lowlight, the Mermaid renderer, and styles)'],
+    section1Online: 'NETWORK DEPENDENCIES',
+    section1OnlineItems: ['Lite: required editor, syntax-highlighter and Mermaid libraries load from public CDNs at startup; Complete needs no network'],
     section2Eyebrow: '02 / Review handoff',
     section2Title: 'Review right in the doc. Your agent takes it from there.',
     section2Lead: 'In Taco you can:',
     section2Points: [
       'Select text to comment — the discussion stays next to the source',
-      'Edit in place: WYSIWYG Markdown, live-previewed YAML and Mermaid',
+      'Edit in place: WYSIWYG Markdown, syntax-highlighted JSON/YAML source and Mermaid diagram preview',
       'Reply to and resolve threads',
       'Hit Handoff to pack every edit and comment into one message for your agent',
     ],
@@ -1014,6 +1020,7 @@ export default function HomePage() {
               </div>
 
               <div className="bundle-card__tree">
+                <div className="bundle-card__online-title">{t.section1BreakdownTitle}</div>
                 {t.section1Tree.map(([key, value], index) => (
                   <div key={key} className="bundle-card__row">
                     <span className="bundle-card__branch">{index === t.section1Tree.length - 1 ? '└──' : '├──'}</span>
@@ -1021,6 +1028,11 @@ export default function HomePage() {
                     <span className="bundle-card__value">{value}</span>
                   </div>
                 ))}
+              </div>
+
+              <div className="bundle-card__online">
+                <div className="bundle-card__online-title">{t.section1ShellSizeTitle}</div>
+                {t.section1ShellSizes.map((item) => <div key={item}>· {item}</div>)}
               </div>
 
               <div className="bundle-card__online">

@@ -10,12 +10,11 @@ import {
   type TacoFile,
 } from './model.ts'
 import { resolveCheckpoints, setDocumentStatus, type DocumentStatus } from '@taco/protocol'
-import { Editor } from '@tiptap/core'
 import { canSaveAndUnpack, canWriteInPlace, saveAndUnpack, saveCopy, saveFile, type SaveResult } from './kernel/save.ts'
-import { blockHtml, blocksFromEditor, createTacoEditorExtensions, ensureTacoBlockIds, migrateTacoBundleBlocks } from './tiptap-editor.ts'
+import { getDefaultRichEditorAdapter, type RichEditorAdapter, type RichEditorHandle } from './rich-editor.ts'
+import type { SourceHighlighter } from './source-editor.ts'
 import { TacoStore } from './store.ts'
-import { TacoSyncSession } from './sync/session.ts'
-import { displayAuthorName } from './identity.ts'
+
 import { storageGet, storageSet } from './kernel/storage.ts'
 import {
   filePathFromHash,
@@ -25,7 +24,7 @@ import {
   usesUrlHashForFileSelection,
 } from './file-selection.ts'
 import { createBrandMarkContainer } from './brand.ts'
-import { createSourceEditor, type SourceEditorController } from './source-editor.ts'
+import { createSourceEditor, setDefaultHighlighter, type SourceEditorController } from './source-editor.ts'
 import { FileNavigation } from './file-navigation.ts'
 import { getAvailableGroups, getFileCurrentGroup, openGroupSelectorPopover } from './group-selector.ts'
 import { assignFileToGroup, createInitialManifest } from './navigation-editor.ts'
@@ -44,17 +43,16 @@ import {
 import { BundleDirtyTracker } from './dirty-tracker.ts'
 import type { MermaidRuntime } from './mermaid.ts'
 import { CommentsController } from './comments-controller.ts'
-import { joinFromDoc } from './sync/online.ts'
+
 import { LOCALE_CHOICES, copy, resolveLocale, type Locale } from './i18n.ts'
 import { createUnifiedDiff } from './kernel/diff.ts'
-import { MarkdownBlockReconstructor } from './markdown-block-reconstructor.ts'
+
 import { OutlineController } from './outline-controller.ts'
-import { PresenceController } from './presence-controller.ts'
-import { ShareController } from './share-controller.ts'
-import { openPngPreview, resolveEmbeddedMarkdownAssets } from './markdown-assets.ts'
+
+import { openPngPreview } from './markdown-assets.ts'
 import { hasCollabSecrets } from './security.ts'
 import { frontmatterTitle, parseFrontmatter } from './frontmatter.ts'
-import { setEditorFrontmatterProperty } from './tiptap-document-properties.ts'
+
 import { resolveFileCategory } from './category.ts'
 import { commentLineReference } from './comment-position.ts'
 import { createStructuredFileViewer, structuredFileLabels } from './structured-file-viewer.ts'
@@ -65,6 +63,8 @@ import { checkpointCopy } from './i18n.ts'
 type AuxiliaryTab = 'outline' | 'comments'
 
 export interface FileBrowserOptions {
+  richEditorAdapter?: RichEditorAdapter | Promise<RichEditorAdapter> | (() => Promise<RichEditorAdapter>)
+  highlighter?: SourceHighlighter | Promise<SourceHighlighter>
   mermaidRuntime?: MermaidRuntime
 }
 
@@ -111,17 +111,25 @@ export class FileBrowser {
   private checkpointTemplateInput!: HTMLInputElement
   private workspacePath!: HTMLElement
   private readonly markdownMigrationErrors = new Map<string, string>()
-  private markdownEditor: Editor | null = null
-  private readonly markdownReconstructor = new MarkdownBlockReconstructor()
+  private richEditorAdapter: RichEditorAdapter | null = null
+  private richEditorLoading = false
+  private richEditor: RichEditorHandle | null = null
+  private awaitingRichEditor: { path: string; content: string; serial: number } | null = null
+  private richEditorFailure: string | null = null
+  private highlighter: SourceHighlighter | undefined
+  readonly initialPreviewReady: Promise<void>
+  private initialPreviewPath: string | null = null
+  private resolveInitialPreview: (() => void) | null = null
+
+  get markdownEditor(): unknown {
+    return this.richEditor?.rawEditor ?? null
+  }
   private sourceEditor: SourceEditorController | null = null
   private editorMountSerial = 0
   private locale: Locale
   private readonly store: TacoStore
-  private readonly sync: TacoSyncSession
   private readonly comments: CommentsController
   private readonly outline: OutlineController
-  private readonly presence: PresenceController
-  private readonly share: ShareController
   private copyFeedbackTimer: number | null = null
   private readonly dirtyTracker: BundleDirtyTracker
   private readonly cleanups: Array<() => void> = []
@@ -130,12 +138,12 @@ export class FileBrowser {
   private copyReviewGroup!: HTMLElement
   private readonly systemAppearance = window.matchMedia('(prefers-color-scheme: dark)')
   private themePreference: 'system' | 'light' | 'dark' = 'system'
-  /** Embedded in a host page (`?embed`): the host owns theme, language and sharing; comments lead. */
+  /** Embedded in a host page (`?embed`): the host owns theme and language; comments lead. */
   private readonly embedded = new URLSearchParams(location.search).has('embed')
   private readonly handleSystemAppearanceChange = (): void => {
     if (this.themePreference === 'system') this.applyAppearance()
   }
-  private applyingRemoteEditor = false
+
   private sidebarClosed: boolean
   private commentPanelOpen: boolean
   private desktopCommentPanelOpen: boolean
@@ -151,7 +159,7 @@ export class FileBrowser {
     else this.rememberOfflineSelection(file)
   }
   private readonly handleDocumentKeyDown = (event: KeyboardEvent): void => this.onKey(event)
-  private readonly handleWindowResize = (): void => this.presence.paintRemoteCursors()
+
   private readonly handleNarrowLayoutChange = (event: MediaQueryListEvent): void => {
     this.root.classList.add('panel-motion-disabled')
     this.sidebarClosed = event.matches
@@ -223,8 +231,45 @@ export class FileBrowser {
     const savedTheme = (this.embedded ? hostParams.get('theme') : null) ?? storageGet('taco-theme')
     this.themePreference = savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'system'
     this.applyAppearance()
-    for (const failure of migrateTacoBundleBlocks(bundle, this.mermaidLabels())) {
-      this.markdownMigrationErrors.set(failure.path, failure.message)
+    const highlighter = options.highlighter
+    if (highlighter && typeof (highlighter as Promise<SourceHighlighter>).then === 'function') {
+      void (highlighter as Promise<SourceHighlighter>).then((ready) => {
+        this.highlighter = ready
+        setDefaultHighlighter(ready)
+        this.sourceEditor?.refreshHighlight()
+      }).catch(() => {
+        // Source editing is available without syntax highlighting.
+      })
+    } else {
+      this.highlighter = highlighter as SourceHighlighter | undefined
+      if (this.highlighter) setDefaultHighlighter(this.highlighter)
+    }
+    const adapterOption = options.richEditorAdapter ?? getDefaultRichEditorAdapter()
+    const adapterPromise = typeof adapterOption === 'function' ? adapterOption() : adapterOption
+    if (adapterPromise && typeof (adapterPromise as Promise<RichEditorAdapter>).then === 'function') {
+      this.richEditorLoading = true
+      void (adapterPromise as Promise<RichEditorAdapter>).then((adapter) => {
+        this.richEditorLoading = false
+        this.richEditorAdapter = adapter
+        for (const failure of adapter.migrateBundleBlocks(this.bundle, this.mermaidLabels())) {
+          this.markdownMigrationErrors.set(failure.path, failure.message)
+        }
+        this.promoteAwaitingMarkdown()
+      }).catch((error: unknown) => {
+        this.richEditorLoading = false
+        this.richEditorFailure = error instanceof Error ? error.message : String(error)
+        const waiting = this.awaitingRichEditor
+        this.awaitingRichEditor = null
+        if (waiting && this.selected?.path === waiting.path && this.editorMountSerial === waiting.serial) {
+          this.viewer.removeAttribute('aria-busy')
+          this.mountMarkdownFallback(this.viewer, this.selected, this.richEditorFailure)
+        }
+      })
+    } else if (adapterOption) {
+      this.richEditorAdapter = adapterOption as RichEditorAdapter
+      for (const failure of this.richEditorAdapter.migrateBundleBlocks(bundle, this.mermaidLabels())) {
+        this.markdownMigrationErrors.set(failure.path, failure.message)
+      }
     }
     this.dirtyTracker = new BundleDirtyTracker(bundle)
     this.narrowLayout = matchMedia('(max-width: 820px)')
@@ -234,13 +279,15 @@ export class FileBrowser {
     const selectionKey = fileSelectionSessionKey(bundle.docId)
     const initialPath = selectedPathForLoad(location.protocol, location.hash, storageGet(selectionKey, 'session'))
     this.selected = fileByPath(bundle, initialPath) ?? defaultFile(bundle)
+    if (this.selected && fileKind(this.selected) === 'mermaid') this.initialPreviewPath = this.selected.path
+    this.initialPreviewReady = this.initialPreviewPath
+      ? new Promise<void>((resolve) => { this.resolveInitialPreview = resolve })
+      : Promise.resolve()
     if (this.selected) this.rememberOfflineSelection(this.selected)
     this.auxiliaryTab = this.embedded || !this.selected || fileKind(this.selected) !== 'markdown' ? 'comments' : 'outline'
-    this.sync = new TacoSyncSession(this.store)
     this.comments = new CommentsController({
       bundle: this.bundle,
       store: this.store,
-      sync: this.sync,
       getSelected: () => this.selected,
       getViewer: () => this.viewer,
       getSourceEditor: () => this.sourceEditor,
@@ -255,41 +302,11 @@ export class FileBrowser {
       onSelectHeading: (file, headingId) => this.updateSelectionLocation(file, true, headingId),
       onVisibilityChange: () => this.syncAuxiliaryTabs(),
     })
-    this.presence = new PresenceController({
-      sync: this.sync,
-      getEditor: () => this.markdownEditor,
-      getSelected: () => this.selected,
-      getViewer: () => this.viewer,
-      getLabels: () => this.t,
-    })
-    this.share = new ShareController({
-      bundle: this.bundle,
-      store: this.store,
-      sync: this.sync,
-      getLocale: () => this.locale,
-      openPopover: (anchor, className) => this.openPopover(anchor, className),
-      menuButton: (label, action, options) => this.menuButton(label, action, options),
-      selectFile: (file) => this.selectFile(file),
-      paintPresence: () => this.presence.paint(),
-      confirmDownload: (credentialBearing) => this.confirmDownloadFallback(credentialBearing),
-      reportExport: (result) => this.reportExport(result),
-      toast: (message) => this.toast(message),
-    })
-    this.sync.setPresence({ name: displayAuthorName(), fileId: this.selected?.id ?? '' })
-    this.cleanups.push(this.sync.onPeers(() => {
-      this.presence.paint()
-      this.presence.paintRemoteCursors()
-      this.share.refresh()
-    }))
-    this.cleanups.push(this.sync.onRemote(() => this.applyRemoteState()))
     this.cleanups.push(this.store.onChange(({ change }) => {
       this.dirtyTracker.note(change)
       if (this.saveButton) this.syncDirtyState()
     }))
-    if (this.bundle.collab?.room && this.bundle.collab.on !== false && resolveCheckpoints(this.bundle).valid) {
-      this.sync.enable()
-      this.share.wireOnlineStatus(joinFromDoc(this.sync, this.store))
-    }
+
     this.build()
     window.addEventListener('hashchange', this.handleHashChange)
     this.dirtyTracker.markSaved()
@@ -298,27 +315,27 @@ export class FileBrowser {
     this.captureCheckpointBaseline()
     this.syncDirtyState()
     document.addEventListener('keydown', this.handleDocumentKeyDown)
-    window.addEventListener('resize', this.handleWindowResize)
+
     this.narrowLayout.addEventListener('change', this.handleNarrowLayoutChange)
     this.systemAppearance.addEventListener('change', this.handleSystemAppearanceChange)
   }
 
   destroy(): void {
+    this.finishInitialPreview()
     window.removeEventListener('hashchange', this.handleHashChange)
     document.removeEventListener('keydown', this.handleDocumentKeyDown)
-    window.removeEventListener('resize', this.handleWindowResize)
+
     this.narrowLayout.removeEventListener('change', this.handleNarrowLayoutChange)
     this.systemAppearance.removeEventListener('change', this.handleSystemAppearanceChange)
     for (const cleanup of this.cleanups.splice(0)) cleanup()
-    this.sync.close()
-    this.markdownEditor?.destroy()
-    this.markdownEditor = null
+    this.richEditor?.destroy()
+    this.richEditor = null
+    this.awaitingRichEditor = null
     this.outline.destroy()
     this.fileNavigation?.destroy()
     this.fileNavigation = null
     this.comments.destroy()
-    this.presence.destroy()
-    this.share.destroy()
+
     this.root.replaceChildren()
     this.root.className = ''
   }
@@ -327,8 +344,9 @@ export class FileBrowser {
     if (this.fileNavigation) this.sidebarScrollTop = this.fileNavigation.getScrollTop()
     this.fileNavigation?.destroy()
     this.fileNavigation = null
-    this.markdownEditor?.destroy()
-    this.markdownEditor = null
+    this.richEditor?.destroy()
+    this.richEditor = null
+    this.awaitingRichEditor = null
     this.root.innerHTML = ''
     this.root.className = 'taco-shell panel-motion-disabled'
     this.root.classList.toggle('sidebar-closed', this.sidebarClosed)
@@ -355,6 +373,7 @@ export class FileBrowser {
         addFile: this.t.addFile,
         renameFile: this.t.renameFile,
         deleteFile: this.t.deleteFile,
+        actions: this.t.actions,
         setEntry: this.t.setEntry,
         entryBadge: this.t.entryBadge,
         newGroupPrompt: this.t.newGroupPrompt,
@@ -439,10 +458,7 @@ export class FileBrowser {
     this.workspacePath = el('div', 'workspace-path', this.selected ? relativePath(this.bundle, this.selected) : '')
     this.syncWorkspaceHeader()
     const workspaceHeaderSpacer = el('span', 'workspace-header-spacer')
-    const share = createControlButton('share', this.t.share, () => { if (!this.embedded) this.share.open(share) }, 'share-button')
-    this.share.mount(share)
-    const presenceStrip = el('div', 'presence-strip')
-    this.presence.mount(presenceStrip)
+
     this.copyButton = createControlButton('copy', this.t.copyReview, () => { void this.copyReviewFull() }, 'copy-review-main', false, false)
     this.copyButton.classList.remove('control-button-icon')
     this.copyButton.classList.add('control-button-with-label')
@@ -501,8 +517,7 @@ export class FileBrowser {
       this.categoryBadge,
       this.workspacePath,
       workspaceHeaderSpacer,
-      presenceStrip,
-      share,
+
       this.copyReviewGroup,
       saveGroup,
       theme,
@@ -514,14 +529,14 @@ export class FileBrowser {
     workspaceBody.addEventListener('transitionend', (event) => {
       if (event.target !== workspaceBody || event.propertyName !== 'grid-template-columns') return
       this.comments.refreshHighlights()
-      this.presence.paintRemoteCursors()
+
       this.outline.scheduleActive()
     })
     this.viewer = el('main', 'file-viewer')
     this.viewer.id = 'taco-main'
     this.viewer.addEventListener('click', (event) => this.comments.openHighlightedComment(event))
     this.viewer.addEventListener('scroll', () => {
-      this.presence.paintRemoteCursors()
+
       this.outline.scheduleActive()
     }, { passive: true })
     this.commentPanel = this.buildCommentPanel()
@@ -543,7 +558,7 @@ export class FileBrowser {
     this.syncPanelToggles()
     this.comments.paint()
     this.syncAuxiliaryTabs()
-    this.presence.paint()
+
     this.syncDirtyState()
   }
 
@@ -553,7 +568,7 @@ export class FileBrowser {
     this.root.classList.remove('is-checkpoint-view')
     this.selected = file
     this.auxiliaryTab = this.embedded || fileKind(file) !== 'markdown' ? 'comments' : 'outline'
-    this.sync.setPresence({ fileId: file.id ?? '', from: 0, to: 0, focused: false, hasCursor: false })
+
     this.comments.resetForFileChange()
     this.updateSelectionLocation(file, writeHash)
     this.syncWorkspaceHeader()
@@ -576,7 +591,7 @@ export class FileBrowser {
     this.root.classList.add('is-checkpoint-view')
     this.selected = null
     this.comments.resetForFileChange()
-    this.sync.setPresence({ fileId: '', from: 0, to: 0, focused: false, hasCursor: false })
+
     this.syncWorkspaceHeader()
     this.fileNavigation?.paint(null, true, null)
     this.paintViewer()
@@ -631,12 +646,23 @@ export class FileBrowser {
     history.replaceState(null, '', `#${encodeURIComponent(file.path)}${heading}`)
   }
 
+  private finishInitialPreview(): void {
+    this.resolveInitialPreview?.()
+    this.resolveInitialPreview = null
+    this.initialPreviewPath = null
+  }
+
   private paintViewer(animateEntrance = false): void {
     const mountSerial = ++this.editorMountSerial
-    this.markdownEditor?.destroy()
-    this.markdownEditor = null
+    if (this.initialPreviewPath && (this.checkpointView || this.selected?.path !== this.initialPreviewPath)) {
+      this.finishInitialPreview()
+    }
+    this.richEditor?.destroy()
+    this.richEditor = null
+    this.awaitingRichEditor = null
     this.sourceEditor = null
     this.viewer.innerHTML = ''
+    this.viewer.removeAttribute('aria-busy')
     if (this.checkpointView) {
       this.viewer.append(createCheckpointView(resolveCheckpoints(this.bundle), checkpointCopy(this.locale), {
         readOnly: !bundleCanWrite(this.bundle),
@@ -678,6 +704,9 @@ export class FileBrowser {
         labels: structuredFileLabels(this.locale),
         mermaidLabels: this.mermaidLabels(),
         mermaidRuntime: this.options.mermaidRuntime,
+        onPreviewSettled: file.path === this.initialPreviewPath ? () => {
+          if (this.editorMountSerial === mountSerial) this.finishInitialPreview()
+        } : undefined,
         readOnly: !bundleCanWrite(this.bundle),
         sourceLabel: this.t.sourceEditor(kind),
         onNodeComment: (source) => this.comments.captureSourceSelection(source, file, undefined, true),
@@ -765,19 +794,58 @@ export class FileBrowser {
   }
 
 
-  private mountMarkdownFallback(host: HTMLElement, file: TacoFile, message: string): void {
-    host.dataset.editorError = message
+  private promoteAwaitingMarkdown(): void {
+    if (!this.richEditorAdapter || !this.awaitingRichEditor) return
+    const { path, content, serial } = this.awaitingRichEditor
+    if (this.selected?.path !== path) return
+    if (this.selected.content !== content) return
+    if (this.editorMountSerial !== serial) return
+    this.awaitingRichEditor = null
+    this.mountMarkdownEditor(this.selected, serial)
+  }
+
+  private mountMarkdownFallback(host: HTMLElement, file: TacoFile, message?: string): void {
+    if (message) host.dataset.editorError = message
+    else delete host.dataset.editorError
     const source = createSourceEditor({
       value: file.content,
       label: this.t.sourceEditor('markdown'),
-      readOnly: true,
-      onChange: () => {},
+      readOnly: !bundleCanWrite(this.bundle),
+      highlighter: this.highlighter,
+      onChange: (content) => {
+        this.awaitingRichEditor = null
+        this.updateFileContent(file.path, content, undefined)
+        requestAnimationFrame(() => this.comments.refreshHighlights())
+      },
     })
     this.sourceEditor = source
-    host.replaceChildren(el('p', 'editor-error', `${this.t.editorFailed} ${file.path}: ${message}`), source.element)
+    source.input.addEventListener('mouseup', (event) => this.comments.captureSourceSelection(source, file, event))
+    source.input.addEventListener('keyup', (event) => {
+      if (event.key === 'Shift' || event.key === 'Escape') return
+      this.comments.captureSourceSelection(source, file)
+    })
+    if (message) {
+      host.replaceChildren(el('p', 'editor-error', `${this.t.editorFailed} ${file.path}: ${message}`), source.element)
+    } else {
+      host.replaceChildren(source.element)
+    }
+    this.comments.refreshHighlights()
+    this.outline.paint()
   }
 
   private mountMarkdownEditor(file: TacoFile, mountSerial: number): void {
+    if (!this.richEditorAdapter) {
+      if (this.richEditorLoading) {
+        this.awaitingRichEditor = { path: file.path, content: file.content, serial: mountSerial }
+        this.viewer.setAttribute('aria-busy', 'true')
+        const loading = el('div', 'empty-state', this.t.editorLoading)
+        loading.setAttribute('role', 'status')
+        this.viewer.replaceChildren(loading)
+      } else {
+        this.mountMarkdownFallback(this.viewer, file, this.richEditorFailure ?? undefined)
+      }
+      return
+    }
     const migrationError = this.markdownMigrationErrors.get(file.path)
     if (migrationError) {
       this.mountMarkdownFallback(this.viewer, file, migrationError)
@@ -800,7 +868,7 @@ export class FileBrowser {
     title.title = this.t.fileTitle
     title.addEventListener('input', () => {
       const nextTitle = title.textContent?.replace(/\s+/g, ' ').trim() ?? ''
-      if (!this.markdownEditor || !setEditorFrontmatterProperty(this.markdownEditor, 'title', nextTitle || undefined)) {
+      if (!this.richEditor || !this.richEditor.setTitle(nextTitle)) {
         title.setAttribute('aria-invalid', 'true')
       } else title.removeAttribute('aria-invalid')
     })
@@ -822,75 +890,37 @@ export class FileBrowser {
     titleRow.append(titleIcon, title)
     const editorHost = el('div', 'tiptap-editor-host')
     shell.append(titleRow, editorHost)
-    this.viewer.append(shell)
-    const extensions = createTacoEditorExtensions(this.mermaidLabels(), {
-      mermaidRuntime: this.options.mermaidRuntime,
-      onCodeBlockComment: (target) => this.comments.startCodeBlockComment(editorHost, file, target),
-    })
-    const hasBlocks = Boolean(file.blocks?.length)
-    let mounting = true
-    let editor: Editor | undefined
+    this.sourceEditor = null
+    delete this.viewer.dataset.editorError
+    this.viewer.replaceChildren(shell)
+    this.viewer.removeAttribute('aria-busy')
+
     try {
-      editor = new Editor({
+      this.richEditor = this.richEditorAdapter.mount({
         element: editorHost,
-        extensions,
-        editable: bundleCanWrite(this.bundle),
-        content: hasBlocks ? blockHtml(file.blocks) : file.content,
-        ...(hasBlocks ? { parseOptions: { preserveWhitespace: 'full' as const } } : { contentType: 'markdown' as const }),
-        editorProps: {
-          attributes: {
-            class: 'tiptap',
-            'aria-label': this.t.markdownEditor,
-          },
+        file,
+        bundle: this.bundle,
+        readOnly: !bundleCanWrite(this.bundle),
+        labels: {
+          markdownEditor: this.t.markdownEditor,
+          ...this.mermaidLabels(),
         },
-        onUpdate: ({ editor: activeEditor, transaction }) => {
-          if (mounting) return
-          if (this.markdownEditor !== activeEditor || mountSerial !== this.editorMountSerial) return
-          if (!transaction.docChanged) return
-          if (this.applyingRemoteEditor) return
-          if (ensureTacoBlockIds(activeEditor, file.id ?? file.path, false)) return
-          const nextMarkdown = this.markdownReconstructor.reconstruct(activeEditor)
-          if (nextMarkdown === file.content || nextMarkdown.trim() === file.content.trim()) return
-          this.updateFileContent(file.path, nextMarkdown, blocksFromEditor(activeEditor, extensions))
-          requestAnimationFrame(() => {
-            resolveEmbeddedMarkdownAssets(editorHost, this.bundle, file)
-            this.comments.refreshHighlights(editorHost)
-            this.presence.publish(activeEditor)
-            this.outline.paint()
-          })
+        mermaidRuntime: this.options.mermaidRuntime,
+        onUpdate: (nextMarkdown, blocks) => {
+          if (mountSerial !== this.editorMountSerial) return
+          this.updateFileContent(file.path, nextMarkdown, blocks)
         },
-        onSelectionUpdate: ({ editor: activeEditor }) => this.presence.publish(activeEditor),
-        onFocus: ({ editor: activeEditor }) => this.presence.publish(activeEditor, true),
-        onBlur: ({ editor: activeEditor }) => this.presence.publish(activeEditor, false),
+        onCodeBlockComment: (target) => this.comments.startCodeBlockComment(editorHost, file, target),
+        onLinkClick: (event) => this.handleEditorLink(event, file),
+        onSelectionChange: () => this.comments.captureEditorSelection(editorHost, file),
+        onRefreshHighlights: (host) => this.comments.refreshHighlights(host),
+        onOutlinePaint: () => this.outline.paint(),
+        scrollToHeading: (headingHash) => this.outline.scrollToHeading(headingHash, 'auto'),
       })
-      ensureTacoBlockIds(editor, file.id ?? file.path, !hasBlocks)
-      this.markdownEditor = editor
-      this.markdownReconstructor.init(file.content, editor)
-      if (!file.blocks?.length) {
-        file.blocks = blocksFromEditor(editor, extensions)
-      }
-      mounting = false
     } catch (error) {
-      editor?.destroy()
       this.mountMarkdownFallback(editorHost, file, error instanceof Error ? error.message : String(error))
       return
     }
-    requestAnimationFrame(() => {
-      if (this.markdownEditor !== editor || mountSerial !== this.editorMountSerial) return
-      resolveEmbeddedMarkdownAssets(editorHost, this.bundle, file)
-      this.comments.refreshHighlights(editorHost)
-      const headingHash = decodeURIComponent(location.hash.split('::')[1] ?? '')
-      if (headingHash) this.outline.scrollToHeading(headingHash, 'auto')
-      this.presence.publish(editor, editor.isFocused, false)
-      this.presence.paintRemoteCursors()
-      this.outline.paint()
-    })
-    editorHost.addEventListener('click', (event) => this.handleEditorLink(event, file))
-    editorHost.addEventListener('mouseup', () => this.comments.captureEditorSelection(editorHost, file))
-    editorHost.addEventListener('keyup', (event) => {
-      if ((event as KeyboardEvent).key === 'Shift' || (event as KeyboardEvent).key === 'Escape') return
-      this.comments.captureEditorSelection(editorHost, file)
-    })
   }
 
   private mermaidLabels() {
@@ -1101,6 +1131,7 @@ export class FileBrowser {
       currentGroupId: groupInfo.groupId,
       labels: {
         ungrouped: this.t.ungrouped,
+        checkpoint: checkpointCopy(this.locale).checkpoint,
       },
       onSelectGroup: (targetGroupId) => {
         if (!this.selected) return
@@ -1114,64 +1145,7 @@ export class FileBrowser {
       },
     })
   }
-  private applyRemoteState(): void {
-    const selectedId = this.selected?.id
-    if (this.checkpointView || this.selectedPlaceholder) {
-      if (this.selectedPlaceholder && fileByPath(this.bundle, this.selectedPlaceholder)) {
-        this.selected = fileByPath(this.bundle, this.selectedPlaceholder)
-        this.selectedPlaceholder = null
-      } else if (this.checkpointView && this.bundle.checkpoints === undefined) {
-        this.checkpointView = false
-        this.root.classList.remove('is-checkpoint-view')
-        this.selected = defaultFile(this.bundle)
-        this.selectedPlaceholder = null
-      } else this.selected = null
-    } else this.selected = this.bundle.files.find((file) => file.id === selectedId)
-      ?? (this.selected ? fileByPath(this.bundle, this.selected.path) : null)
-      ?? defaultFile(this.bundle)
-    const title = this.root.querySelector<HTMLInputElement>('.bundle-title')
-    if (title && title.value !== this.bundle.title) title.value = this.bundle.title
-    if (this.checkpointTemplateInput && document.activeElement !== this.checkpointTemplateInput) {
-      const template = resolveCheckpoints(this.bundle).state?.template ?? ''
-      this.checkpointTemplateInput.value = template
-      this.checkpointTemplateInput.size = Math.max(8, Math.min(template.length, 32))
-    }
-    document.title = `${this.bundle.title} — Taco`
 
-    if (this.markdownEditor && this.selected && fileKind(this.selected) === 'markdown') {
-      const selection = this.markdownEditor.state.selection
-      this.applyingRemoteEditor = true
-      try {
-        this.markdownEditor.commands.setContent(blockHtml(this.selected.blocks) || '<p></p>', { emitUpdate: false, parseOptions: { preserveWhitespace: 'full' } })
-        this.selected.content = this.markdownReconstructor.reconstruct(this.markdownEditor)
-        const title = frontmatterTitle(this.selected.content)
-        if (title) this.selected.title = title
-        else if (parseFrontmatter(this.selected.content).kind === 'valid') delete this.selected.title
-        const maximum = this.markdownEditor.state.doc.content.size
-        this.markdownEditor.commands.setTextSelection({
-          from: Math.max(1, Math.min(selection.from, maximum)),
-          to: Math.max(1, Math.min(selection.to, maximum)),
-        })
-      } finally {
-        this.applyingRemoteEditor = false
-      }
-      const host = this.viewer.querySelector<HTMLElement>('.tiptap-editor-host')
-      if (host) {
-        resolveEmbeddedMarkdownAssets(host, this.bundle, this.selected)
-        this.comments.refreshHighlights(host)
-      }
-      this.outline.paint()
-    } else this.paintViewer()
-    this.fileNavigation?.refresh(this.selected, this.checkpointView, this.selectedPlaceholder)
-    this.syncWorkspaceHeader()
-    this.comments.paint()
-    this.syncDirtyState()
-    if (this.markdownEditor) {
-      const presence = this.sync.presence()
-      this.presence.publish(this.markdownEditor, this.markdownEditor.isFocused, presence.hasCursor)
-    }
-    requestAnimationFrame(() => this.presence.paintRemoteCursors())
-  }
 
   private toggleSidebar(): void {
     this.sidebarClosed = !this.sidebarClosed
@@ -1204,7 +1178,7 @@ export class FileBrowser {
     if (layoutChanged) requestAnimationFrame(() => {
       if (!this.root.isConnected) return
       this.comments.refreshHighlights()
-      this.presence.paintRemoteCursors()
+
       this.outline.scheduleActive()
     })
   }
@@ -1485,7 +1459,7 @@ export class FileBrowser {
       if (!await this.confirmDownloadFallback(credentialBearing)) return
     } else if (credentialBearing && !window.confirm(this.t.credentialSaveConfirm)) return
     try {
-      this.sync.stampInto(this.bundle)
+
       const result = mode === 'copy'
         ? await saveCopy(this.bundle)
         : mode === 'unpack'
@@ -1514,11 +1488,6 @@ export class FileBrowser {
     }
   }
 
-  private reportExport(result: SaveResult): void {
-    if (result === 'cancelled') { this.toast(this.t.saveCancelled); return }
-    if (result === 'directory-unavailable') { this.toast(this.t.directoryUnavailable); return }
-    this.toast(result === 'downloaded' ? this.t.downloadStarted : this.t.saved)
-  }
 
   private confirmDownloadFallback(credentialBearing: boolean): Promise<boolean> {
     return showConfirmDialog({
@@ -1541,7 +1510,7 @@ export class FileBrowser {
     setTimeout(() => toast.remove(), 2360)
   }
   private async handleCreateFile(targetGroupId: string | null): Promise<void> {
-    const groups = getAvailableGroups(this.bundle)
+    const groups = getAvailableGroups(this.bundle, checkpointCopy(this.locale).checkpoint)
     const result = await showNewFileDialog({
       title: this.t.addFile,
       typeLabel: this.t.newFileType,
@@ -1580,9 +1549,6 @@ export class FileBrowser {
   }
 
   private async handleRenameFile(file: TacoFile): Promise<void> {
-    const isTracked = (): boolean => resolveCheckpoints(this.bundle).nodes
-      .some((node) => node.documents.some((document) => document.path === file.path))
-    if (isTracked()) return
     const fullName = fileName(file.path)
     const dotIndex = fullName.lastIndexOf('.')
     const baseName = dotIndex > 0 ? fullName.slice(0, dotIndex) : fullName
@@ -1597,7 +1563,6 @@ export class FileBrowser {
       cancelLabel: this.t.cancel ?? 'Cancel',
     })
     if (!newName || !newName.trim()) return
-    if (isTracked()) return
 
     // 清理并剥除可能误输的相同后缀，严格强制追加原有后缀名
     let cleanBase = newName.trim().replaceAll('\\', '/').split('/').filter(Boolean).pop() ?? ''
@@ -1612,6 +1577,8 @@ export class FileBrowser {
     if (fileByPath(this.bundle, newPath)) return
 
     const oldPath = file.path
+    const checkpoints = resolveCheckpoints(this.bundle)
+    const wasTracked = checkpoints.valid && checkpoints.nodes.some((node) => node.documents.some((document) => document.path === oldPath))
     this.store.commit({ kind: 'document' }, () => {
       file.path = newPath
       if (this.bundle.navigation) {
@@ -1623,6 +1590,9 @@ export class FileBrowser {
         if (this.bundle.navigation.entry === oldRel) {
           this.bundle.navigation.entry = newRel
         }
+      }
+      if (wasTracked && checkpoints.state) {
+        this.bundle.checkpoints = { ...checkpoints.state, documents: checkpoints.state.documents.filter((record) => record.path !== oldPath) }
       }
     })
 
@@ -1641,6 +1611,8 @@ export class FileBrowser {
     })
     if (!confirmed) return
     const filePath = file.path
+    const checkpoints = resolveCheckpoints(this.bundle)
+    const wasTracked = checkpoints.valid && checkpoints.nodes.some((node) => node.documents.some((document) => document.path === filePath))
     this.store.commit({ kind: 'document' }, () => {
       this.bundle.files = this.bundle.files.filter((f) => f.path !== filePath)
       if (this.bundle.navigation) {
@@ -1652,13 +1624,27 @@ export class FileBrowser {
           delete this.bundle.navigation.entry
         }
       }
+      if (wasTracked && checkpoints.state) {
+        this.bundle.checkpoints = { ...checkpoints.state, documents: checkpoints.state.documents.filter((record) => record.path !== filePath) }
+      }
     })
 
     if (this.selected?.path === filePath) {
-      this.selected = defaultFile(this.bundle)
-      if (this.selected) this.selectFile(this.selected)
+      if (wasTracked) this.selectPlaceholder(filePath)
+      else {
+        const next = defaultFile(this.bundle)
+        if (next) this.selectFile(next)
+        else {
+          this.selected = null
+          this.comments.resetForFileChange()
+          this.syncWorkspaceHeader()
+          this.paintViewer()
+          this.comments.paint()
+          this.syncAuxiliaryTabs()
+        }
+      }
     }
-    this.fileNavigation?.refresh(this.selected)
+    this.fileNavigation?.refresh(this.selected, this.checkpointView, this.selectedPlaceholder)
   }
 
 

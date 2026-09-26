@@ -8,7 +8,10 @@ import {
   renderOpenApiOverview,
   structuredFileLabels,
 } from '../src/structured-file-viewer.ts'
+import { setDefaultHighlighter } from '../src/source-editor.ts'
+import { completeHighlighter } from '../src/highlighter-lowlight.ts'
 
+setDefaultHighlighter(completeHighlighter)
 const file = (path: string, content: string, mediaType = 'application/yaml'): TacoFile => ({
   path: `specs/006-renderers/${path}`,
   mediaType,

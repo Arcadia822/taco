@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { FORMAT, type TacoBundle } from '../src/model.ts'
-import { applySyncDoc, TacoStore, toSyncDoc } from '../src/store.ts'
+import { TacoStore } from '../src/store.ts'
 
 const createSampleBundle = (): TacoBundle => ({
   format: FORMAT,
@@ -11,9 +11,9 @@ const createSampleBundle = (): TacoBundle => ({
   files: [
     {
       id: 'f1',
-      path: 'specs/sample/README.md',
+      path: 'specs/sample/overview.md',
       mediaType: 'text/markdown',
-      content: '# Hello',
+      content: '# Overview',
     },
     {
       id: 'f2',
@@ -24,35 +24,7 @@ const createSampleBundle = (): TacoBundle => ({
   ],
 })
 
-describe('TacoStore and sync navigation support', () => {
-  it('spreads navigation into toSyncDoc when present', () => {
-    const bundle = createSampleBundle()
-    bundle.navigation = {
-      version: 1,
-      entry: 'specs/sample/api.md',
-      groups: [
-        {
-          id: 'g1',
-          title: 'Docs',
-          paths: ['specs/sample/api.md'],
-        },
-      ],
-    }
-
-    const syncDoc = toSyncDoc(bundle)
-    expect(syncDoc.navigation).toEqual({
-      version: 1,
-      entry: 'specs/sample/api.md',
-      groups: [
-        {
-          id: 'g1',
-          title: 'Docs',
-          paths: ['specs/sample/api.md'],
-        },
-      ],
-    })
-  })
-
+describe('TacoStore', () => {
   it('updateNavigation commits a document change event and mutates bundle', () => {
     const bundle = createSampleBundle()
     const store = new TacoStore(bundle)
@@ -61,13 +33,15 @@ describe('TacoStore and sync navigation support', () => {
 
     const success = store.updateNavigation({
       version: 1,
-      groups: [{ id: 'core', title: 'Core', paths: ['specs/sample/README.md'] }],
+      entry: 'specs/sample/api.md',
+      groups: [],
     })
 
     expect(success).toBe(true)
     expect(bundle.navigation).toEqual({
       version: 1,
-      groups: [{ id: 'core', title: 'Core', paths: ['specs/sample/README.md'] }],
+      entry: 'specs/sample/api.md',
+      groups: [],
     })
     expect(events).toEqual([
       {
@@ -77,29 +51,39 @@ describe('TacoStore and sync navigation support', () => {
     ])
   })
 
-  it('applySyncDoc writes back navigation and deletes navigation if omitted on remote', () => {
+  it('commit mutates bundle and emits change event', () => {
     const bundle = createSampleBundle()
-    bundle.navigation = {
-      version: 1,
-      groups: [{ id: 'old', title: 'Old', paths: [] }],
-    }
+    const store = new TacoStore(bundle)
+    const events: unknown[] = []
+    store.onChange((event) => events.push(event))
 
-    const remoteSync = toSyncDoc(createSampleBundle())
-    remoteSync.navigation = {
-      version: 1,
-      entry: 'specs/sample/api.md',
-      groups: [{ id: 'new', title: 'New', paths: ['specs/sample/api.md'] }],
-    }
-
-    applySyncDoc(bundle, remoteSync)
-    expect(bundle.navigation).toEqual({
-      version: 1,
-      entry: 'specs/sample/api.md',
-      groups: [{ id: 'new', title: 'New', paths: ['specs/sample/api.md'] }],
+    const success = store.commit({ kind: 'file', fileId: 'f1' }, () => {
+      bundle.files[0].content = '# Updated Overview'
     })
 
-    const emptyRemote = toSyncDoc(createSampleBundle())
-    applySyncDoc(bundle, emptyRemote)
-    expect(bundle.navigation).toBeUndefined()
+    expect(success).toBe(true)
+    expect(bundle.files[0].content).toBe('# Updated Overview')
+    expect(events).toEqual([
+      {
+        source: 'local',
+        change: { kind: 'file', fileId: 'f1' },
+      },
+    ])
+  })
+
+  it('refuses commit when bundle is in reader mode', () => {
+    const bundle = createSampleBundle()
+    bundle.access = 'reader'
+    const store = new TacoStore(bundle)
+    const events: unknown[] = []
+    store.onChange((event) => events.push(event))
+
+    const success = store.commit({ kind: 'file', fileId: 'f1' }, () => {
+      bundle.files[0].content = '# Should Not Update'
+    })
+
+    expect(success).toBe(false)
+    expect(bundle.files[0].content).toBe('# Overview')
+    expect(events).toHaveLength(0)
   })
 })

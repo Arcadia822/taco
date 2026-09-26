@@ -12,7 +12,7 @@ import {
   type MermaidRuntime,
   type MermaidTheme,
 } from './mermaid.ts'
-import { bindMermaidCanvasDrag, createMermaidSplitView, iconButton, type MermaidSplitViewController } from './tiptap-code-block.ts'
+import { bindMermaidCanvasDrag, createMermaidSplitView, iconButton, type MermaidSplitViewController } from './mermaid-split-view.ts'
 import { createSegmentedControl } from './segmented-control.ts'
 import { createSourceEditor, type SourceEditorController } from './source-editor.ts'
 import { fileName, type TacoFile } from './model.ts'
@@ -553,6 +553,7 @@ export interface StructuredFileViewerOptions {
   labels: StructuredFileLabels
   mermaidLabels: MermaidPluginLabels
   mermaidRuntime?: MermaidRuntime
+  onPreviewSettled?: () => void
   readOnly: boolean
   sourceLabel: string
   onChange: (content: string) => void
@@ -613,6 +614,7 @@ export const createStructuredFileViewer = (options: StructuredFileViewerOptions)
   const sourceEditor: SourceEditorController = {
     element: rawSource.element,
     input: rawSource.input,
+    refreshHighlight: rawSource.refreshHighlight,
     setCommentRanges: rawSource.setCommentRanges,
     highlightRange: rawSource.highlightRange,
     activateRange: (range) => {
@@ -689,18 +691,22 @@ export const createStructuredFileViewer = (options: StructuredFileViewerOptions)
             if (configured !== rawSource.input.value) {
               mermaidView?.updateCode(configured)
               options.onChange(configured)
+              return
             }
           }
         }
         syncMermaidControls()
+        options.onPreviewSettled?.()
       },
       onUnavailable: () => {
         diagnostics.replaceChildren(diagnosticNode(options.labels.mermaidUnavailable))
         mermaidView?.toggleCodePanel(true)
+        options.onPreviewSettled?.()
       },
       onRenderError: () => {
         diagnostics.replaceChildren(diagnosticNode(options.mermaidLabels.error))
         mermaidView?.toggleCodePanel(true)
+        options.onPreviewSettled?.()
       },
     })
     const view = mermaidView

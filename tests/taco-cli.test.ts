@@ -32,6 +32,7 @@ interface CliBundle {
     sourceHash?: string
   }>
   packOptions?: { ignore: string[] }
+  navigation?: { version: 1; entry: string; groups: [] }
   comments?: Array<Record<string, unknown>>
 }
 
@@ -265,6 +266,53 @@ describe('Taco extension CLI', () => {
       'sourceUrl is no longer supported',
     )
   })
+  it('preserves shell variant and review identity across refresh while allowing explicit conversion', () => {
+    const project = mkdtempSync(join(tmpdir(), 'taco-variants-'))
+    const feature = join(project, 'specs/006-variant')
+    const output = join(feature, '006-variant.taco.html')
+    mkdirSync(feature, { recursive: true })
+    writeFileSync(join(feature, 'spec.md'), '# Variant\n\nReview text.\n')
+
+    expect(runJson<{ variant: string }>(['pack', feature, '--project-root', project, '--output', output], project).variant).toBe('complete')
+    const initial = readBundle(output)
+    initial.comments = [{
+      id: 'thread-variant',
+      anchor: {
+        path: 'specs/006-variant/spec.md',
+        position: { start: 0, end: 1 },
+        quote: { exact: '#', prefix: '', suffix: ' Variant' },
+      },
+      status: 'open',
+      messages: [{ id: 'message-variant', author: 'Reviewer', body: 'Keep this thread.', createdAt: '2026-09-25T00:00:00.000Z' }],
+      createdAt: '2026-09-25T00:00:00.000Z',
+      updatedAt: '2026-09-25T00:00:00.000Z',
+    }]
+    initial.navigation = { version: 1, entry: 'specs/006-variant/spec.md', groups: [] }
+    writeBundle(output, initial)
+
+    const lite = runJson<{ variant: string }>(['pack', feature, '--project-root', project, '--output', output, '--lite'], project)
+    expect(lite.variant).toBe('lite')
+    expect(readFileSync(output, 'utf8')).toMatch(/<meta name="taco-shell-variant" content="lite"\s*\/>/)
+    const baseline = readBundle(output)
+    expect(baseline.docId).toBe(initial.docId)
+    expect(baseline.comments).toEqual(initial.comments)
+    expect(baseline.navigation).toEqual(initial.navigation)
+
+    expect(runJson<{ variant: string }>(['pack', feature, '--project-root', project, '--output', output], project).variant).toBe('lite')
+    const conflicting = spawnSync(process.execPath, [cli, 'pack', feature, '--project-root', project, '--output', output, '--shell', shell, '--json'], { cwd: project, encoding: 'utf8' })
+    expect(conflicting.status).toBe(1)
+    expect(JSON.parse(conflicting.stderr).error).toContain('conflicts with existing Taco variant')
+    const conflictingFlags = spawnSync(process.execPath, [cli, 'pack', feature, '--project-root', project, '--output', output, '--lite', '--complete', '--json'], { cwd: project, encoding: 'utf8' })
+    expect(conflictingFlags.status).toBe(1)
+    expect(JSON.parse(conflictingFlags.stderr).error).toContain('Conflicting variant flags')
+    expect(readBundle(output).comments).toEqual(initial.comments)
+
+    expect(runJson<{ variant: string }>(['pack', feature, '--project-root', project, '--output', output, '--complete'], project).variant).toBe('complete')
+    expect(readBundle(output).navigation).toEqual(initial.navigation)
+    expect(readBundle(output).comments).toEqual(initial.comments)
+    expect(readFileSync(output, 'utf8')).toMatch(/<meta name="taco-shell-variant" content="complete"\s*\/>/)
+  })
+
 
   it('refreshes an existing Taco with the latest shell while preserving its bundle state', () => {
     const project = mkdtempSync(join(tmpdir(), 'taco-refresh-'))

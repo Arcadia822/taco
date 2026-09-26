@@ -60,15 +60,17 @@ small task "fix-pagination-copy"
 
 ## Locate the shell
 
-A `.taco.html` = fixed shell (runtime viewer/editor) + one JSON data block. Find a shell in the first location that exists:
+A `.taco.html` = fixed shell (runtime viewer/editor) + one JSON data block. Choose by the **recipient's opening environment**: the larger Complete shell is the default when the recipient may be offline; the smaller Lite shell is for reliable network access. Lite loads pinned public CDN editor/highlighter/Mermaid libraries for file types in the bundle. If its rich editor cannot load, writable Markdown remains editable in plain-text source mode, including comments, saving, and Handoff. Do not select Lite merely because the Agent currently has network access. Never silently replace an existing Complete Taco with Lite on refresh; preserve the existing shell variant unless the user explicitly chooses a different one.
 
-1. This skill's own `taco-shell.html` (sits next to this `SKILL.md`) — the default, always available
-2. A template pack's `empty.taco.html`
-3. `.specify/extensions/taco/assets/taco-shell.html` (Spec Kit extension installation)
-4. A locally cloned Taco checkout: `<taco-repo>/extensions/taco/assets/taco-shell.html`
-5. If none exists, ask the user where a Taco shell lives.
+Find the selected variant in the first location that exists:
 
-The bundled `taco-shell.html` has an empty `#taco-document` block. Fill it before opening; an unfilled shell shows the runtime's empty-bundle recovery screen, not a document. Template and checkout fallbacks may contain starter data: use their runtime, not their identity or content. Only write the data block and `<title>`.
+1. This skill's own `taco-shell.html` (Complete) or `taco-shell-lite.html` (Lite), next to this `SKILL.md`
+2. A template pack's `empty.taco.html` (Complete)
+3. `.specify/extensions/taco/assets/taco-shell.html` or `taco-shell-lite.html` (Spec Kit extension installation)
+4. A locally cloned Taco checkout: `<taco-repo>/extensions/taco/assets/taco-shell.html` or `taco-shell-lite.html`
+5. If none exists for the selected variant, ask the user where that shell lives; never substitute a different variant unnoticed.
+
+Both skill shells have an empty `#taco-document` block. Fill it before opening; an unfilled shell shows the runtime's empty-bundle recovery screen, not a document. Template and checkout fallbacks may contain starter data: use their runtime, not their identity or content. Only write the data block and `<title>`.
 
 ## The bundle format (`taco/files` v1)
 
@@ -99,14 +101,14 @@ When creating, modifying, inspecting, or reporting a Checkpoint graph or its doc
 
 `mediaType` by carrier:
 
-| File             | `mediaType`        | Notes                                                                 |
-| ---------------- | ------------------ | --------------------------------------------------------------------- |
-| `.md`            | `text/markdown`    | editable document                                                     |
-| `.json`          | `application/json` | source view                                                           |
-| `.yaml` / `.yml` | `application/yaml` | source view                                                           |
-| `diagrams/*.mmd` | `text/plain`       | Mermaid source; the runtime routes it by extension, not by media type |
-| `.png`           | `image/png`        | `content` is a `data:image/png;base64,…` URI                          |
-| any other UTF-8 text | `text/plain` | plain-text source; excludes `.html` and `.htm` |
+| File                 | `mediaType`        | Notes                                                             |
+| -------------------- | ------------------ | ----------------------------------------------------------------- |
+| `.md`                | `text/markdown`    | editable document                                                 |
+| `.json`              | `application/json` | editable syntax-highlighted source                                |
+| `.yaml` / `.yml`     | `application/yaml` | editable syntax-highlighted source                                |
+| `diagrams/*.mmd`     | `text/plain`       | editable Mermaid source and diagram preview; routed by extension |
+| `.png`               | `image/png`        | `content` is a `data:image/png;base64,…` URI                      |
+| any other UTF-8 text | `text/plain`       | plain-text source; excludes `.html` and `.htm`                    |
 
 Per-file fields:
 
@@ -127,14 +129,14 @@ Writing rules:
 - `<title>` in the head must be `<bundle title> — Taco` (with `&`, `<`, `>` escaped).
 - Validate before writing: `JSON.parse` the exact escaped string you will insert (it must round-trip), then check the shape rules above. Write the whole file to a temporary sibling and rename it over the destination, so a failure never truncates the existing Taco.
 - Only the data block and `<title>` change. Everything else in the shell stays byte-identical.
-- Keep the file self-contained: PNG assets as data URIs; no external URLs or scripts.
+- Keep bundled content self-contained: PNG assets as data URIs and no external document assets. Complete never fetches runtime dependencies; Lite fetches only its pinned public CDN libraries.
 
 ## Workflow
 
 ### 1. Assemble: write the bundle into the shell
 
-1. If a `.taco.html` already exists at the destination, **read its bundle first** — before you copy or overwrite anything, or you will read your own fresh copy instead of the reviewed document.
-2. Read the shell into memory; do not copy it over the destination. For a refresh, retain the old bundle in memory separately.
+1. If a `.taco.html` already exists at the destination, **read its bundle and shell variant first** — before you copy or overwrite anything, or you will read your own fresh copy instead of the reviewed document. Preserve Complete/Lite on refresh unless the user explicitly requested conversion.
+2. Read the matching shell into memory; do not copy it over the destination. For a refresh, retain the old bundle in memory separately.
 3. Enumerate the document directory and build `files[]` from regular source files. Exclude dotfiles and every `*.taco.html`. Preserve the existing `packOptions.ignore` rules unless new exclusions were requested. Report exclusions; stop on unhandled symlinks, non-UTF-8 files, invalid PNGs or unsupported entries, including ordinary `.html`/`.htm` files, instead of following or silently skipping them. Explicitly ignore unsupported source paths when their omission is intended.
 4. For a new document, set `format: "taco/files"`, `version: 1`, a fresh unique `docId`, `title`, `root` and `files`. Choose the Checkpoint definition from the user's or project's review requirements, if any; otherwise omit `checkpoints`, even if a starter pack contains one. The bundled `spec/` SDD graph is an example to adapt only if it fits; its stage names, document paths, and display template are not defaults that override project conventions. For a refresh, preserve the previous bundle wholesale—including `checkpoints.nodes`, `checkpoints.documents`, and any unknown fields—and replace only intended fields; keep `root`, format/version and identity unchanged. Stop on an unsupported format/version rather than downgrading it. Match existing file entries by path, preserve unknown fields and stable ids, and update content-dependent fields using the rules above.
 5. Serialize into the in-memory shell, validate the exact result, then write a temporary sibling and rename it to `<DOC_DIR>/<name>.taco.html`. Until this succeeds, leave the previous destination untouched.

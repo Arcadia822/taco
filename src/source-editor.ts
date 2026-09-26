@@ -1,80 +1,36 @@
-import json from 'highlight.js/lib/languages/json'
-import yaml from 'highlight.js/lib/languages/yaml'
-import type { LanguageFn } from 'highlight.js'
-import { createLowlight } from 'lowlight'
+export type SourceLanguage = 'json' | 'yaml' | 'mermaid'
 
-const mermaid: LanguageFn = (hljs) => ({
-  name: 'Mermaid',
-  aliases: ['mmd'],
-  keywords: {
-    keyword: [
-      'flowchart', 'graph', 'sequenceDiagram', 'classDiagram', 'stateDiagram-v2', 'erDiagram',
-      'journey', 'gantt', 'pie', 'quadrantChart', 'requirementDiagram', 'gitGraph', 'mindmap',
-      'timeline', 'sankey-beta', 'xychart-beta', 'block-beta', 'packet', 'architecture-beta', 'kanban',
-      'subgraph', 'end', 'direction', 'participant', 'actor', 'autonumber', 'activate', 'deactivate',
-      'loop', 'alt', 'else', 'opt', 'par', 'and', 'rect', 'critical', 'break', 'note', 'over',
-      'left', 'right', 'of', 'as', 'classDef', 'class', 'click', 'style', 'linkStyle',
-    ].join(' '),
-  },
-  contains: [
-    { begin: /^---[ \t]*$/, end: /^---[ \t]*$/, subLanguage: 'yaml' },
-    hljs.COMMENT('%%', '$'),
-    hljs.QUOTE_STRING_MODE,
-    { scope: 'symbol', begin: /(?:<-->|<--|-->|---|-\.->|==>|~~~|--x|--o|o--|x--)/ },
-    { scope: 'title', begin: /\b[A-Za-z_][\w-]*(?=\s*[[(\{])/ },
-    { scope: 'number', begin: hljs.NUMBER_RE },
-  ],
-})
+export type SourceHighlighter = (target: HTMLElement, language: SourceLanguage, value: string) => void
 
-interface HighlightNode {
-  type: string
-  value?: string
-  tagName?: string
-  properties?: { className?: string | string[] }
-  children?: HighlightNode[]
+let defaultHighlighter: SourceHighlighter | undefined
+
+export const setDefaultHighlighter = (highlighter: SourceHighlighter | undefined): void => {
+  defaultHighlighter = highlighter
 }
+
+export const getDefaultHighlighter = (): SourceHighlighter | undefined => defaultHighlighter
 
 export interface SourceCommentRange {
   start: number
   end: number
 }
 
-interface SourceEditorOptions {
+export interface SourceEditorOptions {
   value: string
-  language?: 'json' | 'yaml' | 'mermaid'
+  language?: SourceLanguage
   label: string
   readOnly?: boolean
+  highlighter?: SourceHighlighter
   onChange: (value: string) => void
 }
 
 export interface SourceEditorController {
   element: HTMLElement
   input: HTMLTextAreaElement
+  refreshHighlight: () => void
   setCommentRanges: (ranges: SourceCommentRange[]) => void
   activateRange: (range: SourceCommentRange | null) => void
   highlightRange: (range: SourceCommentRange | null) => void
-}
-
-const lowlight = createLowlight({ json, yaml, mermaid })
-
-const appendHighlightNode = (parent: Node, node: HighlightNode): void => {
-  if (node.type === 'text') {
-    parent.appendChild(document.createTextNode(node.value ?? ''))
-    return
-  }
-  if (node.type !== 'element' || !node.tagName) return
-
-  const element = document.createElement(node.tagName)
-  const className = node.properties?.className
-  if (className) element.className = Array.isArray(className) ? className.join(' ') : className
-  for (const child of node.children ?? []) appendHighlightNode(element, child)
-  parent.appendChild(element)
-}
-
-const renderLanguageHighlight = (target: HTMLElement, language: 'json' | 'yaml' | 'mermaid', value: string): void => {
-  const tree = lowlight.highlight(language, value) as unknown as HighlightNode
-  target.replaceChildren()
-  for (const child of tree.children ?? []) appendHighlightNode(target, child)
 }
 
 const decorateTextRange = (root: HTMLElement, range: SourceCommentRange, className: string): void => {
@@ -105,7 +61,14 @@ const decorateTextRange = (root: HTMLElement, range: SourceCommentRange, classNa
   }
 }
 
-export const createSourceEditor = ({ value, language, label, readOnly = false, onChange }: SourceEditorOptions): SourceEditorController => {
+export const createSourceEditor = ({
+  value,
+  language,
+  label,
+  readOnly = false,
+  highlighter,
+  onChange,
+}: SourceEditorOptions): SourceEditorController => {
   const host = document.createElement('div')
   host.className = `source-editor${language ? ` source-editor-${language}` : ''}`
 
@@ -130,8 +93,16 @@ export const createSourceEditor = ({ value, language, label, readOnly = false, o
   let activeRange: SourceCommentRange | null = null
   let hoverRange: SourceCommentRange | null = null
   const renderHighlight = (): void => {
-    if (language) renderLanguageHighlight(highlight, language, input.value)
-    else highlight.textContent = input.value
+    const activeHighlighter = highlighter ?? defaultHighlighter
+    if (language && activeHighlighter) {
+      try {
+        activeHighlighter(highlight, language, input.value)
+      } catch {
+        highlight.textContent = input.value
+      }
+    } else {
+      highlight.textContent = input.value
+    }
     for (const range of commentRanges) decorateTextRange(highlight, range, 'source-comment-highlight')
     if (activeRange) decorateTextRange(highlight, activeRange, 'source-comment-highlight is-active')
     if (hoverRange) decorateTextRange(highlight, hoverRange, 'source-comment-highlight')
@@ -165,6 +136,7 @@ export const createSourceEditor = ({ value, language, label, readOnly = false, o
   requestAnimationFrame(resize)
   return {
     element: host,
+    refreshHighlight: renderHighlight,
     input,
     highlightRange: (range) => { hoverRange = range; renderHighlight() },
     setCommentRanges: (ranges) => {

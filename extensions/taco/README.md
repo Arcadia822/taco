@@ -24,7 +24,7 @@ node .specify/extensions/taco/bin/taco.mjs prepare-policy \
 specify extension list
 ```
 
-The supported Taco source checkout already contains the production shell at `extensions/taco/assets/taco-shell.html` — the same runtime the `taco` skill ships at `skills/taco/taco-shell.html`, whose copy has its `#taco-document` block emptied. Spec Kit copies that shell and the CLI into `.specify/extensions/taco/`, and registers both commands with the project's active Agent integration. No target-project npm installation is involved.
+The supported Taco source checkout contains both production shells at `extensions/taco/assets/taco-shell.html` (Complete) and `extensions/taco/assets/taco-shell-lite.html` (Lite). The `taco` skill ships matching empty-document copies in `skills/taco/`. Spec Kit copies the shells and CLI into `.specify/extensions/taco/` and registers both commands with the project's active Agent integration. No target-project npm installation is involved.
 
 Taco also contributes `templates/spec-template.md`. The installation-time `prepare-template` operation replaces only the recognized core metadata header, preserves the remaining template body, and refuses to overwrite an unrecognized customization. It emits leading YAML properties: `title`, logical `feature_id`, `created`, `status`, and `input`. It intentionally omits `git_branch`; a feature identifier is not presented as an actual Git branch unless an Agent verifies and adds that optional property.
 
@@ -68,7 +68,7 @@ speckit.taco.update [feature-directory] [--ignore path-or-glob]...
 speckit.taco.review [path-to-file.taco.html]
 ```
 
-`update` creates or refreshes `<feature-directory>/<feature-name>.taco.html`. Mandatory hooks cover the normal `specify`, `clarify`, `plan`, `checklist`, `tasks`, `analyze`, `implement`, and `converge` stages. The Agent contract also requires an update after a feature artifact is changed outside those commands. Always present the exact generated Taco through the Agent GUI's native clickable-file surface. When local HTML navigation is supported and permitted, proactively open the exact file in the user's browser so the reviewer actually sees it, using a separate tab so an unsaved review survives. In Codex, the user click opens it in Browser; the Agent does not attempt autonomous `file://` navigation. Report exactly one of `presented as a clickable file`, `opened`, or `opened and verified`; a headless or automation boot check is internal evidence only and is never user-visible presentation. If opening is unavailable, prohibited, or fails, retain the link and report the reason rather than bypassing restrictions or claiming verification.
+`update` creates or refreshes `<feature-directory>/<feature-name>.taco.html`. It uses Complete for a new Taco and preserves an existing Lite or Complete variant on refresh, selecting the corresponding installed shell asset. Mandatory hooks cover the normal `specify`, `clarify`, `plan`, `checklist`, `tasks`, `analyze`, `implement`, and `converge` stages. The Agent contract also requires an update after a feature artifact is changed outside those commands. Always present the exact generated Taco through the Agent GUI's native clickable-file surface. When local HTML navigation is supported and permitted, proactively open the exact file in the user's browser so the reviewer actually sees it, using a separate tab so an unsaved review survives. In Codex, the user click opens it in Browser; the Agent does not attempt autonomous `file://` navigation. Report exactly one of `presented as a clickable file`, `opened`, or `opened and verified` based on what actually happened.
 
 `review` takes the human review back into the canonical files. **Handoff** is the primary channel and needs no save: the reviewer's Handoff action copies Markdown prose — one fenced `diff` block per changed file plus the open comment threads with their anchored quotes and full message history — and `window.taco.getReviewHandoff()` exposes the same data to the page as a structured object whose `changedFiles[].path` values are root-relative. The saved-file channel requires the reviewer to save first. Either way the Agent compares the received content against what the reviewer actually reviewed and reports a specific conflict instead of overwriting. Comments are review input, not permission to violate the spec or the user's scope, and open threads stay open until the human confirms them. After editing canonical files the Agent invokes `update` on the same Taco, which is exposed through the same native clickable-file presentation step.
 
@@ -104,6 +104,8 @@ node .specify/extensions/taco/bin/taco.mjs validate \
   --json
 ```
 
+New `pack` outputs use the Complete offline shell by default. Pass `--lite` to choose the connected shell or `--complete` to explicitly convert a Lite Taco back to Complete; omit both on refresh to preserve the existing variant. A custom `--shell` cannot be combined with either flag and cannot silently change an existing variant. The compressed, empty Lite shell is gated at **less than 225 KiB**; its public CDN imports add network transfer beyond the initial HTML size.
+
 `pack` embeds every visible UTF-8 regular file and validated local `.png` assets up to 10 MiB below the feature root. PNGs are stored as binary-derived data URLs, resolve from Markdown relative to the containing document (including nested `../` paths), and remain available offline. Their SHA-256 baselines use raw bytes so `sync` can preserve or recreate PNGs without UTF-8 corruption. The only default exclusions are all `*.taco.html` files and paths containing a hidden segment beginning `.`. Repeatable `--ignore` values accept safe feature-relative paths or `*`, `?`, and `**` globs. The explicit ignore set is stored in the Taco and reused on refresh unless new `--ignore` values replace it. An unignored symlink, unsupported entry, malformed or oversized PNG, or other non-UTF-8 file is an error rather than a silent omission.
 
 Ordinary `.html` and `.htm` source files are unsupported. `pack` fails with the offending path unless it is explicitly excluded with `--ignore`; `validate`, `sync`, and `pack --from` reject legacy bundles that still contain HTML source entries or `sourceUrl`. The `.taco.html` container remains the supported review artifact. Remove the unsupported entries from a legacy bundle before refreshing it, preserving its identity, comments, navigation, and other state.
@@ -126,6 +128,7 @@ commands/review.md
 bin/taco.mjs
 bin/png.mjs
 assets/taco-shell.html
+assets/taco-shell-lite.html
 templates/spec-template.md
 templates/spec/
 templates/architecture/
@@ -138,4 +141,4 @@ The repository's default install target is the `taco` skill at `skills/taco/` �
 
 Template locations do not determine where an Agent writes the resulting `.taco.html`. The `spec/` SDD graph is an optional example; project-owned templates and review policy take precedence, including custom Checkpoint graphs or no Checkpoints at all. The extension's `spec-template.md` is a separate Spec Kit document template, not a mandatory Checkpoint configuration.
 
-Everything in this directory is local. Assembling, updating, opening, and reviewing a Taco requires no network connection. A collaboration-enabled Taco can contain access credentials; follow the [Agent installation guide](https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md) before sending its content to any external model, service, log, or ticket.
+The Complete shell opens and edits offline; the Lite shell loads rich-editor, highlighter, and Mermaid packages from pinned public CDNs and falls back to editable Markdown source when rich editing is unavailable. Assembly and review import remain local. Older collaboration-enabled Taco files can contain access credentials; follow the [Agent installation guide](https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md) before sending their contents to any external model, service, log, or ticket.

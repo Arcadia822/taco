@@ -7,9 +7,6 @@ import {
   sanitizeMermaidSvg,
   validateTacoSecurity,
 } from '../src/security.ts'
-import { rebuildSyncDoc, validateOps, validatePresence, validateSyncState } from '../src/sync/validation.ts'
-import { SYNC_V } from '../src/sync/crdt.ts'
-import { toSyncDoc } from '../src/store.ts'
 
 const bundle = (): TacoBundle => ({
   format: 'taco/files', version: 1, docId: 'security-test', title: 'Security test', root: 'specs/security-test',
@@ -88,70 +85,5 @@ describe('untrusted Taco input policy', () => {
     })
     expect(JSON.stringify(projected)).not.toContain('nested-room-secret')
     expect(JSON.stringify(projected)).not.toContain('nested-owner-secret')
-  })
-})
-
-describe('collaboration input validation', () => {
-  it('rebuilds a snapshot key by key and sanitizes remote block HTML', () => {
-    const document = bundle()
-    const sync = toSyncDoc(document)
-    const block = sync.files[0].nodes[0]
-    if (block.kind !== 'block') throw new Error('expected block')
-    block.html = '<p data-taco-block-id="block-safe" onclick="alert(1)">Remote<img src="https://attacker.test/track"></p>'
-    ;(sync as unknown as Record<string, unknown>).collab = { key: 'remote-secret' }
-    ;(sync.files[0] as unknown as Record<string, unknown>).unknownSecret = 'drop-me'
-
-    const rebuilt = rebuildSyncDoc(sync, document)
-    const rebuiltBlock = rebuilt.files[0].nodes[0]
-    expect(rebuilt).not.toHaveProperty('collab')
-    expect(rebuilt.files[0]).not.toHaveProperty('unknownSecret')
-    expect(rebuiltBlock).toMatchObject({ kind: 'block', type: 'paragraph' })
-    expect((rebuiltBlock as { html: string }).html).not.toContain('onclick')
-    expect((rebuiltBlock as { html: string }).html).not.toContain('src="https://')
-  })
-
-  it('rejects an invalid snapshot atomically before projection', () => {
-    const document = bundle()
-    const sync = toSyncDoc(document)
-    sync.files.push(structuredClone(sync.files[0]))
-    expect(() => rebuildSyncDoc(sync, document)).toThrow('security:duplicate-sync-file')
-    expect(document.files[0].content).toBe('Safe')
-  })
-
-  it('rejects malformed optional comment message timestamps atomically', () => {
-    const document = bundle()
-    document.comments = [{
-      id: 'thread-security',
-      anchor: { path: document.files[0].path, position: { start: 0, end: 4 }, quote: { exact: 'Safe', prefix: '', suffix: '' } },
-      status: 'open',
-      messages: [{ id: 'message-security', author: 'Ada', body: 'Review', createdAt: '2026-08-10T00:00:00.000Z' }],
-      createdAt: '2026-08-10T00:00:00.000Z', updatedAt: '2026-08-10T00:00:00.000Z',
-    }]
-    const sync = toSyncDoc(document)
-    const message = sync.files[0].nodes.find((node) => node.id === 'message-security') as unknown as Record<string, unknown>
-    message.deletedAt = 'invalid'
-    expect(() => rebuildSyncDoc(sync, document)).toThrow('security:invalid-comment-message')
-    expect(document.comments[0].messages[0].body).toBe('Review')
-  })
-
-  it('rejects credential mutation and malformed operation units', () => {
-    const valid = [{ a: 'peer', s: 1, l: 1, op: 'set', k: 'title', v: 'Remote' }]
-    expect(validateOps(valid)).toEqual(valid)
-    expect(validateOps([{ a: 'peer', s: 2, l: 2, op: 'set', k: 'title' }])).toHaveLength(1)
-    expect(() => validateOps([...valid, { a: 'peer', s: 2, l: 2, op: 'set', k: 'collab.key', v: 'secret' }])).toThrow('security:invalid-set-op')
-    expect(() => validateOps([{ a: 'peer', s: 3, l: 3, op: 'ins', kind: 'element', id: 'bad', sl: 'file-spec', ord: 'U', node: {} }])).toThrow('security:invalid-ins-op')
-  })
-
-  it('requires the complete supported sync-state envelope', () => {
-    const state = { v: SYNC_V, lamport: 0, vv: {}, regs: {}, pos: {}, births: {}, tombs: {}, stash: {}, limbo: {} }
-    expect(validateSyncState(state)).toEqual(state)
-    expect(() => validateSyncState({ ...state, vv: { peer: 'one' } })).toThrow('security:invalid-sync-state')
-    expect(() => validateSyncState({ ...state, pos: { node: { p: '@doc', o: 'not-an-order!', r: [1, 'peer'] } } })).toThrow('security:invalid-sync-state')
-  })
-
-  it('accepts only bounded, inert collaboration presence', () => {
-    const presence = { name: 'Ada', color: '#123abc', fileId: 'file-spec', from: 0, to: 1, focused: true, hasCursor: true }
-    expect(validatePresence(presence)).toEqual(presence)
-    expect(() => validatePresence({ ...presence, color: 'url(https://attacker.test/pixel)' })).toThrow('security:invalid-presence')
   })
 })
