@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.11.0](https://github.com/Arcadia822/taco/compare/v0.10.0...v0.11.0) (2026-09-26)
+
+### Features
+
+* ship Taco Complete and Lite review shells (#54) ([1f63c7a](https://github.com/Arcadia822/taco/commit/1f63c7aa62cad549fd93aa107fa7770948ba1f41))
+
+### Bug Fixes
+
+* **ui**: remove redundant OpenAPI option from new file dialog (close #48) ([4846799](https://github.com/Arcadia822/taco/commit/48467993439e94ed4d8cd81458fce7710d8405ab))
+
+### Chores & Maintenance
+
+* chore: **release**: tacobin-v0.3.0 ([c027c3d](https://github.com/Arcadia822/taco/commit/c027c3da4d0665eb98d3e644083f44521aedd28d))
+
 ## [0.10.0](https://github.com/Arcadia822/taco/compare/v0.9.1...v0.10.0) (2026-09-25)
 
 ### Features
