@@ -161,15 +161,18 @@ const I18N = {
     sectionCpStage1: '01 规范定义',
     sectionCpStage2: '02 架构与模型',
     sectionCpStage3: '03 接口契约',
-    section1FileSize: '离线可用',
+    section1FileSize: 'Lite 示例',
+    section1BreakdownTitle: 'Lite shell + 当前示例内容',
     section1Tree: [
-      ['应用', '编辑器、渲染器、样式与运行时全内联'],
-      ['文件', '4 个文件：spec、data-model、流程图、OpenAPI'],
-      ['评论', '跨文件评审意见与状态'],
-      ['导航', '分类与入口映射清单'],
+      ['应用', '约 178 KB'],
+      ['文件', '约 8.1 KB'],
+      ['评论', '约 3.3 KB'],
+      ['导航', '约 0.5 KB'],
     ],
+    section1ShellSizeTitle: 'Shell 大小（不含文档）',
+    section1ShellSizes: ['Lite：约 180 KB', 'Complete：约 2.7 MB（内嵌 Tiptap、highlight.js/lowlight、Mermaid 渲染库及样式）'],
     section1Online: '联网依赖',
-    section1OnlineItems: ['Lite：所需编辑器、语法高亮和 Mermaid 库在启动时从公共 CDN 加载；Complete 无需联网', '实时协作中继：可选'],
+    section1OnlineItems: ['Lite：所需编辑器、语法高亮和 Mermaid 库在启动时从公共 CDN 加载；Complete 无需联网'],
     section2Eyebrow: '02 / 评审交接',
     section2Title: '评审直接在文档里做，Agent 接着就改',
     section2Lead: '打开 Taco，你可以：',
@@ -270,15 +273,18 @@ const I18N = {
     sectionCpStage1: '01 Specification',
     sectionCpStage2: '02 Architecture & Model',
     sectionCpStage3: '03 API Contract',
-    section1FileSize: 'Offline-ready',
+    section1FileSize: 'Lite example',
+    section1BreakdownTitle: 'LITE SHELL + CURRENT DEMO CONTENT',
     section1Tree: [
-      ['App', 'inlined editor, renderers, styling and runtime'],
-      ['Files', '4 files: spec, data model, flowchart, OpenAPI'],
-      ['Comments', 'cross-file review threads and status'],
-      ['Navigation', 'categories and entry manifest'],
+      ['App', 'about 178 KB'],
+      ['Files', 'about 8.8 KB'],
+      ['Comments', 'about 3.4 KB'],
+      ['Navigation', 'about 0.5 KB'],
     ],
+    section1ShellSizeTitle: 'SHELL SIZE (EXCLUDES DOCUMENTS)',
+    section1ShellSizes: ['Lite: about 180 KB', 'Complete: about 2.7 MB (bundles Tiptap, highlight.js/lowlight, the Mermaid renderer, and styles)'],
     section1Online: 'NETWORK DEPENDENCIES',
-    section1OnlineItems: ['Lite: required editor, syntax-highlighter and Mermaid libraries load from public CDNs at startup; Complete needs no network', 'Live collaboration relay — optional'],
+    section1OnlineItems: ['Lite: required editor, syntax-highlighter and Mermaid libraries load from public CDNs at startup; Complete needs no network'],
     section2Eyebrow: '02 / Review handoff',
     section2Title: 'Review right in the doc. Your agent takes it from there.',
     section2Lead: 'In Taco you can:',
@@ -1014,6 +1020,7 @@ export default function HomePage() {
               </div>
 
               <div className="bundle-card__tree">
+                <div className="bundle-card__online-title">{t.section1BreakdownTitle}</div>
                 {t.section1Tree.map(([key, value], index) => (
                   <div key={key} className="bundle-card__row">
                     <span className="bundle-card__branch">{index === t.section1Tree.length - 1 ? '└──' : '├──'}</span>
@@ -1021,6 +1028,11 @@ export default function HomePage() {
                     <span className="bundle-card__value">{value}</span>
                   </div>
                 ))}
+              </div>
+
+              <div className="bundle-card__online">
+                <div className="bundle-card__online-title">{t.section1ShellSizeTitle}</div>
+                {t.section1ShellSizes.map((item) => <div key={item}>· {item}</div>)}
               </div>
 
               <div className="bundle-card__online">
