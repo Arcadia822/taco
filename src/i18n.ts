@@ -10,7 +10,7 @@ const en = {
   files: 'Files', otherFiles: 'Unassigned files', search: 'Search', searchTitle: 'Search documents',
   ungrouped: 'Unassigned', newGroup: 'New group...', newGroupTitle: 'New group', groupTitlePlaceholder: 'Group name', create: 'Create',
   addGroup: 'Add group', renameGroup: 'Rename group', deleteGroup: 'Delete group',
-  addFile: 'Add file', renameFile: 'Rename file', deleteFile: 'Delete file',
+  addFile: 'Add file', renameFile: 'Rename file', deleteFile: 'Delete file', actions: 'Actions',
   setEntry: 'Set as entry document', entryBadge: 'Entry', newGroupPrompt: 'Group title:',
   newFilePrompt: 'File name (e.g. overview.md):', renameFilePrompt: 'New file name:',
   newFileType: 'File type', newFileName: 'File name', newFileCategory: 'Category', changeCategory: 'Change category',
@@ -75,7 +75,7 @@ const zhHans: Copy = {
   ungrouped: '未分配', newGroup: '新建分组...', newGroupTitle: '新建分组', groupTitlePlaceholder: '分组名称', create: '创建',
   addGroup: '添加分组', renameGroup: '重命名分组', deleteGroup: '删除分组',
   setEntry: '设为主入口', entryBadge: '入口', newGroupPrompt: '分组标题：',
-  addFile: '新建文件', renameFile: '重命名文件', deleteFile: '删除文件',
+  addFile: '新建文件', renameFile: '重命名文件', deleteFile: '删除文件', actions: '操作',
   newFilePrompt: '文件名（如 overview.md）：', renameFilePrompt: '新文件名：',
   newFileType: '文件类型', newFileName: '文件名', newFileCategory: '分类', changeCategory: '更改分类',
   deleteGroupConfirm: '确定删除该分组吗？组内文件将移至未分配区。',
@@ -140,7 +140,7 @@ export const copy: Record<Locale, Copy> = {
 
 
 const checkpointEn: CheckpointLabels = {
-  checkpoints: 'Checkpoints', checkpointsInvalid: 'Invalid checkpoints',
+  checkpoints: 'Checkpoints', checkpoint: 'Checkpoint', checkpointsInvalid: 'Invalid checkpoints',
   checkpointTemplateName: 'Checkpoint template name', checkpointUnnamed: 'Untitled',
   statusTodo: 'To do', statusInProgress: 'In progress', statusComplete: 'Complete', statusFreeze: 'Frozen',
   checkpointOptional: 'optional', checkpointRequired: 'required', checkpointMissingFile: 'Not created',
@@ -151,13 +151,13 @@ const checkpointEn: CheckpointLabels = {
 const checkpointTranslations: Record<Locale, CheckpointLabels> = {
   en: checkpointEn,
   'zh-Hans': {
-    checkpoints: 'Checkpoints', checkpointsInvalid: 'Checkpoints 定义无效',
-    checkpointTemplateName: 'Checkpoint 模板名称', checkpointUnnamed: '未命名',
+    checkpoints: '检查点', checkpoint: '检查点', checkpointsInvalid: '检查点定义无效',
+    checkpointTemplateName: '检查点模板名称', checkpointUnnamed: '未命名',
     statusTodo: '待开始', statusInProgress: '进行中', statusComplete: '已完成', statusFreeze: '已冻结',
     checkpointOptional: '可选', checkpointRequired: '必需', checkpointMissingFile: '未创建',
-    checkpointOpenView: '在 Checkpoints 中查看', checkpointCreateFile: '创建文件',
+    checkpointOpenView: '在检查点中查看', checkpointCreateFile: '创建文件',
     checkpointNotCreatedRead: '此文件尚未创建',
-    checkpointGroupHint: '分组由 Checkpoint 决定', checkpointOverridden: (category) => `分组由 Checkpoint 决定，原 category「${category}」未生效`,
+    checkpointGroupHint: '分组由检查点决定', checkpointOverridden: (category) => `分组由检查点决定，原分类「${category}」未生效`,
   },
 }
 export const checkpointCopy = (locale: Locale): CheckpointLabels => checkpointTranslations[locale]

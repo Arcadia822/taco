@@ -1187,7 +1187,6 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .checkpoint-template-name:not(:disabled):hover, .checkpoint-template-name:not(:disabled):focus-visible { border-color: var(--line-strong); background: var(--surface); }
 .checkpoint-template-name:disabled { opacity: 1; cursor: default; }
 .is-checkpoint-view .bundle-title, .is-checkpoint-view .workspace-path, .is-checkpoint-view .workspace-category-badge,
-  .is-checkpoint-view .copy-review-group, .is-checkpoint-view .save-group,
   .is-checkpoint-view .comment-toggle { display: none; }
 .is-checkpoint-view .checkpoint-page-title { display: flex; }
 .is-checkpoint-view .workspace-body { grid-template-columns: minmax(0, 1fr) 0; }

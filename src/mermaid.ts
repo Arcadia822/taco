@@ -535,6 +535,7 @@ const renderDiagram = (
       if (surface.dataset.renderId !== id) return
       surface.className = 'surface'
       surface.innerHTML = sanitizeMermaidSvg(svg)
+      delete host.dataset.mermaidUnavailable
       host.dataset.mermaidTheme = currentTheme
       host.dataset.mermaidLook = effectiveLook
       host.dataset.mermaidDark = String(isDark)

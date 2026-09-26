@@ -55,8 +55,10 @@ export function bootCommon(bundle: TacoBundle, options: FileBrowserOptions = {},
   const root = document.getElementById('app')
   if (!root) throw new Error('Taco root element is missing')
   const browser = new FileBrowser(root, bundle, options)
-  if (initialReady) void initialReady.then(dismissSplashAfterPaint, dismissSplashAfterPaint)
-  else dismissSplashAfterPaint()
+  const ready = initialReady
+    ? Promise.allSettled([initialReady, browser.initialPreviewReady])
+    : browser.initialPreviewReady
+  void ready.then(dismissSplashAfterPaint)
 
   window.taco = {
     format: 'taco/files',

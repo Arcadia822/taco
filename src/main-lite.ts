@@ -1,5 +1,5 @@
 import { fileKind, parseBundle } from './model.ts'
-import { MermaidRuntime, type MermaidApi } from './mermaid.ts'
+import { MermaidRuntime } from './mermaid.ts'
 import { bootCommon, recoveryGate } from './main-common.ts'
 import { readEmbeddedDoc } from './kernel/save.ts'
 import { loadLiteRichEditorAdapter, loadLiteHighlighter, loadLiteMermaid } from './lite-cdn-loader.ts'
@@ -18,20 +18,19 @@ if (parsed.ok) {
   const richEditorAdapter = hasMarkdown ? loadLiteRichEditorAdapter() : undefined
   const highlighter = hasCode ? loadLiteHighlighter() : undefined
 
-  let mermaidPromise: Promise<MermaidApi> | undefined
-  if (hasMermaidFile) {
-    mermaidPromise = loadLiteMermaid()
-  }
+  let mermaidLoadAttempt = 0
+  let preloadedMermaid = hasMermaidFile ? loadLiteMermaid(mermaidLoadAttempt++) : undefined
   const mermaidRuntime = new MermaidRuntime(() => {
-    mermaidPromise ??= loadLiteMermaid()
-    return mermaidPromise
+    const pending = preloadedMermaid
+    preloadedMermaid = undefined
+    return pending ?? loadLiteMermaid(mermaidLoadAttempt++)
   })
 
   bootCommon(bundle, {
     richEditorAdapter,
     highlighter,
     mermaidRuntime,
-  }, richEditorAdapter)
+  }, Promise.allSettled([richEditorAdapter, highlighter, preloadedMermaid]))
 } else {
   recoveryGate(embedded, parsed.err === 'empty' ? 'The bundle block is empty.' : `${parsed.err}: ${parsed.detail}`)
 }

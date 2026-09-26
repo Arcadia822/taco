@@ -101,14 +101,14 @@ When creating, modifying, inspecting, or reporting a Checkpoint graph or its doc
 
 `mediaType` by carrier:
 
-| File             | `mediaType`        | Notes                                                                 |
-| ---------------- | ------------------ | --------------------------------------------------------------------- |
-| `.md`            | `text/markdown`    | editable document                                                     |
-| `.json`          | `application/json` | source view                                                           |
-| `.yaml` / `.yml` | `application/yaml` | source view                                                           |
-| `diagrams/*.mmd` | `text/plain`       | Mermaid source; the runtime routes it by extension, not by media type |
-| `.png`           | `image/png`        | `content` is a `data:image/png;base64,…` URI                          |
-| any other UTF-8 text | `text/plain` | plain-text source; excludes `.html` and `.htm` |
+| File                 | `mediaType`        | Notes                                                             |
+| -------------------- | ------------------ | ----------------------------------------------------------------- |
+| `.md`                | `text/markdown`    | editable document                                                 |
+| `.json`              | `application/json` | editable syntax-highlighted source                                |
+| `.yaml` / `.yml`     | `application/yaml` | editable syntax-highlighted source                                |
+| `diagrams/*.mmd`     | `text/plain`       | editable Mermaid source and diagram preview; routed by extension |
+| `.png`               | `image/png`        | `content` is a `data:image/png;base64,…` URI                      |
+| any other UTF-8 text | `text/plain`       | plain-text source; excludes `.html` and `.htm`                    |
 
 Per-file fields:
 

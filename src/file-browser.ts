@@ -117,6 +117,9 @@ export class FileBrowser {
   private awaitingRichEditor: { path: string; content: string; serial: number } | null = null
   private richEditorFailure: string | null = null
   private highlighter: SourceHighlighter | undefined
+  readonly initialPreviewReady: Promise<void>
+  private initialPreviewPath: string | null = null
+  private resolveInitialPreview: (() => void) | null = null
 
   get markdownEditor(): unknown {
     return this.richEditor?.rawEditor ?? null
@@ -239,6 +242,7 @@ export class FileBrowser {
       })
     } else {
       this.highlighter = highlighter as SourceHighlighter | undefined
+      if (this.highlighter) setDefaultHighlighter(this.highlighter)
     }
     const adapterOption = options.richEditorAdapter ?? getDefaultRichEditorAdapter()
     const adapterPromise = typeof adapterOption === 'function' ? adapterOption() : adapterOption
@@ -247,6 +251,9 @@ export class FileBrowser {
       void (adapterPromise as Promise<RichEditorAdapter>).then((adapter) => {
         this.richEditorLoading = false
         this.richEditorAdapter = adapter
+        for (const failure of adapter.migrateBundleBlocks(this.bundle, this.mermaidLabels())) {
+          this.markdownMigrationErrors.set(failure.path, failure.message)
+        }
         this.promoteAwaitingMarkdown()
       }).catch((error: unknown) => {
         this.richEditorLoading = false
@@ -272,6 +279,10 @@ export class FileBrowser {
     const selectionKey = fileSelectionSessionKey(bundle.docId)
     const initialPath = selectedPathForLoad(location.protocol, location.hash, storageGet(selectionKey, 'session'))
     this.selected = fileByPath(bundle, initialPath) ?? defaultFile(bundle)
+    if (this.selected && fileKind(this.selected) === 'mermaid') this.initialPreviewPath = this.selected.path
+    this.initialPreviewReady = this.initialPreviewPath
+      ? new Promise<void>((resolve) => { this.resolveInitialPreview = resolve })
+      : Promise.resolve()
     if (this.selected) this.rememberOfflineSelection(this.selected)
     this.auxiliaryTab = this.embedded || !this.selected || fileKind(this.selected) !== 'markdown' ? 'comments' : 'outline'
     this.comments = new CommentsController({
@@ -310,6 +321,7 @@ export class FileBrowser {
   }
 
   destroy(): void {
+    this.finishInitialPreview()
     window.removeEventListener('hashchange', this.handleHashChange)
     document.removeEventListener('keydown', this.handleDocumentKeyDown)
 
@@ -361,6 +373,7 @@ export class FileBrowser {
         addFile: this.t.addFile,
         renameFile: this.t.renameFile,
         deleteFile: this.t.deleteFile,
+        actions: this.t.actions,
         setEntry: this.t.setEntry,
         entryBadge: this.t.entryBadge,
         newGroupPrompt: this.t.newGroupPrompt,
@@ -633,8 +646,17 @@ export class FileBrowser {
     history.replaceState(null, '', `#${encodeURIComponent(file.path)}${heading}`)
   }
 
+  private finishInitialPreview(): void {
+    this.resolveInitialPreview?.()
+    this.resolveInitialPreview = null
+    this.initialPreviewPath = null
+  }
+
   private paintViewer(animateEntrance = false): void {
     const mountSerial = ++this.editorMountSerial
+    if (this.initialPreviewPath && (this.checkpointView || this.selected?.path !== this.initialPreviewPath)) {
+      this.finishInitialPreview()
+    }
     this.richEditor?.destroy()
     this.richEditor = null
     this.awaitingRichEditor = null
@@ -682,6 +704,9 @@ export class FileBrowser {
         labels: structuredFileLabels(this.locale),
         mermaidLabels: this.mermaidLabels(),
         mermaidRuntime: this.options.mermaidRuntime,
+        onPreviewSettled: file.path === this.initialPreviewPath ? () => {
+          if (this.editorMountSerial === mountSerial) this.finishInitialPreview()
+        } : undefined,
         readOnly: !bundleCanWrite(this.bundle),
         sourceLabel: this.t.sourceEditor(kind),
         onNodeComment: (source) => this.comments.captureSourceSelection(source, file, undefined, true),
@@ -776,9 +801,6 @@ export class FileBrowser {
     if (this.selected.content !== content) return
     if (this.editorMountSerial !== serial) return
     this.awaitingRichEditor = null
-    for (const failure of this.richEditorAdapter.migrateBundleBlocks(this.bundle, this.mermaidLabels())) {
-      this.markdownMigrationErrors.set(failure.path, failure.message)
-    }
     this.mountMarkdownEditor(this.selected, serial)
   }
 
@@ -1109,6 +1131,7 @@ export class FileBrowser {
       currentGroupId: groupInfo.groupId,
       labels: {
         ungrouped: this.t.ungrouped,
+        checkpoint: checkpointCopy(this.locale).checkpoint,
       },
       onSelectGroup: (targetGroupId) => {
         if (!this.selected) return
@@ -1487,7 +1510,7 @@ export class FileBrowser {
     setTimeout(() => toast.remove(), 2360)
   }
   private async handleCreateFile(targetGroupId: string | null): Promise<void> {
-    const groups = getAvailableGroups(this.bundle)
+    const groups = getAvailableGroups(this.bundle, checkpointCopy(this.locale).checkpoint)
     const result = await showNewFileDialog({
       title: this.t.addFile,
       typeLabel: this.t.newFileType,
@@ -1526,9 +1549,6 @@ export class FileBrowser {
   }
 
   private async handleRenameFile(file: TacoFile): Promise<void> {
-    const isTracked = (): boolean => resolveCheckpoints(this.bundle).nodes
-      .some((node) => node.documents.some((document) => document.path === file.path))
-    if (isTracked()) return
     const fullName = fileName(file.path)
     const dotIndex = fullName.lastIndexOf('.')
     const baseName = dotIndex > 0 ? fullName.slice(0, dotIndex) : fullName
@@ -1543,7 +1563,6 @@ export class FileBrowser {
       cancelLabel: this.t.cancel ?? 'Cancel',
     })
     if (!newName || !newName.trim()) return
-    if (isTracked()) return
 
     // 清理并剥除可能误输的相同后缀，严格强制追加原有后缀名
     let cleanBase = newName.trim().replaceAll('\\', '/').split('/').filter(Boolean).pop() ?? ''
@@ -1558,6 +1577,8 @@ export class FileBrowser {
     if (fileByPath(this.bundle, newPath)) return
 
     const oldPath = file.path
+    const checkpoints = resolveCheckpoints(this.bundle)
+    const wasTracked = checkpoints.valid && checkpoints.nodes.some((node) => node.documents.some((document) => document.path === oldPath))
     this.store.commit({ kind: 'document' }, () => {
       file.path = newPath
       if (this.bundle.navigation) {
@@ -1569,6 +1590,9 @@ export class FileBrowser {
         if (this.bundle.navigation.entry === oldRel) {
           this.bundle.navigation.entry = newRel
         }
+      }
+      if (wasTracked && checkpoints.state) {
+        this.bundle.checkpoints = { ...checkpoints.state, documents: checkpoints.state.documents.filter((record) => record.path !== oldPath) }
       }
     })
 
@@ -1587,6 +1611,8 @@ export class FileBrowser {
     })
     if (!confirmed) return
     const filePath = file.path
+    const checkpoints = resolveCheckpoints(this.bundle)
+    const wasTracked = checkpoints.valid && checkpoints.nodes.some((node) => node.documents.some((document) => document.path === filePath))
     this.store.commit({ kind: 'document' }, () => {
       this.bundle.files = this.bundle.files.filter((f) => f.path !== filePath)
       if (this.bundle.navigation) {
@@ -1598,13 +1624,27 @@ export class FileBrowser {
           delete this.bundle.navigation.entry
         }
       }
+      if (wasTracked && checkpoints.state) {
+        this.bundle.checkpoints = { ...checkpoints.state, documents: checkpoints.state.documents.filter((record) => record.path !== filePath) }
+      }
     })
 
     if (this.selected?.path === filePath) {
-      this.selected = defaultFile(this.bundle)
-      if (this.selected) this.selectFile(this.selected)
+      if (wasTracked) this.selectPlaceholder(filePath)
+      else {
+        const next = defaultFile(this.bundle)
+        if (next) this.selectFile(next)
+        else {
+          this.selected = null
+          this.comments.resetForFileChange()
+          this.syncWorkspaceHeader()
+          this.paintViewer()
+          this.comments.paint()
+          this.syncAuxiliaryTabs()
+        }
+      }
     }
-    this.fileNavigation?.refresh(this.selected)
+    this.fileNavigation?.refresh(this.selected, this.checkpointView, this.selectedPlaceholder)
   }
 
 

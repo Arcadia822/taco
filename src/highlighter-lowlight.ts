@@ -1,31 +1,8 @@
 import json from 'highlight.js/lib/languages/json'
 import yaml from 'highlight.js/lib/languages/yaml'
-import type { LanguageFn } from 'highlight.js'
+import { mermaidLanguage } from './mermaid-language.ts'
 import { createLowlight } from 'lowlight'
 import type { SourceHighlighter, SourceLanguage } from './source-editor.ts'
-
-const mermaid: LanguageFn = (hljs) => ({
-  name: 'Mermaid',
-  aliases: ['mmd'],
-  keywords: {
-    keyword: [
-      'flowchart', 'graph', 'sequenceDiagram', 'classDiagram', 'stateDiagram-v2', 'erDiagram',
-      'journey', 'gantt', 'pie', 'quadrantChart', 'requirementDiagram', 'gitGraph', 'mindmap',
-      'timeline', 'sankey-beta', 'xychart-beta', 'block-beta', 'packet', 'architecture-beta', 'kanban',
-      'subgraph', 'end', 'direction', 'participant', 'actor', 'autonumber', 'activate', 'deactivate',
-      'loop', 'alt', 'else', 'opt', 'par', 'and', 'rect', 'critical', 'break', 'note', 'over',
-      'left', 'right', 'of', 'as', 'classDef', 'class', 'click', 'style', 'linkStyle',
-    ].join(' '),
-  },
-  contains: [
-    { begin: /^---[ \t]*$/, end: /^---[ \t]*$/, subLanguage: 'yaml' },
-    hljs.COMMENT('%%', '$'),
-    hljs.QUOTE_STRING_MODE,
-    { scope: 'symbol', begin: /(?:<-->|<--|-->|---|-\.->|==>|~~~|--x|--o|o--|x--)/ },
-    { scope: 'title', begin: /\b[A-Za-z_][\w-]*(?=\s*[[(\{])/ },
-    { scope: 'number', begin: hljs.NUMBER_RE },
-  ],
-})
 
 interface HighlightNode {
   type: string
@@ -49,7 +26,7 @@ const appendHighlightNode = (parent: Node, node: HighlightNode): void => {
   parent.appendChild(element)
 }
 
-const lowlight = createLowlight({ json, yaml, mermaid })
+const lowlight = createLowlight({ json, yaml, mermaid: mermaidLanguage })
 
 export const completeHighlighter: SourceHighlighter = (
   target: HTMLElement,

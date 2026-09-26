@@ -76,8 +76,9 @@ Agent 只复制 skill 的 shell、把文档写入其数据块，目录中的其�
 ## 当前能力
 
 - 将完整规格目录打包成一个可携带的 `.taco.html` 文件，在浏览器中打开并离线使用。
-- 在保留真实目录结构的同时，浏览、搜索和编辑 canonical Markdown 与其他文本文件。
+- 保留真实目录结构，浏览、搜索和编辑 canonical Markdown 与其他文本文件。独立 JSON/YAML 文件提供语法高亮源码编辑器；Mermaid 图表支持编辑源码与预览。
 - 通过锚定评论线程评审规格，可原位编辑自己的消息，也可将单条消息删除为保留回复的占位记录；随后保存更新后的 Taco，或把修改写回原始目录。
+- 可选用检查点追踪文档进度。重命名或删除必需文件后，原要求路径仍显示为「未创建」，不会被悄悄改写。
 - 收件环境可能离线时选择自包含的 Complete；联网评审可选择更小的 Lite。Lite 的 CDN 编辑器不可用时仍可编辑 Markdown 源码。
 - 可选地（需显式请求）集成 Spec Kit，持续更新每个 feature 的 Taco，并通过冲突检测安全导入人类修改与评论。
 
@@ -156,7 +157,7 @@ npm run check
 
 ## 项目状态
 
-Taco 当前处于原型阶段。文件浏览、Markdown 编辑、YAML frontmatter 属性、通用源码编辑、JSON 语法高亮、Mermaid、评论和单文件保存已实现。Complete 支持离线评审；Lite 从公共 CDN 加载锁定版本的编辑器依赖，加载失败时仍可编辑 Markdown 源码。实时协作、独立 YAML/JSON 文件的结构化编辑、版本历史、账号与 SSO 尚未实现。
+Taco 当前处于原型阶段。文件浏览、Markdown 编辑、YAML frontmatter 属性、独立 JSON/YAML 源码编辑与语法高亮、Mermaid 图表、分类、检查点、评论和单文件保存已实现。首次打开 Mermaid 图表时，启动加载画面会保持到预览完成或报错。Complete 支持离线评审；Lite 从公共 CDN 加载锁定版本的编辑器依赖，加载失败时仍可编辑 Markdown 源码。实时协作、版本历史、账号与 SSO 尚未实现。
 
 Taco v0.3 是可运行、可测试的原型，不构成生产稳定性承诺。
 

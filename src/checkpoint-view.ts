@@ -2,6 +2,7 @@ import type { DocumentStatus, ResolvedCheckpoints, ResolvedCheckpointNode } from
 import { createFileAttribute, createStatusIcon, el, svgIcon } from './ui-primitives.ts'
 
 export interface CheckpointLabels {
+  checkpoint: string
   checkpoints: string
   checkpointsInvalid: string
   checkpointTemplateName: string

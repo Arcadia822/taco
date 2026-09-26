@@ -76,8 +76,9 @@ The project is licensed under the MIT License. You can study the implementation,
 ## Current capabilities
 
 - Package a complete specification directory into one portable `.taco.html` file that opens in a browser and works offline.
-- Browse, search, and edit the canonical Markdown and text files while preserving their real directory structure.
+- Browse, search, and edit the canonical Markdown and text files while preserving their real directory structure. Standalone JSON/YAML have syntax-highlighted source editors; Mermaid diagrams have an editable source and preview.
 - Review specs with anchored comment threads, including in-place editing of your own messages and tombstone deletion of individual messages without removing their replies; then save an updated Taco or write the changes back to the original directory.
+- Track document readiness with optional Checkpoints. Renaming or deleting a required file leaves its original Checkpoint path visible as uncreated rather than silently rewriting the requirement.
 - Choose the self-contained Complete shell for offline review or the smaller Lite shell for connected review, with editable Markdown source fallback when Lite's CDN editor is unavailable.
 - Integrate with Spec Kit, optionally and on explicit request, to keep each feature's Taco current and safely import human edits and comments with conflict detection.
 
@@ -156,7 +157,7 @@ Useful contribution areas include accessibility, editing, offline text renderers
 
 ## Project status
 
-Taco is currently a prototype. File browsing, Markdown editing, YAML frontmatter properties, generic source editing, JSON syntax highlighting, Mermaid, comments, and single-file saving are implemented. The Complete shell supports offline review; Lite loads pinned editor libraries from public CDNs and keeps Markdown source writable when they fail. Real-time collaboration, standalone structured YAML/JSON editing, version history, accounts, and SSO are not implemented.
+Taco is currently a prototype. File browsing, Markdown editing, YAML frontmatter properties, standalone YAML/JSON source editing with syntax highlighting, Mermaid diagrams, Categories, Checkpoints, comments, and single-file saving are implemented. When the initial file is a Mermaid diagram, the startup splash remains visible until its first preview renders or reports an error. The Complete shell supports offline review; Lite loads pinned editor libraries from public CDNs and keeps Markdown source writable when they fail. Real-time collaboration, version history, accounts, and SSO are not implemented.
 
 Taco v0.3 is a testable prototype, not a production-stability commitment.
 

@@ -553,6 +553,7 @@ export interface StructuredFileViewerOptions {
   labels: StructuredFileLabels
   mermaidLabels: MermaidPluginLabels
   mermaidRuntime?: MermaidRuntime
+  onPreviewSettled?: () => void
   readOnly: boolean
   sourceLabel: string
   onChange: (content: string) => void
@@ -690,18 +691,22 @@ export const createStructuredFileViewer = (options: StructuredFileViewerOptions)
             if (configured !== rawSource.input.value) {
               mermaidView?.updateCode(configured)
               options.onChange(configured)
+              return
             }
           }
         }
         syncMermaidControls()
+        options.onPreviewSettled?.()
       },
       onUnavailable: () => {
         diagnostics.replaceChildren(diagnosticNode(options.labels.mermaidUnavailable))
         mermaidView?.toggleCodePanel(true)
+        options.onPreviewSettled?.()
       },
       onRenderError: () => {
         diagnostics.replaceChildren(diagnosticNode(options.mermaidLabels.error))
         mermaidView?.toggleCodePanel(true)
+        options.onPreviewSettled?.()
       },
     })
     const view = mermaidView

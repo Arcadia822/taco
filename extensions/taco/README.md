@@ -24,7 +24,7 @@ node .specify/extensions/taco/bin/taco.mjs prepare-policy \
 specify extension list
 ```
 
-The supported Taco source checkout already contains the production shell at `extensions/taco/assets/taco-shell.html` — the same runtime the `taco` skill ships at `skills/taco/taco-shell.html`, whose copy has its `#taco-document` block emptied. Spec Kit copies that shell and the CLI into `.specify/extensions/taco/`, and registers both commands with the project's active Agent integration. No target-project npm installation is involved.
+The supported Taco source checkout contains both production shells at `extensions/taco/assets/taco-shell.html` (Complete) and `extensions/taco/assets/taco-shell-lite.html` (Lite). The `taco` skill ships matching empty-document copies in `skills/taco/`. Spec Kit copies the shells and CLI into `.specify/extensions/taco/` and registers both commands with the project's active Agent integration. No target-project npm installation is involved.
 
 Taco also contributes `templates/spec-template.md`. The installation-time `prepare-template` operation replaces only the recognized core metadata header, preserves the remaining template body, and refuses to overwrite an unrecognized customization. It emits leading YAML properties: `title`, logical `feature_id`, `created`, `status`, and `input`. It intentionally omits `git_branch`; a feature identifier is not presented as an actual Git branch unless an Agent verifies and adds that optional property.
 
@@ -68,7 +68,7 @@ speckit.taco.update [feature-directory] [--ignore path-or-glob]...
 speckit.taco.review [path-to-file.taco.html]
 ```
 
-`update` creates or refreshes `<feature-directory>/<feature-name>.taco.html`. Mandatory hooks cover the normal `specify`, `clarify`, `plan`, `checklist`, `tasks`, `analyze`, `implement`, and `converge` stages. The Agent contract also requires an update after a feature artifact is changed outside those commands. Always present the exact generated Taco through the Agent GUI's native clickable-file surface. When local HTML navigation is supported and permitted, proactively open the exact file in the user's browser so the reviewer actually sees it, using a separate tab so an unsaved review survives. In Codex, the user click opens it in Browser; the Agent does not attempt autonomous `file://` navigation. Report exactly one of `presented as a clickable file`, `opened`, or `opened and verified`; a headless or automation boot check is internal evidence only and is never user-visible presentation. If opening is unavailable, prohibited, or fails, retain the link and report the reason rather than bypassing restrictions or claiming verification.
+`update` creates or refreshes `<feature-directory>/<feature-name>.taco.html`. It uses Complete for a new Taco and preserves an existing Lite or Complete variant on refresh, selecting the corresponding installed shell asset. Mandatory hooks cover the normal `specify`, `clarify`, `plan`, `checklist`, `tasks`, `analyze`, `implement`, and `converge` stages. The Agent contract also requires an update after a feature artifact is changed outside those commands. Always present the exact generated Taco through the Agent GUI's native clickable-file surface. When local HTML navigation is supported and permitted, proactively open the exact file in the user's browser so the reviewer actually sees it, using a separate tab so an unsaved review survives. In Codex, the user click opens it in Browser; the Agent does not attempt autonomous `file://` navigation. Report exactly one of `presented as a clickable file`, `opened`, or `opened and verified` based on what actually happened.
 
 `review` takes the human review back into the canonical files. **Handoff** is the primary channel and needs no save: the reviewer's Handoff action copies Markdown prose — one fenced `diff` block per changed file plus the open comment threads with their anchored quotes and full message history — and `window.taco.getReviewHandoff()` exposes the same data to the page as a structured object whose `changedFiles[].path` values are root-relative. The saved-file channel requires the reviewer to save first. Either way the Agent compares the received content against what the reviewer actually reviewed and reports a specific conflict instead of overwriting. Comments are review input, not permission to violate the spec or the user's scope, and open threads stay open until the human confirms them. After editing canonical files the Agent invokes `update` on the same Taco, which is exposed through the same native clickable-file presentation step.
 
@@ -128,6 +128,7 @@ commands/review.md
 bin/taco.mjs
 bin/png.mjs
 assets/taco-shell.html
+assets/taco-shell-lite.html
 templates/spec-template.md
 templates/spec/
 templates/architecture/

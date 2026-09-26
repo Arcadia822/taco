@@ -21,6 +21,7 @@ interface DirNode {
 
 export interface FileNavigationLabels {
   files: string
+  actions: string
   collapseFiles: string
   otherFiles: string
   addGroup?: string
@@ -266,7 +267,7 @@ export class FileNavigation {
         if (this.options.onUpdateNavigation && this.options.bundle.navigation?.groups.some(({ id }) => id === group.id) && !group.id.startsWith('category-')) {
           const menuBtn = createControlButton(
             'more-horizontal',
-            'Actions',
+            this.options.labels.actions,
             () => {
               this.openGroupMenu(menuBtn, group)
             },
@@ -439,14 +440,14 @@ export class FileNavigation {
     if (this.options.editable) {
       const menu = createControlButton(
         'more-horizontal',
-        'Actions',
-        () => this.openFileMenu(menu, file, true),
+        this.options.labels.actions,
+        () => this.openFileMenu(menu, file),
         'file-action-btn checkpoint-file-menu',
       )
       actions.append(menu)
       row.addEventListener('contextmenu', (event) => {
         event.preventDefault()
-        this.openFileMenu(menu, file, true)
+        this.openFileMenu(menu, file)
       })
     }
     const statusText = statusLabel(status, labels)
@@ -492,7 +493,7 @@ export class FileNavigation {
       const fileActions = el('span', 'file-actions')
       const menuBtn = createControlButton(
         'more-horizontal',
-        'Actions',
+        this.options.labels.actions,
         () => {
           this.openFileMenu(menuBtn, file)
         },
@@ -551,24 +552,12 @@ export class FileNavigation {
     this.positionPopover(popover, anchor)
   }
 
-  private openFileMenu(anchor: HTMLElement, file: TacoFile, checkpointFile = false): void {
+  private openFileMenu(anchor: HTMLElement, file: TacoFile): void {
     this.closePopover()
     const popover = el('div', 'topbar-popover navigation-popover')
     popover.setAttribute('role', 'menu')
 
-    const setEntryBtn = sidebarRow('button', {
-      className: 'popover-action',
-      leading: svgIcon('check'),
-      label: this.options.labels.setEntry ?? 'Set as entry document',
-    }) as HTMLButtonElement
-    setEntryBtn.type = 'button'
-    setEntryBtn.addEventListener('click', () => {
-      this.closePopover()
-      this.handleSetEntry(file.path)
-    })
-    popover.append(setEntryBtn)
-
-    if (!checkpointFile && this.options.onRenameFile) {
+    if (this.options.onRenameFile) {
       const renameBtn = sidebarRow('button', {
         className: 'popover-action',
         leading: svgIcon('edit'),
@@ -582,7 +571,7 @@ export class FileNavigation {
       popover.append(renameBtn)
     }
 
-    if (!checkpointFile && this.options.onDeleteFile) {
+    if (this.options.onDeleteFile) {
       const deleteBtn = sidebarRow('button', {
         className: 'popover-action is-destructive',
         leading: svgIcon('trash'),
@@ -595,6 +584,23 @@ export class FileNavigation {
       })
       popover.append(deleteBtn)
     }
+
+    if (popover.childElementCount) {
+      const divider = el('div', 'popover-separator')
+      divider.setAttribute('role', 'separator')
+      popover.append(divider)
+    }
+    const setEntryBtn = sidebarRow('button', {
+      className: 'popover-action',
+      leading: svgIcon('key'),
+      label: this.options.labels.setEntry ?? 'Set as entry document',
+    }) as HTMLButtonElement
+    setEntryBtn.type = 'button'
+    setEntryBtn.addEventListener('click', () => {
+      this.closePopover()
+      this.handleSetEntry(file.path)
+    })
+    popover.append(setEntryBtn)
 
     this.positionPopover(popover, anchor)
   }

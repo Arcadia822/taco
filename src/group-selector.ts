@@ -48,10 +48,11 @@ export function getFileCurrentGroup(
  */
 export function getAvailableGroups(
   bundle: TacoBundle,
+  checkpointLabel: string,
 ): GroupSelectOption[] {
   const resolved = resolveDocumentNavigation(bundle)
   return [
-    ...resolved.checkpointGroups.map(({ id, title }) => ({ id, title: `${title} · Checkpoint` })),
+    ...resolved.checkpointGroups.map(({ id, title }) => ({ id, title: `${title} · ${checkpointLabel}` })),
     ...resolved.groups.map(({ id, title }) => ({ id, title })),
   ]
 }
@@ -61,8 +62,9 @@ export interface OpenGroupSelectorOptions {
   bundle: TacoBundle
   file: TacoFile
   currentGroupId: string | null
-  labels?: {
+  labels: {
     ungrouped: string
+    checkpoint: string
   }
   onSelectGroup: (groupId: string | null) => void
 }
@@ -76,7 +78,7 @@ export function openGroupSelectorPopover(options: OpenGroupSelectorOptions): voi
   const popover = el('div', 'topbar-popover group-selector-popover')
   popover.setAttribute('role', 'menu')
 
-  const groups = getAvailableGroups(options.bundle)
+  const groups = getAvailableGroups(options.bundle, options.labels.checkpoint)
 
   // 1. 已有分组列表
   for (const group of groups) {

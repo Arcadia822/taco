@@ -1,3 +1,4 @@
+import { mermaidLanguage } from './mermaid-language.ts'
 import type { MermaidApi } from './mermaid.ts'
 import type { RichEditorAdapter } from './rich-editor.ts'
 import type { SourceHighlighter, SourceLanguage } from './source-editor.ts'
@@ -94,10 +95,11 @@ export function loadWithHedging<T>(
   })
 }
 
-export const loadLiteMermaid = (): Promise<MermaidApi> => {
+export const loadLiteMermaid = (retry = 0): Promise<MermaidApi> => {
   return loadWithHedging(async (provider) => {
     const url = CDN_URLS[provider].mermaid
-    const mod = await import(/* @vite-ignore */ url)
+    // Browsers cache failed module imports for a document, even after connectivity returns.
+    const mod = await import(/* @vite-ignore */ (retry ? `${url}?taco-retry=${retry}` : url))
     const api = mod.default ?? mod
     if (!api || typeof api.render !== 'function') throw new Error('Invalid Mermaid API from CDN')
     return api
@@ -141,7 +143,7 @@ export const loadLiteHighlighter = (): Promise<SourceHighlighter> => {
     const json = jsonMod.default ?? jsonMod
     const yaml = yamlMod.default ?? yamlMod
 
-    const lowlight = createLowlight({ json, yaml })
+    const lowlight = createLowlight({ json, yaml, mermaid: mermaidLanguage })
 
     const highlighter: SourceHighlighter = (
       target: HTMLElement,
