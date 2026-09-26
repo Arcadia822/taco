@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.10.0](https://github.com/Arcadia822/taco/compare/v0.9.1...v0.10.0) (2026-09-25)
+
+### Features
+
+* virtual category assignment, remove stage routing and HTML sources (close #52) (#55) ([108d46c](https://github.com/Arcadia822/taco/commit/108d46cfc273933f5f24250139d7a4c6846ff2b6))
+
+### Chores & Maintenance
+
+* chore: **release**: tacobin-v0.2.0 ([d3eb122](https://github.com/Arcadia822/taco/commit/d3eb122344426a8666a99396b10ea81a379992e1))
+* chore: **release**: taco-cli v0.2.0 ([f5c15d9](https://github.com/Arcadia822/taco/commit/f5c15d92bdbde88c3f1cdf31effc33248007a2de))
+
 ## [0.9.1](https://github.com/Arcadia822/taco/compare/v0.9.0...v0.9.1) (2026-09-24)
 
 ### Chores & Maintenance
