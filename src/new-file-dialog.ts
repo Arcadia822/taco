@@ -1,6 +1,6 @@
 import { createControlButton, el, type IconName } from './ui-primitives.ts'
 
-export type AllowedNewFileType = 'markdown' | 'mermaid' | 'json' | 'yaml' | 'openapi'
+export type AllowedNewFileType = 'markdown' | 'mermaid' | 'json' | 'yaml'
 
 export interface NewFileTypeOption {
   type: AllowedNewFileType
@@ -43,14 +43,6 @@ export const NEW_FILE_TYPES: readonly NewFileTypeOption[] = [
     iconName: 'file-code',
     colorClass: 'type-yaml',
     defaultContent: () => `# Configuration\n`,
-  },
-  {
-    type: 'openapi',
-    label: 'OpenAPI (.yaml)',
-    extension: '.yaml',
-    iconName: 'file-code',
-    colorClass: 'type-yaml',
-    defaultContent: (name) => `openapi: 3.1.0\ninfo:\n  title: "${name}"\n  version: "1.0.0"\npaths: {}\n`,
   },
 ] as const
 
@@ -160,7 +152,7 @@ export const showNewFileDialog = (options: NewFileDialogOptions): Promise<NewFil
 
         let mediaType = 'text/markdown'
         if (chosen.type === 'json') mediaType = 'application/json'
-        else if (chosen.type === 'yaml' || chosen.type === 'openapi') mediaType = 'application/yaml'
+        else if (chosen.type === 'yaml') mediaType = 'application/yaml'
         else if (chosen.type === 'mermaid') mediaType = 'text/plain'
 
         resolve({
