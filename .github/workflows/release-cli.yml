@@ -32,6 +32,7 @@ jobs:
           VERSION="${GITHUB_REF_NAME#taco-cli-v}"
           PACKAGE_VERSION="$(node -p "require('./packages/cli/package.json').version")"
           test "$VERSION" = "$PACKAGE_VERSION"
+          echo "PACKAGE_VERSION=$PACKAGE_VERSION" >> "$GITHUB_ENV"
 
       - name: Compile standalone binaries
         shell: bash
@@ -54,7 +55,7 @@ jobs:
           tar -C release -xzf release/taco-cli-linux-x64.tar.gz
           release/taco-cli-linux-x64 help > /tmp/taco-cli-help.json
           release/taco-cli-linux-x64 skills read taco > /tmp/taco-cli-skill.json
-          node -e "const h=require('/tmp/taco-cli-help.json'); if(h.schema!=='taco-cli-help/1') process.exit(1)"
+          node -e "const h=require('/tmp/taco-cli-help.json'); if(h.schema!=='taco-cli-help/1') process.exit(1); if(h.binaryVersion!=='$PACKAGE_VERSION') process.exit(1)"
           node -e "const s=require('/tmp/taco-cli-skill.json'); if(!s.content.includes('## Start Here')) process.exit(1)"
 
       - name: Publish GitHub Release
