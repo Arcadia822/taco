@@ -127,7 +127,7 @@ const { ok, issues, findings, counts } = window.taco.validate()
 findings.filter((finding) => finding.severity !== 'info')
 ```
 
-`issues` reports collaboration credentials and runtime security; `findings` reports the document itself. Each finding is `{ code, severity, message, path? }` and covers duplicate file ids, comment anchors whose quote moved or vanished, relative links that point outside the bundle or at nothing, navigation and Checkpoint paths that reference no file, and blocks the editor could not migrate. `ok` is false when there is a security issue or an `error`-severity finding. `severity: 'info'` is deliberately quiet — an unknown bundle field is preserved unchanged, not a defect.
+`issues` reports collaboration credentials and runtime security; `findings` reports the document itself. Each finding is `{ code, severity, message, path? }` and covers duplicate file ids, comment anchors whose quote no longer resolves against the file, relative links that point outside the bundle or at nothing, navigation and Checkpoint paths that reference no file, and blocks the editor could not migrate. `ok` is false when there is a security issue or an `error`-severity finding. `severity: 'info'` is deliberately quiet — an unknown bundle field is preserved unchanged, not a defect.
 
 Without a browser, use the bundled checker:
 

@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -13,9 +13,9 @@ const dataBlock = /(<script\b(?=[^>]*\bid=["']taco-document["'])[^>]*>)([\s\S]*?
 
 const fixtureDir = () => mkdtempSync(join(tmpdir(), 'taco-skill-pack-'))
 
-const write = (path: string, content: string) => {
+const write = (path: string, content: string | Buffer) => {
   mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, content, 'utf8')
+  writeFileSync(path, content)
 }
 
 const pack = (args: string[]) =>
@@ -265,6 +265,96 @@ describe('skill packer', () => {
       expect(parsed.bundle.files.length).toBeGreaterThan(0)
       expect(parsed.bundle.docId).toBeTruthy()
     }
+  })
+
+  it('ships the same PNG validator the runtime enforces', () => {
+    const mirrored = readFileSync(resolve('skills/taco/scripts/png.mjs'))
+    const canonical = readFileSync(resolve('extensions/taco/bin/png.mjs'))
+    expect(mirrored.equals(canonical), 'skills/taco/scripts/png.mjs must stay byte-identical').toBe(true)
+  })
+
+  it('refuses a PNG the runtime would reject', () => {
+    const directory = join(fixtureDir(), 'broken-png')
+    // A PNG signature and nothing else: the old check accepted it, then the artifact opened in Recovery.
+    write(join(directory, 'diagram.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+
+    const result = spawnSync(process.execPath, [packScript, '--dir', directory, '--title', 'Broken'], { encoding: 'utf8' })
+    expect(result.status).toBe(1)
+  })
+
+  it('keeps the shell variant across a refresh', () => {
+    const directory = freeFormDirectory()
+    pack(['--dir', directory, '--title', 'Roguelike Tactics Research', '--shell', resolve('skills/taco/taco-shell-lite.html')])
+    const artifact = join(directory, 'Roguelike_Tactics_Research.taco.html')
+    expect(readFileSync(artifact, 'utf8')).toContain('name="taco-shell-variant" content="lite"')
+
+    pack(['--dir', directory, '--title', 'Roguelike Tactics Research'])
+    expect(readFileSync(artifact, 'utf8')).toContain('name="taco-shell-variant" content="lite"')
+  })
+
+  it('refuses to downgrade a bundle written by a newer format version', () => {
+    const directory = freeFormDirectory()
+    pack(['--dir', directory, '--title', 'Roguelike Tactics Research'])
+    const artifact = join(directory, 'Roguelike_Tactics_Research.taco.html')
+    writeBundle(artifact, (bundle) => {
+      bundle.version = 9
+    })
+
+    const result = spawnSync(process.execPath, [packScript, '--dir', directory, '--title', 'Roguelike Tactics Research'], {
+      encoding: 'utf8',
+    })
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('will not downgrade')
+  })
+
+  it('keeps a commented source whose file disappeared', () => {
+    const directory = freeFormDirectory()
+    pack(['--dir', directory, '--title', 'Roguelike Tactics Research'])
+    const artifact = join(directory, 'Roguelike_Tactics_Research.taco.html')
+    writeBundle(artifact, (bundle) => {
+      bundle.comments = [
+        {
+          id: 'thread-1',
+          status: 'open',
+          createdAt: '2026-09-26T10:00:00.000Z',
+          updatedAt: '2026-09-26T10:00:00.000Z',
+          anchor: {
+            path: 'roguelike-tactics-game/combat-model.md',
+            position: { start: 0, end: 6 },
+            quote: { exact: 'Combat', prefix: '# ', suffix: '' },
+          },
+          messages: [{ id: 'm1', author: 'Arcadia', body: 'keep this', createdAt: '2026-09-26T10:00:00.000Z' }],
+        },
+      ]
+    })
+    rmSync(join(directory, 'combat-model.md'))
+
+    const output = pack(['--dir', directory, '--title', 'Roguelike Tactics Research'])
+    expect(output).toContain('commented source is gone from the directory')
+
+    const { parsed } = readBundle(artifact)
+    expect(parsed.ok).toBe(true)
+    if (parsed.ok) {
+      expect(parsed.bundle.files.map((file) => file.path)).toContain('roguelike-tactics-game/combat-model.md')
+    }
+  })
+
+  it('applies an entry without inventing groups', () => {
+    const directory = freeFormDirectory()
+    pack(['--dir', directory, '--title', 'Roguelike Tactics Research', '--entry', 'research.md'])
+    const artifact = join(directory, 'Roguelike_Tactics_Research.taco.html')
+
+    const { parsed } = readBundle(artifact)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.bundle.navigation?.entry).toBe('research.md')
+    // An entry needs a manifest, and a manifest suppresses directory grouping: the groups must be
+    // the ones the directory already produced, so asking for an entry does not reshuffle the sidebar.
+    expect(parsed.bundle.navigation?.groups.map((group) => group.title)).toEqual(['notes'])
+    expect(resolveDocumentNavigation(parsed.bundle).unassigned.map((file) => file.path)).toEqual([
+      'roguelike-tactics-game/combat-model.md',
+      'roguelike-tactics-game/research.md',
+    ])
   })
 
   it('writes a shell whose data block the runtime accepts', () => {

@@ -19,6 +19,7 @@
 // non-zero with the reason on stderr.
 
 import { randomUUID } from 'node:crypto'
+import { MAX_PNG_SIZE, PNG_DATA_URL_PREFIX, decodePng, validatePngBytes } from './png.mjs'
 import {
   lstat,
   mkdir,
@@ -33,9 +34,6 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 
 const FORMAT = 'taco/files'
 const FORMAT_VERSION = 1
-const MAX_PNG_BYTES = 10 * 1024 * 1024
-const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-const PNG_DATA_URL_PREFIX = 'data:image/png;base64,'
 const DATA_CONTENT = /(<script\b(?=[^>]*\bid=["']taco-document["'])[^>]*>)([\s\S]*?)(<\/script>)/i
 const DATA_BLOCK = /<script\b(?=[^>]*\bid=["']taco-document["'])[^>]*>[\s\S]*?<\/script>/i
 const SHELL_TITLE = /<title\b[^>]*>[\s\S]*?<\/title>/i
@@ -186,14 +184,12 @@ const collectFiles = async (featureDir, rootPath, existingByPath, ignorePatterns
       let hashInput
       if (isPng) {
         const bytes = await readFile(absolute)
-        if (bytes.length > MAX_PNG_BYTES) {
+        if (bytes.length > MAX_PNG_SIZE) {
           throw new Error(
             `PNG image exceeds 10 MiB limit: ${relativePathKey} (${bytes.length} bytes); optimize or exclude with --ignore`,
           )
         }
-        if (bytes.length < PNG_SIGNATURE.length || !bytes.subarray(0, 8).equals(PNG_SIGNATURE)) {
-          throw new Error(`File is not a valid PNG image: ${relativePathKey}; exclude it with --ignore`)
-        }
+        validatePngBytes(bytes, relativePathKey)
         content = `${PNG_DATA_URL_PREFIX}${bytes.toString('base64')}`
         hashInput = bytes
       } else {
@@ -426,8 +422,12 @@ const validateBundle = (raw) => {
     if (value.blocks !== undefined && (!Array.isArray(value.blocks) || !value.blocks.every(isBlock))) {
       fail(`file blocks are invalid: ${value.path}`)
     }
-    if (value.mediaType === 'image/png' && !value.content.startsWith(PNG_DATA_URL_PREFIX)) {
-      fail(`PNG content must be a data URI: ${value.path}`)
+    if (value.mediaType === 'image/png') {
+      try {
+        decodePng(value.content, value.path)
+      } catch (error) {
+        fail(error instanceof Error ? error.message : String(error))
+      }
     }
   }
 
@@ -465,6 +465,7 @@ const UNASSIGNED = '未分类'
 
 const checkpointState = (bundle) => {
   const checkpoints = bundle.checkpoints
+  const problems = []
   if (!isRecord(checkpoints) || !Array.isArray(checkpoints.nodes)) return null
   const nodes = checkpoints.nodes.filter(
     (node) =>
@@ -475,6 +476,30 @@ const checkpointState = (bundle) => {
       Array.isArray(node.documents),
   )
   if (!nodes.length) return null
+  const ids = new Set()
+  for (const node of nodes) {
+    if (ids.has(node.id)) problems.push(`duplicate checkpoint node id: ${node.id}`)
+    ids.add(node.id)
+  }
+  for (const node of nodes) {
+    for (const predecessor of node.after) {
+      if (!ids.has(predecessor)) {
+        problems.push(`checkpoint "${node.id}" waits on an unknown predecessor: ${predecessor}`)
+      }
+    }
+  }
+  const seenDocuments = new Set()
+  for (const node of nodes) {
+    for (const document of node.documents) {
+      if (!isRecord(document) || !isNonEmptyString(document.path)) {
+        problems.push(`checkpoint "${node.id}" has a malformed document entry`)
+        continue
+      }
+      const path = document.path.startsWith(`${bundle.root}/`) ? document.path : `${bundle.root}/${document.path}`
+      if (seenDocuments.has(path)) problems.push(`a document belongs to more than one checkpoint: ${path}`)
+      seenDocuments.add(path)
+    }
+  }
   const status = new Map()
   if (Array.isArray(checkpoints.documents)) {
     for (const record of checkpoints.documents) {
@@ -488,7 +513,8 @@ const checkpointState = (bundle) => {
   while (remaining.size) {
     const ready = [...remaining.values()].filter((node) => node.after.every((id) => satisfied.has(id)))
     if (!ready.length) {
-      ordered.push(...remaining.values())
+      // A dependency cycle is the only way here; the runtime refuses the whole graph.
+      problems.push(`checkpoint graph has a dependency cycle involving: ${[...remaining.keys()].join(', ')}`)
       break
     }
     ready.sort((a, b) => a.id.localeCompare(b.id))
@@ -498,7 +524,21 @@ const checkpointState = (bundle) => {
       remaining.delete(node.id)
     }
   }
-  return { nodes: ordered, status, template: typeof checkpoints.template === 'string' ? checkpoints.template : null }
+  return { nodes: ordered, status, template: typeof checkpoints.template === 'string' ? checkpoints.template : null, problems }
+}
+
+/** First-level directory groups, the sidebar's default when no manifest declares any. */
+const directoryGroups = (files, rootPath) => {
+  const byCategory = new Map()
+  for (const file of files) {
+    const relative = file.path.slice(rootPath.length + 1)
+    const segments = relative.split('/')
+    if (segments.length < 2) continue
+    const title = segments[0]
+    if (!byCategory.has(title)) byCategory.set(title, [])
+    byCategory.get(title).push(relative)
+  }
+  return [...byCategory.entries()].map(([title, paths]) => ({ id: `category-${title}`, title, paths }))
 }
 
 const structureOf = (bundle) => {
@@ -509,6 +549,7 @@ const structureOf = (bundle) => {
   const checkpointPaths = new Set()
   const checkpointGroups = []
   if (checkpoint) {
+    for (const problem of checkpoint.problems) warnings.push(problem)
     for (const node of checkpoint.nodes) {
       const entries = node.documents.map((document) => {
         const path = document.path.startsWith(`${bundle.root}/`)
@@ -560,17 +601,10 @@ const structureOf = (bundle) => {
       if (!paths.has(entry)) warnings.push(`navigation.entry is not in the bundle: ${entry}`)
     }
   } else {
-    const byCategory = new Map()
-    for (const file of bundle.files) {
-      if (assigned.has(file.path)) continue
-      const segments = rel(file.path).split('/')
-      const category = segments.length > 1 ? segments[0] : UNASSIGNED
-      if (category === UNASSIGNED) continue
-      if (!byCategory.has(category)) byCategory.set(category, [])
-      byCategory.get(category).push(file.path)
-      assigned.add(file.path)
+    for (const group of directoryGroups(bundle.files, bundle.root)) {
+      groups.push({ id: group.id, title: group.title, files: group.paths.map((path) => `${bundle.root}/${path}`) })
+      for (const path of group.paths) assigned.add(`${bundle.root}/${path}`)
     }
-    for (const [title, files] of byCategory) groups.push({ id: `category-${title}`, title, files })
   }
 
   const unassigned = bundle.files.map((file) => file.path).filter((path) => !assigned.has(path))
@@ -601,7 +635,7 @@ const structureOf = (bundle) => {
   }
 }
 
-const printStructure = (bundle, structure, lines) => {
+const printStructure = (bundle, structure, lines, extraWarnings = []) => {
   lines.push(`  root: ${bundle.root}`)
   lines.push(`  files: ${bundle.files.length}`)
   lines.push(`  entry: ${structure.entry ?? '(none)'}${structure.entryDeclared ? ' (declared)' : ' (derived)'}`)
@@ -630,9 +664,10 @@ const printStructure = (bundle, structure, lines) => {
     lines.push('  unassigned: (none)')
   }
   lines.push(`  comments: ${structure.comments.open} open, ${structure.comments.resolved} resolved`)
-  if (structure.warnings.length) {
+  const warnings = [...extraWarnings, ...structure.warnings]
+  if (warnings.length) {
     lines.push('  warnings:')
-    for (const warning of structure.warnings) lines.push(`    - ${warning}`)
+    for (const warning of warnings) lines.push(`    - ${warning}`)
   }
 }
 
@@ -674,20 +709,21 @@ const atomicWrite = async (path, text) => {
   }
 }
 
-const readBundleFromHtml = async (path) => {
-  const html = await readFile(path, 'utf8')
+const readBundleFrom = (html, label) => {
   const match = html.match(DATA_CONTENT)
-  if (!match) throw new Error(`${path} has no #taco-document data block`)
+  if (!match) throw new Error(`${label} has no #taco-document data block`)
   const text = match[2].trim()
-  if (!text) throw new Error(`${path} has an empty #taco-document data block; assemble a bundle first`)
+  if (!text) throw new Error(`${label} has an empty #taco-document data block; assemble a bundle first`)
   let bundle
   try {
     bundle = JSON.parse(text)
   } catch (error) {
-    throw new Error(`${path} has invalid JSON in #taco-document: ${error.message}`)
+    throw new Error(`${label} has invalid JSON in #taco-document: ${error.message}`)
   }
   return { html, bundle: validateBundle(bundle) }
 }
+
+const readBundleFromHtml = async (path) => readBundleFrom(await readFile(path, 'utf8'), resolve(path))
 
 const shellVariantOf = (html) =>
   html.match(/<meta\b(?=[^>]*\bname=["']taco-shell-variant["'])[^>]*>/i)?.[0]?.match(/\bcontent=["'](complete|lite)["']/i)?.[1] ?? 'complete (unmarked)'
@@ -749,21 +785,54 @@ const pack = async ({ options, multi, flags }) => {
   const outputStats = await lstat(outputPath).catch(() => null)
   if (outputStats?.isSymbolicLink()) throw new Error(`Refusing to write Taco through a symbolic link: ${outputPath}`)
 
-  const priorBundle = outputStats ? (await readBundleFromHtml(outputPath)).bundle : null
+  const priorHtml = outputStats ? await readFile(outputPath, 'utf8') : null
+  const priorBundle = priorHtml ? readBundleFrom(priorHtml, outputPath).bundle : null
   if (priorBundle && priorBundle.root !== rootPath) {
     throw new Error(`Existing Taco root ${priorBundle.root} does not match ${rootPath}`)
   }
+  if (priorBundle && priorBundle.version > FORMAT_VERSION) {
+    throw new Error(
+      `Existing Taco is taco/files v${priorBundle.version}; this packer writes v${FORMAT_VERSION} and will not downgrade it. Use a tool that understands v${priorBundle.version}`,
+    )
+  }
 
-  const shellPath = resolve(options.get('shell') ?? join(import.meta.dirname, '../taco-shell.html'))
-  const shell = await readFile(shellPath, 'utf8').catch(() => {
-    throw new Error(`Shell not found: ${shellPath}`)
-  })
+  let shell
+  let shellSource
+  if (options.get('shell')) {
+    shellSource = resolve(options.get('shell'))
+    shell = await readFile(shellSource, 'utf8').catch(() => {
+      throw new Error(`Shell not found: ${shellSource}`)
+    })
+  } else if (priorHtml) {
+    // A refresh reuses the artifact's own shell, so Complete stays Complete and Lite stays Lite.
+    shellSource = outputPath
+    shell = priorHtml
+  } else {
+    shellSource = join(import.meta.dirname, '../taco-shell.html')
+    shell = await readFile(shellSource, 'utf8').catch(() => {
+      throw new Error(`Shell not found: ${shellSource}`)
+    })
+  }
 
   const ignorePatterns = (multi.get('ignore')?.length ? multi.get('ignore') : priorBundle?.packOptions?.ignore ?? []).map(
     normalizeIgnorePattern,
   )
   const existingByPath = new Map((priorBundle?.files ?? []).map((file) => [file.path, file]))
   const { files, skipped } = await collectFiles(featureDir, rootPath, existingByPath, ignorePatterns)
+  const packWarnings = []
+  // A commented source that disappeared keeps its previous entry: the review history still exists
+  // and dropping the file would make the bundle's own comments unresolvable.
+  const present = new Set(files.map((file) => file.path))
+  for (const thread of priorBundle?.comments ?? []) {
+    if (present.has(thread.anchor.path)) continue
+    const previous = existingByPath.get(thread.anchor.path)
+    if (!previous) {
+      throw new Error(`comment ${thread.id} anchors ${thread.anchor.path}, which is neither in the directory nor in the previous bundle`)
+    }
+    files.push(previous)
+    present.add(previous.path)
+    packWarnings.push(`commented source is gone from the directory; keeping its last known content: ${previous.path}`)
+  }
   if (!files.length) throw new Error(`No supported source files found in ${featureDir}`)
 
   const title = options.get('title') ?? priorBundle?.title ?? portableTitleBase(rootPath)
@@ -794,23 +863,28 @@ const pack = async ({ options, multi, flags }) => {
     files,
     packOptions: { ignore: ignorePatterns },
   }
+  const priorManifest = priorBundle?.navigation
   if (groups.length) {
+    bundle.navigation = { version: 1, ...(entry ? { entry } : {}), groups }
+  } else if (entry) {
+    // An entry lives in the manifest, and a manifest suppresses directory grouping. Freeze the
+    // groups the sidebar already shows so asking for an entry does not reshuffle the document.
     bundle.navigation = {
       version: 1,
-      ...(entry ? { entry } : {}),
-      groups,
+      entry,
+      groups: priorManifest?.groups?.length ? priorManifest.groups : directoryGroups(files, rootPath),
     }
-  } else if (priorBundle?.navigation) {
-    bundle.navigation = priorBundle.navigation
+  } else if (priorManifest) {
+    bundle.navigation = priorManifest
   }
 
   validateBundle(bundle)
   const structure = structureOf(bundle)
   const lines = [`taco pack${flags.has('dry-run') ? ' (dry run)' : ''}: ${outputPath}`]
-  lines.push(`  shell: ${shellVariantOf(shell)} (from ${shellPath})`)
+  lines.push(`  shell: ${shellVariantOf(shell)} (from ${shellSource})`)
   lines.push(`  title: ${bundle.title}`)
   lines.push(`  docId: ${bundle.docId}${priorBundle?.docId ? ' (preserved)' : ' (new)'}`)
-  printStructure(bundle, structure, lines)
+  printStructure(bundle, structure, lines, packWarnings)
   if (skipped.length) {
     lines.push('  excluded:')
     for (const item of skipped) lines.push(`    - ${item.path} (${item.reason})`)
