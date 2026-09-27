@@ -1,8 +1,108 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Tacobin — Single-File Review Space for Humans & Agents',
-  description: 'Specification review space for Taco artifacts',
+  metadataBase: new URL('https://tacobin.arcadia-han.com'),
+  title: {
+    default: 'Taco — 面向人类与 AI Agent 协作的单文件可交互规范空间',
+    template: '%s | Taco',
+  },
+  description:
+    'Taco (Taco Page) 是一个自洽单文件 HTML 规范协作空间。包含阶段门禁 (Checkpoints)、双向交接 (Handoff)、富文本与 Mermaid 实时可视化，支持离线阅读与版本化审阅，并提供 Tacobin 云端中继与实时事件订阅。',
+  keywords: [
+    'taco',
+    'taco page',
+    'spec kit',
+    'specification',
+    'agent-human review',
+    'checkpoints',
+    'handoff',
+    'single-file spec',
+    'tacobin',
+    'ai agent collaboration',
+    'mermaid live preview',
+    'offline review',
+  ],
+  authors: [{ name: 'Arcadia', url: 'https://github.com/Arcadia822/taco' }],
+  creator: 'Arcadia',
+  publisher: 'Stencil Labs / Arcadia',
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'zh_CN',
+    alternateLocale: ['en_US'],
+    url: 'https://tacobin.arcadia-han.com',
+    siteName: 'Taco',
+    title: 'Taco — Single-File Interactive Spec & Review Space for Humans & Agents',
+    description:
+      '一个议题的完整设计，一个文件装下。自洽单文件 HTML、Checkpoints 依赖图与阶段门禁、双向 Handoff 交接及实时富文本/Mermaid 审阅，附带可选的 Tacobin 在线中继分享。',
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1280,
+        height: 720,
+        alt: 'Taco — Single-File Interactive Spec & Review Space',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Taco — Single-File Interactive Spec & Review Space for Humans & Agents',
+    description:
+      'The whole design doc in one portable .taco.html file. Checkpoints DAG, two-way agent handoff, and in-place rich reviews.',
+    images: ['/og-image.png'],
+    creator: '@arcadia822',
+  },
+  alternates: {
+    canonical: 'https://tacobin.arcadia-han.com',
+    languages: {
+      'zh-CN': 'https://tacobin.arcadia-han.com',
+      'en': 'https://tacobin.arcadia-han.com',
+    },
+  },
+}
+
+const jsonLdWebsite = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: 'Taco',
+  alternateName: ['Taco Page', 'Tacobin'],
+  url: 'https://tacobin.arcadia-han.com',
+  description:
+    'Single-file interactive specification and review space for humans and AI agents with checkpoints, handoffs, and real-time collaboration.',
+}
+
+const jsonLdSoftwareApp = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Taco',
+  applicationCategory: 'DeveloperApplication',
+  operatingSystem: 'All',
+  browserRequirements: 'Requires JavaScript. Works offline in modern browsers.',
+  offers: {
+    '@type': 'Offer',
+    price: '0',
+    priceCurrency: 'USD',
+  },
+  description:
+    'A self-contained single-file HTML spec platform featuring WYSIWYG editing, Mermaid diagrams, review threads, DAG checkpoints, and AI agent handoff workflows.',
+  featureList: [
+    'Self-contained single-file HTML (.taco.html)',
+    'Checkpoints DAG and document lifecycle tracking',
+    'Two-way Human & AI Agent handoff',
+    'In-place WYSIWYG Markdown & Mermaid diagram editing',
+    'Zero install / offline capable review',
+    'Tacobin cloud relay and live event subscription',
+  ],
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -13,6 +113,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="icon"
           type="image/svg+xml"
           href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='15.2' cy='8.8' r='4.8' fill='%233ecf8e'/%3E%3Ccircle cx='7.2' cy='14.4' r='3.2' fill='%233b82f6'/%3E%3Ccircle cx='14.8' cy='18' r='2' fill='%23f97316'/%3E%3C/svg%3E"
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdWebsite) }}
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdSoftwareApp) }}
         />
         {/* Directly embed authentic Taco CSS variables for perfect 1:1 fidelity */}
         <style dangerouslySetInnerHTML={{ __html: `
