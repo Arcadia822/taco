@@ -9,7 +9,7 @@ import {
   type TacoBundle,
   type TacoFile,
 } from './model.ts'
-import { resolveCheckpoints, setDocumentStatus, type DocumentStatus } from '@taco/protocol'
+import { resolveCheckpoints, setDocumentStatus, type DocumentStatus, type ResolvedCheckpoints } from '@taco/protocol'
 import { canSaveAndUnpack, canWriteInPlace, saveAndUnpack, saveCopy, saveFile, type SaveResult } from './kernel/save.ts'
 import { getDefaultRichEditorAdapter, type RichEditorAdapter, type RichEditorHandle } from './rich-editor.ts'
 import type { SourceHighlighter } from './source-editor.ts'
@@ -56,11 +56,11 @@ import { frontmatterTitle, parseFrontmatter } from './frontmatter.ts'
 import { resolveFileCategory } from './category.ts'
 import { commentLineReference } from './comment-position.ts'
 import { createStructuredFileViewer, structuredFileLabels } from './structured-file-viewer.ts'
-import { createSegmentedControl } from './segmented-control.ts'
+import { createSegmentedControl, type SegmentedControl } from './segmented-control.ts'
 import { createCheckpointView } from './checkpoint-view.ts'
 import { checkpointCopy } from './i18n.ts'
 
-type AuxiliaryTab = 'outline' | 'comments'
+type AuxiliaryTab = 'outline' | 'comments' | 'instruction'
 
 export interface FileBrowserOptions {
   richEditorAdapter?: RichEditorAdapter | Promise<RichEditorAdapter> | (() => Promise<RichEditorAdapter>)
@@ -96,6 +96,7 @@ export class FileBrowser {
   private checkpointBaseline = new Map<string, DocumentStatus>()
   private checkpointTemplateBaseline: string | null = null
   private checkpointDocumentBaseline = new Set<string>()
+  private cachedResolvedCheckpoints: { ref: unknown; resolved: ResolvedCheckpoints } | null = null
   private sidebar!: HTMLElement
   private fileNavigation: FileNavigation | null = null
   private viewer!: HTMLElement
@@ -105,8 +106,12 @@ export class FileBrowser {
   private commentPanel!: HTMLElement
   private commentList!: HTMLElement
   private outlineList!: HTMLElement
+  private tabsControl!: SegmentedControl<AuxiliaryTab>
   private outlineTab!: HTMLButtonElement
   private commentsTab!: HTMLButtonElement
+  private instructionTab!: HTMLButtonElement
+  private instructionPanel!: HTMLElement
+  private instructionContent!: HTMLElement
   private categoryBadge!: HTMLButtonElement
   private checkpointTemplateInput!: HTMLInputElement
   private workspacePath!: HTMLElement
@@ -583,8 +588,14 @@ export class FileBrowser {
     this.selectedPlaceholder = null
     this.root.classList.remove('is-checkpoint-view')
     this.selected = file
-    this.auxiliaryTab = this.embedded || fileKind(file) !== 'markdown' ? 'comments' : 'outline'
-
+    const instruction = this.getSelectedInstruction()
+    if (this.auxiliaryTab === 'instruction' && !instruction) {
+      this.auxiliaryTab = this.embedded || fileKind(file) !== 'markdown' ? 'comments' : 'outline'
+    } else if (this.auxiliaryTab === 'outline' && (!this.selected || fileKind(file) !== 'markdown')) {
+      this.auxiliaryTab = instruction ? 'instruction' : 'comments'
+    } else if (!this.auxiliaryTab) {
+      this.auxiliaryTab = this.embedded || fileKind(file) !== 'markdown' ? 'comments' : 'outline'
+    }
     this.comments.resetForFileChange()
     this.updateSelectionLocation(file, writeHash)
     this.syncWorkspaceHeader()
@@ -981,13 +992,31 @@ export class FileBrowser {
     this.selectFile(targetFile)
     if (resolved.hash) requestAnimationFrame(() => this.outline.scrollToHeading(resolved.hash, 'auto'))
   }
+  private getResolvedCheckpoints(): ResolvedCheckpoints {
+    const ref = this.bundle.checkpoints
+    if (this.cachedResolvedCheckpoints && this.cachedResolvedCheckpoints.ref === ref) {
+      return this.cachedResolvedCheckpoints.resolved
+    }
+    const resolved = resolveCheckpoints(this.bundle)
+    this.cachedResolvedCheckpoints = { ref, resolved }
+    return resolved
+  }
+
+  private getSelectedInstruction(): string | undefined {
+    const path = this.selected?.path ?? this.selectedPlaceholder
+    if (!path) return undefined
+    const checkpoints = this.getResolvedCheckpoints()
+    if (!checkpoints.valid) return undefined
+    const doc = checkpoints.documents.find((d) => d.path === path)
+    return doc?.instruction
+  }
 
   private buildCommentPanel(): HTMLElement {
     const panel = el('aside', 'comment-panel right-panel')
     panel.id = 'taco-comments'
     panel.setAttribute('aria-label', this.t.rightPanel)
     const header = el('header', 'panel-header comment-panel-header')
-    const tabs = createSegmentedControl<AuxiliaryTab>({
+    this.tabsControl = createSegmentedControl<AuxiliaryTab>({
       label: this.t.rightPanel,
       value: this.auxiliaryTab,
       variant: 'tabs',
@@ -995,12 +1024,15 @@ export class FileBrowser {
       options: [
         { value: 'outline', label: this.t.outline, controls: 'taco-outline' },
         { value: 'comments', label: this.t.comments, controls: 'taco-comment-list' },
+        { value: 'instruction', label: this.t.instruction, controls: 'taco-instruction-panel' },
       ],
       onChange: (tab) => this.setAuxiliaryTab(tab),
     })
-    this.outlineTab = tabs.buttonFor('outline')!
-    this.commentsTab = tabs.buttonFor('comments')!
-    header.append(tabs.element)
+    this.outlineTab = this.tabsControl.buttonFor('outline')!
+    this.commentsTab = this.tabsControl.buttonFor('comments')!
+    this.instructionTab = this.tabsControl.buttonFor('instruction')!
+    this.instructionTab.remove()
+    header.append(this.tabsControl.element)
     this.outlineList = el('nav', 'document-outline')
     this.outlineList.id = 'taco-outline'
     this.outlineList.setAttribute('aria-label', this.t.outline)
@@ -1008,35 +1040,84 @@ export class FileBrowser {
     this.commentList = el('div', 'comment-list')
     this.commentList.id = 'taco-comment-list'
     this.commentList.setAttribute('role', 'tabpanel')
-    panel.append(header, this.outlineList, this.commentList)
+
+    this.instructionPanel = el('div', 'instruction-panel')
+    this.instructionPanel.id = 'taco-instruction-panel'
+    this.instructionPanel.setAttribute('role', 'tabpanel')
+    this.instructionContent = el('div', 'instruction-body')
+    const copyBtn = el('button', 'instruction-copy-button', this.t.copyInstruction) as HTMLButtonElement
+    copyBtn.type = 'button'
+    copyBtn.addEventListener('click', async () => {
+      const instruction = this.getSelectedInstruction()
+      if (!instruction) return
+      try {
+        await navigator.clipboard.writeText(instruction)
+        this.toast(this.t.instructionCopied)
+      } catch {
+        // Clipboard write failed
+      }
+    })
+    const toolbar = el('div', 'instruction-toolbar')
+    toolbar.append(copyBtn)
+    this.instructionPanel.append(toolbar, this.instructionContent)
+
+    panel.append(header, this.outlineList, this.commentList, this.instructionPanel)
     return panel
   }
 
   private setAuxiliaryTab(tab: AuxiliaryTab): void {
     if (tab === 'outline' && (!this.selected || fileKind(this.selected) !== 'markdown')) return
+    if (tab === 'instruction' && !this.getSelectedInstruction()) return
     const changed = this.auxiliaryTab !== tab
     this.auxiliaryTab = tab
     this.syncAuxiliaryTabs()
     this.syncPanelToggles()
     if (tab === 'outline') this.outline.scheduleActive()
-    else this.commentList.scrollTop = 0
-    if (changed) this.animateSurfaceEntrance(tab === 'outline' ? this.outlineList : this.commentList)
+    else if (tab === 'comments') this.commentList.scrollTop = 0
+    else if (tab === 'instruction') this.instructionPanel.scrollTop = 0
+    if (changed) {
+      const activeSurface = tab === 'outline' ? this.outlineList : tab === 'instruction' ? this.instructionPanel : this.commentList
+      this.animateSurfaceEntrance(activeSurface)
+    }
   }
 
   private syncAuxiliaryTabs(): void {
-    if (!this.outlineTab || !this.commentsTab || !this.outlineList || !this.commentList) return
+    if (!this.outlineTab || !this.commentsTab || !this.instructionTab || !this.outlineList || !this.commentList || !this.instructionPanel) return
     const hasOutline = Boolean(this.selected && fileKind(this.selected) === 'markdown')
-    if (!hasOutline && this.auxiliaryTab === 'outline') this.auxiliaryTab = 'comments'
+    const instruction = this.getSelectedInstruction()
+    const hasInstruction = Boolean(instruction)
+
+    if (!hasInstruction && this.auxiliaryTab === 'instruction') {
+      this.auxiliaryTab = hasOutline ? 'outline' : 'comments'
+    } else if (!hasOutline && this.auxiliaryTab === 'outline') {
+      this.auxiliaryTab = hasInstruction ? 'instruction' : 'comments'
+    }
+
     this.outlineTab.hidden = !hasOutline
-    for (const [tab, button] of [['outline', this.outlineTab], ['comments', this.commentsTab]] as const) {
+    if (hasInstruction) {
+      if (!this.instructionTab.isConnected) {
+        this.commentsTab.after(this.instructionTab)
+      }
+      this.instructionTab.hidden = false
+      if (this.instructionContent) {
+        this.instructionContent.textContent = instruction ?? ''
+      }
+    } else {
+      this.instructionTab.remove()
+      this.instructionTab.hidden = true
+    }
+
+    for (const [tab, button] of [['outline', this.outlineTab], ['comments', this.commentsTab], ['instruction', this.instructionTab]] as const) {
       const active = this.auxiliaryTab === tab
       button.classList.toggle('is-active', active)
       button.setAttribute('aria-selected', String(active))
       button.tabIndex = active ? 0 : -1
     }
+    this.tabsControl?.setValue(this.auxiliaryTab)
     const outlineVisible = hasOutline && this.auxiliaryTab === 'outline'
     this.outlineList.hidden = !outlineVisible
     this.commentList.hidden = this.auxiliaryTab !== 'comments'
+    this.instructionPanel.hidden = this.auxiliaryTab !== 'instruction'
   }
 
   private toggleCommentPanel(): void {
