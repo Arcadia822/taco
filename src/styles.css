@@ -1145,9 +1145,60 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .markdown-asset-tools:empty { display: none; }
 .markdown-asset-tools p { flex-basis: 100%; }
 .png-document-preview { display: block; max-width: 100%; height: auto; margin-top: 12px; }
-.png-preview { max-width: 95vw; max-height: 95vh; overflow: auto; }
+.media-document-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 120px);
+  width: 100%;
+  padding: 32px 16px;
+  box-sizing: border-box;
+}
+.media-document-preview {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+.media-document-preview.image-preview {
+  cursor: zoom-in;
+  max-height: 85vh;
+  object-fit: contain;
+}
+.media-document-preview.video-preview {
+  max-width: 900px;
+  max-height: 80vh;
+  width: 100%;
+  background: #000;
+}
+.media-document-preview.audio-preview {
+  width: 100%;
+  max-width: 540px;
+}
+.png-preview { max-width: 95vw; max-height: 95vh; overflow: auto; border: none; border-radius: 8px; padding: 16px; }
 .png-preview img { display: block; max-width: none; margin-top: 12px; }
 .png-preview::backdrop { background: #0009; }
+
+/* Markdown embedded media centering */
+.taco-editor img, .taco-editor video, .taco-editor audio,
+.ProseMirror img, .ProseMirror video, .ProseMirror audio {
+  display: block;
+  margin: 16px auto;
+  max-width: 100%;
+}
+.taco-editor img, .ProseMirror img {
+  cursor: zoom-in;
+  border-radius: 4px;
+}
+.taco-editor audio, .ProseMirror audio {
+  width: 100%;
+  max-width: 520px;
+}
+.taco-editor video, .ProseMirror video {
+  max-width: 800px;
+  border-radius: 4px;
+}
 
 /* TACO-4 document properties: GitHub references */
 .document-property-github { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; margin-top: 3px; color: var(--doc-muted); font-size: 11px; line-height: 16px; text-decoration: none; }

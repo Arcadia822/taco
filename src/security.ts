@@ -14,15 +14,15 @@ export const SUPPORTED_BLOCK_TYPES = new Set([
 ])
 
 const EDITOR_TAGS = [
-  'a', 'blockquote', 'br', 'code', 'div', 'em', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-  'hr', 'img', 'input', 'li', 'ol', 'p', 'pre', 's', 'span', 'strong', 'table',
-  'tbody', 'td', 'th', 'thead', 'tr', 'u', 'ul',
+  'a', 'audio', 'blockquote', 'br', 'code', 'div', 'em', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'hr', 'iframe', 'img', 'input', 'li', 'ol', 'p', 'pre', 's', 'span', 'strong', 'table',
+  'tbody', 'td', 'th', 'thead', 'tr', 'u', 'ul', 'video', 'source',
 ]
 
 const EDITOR_ATTRS = [
-  'align', 'alt', 'checked', 'class', 'colspan', 'data-key', 'data-taco-align',
-  'data-bom', 'data-closed', 'data-eol', 'data-taco-block-id', 'data-taco-source', 'data-type', 'data-yaml', 'disabled', 'height', 'href', 'rel', 'rowspan',
-  'src', 'target', 'title', 'type', 'width',
+  'align', 'allow', 'allowfullscreen', 'alt', 'autoplay', 'checked', 'class', 'colspan', 'controls', 'data-key', 'data-taco-align',
+  'data-bom', 'data-closed', 'data-eol', 'data-taco-block-id', 'data-taco-source', 'data-type', 'data-yaml', 'disabled', 'height', 'href', 'loading', 'loop', 'muted', 'playsinline', 'preload', 'rel', 'rowspan',
+  'sandbox', 'src', 'target', 'title', 'type', 'width',
 ]
 
 const TRANSPARENT_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs='
@@ -34,6 +34,18 @@ export const safeLinkUrl = (value: string): string | null => {
   const url = value.trim()
   if (!url) return null
   if (isRelativeReference(url) || /^(https?:|mailto:)/i.test(url)) return url
+  return null
+}
+
+export const safeMediaUrl = (value: string): string | null => {
+  const url = value.trim()
+  if (!url) return null
+  if (/^file:/i.test(url) || /^[a-z]:\\/i.test(url) || /^\/\//.test(url)) return null
+  if (/^data:(image\/(?:png|jpeg|jpg|gif|webp|svg\+xml|ico|bmp|avif)|video\/(?:mp4|webm|ogg)|audio\/(?:mpeg|wav|ogg|aac|mp4|webm|flac));base64,[a-z0-9+/=]+$/i.test(url)) {
+    return url
+  }
+  if (/^https?:\/\//i.test(url)) return url
+  if (isRelativeReference(url) && !url.startsWith('/')) return url
   return null
 }
 
@@ -73,6 +85,25 @@ const postProcessEditorHtml = (html: string): string => {
       if (attrs['data-taco-source']) element.dataset.tacoSource = attrs['data-taco-source']
       else delete element.dataset.tacoSource
     }
+    if (element instanceof HTMLMediaElement || element instanceof HTMLSourceElement) {
+      const src = element.getAttribute('src')
+      if (src) {
+        const safe = safeMediaUrl(src)
+        if (safe) element.setAttribute('src', safe)
+        else element.removeAttribute('src')
+      }
+    }
+    if (element instanceof HTMLIFrameElement) {
+      const src = element.getAttribute('src')
+      const safe = src ? safeLinkUrl(src) : null
+      if (safe && /^https?:\/\//i.test(safe)) {
+        element.setAttribute('src', safe)
+        element.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation')
+        element.setAttribute('loading', 'lazy')
+      } else {
+        element.remove()
+      }
+    }
     if (element instanceof HTMLInputElement) {
       if (element.type !== 'checkbox') element.remove()
       else element.disabled = true
@@ -88,7 +119,7 @@ export const sanitizeEditorHtml = (html: string): string => {
     ALLOWED_ATTR: EDITOR_ATTRS,
     ALLOW_DATA_ATTR: false,
     ALLOW_ARIA_ATTR: false,
-    FORBID_TAGS: ['base', 'button', 'embed', 'form', 'iframe', 'link', 'meta', 'object', 'script', 'style', 'svg'],
+    FORBID_TAGS: ['base', 'button', 'embed', 'form', 'link', 'meta', 'object', 'script', 'style', 'svg'],
   })
   return postProcessEditorHtml(String(sanitized))
 }

@@ -98,8 +98,24 @@ const mediaType = (path) => {
   if (lower.endsWith('.xml')) return 'application/xml'
   if (lower.endsWith('.toml')) return 'application/toml'
   if (lower.endsWith('.png')) return 'image/png'
+  if (/\.jpe?g$/i.test(lower)) return 'image/jpeg'
+  if (lower.endsWith('.gif')) return 'image/gif'
+  if (lower.endsWith('.webp')) return 'image/webp'
+  if (lower.endsWith('.mp4')) return 'video/mp4'
+  if (lower.endsWith('.webm')) return 'video/webm'
+  if (lower.endsWith('.mp3')) return 'audio/mpeg'
+  if (lower.endsWith('.wav')) return 'audio/wav'
+  if (lower.endsWith('.ogg')) return 'audio/ogg'
   return 'text/plain'
 }
+
+const isBinaryMediaType = (type) =>
+  type === 'image/png' ||
+  type === 'image/jpeg' ||
+  type === 'image/gif' ||
+  type === 'image/webp' ||
+  type.startsWith('video/') ||
+  type.startsWith('audio/')
 
 const yamlTitleFrom = (content) => {
   const normalized = content.startsWith('\uFEFF') ? content.slice(1) : content
@@ -381,6 +397,7 @@ const collectFiles = async (featureDir, rootPath, existingByPath, ignorePatterns
       }
       const type = mediaType(relativePath)
       const isPng = type === 'image/png'
+      const isBinary = isBinaryMediaType(type)
       let content
       let rawBuffer = null
       if (isPng) {
@@ -391,6 +408,9 @@ const collectFiles = async (featureDir, rootPath, existingByPath, ignorePatterns
         rawBuffer = await readFile(absolute)
         validatePngBytes(rawBuffer, relativePath)
         content = `${PNG_DATA_URL_PREFIX}${rawBuffer.toString('base64')}`
+      } else if (isBinary) {
+        rawBuffer = await readFile(absolute)
+        content = `data:${type};base64,${rawBuffer.toString('base64')}`
       } else {
         try {
           content = decoder.decode(await readFile(absolute))
@@ -679,6 +699,7 @@ export const sync = async ({
     await assertNoSymlinkPath(rootDirectory, target)
     const exists = await pathExists(target)
     const isPng = file.mediaType === 'image/png'
+    const isBinary = isBinaryMediaType(file.mediaType)
     let currentHash = null
     let tacoHash = null
     if (isPng) {
@@ -687,6 +708,13 @@ export const sync = async ({
         currentHash = sha256(diskBuffer)
       }
       tacoHash = sha256(decodePng(file.content, file.path))
+    } else if (isBinary && /^data:[^;]+;base64,/.test(file.content)) {
+      if (exists) {
+        const diskBuffer = await readFile(target)
+        currentHash = sha256(diskBuffer)
+      }
+      const b64 = file.content.slice(file.content.indexOf(',') + 1)
+      tacoHash = sha256(Buffer.from(b64, 'base64'))
     } else {
       const current = exists ? await readFile(target, 'utf8') : null
       currentHash = current === null ? null : sha256(current)
@@ -719,6 +747,9 @@ export const sync = async ({
       const temporary = `${change.target}.taco-${process.pid}-${randomUUID()}.tmp`
       if (change.mediaType === 'image/png') {
         await writeFile(temporary, decodePng(change.content, change.path))
+      } else if (isBinaryMediaType(change.mediaType) && /^data:[^;]+;base64,/.test(change.content)) {
+        const b64 = change.content.slice(change.content.indexOf(',') + 1)
+        await writeFile(temporary, Buffer.from(b64, 'base64'))
       } else {
         await writeFile(temporary, change.content, 'utf8')
       }

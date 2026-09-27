@@ -2208,4 +2208,58 @@ describe('FileBrowser', () => {
     }
   })
 
+  it('renders image, video, and audio standalone files with centered preview and zoom dialog', () => {
+    const mediaBundle: TacoBundle = {
+      format: 'taco/files',
+      version: 1,
+      docId: 'media-test-bundle',
+      title: 'Media Bundle',
+      root: 'specs/media',
+      files: [
+        {
+          path: 'specs/media/photo.png',
+          mediaType: 'image/png',
+          content: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        },
+        {
+          path: 'specs/media/clip.mp4',
+          mediaType: 'video/mp4',
+          content: 'data:video/mp4;base64,AAAA',
+        },
+        {
+          path: 'specs/media/song.mp3',
+          mediaType: 'audio/mpeg',
+          content: 'data:audio/mpeg;base64,BBBB',
+        },
+      ],
+    }
+
+    const browser = new FileBrowser(document.getElementById('app')!, mediaBundle)
+    expect(document.querySelector('.media-document-container')).not.toBeNull()
+    const img = document.querySelector<HTMLImageElement>('.media-document-preview.image-preview')!
+    expect(img).not.toBeNull()
+    expect(img.src).toContain('data:image/png;base64')
+
+    // Clicking the image opens the zoom preview dialog
+    img.click()
+    const dialog = document.querySelector<HTMLDialogElement>('dialog.png-preview')
+    expect(dialog).not.toBeNull()
+    dialog?.remove()
+
+    // Select video file
+    document.querySelector<HTMLButtonElement>('[data-path$="clip.mp4"]')!.click()
+    const video = document.querySelector<HTMLVideoElement>('.media-document-preview.video-preview')!
+    expect(video).not.toBeNull()
+    expect(video.controls).toBe(true)
+    expect(video.src).toContain('data:video/mp4;base64,AAAA')
+
+    // Select audio file
+    document.querySelector<HTMLButtonElement>('[data-path$="song.mp3"]')!.click()
+    const audio = document.querySelector<HTMLAudioElement>('.media-document-preview.audio-preview')!
+    expect(audio).not.toBeNull()
+    expect(audio.controls).toBe(true)
+    expect(audio.src).toContain('data:audio/mpeg;base64,BBBB')
+
+    browser.destroy()
+  })
 })

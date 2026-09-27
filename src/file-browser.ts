@@ -4,6 +4,7 @@ import {
   fileByPath,
   fileKind,
   fileName,
+  isMediaFileKind,
   relativePath,
   isInternalFile,
   type TacoBundle,
@@ -188,7 +189,7 @@ export class FileBrowser {
       .map((file) => {
         const rel = relativePath(this.bundle, file)
         const baseline = this.dirtyTracker.getBaselineContent(file.id ?? file.path) ?? ''
-        const diff = file.mediaType !== 'image/png' ? createUnifiedDiff(baseline, file.content, rel) : undefined
+        const diff = isMediaFileKind(fileKind(file)) ? undefined : createUnifiedDiff(baseline, file.content, rel)
         return {
           path: rel,
           mediaType: file.mediaType,
@@ -715,13 +716,39 @@ export class FileBrowser {
     }
     const kind = fileKind(file)
 
-    if (file.mediaType === 'image/png') {
-      const image = el('img', 'png-document-preview')
-      image.src = file.content
+    if (kind === 'image') {
+      const container = el('div', 'media-document-container')
+      const image = el('img', 'media-document-preview image-preview')
+      let src = file.content
+      if (file.mediaType === 'image/svg+xml' && !src.startsWith('data:')) {
+        src = `data:image/svg+xml;utf8,${encodeURIComponent(file.content)}`
+      }
+      image.src = src
       image.alt = file.title || fallbackFileTitle(file)
-      const open = el('button', '', 'View full size')
-      open.addEventListener('click', () => openPngPreview(file))
-      this.viewer.append(open, image)
+      image.addEventListener('click', () => openPngPreview(file))
+      container.append(image)
+      this.viewer.append(container)
+    } else if (kind === 'video') {
+      const container = el('div', 'media-document-container')
+      const video = document.createElement('video')
+      video.className = 'media-document-preview video-preview'
+      video.controls = true
+      video.playsInline = true
+      if (file.content.startsWith('data:video/')) {
+        video.src = file.content
+      }
+      container.append(video)
+      this.viewer.append(container)
+    } else if (kind === 'audio') {
+      const container = el('div', 'media-document-container')
+      const audio = document.createElement('audio')
+      audio.className = 'media-document-preview audio-preview'
+      audio.controls = true
+      if (file.content.startsWith('data:audio/')) {
+        audio.src = file.content
+      }
+      container.append(audio)
+      this.viewer.append(container)
     } else if (kind === 'markdown') {
       this.mountMarkdownEditor(file, mountSerial)
     } else if (kind === 'yaml' || kind === 'json' || kind === 'mermaid') {

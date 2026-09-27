@@ -36,20 +36,25 @@ const pngError = (file: TacoFile): string | undefined => {
   return error
 }
 
-export const openPngPreview = (file: TacoFile): void => {
-  if (pngError(file)) return
+export const openMediaPreview = (src: string, title?: string): void => {
   const dialog = document.createElement('dialog')
   dialog.className = 'png-preview'
   dialog.dataset.tacoTransient = ''
   const close = createControlButton('x', 'Close', () => dialog.close(), '', true)
   const image = document.createElement('img')
-  image.src = file.content
-  image.alt = file.title || file.path
+  image.src = src
+  image.alt = title || ''
   dialog.setAttribute('aria-label', image.alt)
   dialog.append(close, image)
   dialog.addEventListener('close', () => dialog.remove(), { once: true })
   document.body.append(dialog)
-  dialog.showModal()
+  if (typeof dialog.showModal === 'function') dialog.showModal()
+  else dialog.setAttribute('open', '')
+}
+
+export const openPngPreview = (file: TacoFile): void => {
+  if (file.mediaType === 'image/png' && pngError(file)) return
+  openMediaPreview(file.content, file.title || file.path)
 }
 
 export const resolveEmbeddedMarkdownAssets = (
@@ -106,15 +111,10 @@ export const resolveEmbeddedMarkdownAssets = (
     }
     image.onerror = () => report(`Cannot decode PNG: ${asset.path}; re-export the image and repack`)
     if (image.getAttribute('src') !== asset.content) image.setAttribute('src', asset.content)
+    image.style.cursor = 'zoom-in'
+    image.onclick = () => openMediaPreview(asset.content, asset.title || asset.path)
     previews.set(asset.path, asset)
   }
-  for (const asset of previews.values()) {
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.textContent = `View full size: ${relativePath(bundle, asset)}`
-    button.addEventListener('click', () => openPngPreview(asset))
-    tools.append(button)
-  }
-  if (root instanceof HTMLElement) root.after(tools)
+  if (tools.children.length && root instanceof HTMLElement) root.after(tools)
   return diagnostics
 }
