@@ -11,7 +11,7 @@ Taco turns a Markdown documentation directory into one portable `.taco.html`. A 
 canonical doc directory → one .taco.html → human review (browser) → agent reads Handoff → canonical doc directory
 ```
 
-No CLI is required. A `.taco.html` is plain HTML with one plaintext JSON data block; you assemble it with file read/write tools.
+Nothing to install. A `.taco.html` is plain HTML with one plaintext JSON data block, and this skill ships the assembler so you never hand-write the serialization: `scripts/pack.mjs` builds, validates, escapes, and writes the block, and `scripts/pack.mjs verify` shows the structure a reviewer will see. No CLI is part of this local workflow — `taco-cli` is the optional cloud binary for publishing and hosted events, and the `taco` binary in a Taco checkout is the optional Spec Kit extension CLI. If Node is unavailable, fall back to the manual write contract in `references/bundle-format.md`.
 
 ## When to use
 
@@ -24,6 +24,8 @@ No CLI is required. A `.taco.html` is plain HTML with one plaintext JSON data bl
 This skill bundles optional document examples in `templates/` next to this `SKILL.md`: `spec/`, `architecture/`, `api-reference/`, and `adr/`. (A Taco source checkout carries the same packs at `extensions/taco/templates/`; an installed Spec Kit extension exposes them at `.specify/extensions/taco/templates/`.) First use the user's instructions and project-owned templates or review policy, if present. Read a bundled pack's `README.md` and `template.md` only when it is useful as a starting reference; its fields, files, and Checkpoint graph are not required structure.
 
 Decide whether to use Checkpoints from the review contract, not the task label or document count. Use them when the team needs named review milestones, dependencies, or explicit status tracking; follow any project-specific Checkpoint policy or reviewer request. Otherwise omit `checkpoints` and use Taco's ordinary document review. For comparison, a small copy edit or straightforward bug fix often needs no Checkpoint, while a `spec.md` → `plan.md` → `tasks.md` review can draw on the bundled `spec/` **SDD example**. Neither shape is mandatory: a small change may require client sign-off, and a complex change may use a different project-defined graph. If adapting an example, update every `checkpoints.nodes[].documents[].path` to the new root; never import sample status records as real review progress.
+
+Never transplant a pack's `bundle.json` structure into a directory that does not contain its paths. A copied Checkpoint graph or `navigation` manifest renders empty groups and `Not created` placeholder rows — a document that looks broken instead of simple. The packs supply prose to adapt (`template.md`); their `bundle.json` is a working example of *those* files, not a layout to impose.
 
 ### Optional hosted review
 
@@ -82,7 +84,7 @@ The document lives in one plaintext block near the top of the shell:
 </script>
 ```
 
-The runtime's `parseBundle` validates this; anything corrupt puts the file into Recovery mode, so validate before you write.
+The runtime's `parseBundle` validates this; anything corrupt puts the file into Recovery mode, so validate before you write. Read `references/bundle-format.md` before hand-writing or debugging the block: it is the authority for required and optional fields, the exact rejection rules, and the serialization contract. `scripts/pack.mjs` implements that contract; prefer it to a hand-built block.
 
 Bundle fields:
 
@@ -92,6 +94,7 @@ Bundle fields:
 - `root`: the directory the bundle covers, as a safe relative POSIX path (no leading `/`, no `\`, no empty, `.`, or `..` segments). Every `path` must sit under `root/`.
 - `files`: `{ id?, title?, path, mediaType, content, sourceHash?, blocks? }[]`, `path` safe, unique, and starting with `root/`. Ordinary `.html` and `.htm` source entries and the legacy `sourceUrl` field are unsupported.
 - `comments`, `navigation`, `checkpoints`, `access`, `collab`, `packOptions`, and any other field: carry over from the previous bundle when present.
+- Sidebar groups are **derived at load**, not stored: `checkpoints` first, then `navigation`, then first-level directory names, with every file directly under `root/` landing in `Unassigned`. Omitting `navigation` and `checkpoints` does **not** produce a flat file list, so predict the groups and state them instead of letting the reviewer discover them.
 
 ### Checkpoints and document status
 
@@ -124,7 +127,9 @@ Comments:
 
 Writing rules:
 
-- Serialize with `JSON.stringify(bundle, null, 2)`, then replace every `<`, `>`, `&`, `\u2028`, `\u2029` with its `\uXXXX` escape. Escaping `<` is what guarantees a literal `</script>` can never appear in the block.
+- Prefer `scripts/pack.mjs`; it performs every rule in this list. These rules are the fallback when Node is unavailable and the checklist when something fails to load.
+
+- Serialize with `JSON.stringify(bundle, null, 2)`, then replace every `<` with `\u003c`. That one escape is what guarantees a literal `</script>` can never appear in the block. Escaping `>`, `&`, `\u2028`, `\u2029` is optional hardening, never a load requirement; when you do it, build the pattern with `String.fromCodePoint(0x2028)` / `(0x2029)` rather than a regex literal, which would break your script before it runs.
 - Insert the JSON into the `#taco-document` block by matching it and passing a **callback** to `replace` — `html.replace(dataBlock, () => replacement)` — or by splicing at the block's index. A plain string replacement is unsafe: `$&`, `` $` ``, `$'`, and `$1` inside the JSON would be treated as replacement patterns. Update `<title>` the same way.
 - `<title>` in the head must be `<bundle title> — Taco` (with `&`, `<`, `>` escaped).
 - Validate before writing: `JSON.parse` the exact escaped string you will insert (it must round-trip), then check the shape rules above. Write the whole file to a temporary sibling and rename it over the destination, so a failure never truncates the existing Taco.
@@ -133,15 +138,40 @@ Writing rules:
 
 ## Workflow
 
-### 1. Assemble: write the bundle into the shell
+### 0. Shape the review: decide what the human will see
+
+Decide and state the presentation before writing anything. This is where an unexpected sidebar gets caught.
+
+- Group from the review contract and the directory itself, never from a template's names. A directory of research notes must not grow `spec` / `plan` / `tasks`; declare Checkpoints or `navigation` groups only for documents that exist or that the user explicitly scheduled.
+- Work out the resulting sidebar: which file lands in which group, what falls under `Unassigned`, and which document opens first. The derivation rules live in `references/bundle-format.md`; `scripts/pack.mjs --dry-run` prints the exact result for the real directory.
+- Keep the structure proportional to the directory. One flat Markdown document stays one file; do not add folders, files, or groups to look organized.
+
+### 1. Author the bundle and write it into the shell
+
+You are authoring one document model — the bundle. A directory of Markdown is one input that fills `files[]`; so is a Handoff, so is an existing Taco. The shell is only the carrier: escaping, inserting, and writing it atomically belong to `scripts/pack.mjs`, never to you.
 
 1. If a `.taco.html` already exists at the destination, **read its bundle and shell variant first** — before you copy or overwrite anything, or you will read your own fresh copy instead of the reviewed document. Preserve Complete/Lite on refresh unless the user explicitly requested conversion.
-2. Read the matching shell into memory; do not copy it over the destination. For a refresh, retain the old bundle in memory separately.
-3. Enumerate the document directory and build `files[]` from regular source files. Exclude dotfiles and every `*.taco.html`. Preserve the existing `packOptions.ignore` rules unless new exclusions were requested. Report exclusions; stop on unhandled symlinks, non-UTF-8 files, invalid PNGs or unsupported entries, including ordinary `.html`/`.htm` files, instead of following or silently skipping them. Explicitly ignore unsupported source paths when their omission is intended.
-4. For a new document, set `format: "taco/files"`, `version: 1`, a fresh unique `docId`, `title`, `root` and `files`. Choose the Checkpoint definition from the user's or project's review requirements, if any; otherwise omit `checkpoints`, even if a starter pack contains one. The bundled `spec/` SDD graph is an example to adapt only if it fits; its stage names, document paths, and display template are not defaults that override project conventions. For a refresh, preserve the previous bundle wholesale—including `checkpoints.nodes`, `checkpoints.documents`, and any unknown fields—and replace only intended fields; keep `root`, format/version and identity unchanged. Stop on an unsupported format/version rather than downgrading it. Match existing file entries by path, preserve unknown fields and stable ids, and update content-dependent fields using the rules above.
-5. Serialize into the in-memory shell, validate the exact result, then write a temporary sibling and rename it to `<DOC_DIR>/<name>.taco.html`. Until this succeeds, leave the previous destination untouched.
+2. Run the bundled assembler from the skill directory (it implements the contract in `references/bundle-format.md`):
 
-### 2. Present and verify: open it for the human
+   ```sh
+   node scripts/pack.mjs --dir <DOC_DIR> --title "<Title>" \
+     [--out <name.taco.html>] [--shell <shell.html>] [--root <relpath>] \
+     [--entry <relpath>] [--group "<Title>=<relPath,relPath>"]... [--ignore <glob>]... [--dry-run]
+   ```
+
+   It enumerates the directory, preserves `docId`, `comments`, `checkpoints`, `navigation`, `packOptions` and every unknown field from an existing Taco, keeps each file's `id` and any still-valid `blocks`, rejects symlinks, non-UTF-8 bytes, invalid PNGs and `.html`/`.htm` sources instead of silently dropping them, escapes and validates the data block, and writes it atomically over `<name>.taco.html`. Report the `excluded:` list it prints; pass `--ignore` explicitly when an unsupported path is meant to be omitted.
+3. Hand-build the block only when Node is unavailable: start from the minimal bundle skeleton in `references/bundle-format.md` and edit that model — do not reverse-engineer the field list from this page. Then follow the carrier rules there: read the shell into memory rather than copying it over the destination, serialize and escape, insert with a callback `replace`, `JSON.parse` the exact string you are about to insert, and write a temporary sibling then `rename` it over the destination. Until that rename succeeds, leave the previous destination untouched.
+4. For a new document, set `format: "taco/files"`, `version: 1`, a fresh unique `docId`, `title`, `root` and `files`. Choose the Checkpoint definition from the user's or project's review requirements, if any; otherwise omit `checkpoints`, even if a starter pack contains one. The bundled `spec/` SDD graph is an example to adapt only if it fits; its stage names, document paths, and display template are not defaults that override project conventions. For a refresh, preserve the previous bundle wholesale—including `checkpoints.nodes`, `checkpoints.documents`, and any unknown fields—and replace only intended fields; keep `root`, format/version and identity unchanged. Stop on an unsupported format/version rather than downgrading it. Match existing file entries by path, preserve unknown fields and stable ids, and update content-dependent fields using the rules above.
+
+### 2. Check what the reviewer will see
+
+- With a review tab open, run `window.taco.validate()` in its console — it checks what the renderer actually did (comment anchors, cross-document links, navigation and Checkpoint paths, unmigrated blocks). Offline, run `node scripts/pack.mjs verify <name>.taco.html` instead. Both are described in `references/bundle-format.md`.
+- Compare the reported structure with the shape you decided in step 0: entry document, each group with its files, what sits under `Unassigned`, and open/resolved comment threads.
+- Fix a mismatch, or state it plainly, before handing the file over. A warning you shipped silently is a surprise the reviewer finds instead. Exit code `2` from `pack.mjs verify`, or any `warning`/`error` finding from `validate()`, goes in the report.
+- A Checkpoint document shown as `not created` is expected only when you deliberately scheduled work that does not exist yet. Otherwise the structure was transplanted from a template: remove it.
+- Confirm the artifact loads: the data block must parse and satisfy the shape rules. A Recovery-mode file is a failed hand-off, not a preview.
+
+### 3. Present and open it for the human
 
 - Always present the exact absolute path through the Agent GUI's native clickable local-file surface.
 - **When the host's browser tool supports and permits local `file://` navigation, proactively open the generated file yourself and verify the expected title and document content are visible — do not ask permission first.** The file path is often hard to find; auto-opening is the default, not an extra step. This means the user's real browser: a headless or automation boot check is internal evidence only, **never** a user-visible presentation, and must not be reported as opened.
@@ -149,7 +179,7 @@ Writing rules:
 - If an existing review may hold unsaved edits, open a fresh tab rather than reloading the reviewed tab.
 - Do not require the reviewer to save before Handoff — Handoff and `window.taco.getReviewHandoff()` carry unsaved in-memory edits. Only the saved-file channel needs ⌘S, so say that when you rely on it.
 
-### 3. Consume review: apply human edits and comments
+### 4. Consume review: apply human edits and comments
 
 The reviewer's changes reach you through one of these channels — do not require more than the one that arrives:
 
@@ -168,17 +198,18 @@ Then:
 - Never delete canonical files because they are absent from the bundle.
 - Before loading a saved bundle into model context, inspect it locally for collaboration credentials without printing their values. Do not transmit a credential-bearing file or bundle to an external model or service without authorization; prefer credential-free file projections and review metadata.
 
-### 4. Refresh: rebuild after canonical edits
+### 5. Refresh: rebuild after canonical edits
 
-After canonical edits, refresh the same Taco only when pending direct review edits are handled. If any edits remain conflicted or unavailable, preserve the reviewed file unchanged and report the blocker. Otherwise repeat assembly using the full previous bundle and present/open the result. Verify the path, review history, and **entire Checkpoint definition and status table** are preserved; runtime comment normalization may change serialization but not meaning. Do not reinitialize statuses from a template or infer them from document content.
+After canonical edits, refresh the same Taco only when pending direct review edits are handled. If any edits remain conflicted or unavailable, preserve the reviewed file unchanged and report the blocker. Otherwise repeat assembly (step 1) with the same script and present/open the result. Verify the path, review history, and **entire Checkpoint definition and status table** are preserved; runtime comment normalization may change serialization but not meaning. Do not reinitialize statuses from a template or infer them from document content.
 
 ## Invariants
 
 - The directory remains canonical; the Taco is a review transport.
 - Only the `#taco-document` block and the `<title>` are agent-writable; never touch the shell around them.
 - Preserve `docId`, `comments`, `navigation`, `checkpoints`, and every other stored bundle field across refreshes.
+- Never present a structure the directory does not have: no invented groups, no empty categories, no template-derived stage names.
 - Never fabricate comments, hashes, or verification claims; never claim a user-visible open that did not happen.
 
 ## Report format
 
-End each round with: files assembled/imported, exclusions, open comments handled/deferred by thread ID, files changed while handling comments, refreshed Taco path, and presentation status (`presented as a clickable file` / `opened (user-visible)` / `opened and verified (user-visible)`; report a headless boot check separately as evidence, not as opening).
+End each round with: files assembled/imported, exclusions, the presented structure (entry document, each group with its files, and what sits under `Unassigned`), warnings from `scripts/pack.mjs verify`, open comments handled/deferred by thread ID, files changed while handling comments, refreshed Taco path, and presentation status (`presented as a clickable file` / `opened (user-visible)` / `opened and verified (user-visible)`; report a headless boot check separately as evidence, not as opening).
