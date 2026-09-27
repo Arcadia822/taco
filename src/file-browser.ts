@@ -219,6 +219,10 @@ export class FileBrowser {
       : [])
   }
 
+  getRenderErrors(): Array<{ path: string; message: string }> {
+    return [...this.markdownMigrationErrors.entries()].map(([path, message]) => ({ path, message }))
+  }
+
   constructor(private root: HTMLElement, private bundle: TacoBundle, private readonly options: FileBrowserOptions = {}) {
     this.store = new TacoStore(bundle)
     const hostParams = new URLSearchParams(location.search)
