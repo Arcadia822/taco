@@ -81,7 +81,7 @@ type LocaleCode = 'zh-Hans' | 'en'
 const DEMO_TACO = '008-taco-host-contract.taco.html'
 const DEMO_EDITED_FILE = 'specs/008-taco-host-contract/data-model.mmd'
 const TRACE_TACO_ID = '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001'
-const TRACE_HOST = 'https://tacobin.arcadia-han.com'
+const TRACE_HOST = 'https://taco.arcadia-han.com'
 // Taco 在 ≤1080px 时收起评论栏：窗口更窄时按 1200px 渲染再等比缩小，否则 1:1
 const DEMO_MIN_WIDTH = 1200
 

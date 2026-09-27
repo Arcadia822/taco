@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://tacobin.arcadia-han.com'),
+  metadataBase: new URL('https://taco.arcadia-han.com'),
   title: {
     default: 'Taco — 面向人类与 AI Agent 协作的单文件可交互规范空间',
     template: '%s | Taco',
@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'zh_CN',
     alternateLocale: ['en_US'],
-    url: 'https://tacobin.arcadia-han.com',
+    url: 'https://taco.arcadia-han.com',
     siteName: 'Taco',
     title: 'Taco — Single-File Interactive Spec & Review Space for Humans & Agents',
     description:
@@ -50,6 +50,7 @@ export const metadata: Metadata = {
         url: '/og-image.png',
         width: 1280,
         height: 720,
+        type: 'image/png',
         alt: 'Taco — Single-File Interactive Spec & Review Space',
       },
     ],
@@ -63,11 +64,7 @@ export const metadata: Metadata = {
     creator: '@arcadia822',
   },
   alternates: {
-    canonical: 'https://tacobin.arcadia-han.com',
-    languages: {
-      'zh-CN': 'https://tacobin.arcadia-han.com',
-      'en': 'https://tacobin.arcadia-han.com',
-    },
+    canonical: 'https://taco.arcadia-han.com',
   },
 }
 
@@ -76,34 +73,11 @@ const jsonLdWebsite = {
   '@type': 'WebSite',
   name: 'Taco',
   alternateName: ['Taco Page', 'Tacobin'],
-  url: 'https://tacobin.arcadia-han.com',
+  url: 'https://taco.arcadia-han.com',
   description:
     'Single-file interactive specification and review space for humans and AI agents with checkpoints, handoffs, and real-time collaboration.',
 }
 
-const jsonLdSoftwareApp = {
-  '@context': 'https://schema.org',
-  '@type': 'SoftwareApplication',
-  name: 'Taco',
-  applicationCategory: 'DeveloperApplication',
-  operatingSystem: 'All',
-  browserRequirements: 'Requires JavaScript. Works offline in modern browsers.',
-  offers: {
-    '@type': 'Offer',
-    price: '0',
-    priceCurrency: 'USD',
-  },
-  description:
-    'A self-contained single-file HTML spec platform featuring WYSIWYG editing, Mermaid diagrams, review threads, DAG checkpoints, and AI agent handoff workflows.',
-  featureList: [
-    'Self-contained single-file HTML (.taco.html)',
-    'Checkpoints DAG and document lifecycle tracking',
-    'Two-way Human & AI Agent handoff',
-    'In-place WYSIWYG Markdown & Mermaid diagram editing',
-    'Zero install / offline capable review',
-    'Tacobin cloud relay and live event subscription',
-  ],
-}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -117,10 +91,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdWebsite) }}
-        />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdSoftwareApp) }}
         />
         {/* Directly embed authentic Taco CSS variables for perfect 1:1 fidelity */}
         <style dangerouslySetInnerHTML={{ __html: `
