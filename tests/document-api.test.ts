@@ -56,6 +56,30 @@ describe('window.taco document API', () => {
     expect(window.taco.undoLoad()).toBe(false)
   })
 
+  it('rejects a document that would silently lose its navigation', () => {
+    bootCommon(document_('Review', ['spec.md']))
+
+    // Deliberately invalid: a group without `paths`, which parseBundle silently drops.
+    const broken = {
+      ...document_('Broken', ['spec.md', 'plan.md']),
+      navigation: { version: 1, groups: [{ id: 'group-1', title: 'No paths' }] },
+    }
+
+    const result = window.taco.loadBundle(broken)
+    expect(result.ok).toBe(false)
+    expect(paths()).toEqual(['spec.md'])
+    expect(window.taco.undoLoad()).toBe(false)
+  })
+
+  it('reports an unserializable write-back instead of throwing', () => {
+    bootCommon(document_('Review', ['spec.md']))
+
+    const cyclic: Record<string, unknown> = { format: 'taco/files' }
+    cyclic.self = cyclic
+    expect(window.taco.loadBundle(cyclic).ok).toBe(false)
+    expect(paths()).toEqual(['spec.md'])
+  })
+
   it('reports document findings and security issues from one call', () => {
     const target = document_('Review', ['spec.md'])
     target.comments = [

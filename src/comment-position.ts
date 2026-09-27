@@ -122,9 +122,16 @@ export const formatLineRange = (range: CommentRange): string =>
  */
 export const commentLineReference = (text: string, anchor: TacoTextAnchor): string | null => {
   if (!anchor.quote.exact) return null
-  const range = resolveTextAnchor(text, anchor) ?? mapNormalizedAnchor(text, anchor)
+  const range = resolveAnchorRange(text, anchor)
   return range ? formatLineRange(lineRangeForOffsets(text, range.start, range.end)) : null
 }
+
+/**
+ * Locate an anchor in source text: an exact match first, then the markup-stripped projection of the
+ * same source. Null when the quote is gone from both, which is what makes a comment genuinely stale.
+ */
+export const resolveAnchorRange = (text: string, anchor: TacoTextAnchor): CommentRange | null =>
+  resolveTextAnchor(text, anchor) ?? mapNormalizedAnchor(text, anchor)
 
 const THEMATIC_BREAK = /^ {0,3}(?:[-*_][ \t]*){3,}$/
 const BLOCK_QUOTE = /^ {0,3}>[ \t]?/

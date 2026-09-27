@@ -110,7 +110,16 @@ export class FileBrowser {
   private categoryBadge!: HTMLButtonElement
   private checkpointTemplateInput!: HTMLInputElement
   private workspacePath!: HTMLElement
-  private readonly markdownMigrationErrors = new Map<string, string>()
+  private readonly markdownMigrationErrors = new Map<string, { message: string; content: string }>()
+
+  /**
+   * A migration failure belongs to the content that produced it: once the reviewer edits the file,
+   * the old failure no longer describes the current document and must stop reporting.
+   */
+  private recordMigrationFailure(failure: { path: string; message: string }): void {
+    const content = this.bundle.files.find((file) => file.path === failure.path)?.content ?? ''
+    this.markdownMigrationErrors.set(failure.path, { message: failure.message, content })
+  }
   private richEditorAdapter: RichEditorAdapter | null = null
   private richEditorLoading = false
   private richEditor: RichEditorHandle | null = null
@@ -220,7 +229,10 @@ export class FileBrowser {
   }
 
   getRenderErrors(): Array<{ path: string; message: string }> {
-    return [...this.markdownMigrationErrors.entries()].map(([path, message]) => ({ path, message }))
+    const current = new Map(this.bundle.files.map((file) => [file.path, file.content]))
+    return [...this.markdownMigrationErrors.entries()]
+      .filter(([path, failure]) => current.get(path) === failure.content)
+      .map(([path, failure]) => ({ path, message: failure.message }))
   }
 
   constructor(private root: HTMLElement, private bundle: TacoBundle, private readonly options: FileBrowserOptions = {}) {
@@ -256,7 +268,7 @@ export class FileBrowser {
         this.richEditorLoading = false
         this.richEditorAdapter = adapter
         for (const failure of adapter.migrateBundleBlocks(this.bundle, this.mermaidLabels())) {
-          this.markdownMigrationErrors.set(failure.path, failure.message)
+          this.recordMigrationFailure(failure)
         }
         this.promoteAwaitingMarkdown()
       }).catch((error: unknown) => {
@@ -272,7 +284,7 @@ export class FileBrowser {
     } else if (adapterOption) {
       this.richEditorAdapter = adapterOption as RichEditorAdapter
       for (const failure of this.richEditorAdapter.migrateBundleBlocks(bundle, this.mermaidLabels())) {
-        this.markdownMigrationErrors.set(failure.path, failure.message)
+        this.recordMigrationFailure(failure)
       }
     }
     this.dirtyTracker = new BundleDirtyTracker(bundle)
@@ -850,9 +862,9 @@ export class FileBrowser {
       }
       return
     }
-    const migrationError = this.markdownMigrationErrors.get(file.path)
-    if (migrationError) {
-      this.mountMarkdownFallback(this.viewer, file, migrationError)
+    const migration = this.markdownMigrationErrors.get(file.path)
+    if (migration && migration.content === file.content) {
+      this.mountMarkdownFallback(this.viewer, file, migration.message)
       return
     }
     const parsedFrontmatter = parseFrontmatter(file.content)

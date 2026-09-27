@@ -5,7 +5,9 @@
 // reviewer (or an agent in the console) gets one report instead of several.
 
 import { resolveCheckpoints } from '@taco/protocol'
+import { resolveAnchorRange } from './comment-position.ts'
 import { isInternalFile, type TacoBundle } from './model.ts'
+import { resolveDocumentNavigation } from './navigation.ts'
 import { TACO_SECURITY_VERSION, validateTacoSecurity, type SecurityIssueCode } from './security.ts'
 
 export type FindingSeverity = 'error' | 'warning' | 'info'
@@ -46,7 +48,25 @@ const KNOWN_BUNDLE_FIELDS: Record<string, true> = {
 }
 
 const MARKDOWN_LINK = /\[[^\]]*\]\(([^()\s]+)(?:\s+"[^"]*")?\)/g
+const MARKDOWN_DEFINITION = /^ {0,3}\[[^\]]+\]:\s*(\S+)/gm
 const HAS_SCHEME = /^[a-zA-Z][a-zA-Z0-9+.-]*:/
+
+/** Blank out fenced code blocks and inline code spans, where link-shaped text is not a link. */
+const stripCode = (content: string): string => {
+  const out: string[] = []
+  let fence: string | null = null
+  for (const line of content.split('\n')) {
+    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)
+    if (marker) {
+      if (fence && line.trimStart().startsWith(fence)) fence = null
+      else if (!fence) fence = marker[1]
+      out.push('')
+      continue
+    }
+    out.push(fence ? '' : line.replace(/`[^`\n]*`/g, ' '))
+  }
+  return out.join('\n')
+}
 
 /** Resolve `target` against the directory of `from`, returning null when it leaves the bundle root. */
 const resolveLink = (root: string, from: string, target: string): string | null => {
@@ -64,10 +84,14 @@ const resolveLink = (root: string, from: string, target: string): string | null 
 }
 
 const linkTarget = (raw: string): string | null => {
-  const target = raw.replace(/\\/g, '/').trim()
-  if (!target || target.startsWith('#') || target.startsWith('//') || HAS_SCHEME.test(target)) return null
-  if (target.startsWith('/')) return null
-  return target.split('#')[0] || null
+  const withoutFragment = raw.trim().replace(/\\/g, '/').split('#')[0].split('?')[0]
+  if (!withoutFragment || withoutFragment.startsWith('//') || HAS_SCHEME.test(withoutFragment)) return null
+  if (withoutFragment.startsWith('/')) return null
+  try {
+    return decodeURIComponent(withoutFragment) || null
+  } catch {
+    return withoutFragment
+  }
 }
 
 export function validateDocument(bundle: TacoBundle, renderErrors: readonly RenderFinding[] = []): DocumentValidation {
@@ -102,17 +126,13 @@ export function validateDocument(bundle: TacoBundle, renderErrors: readonly Rend
       continue
     }
     if (file.mediaType === 'image/png') continue
-    const { start, end } = thread.anchor.position
-    const quoted = thread.anchor.quote.exact
-    if (file.content.slice(start, end) === quoted) continue
-    if (file.content.includes(quoted)) {
-      push('comment-anchor-drifted', 'warning', `comment ${thread.id} still quotes "${quoted.slice(0, 40)}" but its position moved; re-anchor it`, file.path)
-    } else {
-      push('comment-anchor-stale', 'warning', `comment ${thread.id} quotes text that is no longer in the file: "${quoted.slice(0, 40)}"`, file.path)
+    if (!resolveAnchorRange(file.content, thread.anchor)) {
+      push('comment-anchor-stale', 'warning', `comment ${thread.id} quotes text that is no longer in the file: "${thread.anchor.quote.exact.slice(0, 40)}"`, file.path)
     }
   }
 
   const checkpoints = resolveCheckpoints(bundle)
+  const navigation = resolveDocumentNavigation(bundle)
   if (!checkpoints.valid) {
     push('checkpoints-invalid', 'warning', `checkpoint graph is not usable: ${checkpoints.error}`)
   } else {
@@ -131,36 +151,44 @@ export function validateDocument(bundle: TacoBundle, renderErrors: readonly Rend
   const manifest = bundle.navigation
   if (manifest) {
     for (const group of manifest.groups) {
-      let members = 0
       for (const raw of group.paths) {
         const path = raw.startsWith(`${bundle.root}/`) ? raw : `${bundle.root}/${raw}`
         if (!paths.has(path)) {
           push('navigation-path-missing', 'warning', `navigation group "${group.title}" lists a path that is not in the bundle: ${path}`, path)
-          continue
         }
-        members += 1
       }
-      if (!members) push('navigation-group-empty', 'warning', `navigation group "${group.title}" has no file in the bundle`)
     }
     if (manifest.entry) {
       const entry = manifest.entry.startsWith(`${bundle.root}/`) ? manifest.entry : `${bundle.root}/${manifest.entry}`
       if (!paths.has(entry)) push('navigation-entry-missing', 'warning', `navigation.entry is not in the bundle: ${entry}`, entry)
     }
   }
+  // Emptiness is what the sidebar will show, so ask the resolver rather than counting declared
+  // paths: a group whose only member is Checkpoint-owned or claimed by an earlier group is empty.
+  for (const warning of navigation.warnings) {
+    push(warning.reason, 'warning', `navigation: ${warning.reason} at ${warning.path}`, warning.path)
+  }
+  for (const group of navigation.groups) {
+    if (!group.files.length) push('navigation-group-empty', 'warning', `navigation group "${group.title}" renders empty`)
+  }
 
   for (const file of bundle.files) {
     if (file.mediaType !== 'text/markdown' || isInternalFile(file.path)) continue
-    MARKDOWN_LINK.lastIndex = 0
-    for (const match of file.content.matchAll(MARKDOWN_LINK)) {
-      const target = linkTarget(match[1])
+    const scannable = stripCode(file.content)
+    const targets = [
+      ...[...scannable.matchAll(MARKDOWN_LINK)].map((match) => match[1]),
+      ...[...scannable.matchAll(MARKDOWN_DEFINITION)].map((match) => match[1]),
+    ]
+    for (const raw of targets) {
+      const target = linkTarget(raw)
       if (!target) continue
       const resolved = resolveLink(bundle.root, file.path, target)
       if (!resolved) {
-        push('markdown-link-escapes-root', 'warning', `link target leaves the bundle root: ${match[1]}`, file.path)
+        push('markdown-link-escapes-root', 'warning', `link target leaves the bundle root: ${raw}`, file.path)
         continue
       }
       if (!paths.has(resolved)) {
-        push('markdown-link-missing', 'warning', `link target is not in the bundle: ${match[1]}`, file.path)
+        push('markdown-link-missing', 'warning', `link target is not in the bundle: ${raw}`, file.path)
       }
     }
   }

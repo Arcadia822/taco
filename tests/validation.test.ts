@@ -67,13 +67,23 @@ describe('validateDocument', () => {
     expect(validateDocument(target).ok).toBe(true)
   })
 
-  it('separates a moved quote from a deleted one', () => {
+  it('resolves an anchor taken from rendered text, not only raw Markdown', () => {
+    // A reviewer selecting `Bold text` in the reading surface stores a quote that does not exist
+    // literally in the source. The runtime projects it back; validation must not call it stale.
     const target = bundle({
-      files: [markdown('docs/spec.md', '# Draft\n\nSome preamble.\n\n# Spec\n')],
-      comments: [thread()],
+      files: [markdown('docs/spec.md', '# Spec\n\n**Bold** text\n')],
+      comments: [
+        thread({
+          anchor: {
+            path: 'docs/spec.md',
+            position: { start: 0, end: 9 },
+            quote: { exact: 'Bold text', prefix: '', suffix: '' },
+          },
+        }),
+      ],
     })
 
-    expect(codes(target)).toContain('comment-anchor-drifted')
+    expect(codes(target)).toEqual([])
   })
 
   it('treats an anchor into a missing file as an error', () => {
@@ -87,6 +97,33 @@ describe('validateDocument', () => {
     expect(result.ok).toBe(false)
   })
 
+  it('ignores link-shaped text inside code and handles encoded and query targets', () => {
+    const target = bundle({
+      files: [
+        markdown(
+          'docs/spec.md',
+          [
+            '# Spec',
+            '',
+            '```md',
+            '[not a link](ghost.md)',
+            '```',
+            '',
+            'Inline `[also not](ghost.md)` stays literal.',
+            '',
+            '![img](my%20image.png) [q](plan.md?view=1) [ok](plan.md)',
+            '',
+            '[ref]: plan.md',
+            '[text][ref]',
+          ].join('\n'),
+        ),
+        markdown('docs/plan.md', '# Plan\n'),
+        { path: 'docs/my image.png', mediaType: 'image/png', content: 'data:image/png;base64,' },
+      ],
+    })
+
+    expect(codes(target)).toEqual([])
+  })
   it('checks that relative links resolve inside the bundle', () => {
     const target = bundle({
       files: [markdown('docs/spec.md', '# Spec\n\n[a](plan.md) [b](missing.md) [c](../../etc/passwd) [d](https://example.com) [e](#anchor)\n')],
@@ -122,6 +159,19 @@ describe('validateDocument', () => {
     expect(codes(target)).toEqual(
       expect.arrayContaining(['navigation-path-missing', 'navigation-group-empty', 'navigation-entry-missing']),
     )
+  })
+
+  it('calls a group empty when its only member is owned by a Checkpoint', () => {
+    const target = bundle({
+      checkpoints: {
+        version: 1,
+        nodes: [{ id: 'spec', title: 'Specification', after: [], documents: [{ path: 'docs/spec.md' }] }],
+        documents: [],
+      },
+      navigation: { version: 1, groups: [{ id: 'group-1', title: 'Specs', paths: ['spec.md'] }] },
+    })
+
+    expect(codes(target)).toContain('navigation-group-empty')
   })
 
   it('surfaces transplanted Checkpoint documents as missing', () => {
