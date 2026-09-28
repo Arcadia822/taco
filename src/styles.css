@@ -1189,11 +1189,14 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 }
 .media-preview-dialog,
 .png-preview {
-  width: fit-content;
-  max-width: min(92vw, 1200px);
-  max-height: min(92vh, 900px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(92vw, 1040px);
+  height: min(88vh, 760px);
   padding: 16px;
   margin: auto;
+  overflow: hidden;
   border: 1px solid var(--line-strong);
   border-radius: 14px;
   background: var(--surface);
@@ -1210,8 +1213,8 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .media-preview-dialog img,
 .png-preview img {
   display: block;
-  max-width: min(88vw, 1160px);
-  max-height: min(86vh, 860px);
+  max-width: 100%;
+  max-height: 100%;
   width: auto;
   height: auto;
   object-fit: contain;
