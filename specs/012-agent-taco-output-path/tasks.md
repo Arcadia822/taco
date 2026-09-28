@@ -22,10 +22,10 @@ status: 'Draft'
 - [ ] T7 `{feature}` 由 `docDir` 的 basename 推导；`docDir` 缺失或 basename 段不安全 → `needs_feature`；`docDir` 等于仓库根 → `root_unresolvable`（两者互斥），均不降级；不提供 `--feature` 覆盖。
 - [ ] T8 `root` 推导：刷新取既有 bundle 的 `root`；新建取项目约定值，无约定取 `basename(docDir)`；`docDir` 等于仓库根 → `root_unresolvable` 停止。
 - [ ] T9 `title` 缺省回退与 `pack.mjs` 对齐（`--title ?? 既有 bundle title ?? portableTitleBase(root)`）；`portableTitleBase` 与 `pack.mjs:64-69` 同算法并有断言。
-- [ ] T10 路径安全：`realpath` 已存在前缀的包含性判定、禁区拒绝（skill/extension/templates/`node_modules`/`.git`）、L0 绝对路径同样受禁区约束；目标文件为符号链接 → 拒绝；目标 `docId` 冲突预检。
+- [ ] T10 路径安全：`realpath` 已存在前缀的包含性判定、禁区拒绝（skill/extension/templates/`node_modules`/`.git`）、L0 绝对路径同样受禁区约束；目标文件为符号链接 → 拒绝；目标 `docId` 冲突预检（**含迁移**：在复制之前完成，`--existing` + `--requested` 同一次调用即判定）。
 - [ ] T11 上下文与家目录：`git rev-parse --show-toplevel` 推导 `workspaceRoot`（`docDir` 为子目录时用顶层并校验包含）；`--personal` → LP（高于 L2）；非 git → L5 + `workspaceRoot-not-git` 告警；`HOME ?? USERPROFILE` 皆缺 → `needs_home`。
 - [ ] T12 告警：`git check-ignore` 命中 → `gitignored`（仍返回路径，不改 `.gitignore`）；`git` 不可用 → `git-unavailable`；`root_unresolvable` 终止。
-- [ ] T13 新增 `tests/output-path.test.ts`：覆盖 spec.md 7.1 的 20 项，其中 13–20 为行为级（真实 `pack.mjs` + 读回 bundle）：首建（父目录不存在）、L0 目录与文件形态、个人意图、无 CP、刷新（路径/`root`/状态保留）、迁移（父目录不存在 + `docId` 与状态逐字段一致）、目标占用（拒绝且文件字节未变）、模板来源独立。
+- [ ] T13 新增 `tests/output-path.test.ts`：覆盖 spec.md 7.1 的 20 项，其中 13–20 为行为级（真实 `pack.mjs` + 读回 bundle）：首建（父目录不存在）、L0 目录与文件形态、个人意图、无 CP、刷新（路径/`root`/状态保留）、迁移（父目录不存在 + `docId` 与状态逐字段一致）、目标占用（拒绝且文件字节未变，含迁移时复制之前即拒绝）、模板来源独立；S2 的 shell 变体分支直接调用导出的 `resolveRule` 断言。
 
 ## 阶段 4：文档接线
 

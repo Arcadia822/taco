@@ -102,7 +102,7 @@ LP 位于 L2 之前（`L0 > L1 > LP > L2 > L3 > L4`），理由：它是用户�
 ### 3.6 刷新、迁移、首次创建与 `root`
 
 - **刷新**：目标路径与 bundle `root` 均保持不变；`docId`、`comments`、`navigation`、`checkpoints`（含文档状态）与未知字段全部保留；`root` 从既有 bundle 读取后原样传入（`pack.mjs:790-791` 强制 `priorBundle.root === --root`）。
-- **迁移**（仅用户显式要求，顺序固定）：读取校验旧 bundle → `mkdir -p` 新目标父目录 → 复制旧文件到新路径 → 对新路径打包（`pack.mjs` 把该副本当 prior bundle 合并）→ 校验 `docId` 与 `comments`/`checkpoints`/`navigation` 逐字段一致 → 报告新旧路径。不删除旧文件，除非用户显式要求。
+- **迁移**（仅用户显式要求，顺序固定）：读取校验旧 bundle 并做**占用预检**（与最终解析同一次调用，`--existing <旧>` + `--requested <新>`；目标已存在且 `docId` ≠ 旧文件 → 此时即停止，**不得先复制**）→ `mkdir -p` 新目标父目录 → 复制旧文件到新路径 → 对新路径打包（`pack.mjs` 把该副本当 prior bundle 合并，`--title` 未给则省略以沿用副本标题）→ 校验 `docId` 与 `comments`/`checkpoints`/`navigation` 逐字段一致 → 报告新旧路径。不删除旧文件，除非用户显式要求。
 - **首次创建**：目标父目录可能不存在，写盘环节必须先 `mkdir -p` 再打包（`pack.mjs:701-703` 的 `atomicWrite` 在目标目录内写临时文件，不创建父目录）。
 - **`root` 必须显式传入**，按"刷新 → 既有 bundle 的 `root`；新建 → 项目约定；无约定 → `basename(DOC_DIR)`（= `pack.mjs:780` 默认，也是本仓库 `specs/011-*` 的既有形态）"确定，并写入报告。不依赖默认值，避免刷新时的 root 不匹配只能由 `pack.mjs:790-791` 在打包中途报错。
 - **DOC_DIR 等于仓库根**：不支持。空 `--root` 被 `pack.mjs:47-51` 拒绝；写成 `.` 虽能通过 root 校验，却会生成 `./<file>` 形式的 `files[].path`，不满足文件路径安全规则（`pack.mjs:47-49,206-208`）。此情形返回 `root_unresolvable` 并停止，提示改为指向子目录；S2 同样不适用。该终止类型与 `needs_feature` 互斥：仓库根用前者，basename 不可安全使用用后者。
@@ -201,7 +201,7 @@ node skills/taco/scripts/output-path.mjs --doc-dir <dir> --operation <create|ref
 3. L1（`--existing`）在存在项目规则时仍胜出；`--requested` 与 `--existing` 同时给出 → `--requested` 胜出。
 4. LP：git 仓库内 `--personal` → 个人归档目录，而非 L2/L3/L4 结果。
 5. L2-S1：`AGENTS.md` 声明 + DOC_DIR → 规则目录；`CLAUDE.md` 声明不同值 → `conflict`；同值 → 取首个；同文件两条（含同值）→ `malformed`。
-6. L2-S2：`--operation create` 且有 `assets/taco-shell.html` 而无声明 → 命中 DOC_DIR；只有 `.specify/` 无 assets → 落到 L3；只有 `taco-shell-lite.html` 时：`create` → 不成立 S2 并给出原因，`refresh` 既有 Lite Taco（传入 shell 变体 `lite`）→ 成立，`refresh` 既有 Complete Taco（变体 `complete`）→ 不成立。
+6. L2-S2（**直接调用导出的 `resolveRule`**，因为公开级联在刷新时由 L1 短路）：`--operation create` 且有 `assets/taco-shell.html` 而无声明 → 命中 DOC_DIR；只有 `.specify/` 无 assets → 落到 L3；只有 `taco-shell-lite.html` 时：`create` → 不成立 S2 并给出原因，`refresh` + 既有 Lite Taco（变体 `lite`）→ 成立，`refresh` + 既有 Complete Taco（变体 `complete`）→ 不成立。另断言：带 `--existing` 的公开解析结果始终是 L1，不受 S2 判定影响。
 7. L2 冲突：S1 与 S2 同时存在且不同 → `conflict`；相同 → 取该目录。
 8. L3：仅 `docs/` → `docs/Tacos`；同时有 `docs/` 与 `specs/` → `docs/Tacos`；仅 `specs/` → `specs/Tacos`。
 9. L4：无文档目录的 git 仓库 → `<repo>/Tacos`。

@@ -99,12 +99,17 @@ node skills/taco/scripts/pack.mjs --dir "$DOC_DIR" --root "$ROOT" --out "$OUT"
 node skills/taco/scripts/pack.mjs verify "$OUT"
 ```
 
-迁移（用户显式要求，父目录可能不存在）：
+迁移（用户显式要求；先用同一解析器做占用预检，**复制之前**就要通过）：
 
 ```sh
+# 解析 + 占用预检：$NEW 已存在且其 docId 与 $EXISTING 不同时，解析器非 0 退出并报告，不得继续
+RESULT=$(node skills/taco/scripts/output-path.mjs --doc-dir "$DOC_DIR" --operation refresh \
+  --existing "$EXISTING" --requested "$NEW" --json)
+NEW=$(jq -r .file <<<"$RESULT"); ROOT=$(jq -r .root <<<"$RESULT")
 mkdir -p "$(dirname "$NEW")"   # 先建目录，否则下一步 cp 失败
 cp "$EXISTING" "$NEW"          # 复制后 $NEW 上的 bundle 与旧文件逐字段相同
-node skills/taco/scripts/pack.mjs --dir "$DOC_DIR" --root "$ROOT" --title "$TITLE" --out "$NEW"
+node skills/taco/scripts/pack.mjs --dir "$DOC_DIR" --root "$ROOT" \
+  ${TITLE:+--title "$TITLE"} --out "$NEW"
 # 校验 docId 与 comments/checkpoints/navigation 逐字段一致；不删除旧文件
 ```
 
