@@ -157,14 +157,15 @@ title = --title ?? 既有 bundle 的 title ?? portableTitleBase(root)
 
 ### 6.2 迁移（仅用户显式要求）
 
-顺序固定，先建目录再复制，避免 `cp` 因父目录缺失失败：
+顺序固定；**占用预检必须排在复制之前**，否则 `cp` 会先覆盖别人的 Taco，且失败后无法回滚：
 
 1. 读取并校验旧 bundle（`docId`、`root`、`comments`、`checkpoints`、未知字段）；
-2. `mkdir -p` 新目标的父目录；
-3. 把旧 `.taco.html` **复制**到新路径（此时新路径 bundle 与旧文件逐字段相同）；
-4. 对新路径打包；`pack.mjs` 会把该副本当 prior bundle 合并，从而保留身份与全部状态；
-5. 校验新文件 `docId` 与旧文件一致，`comments`/`checkpoints`/`navigation` 逐字段相同；
-6. 报告"旧路径 → 新路径"；**不删除**旧文件，除非用户显式要求。
+2. 用 `--operation refresh --existing <旧> --requested <新>` 的**同一次解析**完成占用预检（§5.3）：新目标已存在且其 `docId` ≠ 旧文件的 `docId` → `conflict`，立即停止，**不建目录、不复制**；
+3. `mkdir -p` 新目标的父目录（避免 `cp` 因父目录缺失失败）；
+4. 把旧 `.taco.html` **复制**到新路径（此时新路径 bundle 与旧文件逐字段相同）；
+5. 对新路径打包；`pack.mjs` 会把该副本当 prior bundle 合并，从而保留身份与全部状态；未给出标题时**省略** `--title` 以沿用副本的标题；
+6. 校验新文件 `docId` 与旧文件一致，`comments`/`checkpoints`/`navigation` 逐字段相同；
+7. 报告"旧路径 → 新路径"；**不删除**旧文件，除非用户显式要求。
 
 ### 6.3 首次创建
 
