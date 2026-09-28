@@ -269,7 +269,7 @@ node scripts/check-update.mjs [--json] [--repo <url|path>] [--api-base <url>] [-
 | 用户级 Git 配置 | 全局/系统配置可能携带认证头、URL 重写或代理 | `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` 指向 `/dev/null`、禁用交互与凭据助手；代价是「仅靠 Git 配置走代理」的环境 git 通道失败（§5.2） |
 | 项目级 Git 配置 | 位于 cwd 所在仓库的 `.git/config`（可由下载而来的含 `.git/` 目录触发）同样会被 git 读取 | **子进程 cwd 固定在中立目录**（`os.tmpdir()`），绝不在项目目录内启动 |
 | 未认证限额（HTTP 回退与扩展查询） | 60 次/小时/IP；命中即静默 | git 通道无限制；HTTP 回退只在 git 不可用时启用；扩展查询只在装过扩展的项目里发起一次；15 分钟缓存进一步摊薄 |
-| 缓存文件 | 在用户缓存目录写入版本比较结果（非项目内容） | 仅版本号、来源与时间戳，< 2 KiB；`--no-cache`/`TACO_UPDATE_CACHE_TTL=0` 可完全禁用；读写失败一律忽略 |
+| 缓存文件 | 在用户缓存目录写入版本比较结果与探测目标摘要（非项目内容、非原始路径） | 仅版本号、来源、时间戳与 repo+apiBase 的 SHA-256 摘要，< 2 KiB；`--no-cache`/`TACO_UPDATE_CACHE_TTL=0` 可完全禁用；读写失败一律忽略 |
 | 本机 `taco-cli` | `PATH` 上被替换的可执行文件会被自动执行 | 仅接受解析为绝对路径的常规可执行文件；`--cli-bin`/`TACO_CLI_BIN` 仅限受信调用方与测试；该自动执行在 `SKILL.md` 中明示，可用 `--no-cli` 或 `TACO_UPDATE_CHECK=off` 关闭 |
 | `--api-base` 覆盖 | 调用方可指向任意地址 | 只接受 `https://api.github.com` 或环回测试夹具；`fetch` 使用 `redirect: "error"`，异域 `Link` 不跟随（分页地址由基址构造） |
 | 资源占用 | 子进程挂起、响应体异常膨胀或派生进程残留 | 每次探测独立硬超时、64 KiB 响应上限、进程组级 `SIGKILL`（仅 `taco-cli` 子进程） |
