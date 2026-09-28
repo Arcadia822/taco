@@ -8,7 +8,7 @@
 - [ ] 新增 `scripts/sync-skill-version.mjs`：读取 `package.json` 的 `version`，以 `"<version>\n"` 原子写入 `skills/taco/VERSION`（临时文件 + `rename`）；内容相同则报告 `unchanged` 且不重写；支持 `--dir <skill-dir>` 以便测试。
 - [ ] `package.json`：新增脚本 `"sync:version": "node scripts/sync-skill-version.mjs"`；并在 `build` 链末尾（`scripts/sync-extension-shell.mjs` 之后）追加同一命令，保证完整构建后工作树无漂移。
 - [ ] 运行 `npm run sync:version` 生成 `skills/taco/VERSION`，确认内容等于 `package.json` 版本。
-- [ ] `skills/taco-release/SKILL.md` 步骤 3.1：在更新 `package.json` / `extension.yml` 版本号之后、`npm run check` 之前插入 `npm run sync:version`，并将 `skills/taco/VERSION` 纳入提交（`git add` 已含 `skills/taco/`）。
+- [ ] `.github/workflows/nightly-release.yml`：在 taco 本体发版步骤里，更新版本号之后、`npm run check` 之前插入 `npm run sync:version`，并把 `skills/taco/VERSION` 纳入 `git add`（该步骤已包含 `skills/taco/`）。原 `skills/taco-release/SKILL.md` 已随 PR #82 删除，本行改为直接改 CI。
 - [ ] `AGENTS.md`：注明 `skills/taco/VERSION` 是构建生成物，禁止手改；改动镜像类生成物后重新生成。
 
 ## 阶段 2：探测脚本

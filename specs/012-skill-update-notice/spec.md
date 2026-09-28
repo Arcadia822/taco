@@ -48,7 +48,7 @@ Agent 开始 Taco 工作 → 一次轻量更新检查 → 正常完成交付
 | 远端最新 `taco-cli` 发布 | `taco-cli-v0.2.1`（`gh release list`） |
 | 安装方式 | 安装 skill 是整目录拷贝（或由 `npx skills` 复制/链接），不会克隆仓库——本机没有可供 `git` 查询的远端，探测必须走网络 |
 | git tag 探测 | `git ls-remote --tags --refs https://github.com/Arcadia822/taco.git` → 25 个 tag，约 1.3 s，无认证、无速率限制 |
-| `npx skills` 安装渠道 | 官网给出的命令是 `npx skills@latest add arcadia822/taco --skill=taco`（`skills` 包 v1.7.0，vercel-labs/skills）；`--list` 实测解析出 `taco`、`taco-release` 两个 skill；`add --copy` 实测把整个 skill 目录（含 `scripts/`、`VERSION`）复制到 `./.claude/skills/taco/`，并在项目根写入 `skills-lock.json`（记录 `source`/`sourceType`/`computedHash`，**不含 semver**）；CLI 另有 `update`/`upgrade`、`list`、`remove` 子命令 |
+| `npx skills` 安装渠道 | 官网给出的命令是 `npx skills@latest add arcadia822/taco --skill=taco`（`skills` 包 v1.7.0，vercel-labs/skills）；`--list` 实测会解析出 `taco`（以及当时仍留在仓库里的 `taco-release`——它不是安装项，已在 PR #82 中随发版流程收归 CI 而删除，之后只列出 `taco`）；`add --copy` 实测把整个 skill 目录（含 `scripts/`、`VERSION`）复制到 `./.claude/skills/taco/`，并在项目根写入 `skills-lock.json`（记录 `source`/`sourceType`/`computedHash`，**不含 semver**）；CLI 另有 `update`/`upgrade`、`list`、`remove` 子命令 |
 | GitHub REST `GET /repos/Arcadia822/taco/tags?per_page=100`（未认证） | 200，约 0.9 s，10.6 KB，25 个 tag（按新→旧），Node 内置 `fetch` 直接可用 |
 | 同一 API 的 `GET /releases?per_page=100` | 200，约 1.0 s，**95.6 KB**（含 assets 等冗余字段），对「只比版本」而言过重 |
 | `GET /releases/latest` | 返回 `taco-cli-v0.2.1`——它是「全仓库最新非预发布 release」，**不是** taco 本体的最新版本，直接用它会产生错误结论 |
@@ -126,7 +126,7 @@ Agent 开始 Taco 工作 → 一次轻量更新检查 → 正常完成交付
 
 - **taco skill（本体）**：`skills/taco/` 目录，用户以整目录拷贝方式安装；本特性以其中的 `VERSION` 标记其版本。
 - **taco-cli**：可选安装的云端 CLI（`@tacobin/cli` / 独立二进制），仅在做云端发布/评审时需要。
-- **远端最新版本**：仓库 `Arcadia822/taco` 上已发布的 tag（发版链路只在 `main` 打 tag，见 `skills/taco-release/SKILL.md`）。
+- **远端最新版本**：仓库 `Arcadia822/taco` 上已发布的 tag（发版链路只在 `main` 打 tag，见 `.github/workflows/nightly-release.yml` 与 `scripts/check-changes.mjs`）。
 - **检查会话**：一次 Agent 工作任务的上下文；同一会话内最多检查一次。
 
 ---
@@ -267,7 +267,7 @@ node scripts/check-update.mjs [--json] [--repo <url|path>] [--api-base <url>] [-
 | `docs/agent-installation.md` | **安装入口改为「优先 npx skills 安装，失败或结果不完整时回退整目录拷贝」**（命令与验证：`npx skills@latest add arcadia822/taco --skill=taco`，非交互写法 `-g -a <agent> -y`，验证用 `npx skills@latest list`）；安装文件清单（现有 5 条 bullet，`scripts/**` 已涵盖新脚本）显式加入 `VERSION`；`Verify before reporting success` 加入 `VERSION` 与 `check-update.mjs`；`Use the skill` 之前补 bootstrap 说明；新增「更新提示」小节（按安装渠道给出升级方式） | 修改 |
 | `extensions/taco/policies/taco-agent-policy.md` | 追加一条同等契约（对新装/干净安装的 Spec Kit 项目生效；已安装项目按 §7 走 `manual-merge`） | 修改 |
 | `README.md`、`README.zh-CN.md` | Quickstart 之后一句话说明「有更新会提示、不会自动升级」 | 修改 |
-| `skills/taco-release/SKILL.md` | 发版步骤 3.1：版本号更新后、`npm run check` 之前执行 `npm run sync:version`，并把 `skills/taco/VERSION` 一并提交 | 修改 |
+| `.github/workflows/nightly-release.yml` | 在 taco 本体发版步骤里，`npm run check` 之前执行 `npm run sync:version`，并把 `skills/taco/VERSION` 纳入 `git add`（原 `skills/taco-release/SKILL.md` 已随 PR #82 删除，发版逻辑只在 CI） | 修改 |
 | `AGENTS.md` | 仓库规则中注明 `skills/taco/VERSION` 为生成物，勿手改 | 修改 |
 | `tests/version.test.ts` | 断言已提交的 `skills/taco/VERSION`（`trim()` 后）与 `package.json` 版本一致 | 修改 |
 | `tests/update-check.test.ts` | 新增脚本端到端与契约测试（§8） | 新增 |
@@ -417,7 +417,7 @@ node scripts/check-update.mjs [--json] [--repo <url|path>] [--api-base <url>] [-
 
 用户指出官网已给出 `npx skills@latest add arcadia822/taco --skill=taco`，而 `docs/agent-installation.md` 未写。实测（`skills` v1.7.0）：
 
-- `npx skills@latest add arcadia822/taco --list` 能解析出 `taco`、`taco-release` 两个 skill；
+- `npx skills@latest add arcadia822/taco --list` 当时解析出 `taco`、`taco-release` 两个 skill；用户指出 `taco-release` 不是安装项（发版已由 CI 承担），随后在 PR #82 中把该 skill 删除、脚本移入 `scripts/`，仓库现在只有 `taco` 一个 skill；
 - `add --copy` 会把**整个 skill 目录**（`SKILL.md`、`scripts/`、`VERSION`、模板等）复制到 `./.claude/skills/taco/`，并在项目根写入 `skills-lock.json`（记录 `source`/`sourceType`/`computedHash`，不含 semver）；
 - 升级命令为 `npx skills@latest update taco`。
 
