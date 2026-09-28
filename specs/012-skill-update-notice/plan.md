@@ -14,14 +14,14 @@
 ## 阶段 2：探测脚本
 
 - [ ] 新增 `skills/taco/scripts/check-update.mjs`，实现 `spec.md` §5.3：
-  - [ ] 参数：`--json`、`--repo <url|path>`、`--timeout <ms>`、`--cli-bin <path>`、`--no-cli`；值校验按 §5.2（只接受 `https://` 或绝对本地路径，拒绝 `-` 前缀与其他协议）；非法用法 `exit 2`。
+  - [ ] 参数：`--json`、`--api-base <url>`、`--timeout <ms>`、`--cli-bin <path>`、`--no-cli`（生产默认 `https://api.github.com`；覆盖值只接受 `https://` 或 `http://127.0.0.1`/`localhost` 的测试夹具地址，拒绝 `-` 前缀与其他协议/主机）；非法用法 `exit 2`。
   - [ ] 环境变量：`TACO_UPDATE_CHECK=off` 立即短路（零 spawn、零请求）；`TACO_CLI_BIN` 等价 `--cli-bin`。
   - [ ] 已安装版本：读取脚本同目录 `../VERSION`（区分「缺失」与「不可解析」两种 reason）；`taco-cli --version` 解析 `binaryVersion`，仅在绝对路径常规可执行文件时执行。
-  - [ ] 远端探测：`git ls-remote --tags --refs <repo>` 首选，GitHub Releases API 仅在「`git` 不可用且 `--repo` 未被覆盖」时回退；三段纯数字 tag 匹配，预发布一律忽略；无可用 tag ⇒ 该组件 `latest/updateAvailable=null` 且 `ok` 不变。
-  - [ ] 加固与限额：每次探测独立硬超时（默认 3000 ms）+ 64 KiB 输出上限；`git` 与 `taco-cli` 以独立进程组启动（`detached: true`），超时/超限用 `process.kill(-pid, 'SIGKILL')` 终止整个进程组；`git` 以精简 env（`PATH`/`HOME`/`LANG`）、`GIT_CONFIG_GLOBAL=/dev/null`、`GIT_CONFIG_SYSTEM=/dev/null`、`GIT_TERMINAL_PROMPT=0`、`GIT_ASKPASS`/`SSH_ASKPASS` 不可用、`-c credential.helper=` 运行，**子进程 cwd 固定在中立目录**（`os.tmpdir()`，绝不在项目目录内），仓库参数前插入 `--`。
+  - [ ] 远端探测：单次 `GET https://api.github.com/repos/Arcadia822/taco/tags?per_page=100`（Node 内置 `fetch`，不带凭据，固定 User-Agent）；三段纯数字 tag 匹配，预发布一律忽略；tag 按新→旧，仅当带 `Link: rel="next"` 且某组件首页无匹配时读第 2 页（最多 2 页）；无可用 tag ⇒ 该组件 `latest/updateAvailable=null` 且 `ok` 不变。
+  - [ ] 限额与失败映射：HTTP 用 `AbortSignal.timeout`（默认 3000 ms）、响应体 64 KiB 上限；403/429 或 `x-ratelimit-remaining: 0` ⇒ `rate-limited`，非 2xx ⇒ `http-error`，DNS/连接失败 ⇒ `network-unavailable`，超时 ⇒ `timeout`；全部不重试、不缓存。`taco-cli` 子进程以独立进程组启动（`detached: true`），超时/超限用 `process.kill(-pid, 'SIGKILL')` 终止整个进程组。
   - [ ] 组件独立判定：`skill` 不可读 ⇒ `ok:false` + reason 且完全静默；`cli` 不可读/超时/超限 ⇒ 仅 `cli.installed/updateAvailable=null`，`ok` 与 `skill` 结论不受影响。
   - [ ] 输出：默认一行英文摘要（含被跳过项标注）；`--json` 输出 §5.3 契约对象（键集合与类型精确符合）；检查完成一律 `exit 0`。
-  - [ ] 无副作用：零写入、不读项目内容、不外发本地数据、无凭据。
+  - [ ] 无副作用：零写入（含不做缓存）、不读项目内容、请求不含凭据与本地数据。
 
 ## 阶段 3：Agent 契约（SKILL.md 与相关指南）
 
@@ -34,10 +34,10 @@
 
 ## 阶段 4：测试与验证
 
-- [ ] `tests/update-check.test.ts`（新增）：按 `spec.md` §8.1 的 18 项实现，桩程序放临时目录（`--cli-bin` / `PATH` 前置注入）；超时用例使用 `exec sleep 5` 与派生睡眠两种桩，并断言无残留进程。
+- [ ] `tests/update-check.test.ts`（新增）：按 `spec.md` §8.1 的 17 项实现——本地 `node:http` 夹具提供 tags JSON（`--api-base http://127.0.0.1:<port>`）并断言实际收到的请求（次数/路径/请求头）；`taco-cli` 桩经 `--cli-bin` 注入。
 - [ ] `tests/version.test.ts`（修改）：断言已提交的 `skills/taco/VERSION` 与 `package.json` 一致。
 - [ ] 运行 `npm run sync:version && NODE_OPTIONS="${NODE_OPTIONS:-} --no-experimental-webstorage" npm run check`（顺序体现 §6.1 的发版要求）。
-- [ ] 手工 smoke（§8.2）：真实网络 `--json`；`TACO_UPDATE_CHECK=off` / `--repo /nonexistent` / `--timeout 200` 三个容错场景；真实打包流程确认提醒位置，并区分「正常的 `.taco.html` 写入」与「检查动作的零写入」；扩展策略迁移用两个组合各验证一次（旧 CLI+旧 block ⇒ `unchanged`；新策略+旧 block ⇒ `manual-merge` 且未写入）。
+- [ ] 手工 smoke（§8.2）：真实网络 `--json`（记录耗时与响应体量）；`TACO_UPDATE_CHECK=off` / `--api-base http://127.0.0.1:9` / `--timeout 200` 三个容错场景；真实打包流程确认提醒位置，并区分「正常的 `.taco.html` 写入」与「检查动作的零写入」；扩展策略迁移用两个组合各验证一次（旧 CLI+旧 block ⇒ `unchanged`；新策略+旧 block ⇒ `manual-merge` 且未写入）。
 - [ ] 生成并交付验证用 `.taco.html`（`specs/012-skill-update-notice/012-skill-update-notice.taco.html`），供用户直接打开核对。
 
 ## 阶段 5：交付与评审收尾
