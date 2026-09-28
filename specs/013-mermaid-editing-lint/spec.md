@@ -2,7 +2,7 @@
 title: '013-mermaid-editing-lint'
 feature_id: '013-mermaid-editing-lint'
 created: '2026-09-28'
-status: 'Draft'
+status: 'Frozen'
 issue: 'https://github.com/Arcadia822/taco/issues/51'
 linear: 'https://linear.app/castrel/issue/TACO-19'
 input: |-
@@ -41,7 +41,7 @@ Taco 的 Agent 侧契约明确要求 Agent 写图：
 
 初稿称「`classDiagram` 非法成员：`parse()` 通过、`render()` 抛 `TypeError`，证明只做 parse 不足」。**该断言错误，已撤回**：真机浏览器（pinned mermaid 12.0.0 + Taco 自身配置）下该用例 `parse` 与 `render` 均通过；当时的 `TypeError` 来自测试环境缺少 `SVGElement.getBBox` 垫片，不是 mermaid 行为。以它推导的结论一并作废。
 
-### 2.2 决定性发现：没有 DOM 的 Mermaid 校验是错的
+### 2.2 直连 `parse` 且不给 DOM 会误报 12/18（根因见 §2.3，可旁路）
 
 在**同一份 pinned mermaid 12.0.0**下做 2×2 受控矩阵（共 22 个输入＝18 个合法图 + 3 个语法无效 + 1 个未知类型）：
 
@@ -52,20 +52,55 @@ Taco 的 Agent 侧契约明确要求 Agent 写图：
 | CDN 镜像 | 无 | 6/18 | **12** | 0 |
 | CDN 镜像 | jsdom | **18/18** | 0 | 0 |
 
+（上表两行 jsdom 仅为历史对照；最终方案**不需要 DOM**，见 §2.3。）
+
 漏报的具体族：`stateDiagram-v2`（含 `[*] --> A` 与 `A --> B: go`）、`classDiagram`、`gantt`、`journey`、`mindmap`、`timeline`、`quadrantChart`、`sankey-beta`、`kanban`、`C4Context`、`pie`（带 title）。
 
-根因已定位（无 DOM 下调用不带 `suppressErrors` 的 `parse` 取栈）：
+根因见 §2.3：这些图族在 `parse` 期会走到 `sanitizeText`，而它无条件调用 DOMPurify。**因此「纯 Node 直接 parse」的实现会把 12 个正确文档判为错误**——这比不校验更糟，会成为新的阻塞源。§2.3 给出了零依赖的旁路方案，本节矩阵保留为**为什么不能裸用 parse** 的依据与回归基线。
 
+### 2.3 DOM 依赖的真实来源：`sanitizeText` 里的 DOMPurify
+
+早期结论曾认定「必须提供一个 DOM（jsdom）」。经代码定位，根因只有一处，且**可以旁路**，因此该结论已作废。
+
+定位到的唯一调用点（mermaid 载荷内，行 262 附近）：
+
+```js
+vp  = (e) => (e.htmlLabels ?? e.flowchart?.htmlLabels ?? true)              // getEffectiveHtmlLabels
+ujn = once(() => hpr())                                                    // 惰性注册 DOMPurify 钩子
+fpr = (e) => (ujn(), My.sanitize(e))                                       // removeScript
+Qdr = (e, r) => { if (vp(r)) { const i = r.securityLevel
+  i === 'antiscript' || i === 'strict' || i === 'sandbox' ? e = fpr(e) : i !== 'loose' && (…) } return e }   // sanitizeMore
+Ys  = (e, r) => e && (r.dompurifyConfig
+  ? e = My.sanitize(Qdr(e, r), r.dompurifyConfig).toString()
+  : e = My.sanitize(Qdr(e, r), { FORBID_TAGS: ['style'] }).toString(), e)  // sanitizeText
 ```
-TypeError: My.addHook is not a function
-    at setupDompurifyHooks (.../mermaid.mjs)
-```
 
-这些图族在解析期要经 DOMPurify 处理标签 HTML，而 DOMPurify 在缺少 DOM 时只能退化为残缺桩（无 `addHook`）。**因此「纯 Node 直接 parse」的实现会把 12 个正确文档判为错误**——这比不校验更糟，会成为新的阻塞源。
+- `Qdr`（`sanitizeMore`）在 `htmlLabels` 为 false 时**不会**调用 `fpr`；`securityLevel` 无关。
+- 但 `Ys`（`sanitizeText`）**无条件**调用 `My.sanitize(...)`，与 `securityLevel`、`htmlLabels` 都无关 —— 这就是无 DOM 时 `TypeError: My.addHook is not a function` 的唯一来源。
 
-### 2.3 jsdom 层即足，且与解析器来源无关
+对照实验（同一份 pinned mermaid，18 个合法图，均无 DOM）：
 
-同样是 18/18 正确、0 误收，使用 shell 内嵌载荷或 CDN 镜像**结果一致**。因此可以选**与接收方运行时字节一致**的那份：Complete shell 内嵌的 mermaid。
+| 配置 | 载荷 | 合法图正确通过 |
+| --- | --- | --- |
+| 不调用 `initialize` | 原样 | 6/18 |
+| `initialize({ htmlLabels: false, securityLevel: 'strict' })` | 原样 | 6/18 |
+| `initialize({ htmlLabels: false })` | **旁路 `sanitizeText` 中的 `My.sanitize` 调用** | **18/18** |
+
+旁路后完整验证（无 DOM、纯 Node，0.36s）：
+
+- 18/18 合法图通过（零误报）；
+- 4 个非法输入全部报错，且**行号全部正确**：悬空箭头→第 2 行第 10 列、未闭合方括号→第 2 行第 4 列、sequence 缺冒号→第 2 行第 10 列、gitGraph 非法语句→第 3 行第 3 列；原始 `Parse error on line …` 可读；
+- 未知类型 / 空内容 / 纯注释 → `false`（可归 `unknown-type`）。
+
+**差分测试（支持旁路不改变语法判定）**：对 21 个对抗性输入分别在「旁路 + 无 DOM」与「原样 + jsdom」两种环境下执行 `parse`，逐例比较结果（含错误时的行、列、错误名），**16/16 完全一致**。该差分必须作为可复跑用例纳入 §7.1，并在**每次载荷升级（mermaid 版本或打包方式变化）后重跑**——它是旁路安全性的现行边界，不是一次性结论。覆盖：标签内含 `<b>`/`<script>`/`<br>`/`<!-- -->`/`&`/未转义 `<`/`%%`/`---`/HTML 实体、含 HTML 的 mindmap 标签、sequence 消息含 HTML、「标签内含 HTML 且括号损坏」的非法图，以及**直接针对被旁路消毒语义**的 5 例：`A["#br#<br>&lt;"]`、`A["<style>x</style>"]`、`A["#br#"]`（`#br#` 行分割占位符）、`A["<style>--> B</style>"]`（HTML 内含 Mermaid 语法）、`A["<b>--></b>"]`。**21/21 完全一致**，未发现任何使两侧判定分叉的输入。
+
+**旁路的语义边界（必须如实记录）**：跳过的是 DOMPurify 的**标签 HTML 消毒**，**不是解析器的词法/语法分析**。注意措辞：`sanitizeText` 是在 `parse` 进行期间、构造标签值时被调用的（这正是无 DOM 时 `TypeError` 出现在 `parse` 里而非渲染里的原因），因此不能说它「发生在解析之后」。当前证据支持「不改变语法判定」，但**不构成普遍证明**：证据仅为 22 用例基线 + 16 例对抗性差分（见下），且仅在已测的图族与配置上成立。
+
+旁路锚点（`sanitizeText` 内的那段 `My.sanitize` 表达式）在仓库内**所有 Complete shell 副本**中一致存在，实测：`skills/taco/taco-shell.html`、`extensions/taco/assets/taco-shell.html`、`skills/taco/templates/*/empty.taco.html`、`dist-single/Taco_Spec.taco.html`（各 5,343,411 字节载荷，锚点 **true**）。Lite shell 按设计不含内嵌载荷，因此校验器**始终**以 skill 自带的 Complete shell 为解析器来源，与交付物使用哪个 shell 无关。
+
+### 2.4 jsdom 层即足，且与解析器来源无关（历史记录）
+
+在引入旁路之前，jsdom 曾使 18/18 成立（使用 shell 内嵌载荷或 CDN 镜像结果一致）。该路径现已不必要：§2.3 的旁路在**零依赖、无 DOM** 下达到同样结果。
 
 载荷位置与解出方式（`scripts/postbuild-compress.mjs:94` 生成，`src/mermaid-complete.ts` 运行期消费）：
 
@@ -75,7 +110,7 @@ TypeError: My.addHook is not a function
 
 实测：`skills/taco/taco-shell.html` 中该载荷解压后 5,343,555 字节，`import()` 后 `typeof parse === 'function'`。Lite shell 没有该载荷（按设计从 CDN 加载，`src/lite-cdn-loader.ts`）。
 
-### 2.4 render 阶段只能作参考，不能作语法结论
+### 2.5 render 阶段只能作参考，不能作语法结论
 
 真机 headless Chromium（pinned CDN + Taco 配置）中，**合法的 `mindmap` 源码 render 直接失败**：
 
@@ -86,11 +121,11 @@ mindmap（非法源码） → parse OK · render FAIL TypeError: Cannot read pro
 
 两种输入给出**同一条**无位置信息。jsdom 下 render 对 mindmap 同样假失败。因此 render 判定必须标注为「渲染阶段失败（无位置）」，既不得上升为语法结论，也不得用来否定 `parse` 的通过。
 
-### 2.5 渲染失败在真实浏览器留下未清理的 DOM 残留
+### 2.6 渲染失败在真实浏览器留下未清理的 DOM 残留
 
 同一真机探针记录 `body > div[id^="d"]` 数量随失败单调增长（1 → 2 → 3 → 4），且后续**成功**渲染不会清理历史残留。mermaid 在 `render()` 失败时向 `document.body` 注入 `div#d{id}` 后抛出，Taco 侧从未清理；Taco 的 id 每次自增（`src/mermaid.ts:499`），故编辑期单调累积。
 
-### 2.6 Mermaid 错误族与可用字段（实测）
+### 2.7 Mermaid 错误族与可用字段（实测）
 
 | 错误族 | 触发示例 | 可用字段 | 注意 |
 | --- | --- | --- | --- |
@@ -100,7 +135,7 @@ mindmap（非法源码） → parse OK · render FAIL TypeError: Cannot read pro
 
 `parse(text, { suppressErrors: true })` 返回 `false`（无效）或 `{ diagramType, config }`（有效），**不抛异常**，也不触碰 DOM——这是 lint 的基元。
 
-### 2.7 人侧现状（最小集要修的部分）
+### 2.8 人侧现状（最小集要修的部分）
 
 | # | 现象 | 证据 |
 | --- | --- | --- |
@@ -119,7 +154,7 @@ mindmap（非法源码） → parse OK · render FAIL TypeError: Cannot read pro
 | R1 | Agent 能在交付前校验 `.mmd` 与 Markdown 中 Mermaid 代码块的语法 | Issue 期望 1、验收 3 |
 | R2 | 校验诊断给出类别、行列（可得时）与底层原始信息 | Issue 期望 1 |
 | R3 | 校验**不得**把正确图表判为错误（误报优先于漏报） | §2.2 的代价分析 |
-| R4 | 校验离线可用，且与接收方运行时同版本，不产生版本漂移 | FR-007a 的离线精神 |
+| R4 | 校验离线可用、零新增依赖；Complete 交付物与接收方运行时同字节，Lite 交付物至少同 pinned 版本号 | FR-007a 的离线精神 |
 | R5 | 「校验未运行」必须与「校验通过」可区分，绝不静默通过 | 验收 3 |
 | R6 | 人侧诊断可读：类别 + 位置 + 原文，取代一句话 | Issue 验收 1、3 |
 | R7 | 源码错误与运行时加载失败不互相冒充 | Issue 期望 2、验收 2 |
@@ -152,8 +187,7 @@ mindmap（非法源码） → parse OK · render FAIL TypeError: Cannot read pro
 
 ```sh
 node scripts/lint-mermaid.mjs <file.mmd|file.md>...
-node scripts/lint-mermaid.mjs --dir <dir> [--json]
-node scripts/lint-mermaid.mjs --harness <out.html>   # 零依赖模式（浏览器执行）
+node scripts/lint-mermaid.mjs --dir <dir> [--json] [--shell <shell.html>] [--mermaid <path>]
 ```
 
 - 输入：`.mmd` 文件、含 ```` ```mermaid ```` 围栏的 `.md` 文件、`--dir` 目录（递归、忽略点目录与 `*.taco.html`）、stdin。
@@ -166,60 +200,99 @@ node scripts/lint-mermaid.mjs --harness <out.html>   # 零依赖模式（浏览�
   "tier": "parse", "runtime": "shell-embedded@12.0.0" }
 ```
 
-- 退出码：`0` 全部通过；`1` 存在诊断；`2` 校验**未运行**（解析器或 DOM 不可用、输入不可读）。三者必须可区分（R5）。
+- 退出码：`0` 全部通过；`1` 存在诊断；`2` **校验未能完整、可信地完成**（载荷缺失、旁路锚点不匹配、输入不可读，或任一单元在 `parse` 阶段抛出非白名单异常）。三者必须可区分（R5）。
+- **`2` 优先于 `1`**（审查修正）：多单元输入里可能既有真实语法诊断、又有环境的运行时异常；此时退出码取 `2`，且已收集的诊断仍须保留在 `--json` 输出中，并附显式的「结果不完整」标记（例如顶层 `complete: false` + `runtimeFailures: [...]`），调用方不得把它读成「整份扫描未开始」或「部分通过」。实现禁止在退出码为 `2` 时输出「通过」字样。
 - 特例：目录/文件里**一个 Mermaid 单元都没有**时退出码为 `0`，但必须显式打印 `0 Mermaid unit(s) (nothing to validate)`，不得只打印「通过」——「没有可校验对象」与「校验通过」在输出上仍可区分。
 - `--dir` 只接受目录；把文件传给 `--dir` 必须报错并提示改用位置参数（实测该误用会以退出码 2 收场，但错误信息应直接指出原因）。
 
-### 4.2 解析器来源：shell 内嵌载荷写临时文件
+### 4.2 解析器来源：skill 自带 Complete shell 的内嵌载荷写临时文件
 
 按优先级：
 
-1. **从 shell 提取**（默认路径，离线、零下载）：读 `taco-shell.html`，取出 `#taco-asset-mermaid` 的 base64，`zlib.inflateRawSync` 解压，**写入临时 `.mjs` 文件**，`import(pathToFileURL(tmp))`。这就是「写一个临时文件再用 mermaid parser lint」的直接落地。
-2. `--mermaid <path>`：显式指定一个本地 mermaid ESM 入口。
-3. `--shell <path>`：明确指定 shell 文件。
+1. **默认：skill 自带的 `skills/taco/taco-shell.html`** —— 取出 `#taco-asset-mermaid` 的 base64，`zlib.inflateRawSync` 解压，写入**临时 `.mjs` 文件**，再 `import(pathToFileURL(tmp))`。离线，且解析器始终来自随 skill 一起安装的 Complete shell（与交付物用哪个 shell 无关）。
 
-不使用 CDN 抓取作为默认路径（jsdelivr 的 `dist/mermaid.esm.min.mjs` 是**分片**入口，单个文件无法离线 `import`；实测需要镜像 105 个分片、5.4 MB，不适合作为默认行为）。网络仅在用户显式要求时才参与。
+**保证范围必须分开表述**（审查修正）：
 
-选择内嵌载荷的理由是**一致性**：那份字节就是接收方浏览器将要执行的东西，`parse` 结论天然对应人看到的渲染结果，不存在版本漂移（R4）。
+| 交付物 | 保证 |
+| --- | --- |
+| 用 Complete shell 交付 | 校验器与接收方运行时**同字节**（同一份内嵌载荷） |
+| 用 Lite shell 交付 | 仅**同 pinned 版本号**（`PINNED_VERSIONS.mermaid = '12.0.0'`）：Complete 的载荷是本地 esbuild 打包产物，Lite 在运行时从 jsdelivr/esm.sh 取 CDN 构建（`src/lite-cdn-loader.ts:16-35,101-107`、`scripts/postbuild-compress.mjs:82-99`），两者**不保证字节一致** |
+| `--shell` / `--mermaid` 覆盖 | 由调用方自担，**不**提供上述任一保证 |
 
-### 4.3 DOM 策略：jsdom 是硬约束
+`--mermaid <path>` 会引入版本漂移风险，故仅作最后手段。
+2. `--shell <path>`：改用指定的 Complete shell（用于核对其它副本）。
+3. `--mermaid <path>`：改用本地安装的 mermaid 包入口（不推荐，会引入版本漂移）。
 
-`jsdom` 解析顺序（**必须按调用目录解析，不能靠脚本自身位置**——脚本装在 `skills/taco/scripts/`，其 ESM 裸模块解析以脚本文件为基准，调用方项目的 `node_modules` 不会自动进入解析路径）：
+不用 CDN 抓取作为默认路径：jsdelivr 的 `dist/mermaid.esm.min.mjs` 是**分片**入口，单文件无法离线 `import`（实测需镜像 105 个分片、5.4 MB）。
 
-1. `--jsdom <path>`：显式指定 jsdom 入口；
-2. 以 `createRequire(new URL('package.json', pathToFileURL(join(process.cwd(), '/'))))` 解析 `jsdom`（即以**调用目录** `process.cwd()` 为基准）；
-3. 兜底：脚本自身位置可解析到的 `jsdom`。
+### 4.2.1 旁路 DOMPurify 调用（零依赖的关键）
 
-三者都失败时按 §4.1 的退出码 `2` 失败，并打印与**实际生效顺序**一致的确切补救命令（例如在调用目录执行 `npm i -D jsdom`），**绝不降级为「无 DOM 的 parse」**——§2.2 已证明那样会产生 12/18 误报，且非法输入的诊断也会退化成无信息的 `TypeError`（§4.5）。
-
-必须内置的两个测量垫片（否则部分族解析不稳定）：
+加载临时载荷后，必须精确替换 `sanitizeText` 内那段 `My.sanitize` 调用，使标签文本不再经由 DOMPurify：
 
 ```js
-SVGElement.prototype.getBBox = () => ({ x: 0, y: 0, width: 100, height: 20 })
-SVGElement.prototype.getComputedTextLength = function () { return (this.textContent ?? '').length * 8 }
+// 原（无 DOM 时会抛 TypeError: My.addHook is not a function）
+Ys = (e, r) => e && (r.dompurifyConfig
+  ? e = My.sanitize(Qdr(e, r), r.dompurifyConfig).toString()
+  : e = My.sanitize(Qdr(e, r), { FORBID_TAGS: ['style'] }).toString(), e)
+// 替换为
+Ys = (e, r) => e && (e = String(Qdr(e, r)))
 ```
 
-实现要点：把 jsdom window 上除 `location` 外的可枚举全局注入 `globalThis`（`CSSStyleSheet`、`DOMParser`、`customElements`、`MutationObserver`、`requestAnimationFrame` 等都要在），并以 `window`/`self` 指回该 window。实测该组合下 18/18 正确。
+配套要求：
 
-Lite shell 场景：`taco-shell-lite.html` **没有**内嵌载荷（按设计从 CDN 加载，`src/lite-cdn-loader.ts`）。因此对 Lite 交付物，校验器必须显式说明「无离线载荷」并按需使用 `--mermaid`/`--shell` 或 `--harness --payload cdn`，不得静默回退到网络。
+- 调用 `initialize({ htmlLabels: false, securityLevel: 'strict', layout: 'elk', … })`——与接收方渲染配置一致；`htmlLabels: false` 同时使 `Qdr` 不再调用 `removeScript`。
+- **锚点断言**：替换前必须确认锚点存在，且替换次数恰为 1；不满足即按退出码 `2` 失败（「payload 结构已变化，无法安全旁路」），**绝不**在未旁路的情况下继续用无 DOM 环境校验（那会产生 §2.2 的 12/18 误报）。
+- 锚点稳定性已实测：`skills/taco/taco-shell.html`、`extensions/taco/assets/taco-shell.html`、`skills/taco/templates/*/empty.taco.html`、`dist-single/Taco_Spec.taco.html` 全部命中（载荷各 5,343,411 字节）。
+- 语义边界：跳过的是**标签文本的 HTML 消毒**，发生在解析之后、不影响语法判定（§2.3）。
 
-### 4.4 零依赖模式：`--harness`
+### 4.3 运行时约束：不需要 DOM、不需要浏览器、不需要外部包
 
-对没有 Node 侧 `jsdom`、但**有浏览器工具**的 Agent，`--harness <out.html>` 写一个自包含临时页：内联待校验源码，把诊断 JSON 写入 `<output id="result">`。
+经 §4.2.1 的旁路后，校验器在**纯 Node（无 DOM）** 下即为正确：
 
-**载荷默认必须离线内联**（实测修正）：默认 `--payload embedded` 时把同一份 shell 载荷以 base64 内联进页面，并用 Blob URL 动态导入（与 `src/mermaid-complete.ts:7-19` 同一手法），因此 harness 页面本身不需要网络。`--payload cdn` 才使用 pinned CDN，需显式选择。
+- 合法图 18/18 通过（零误报）；
+- 非法输入全部报错且行号正确（§2.3 实测）；
+- 实测耗时 0.36s（22 个输入，本机）。
 
-**载荷导入必须有超时**（实测修正）：CDN 不可达时动态 `import()` 可能长时间不 settle，页面会永远停在「running」。实现必须给载荷导入设置上限（建议 8s），超时即写入 `unavailable` 并置完成标记，不得悬挂。
+因此：
 
-**退出码语义必须明确区分**（审查修正）：`--harness` 的 `0` 只表示**harness 已写出**，不表示校验通过。该模式下必须打印「校验未运行 —— 请在浏览器中打开该文件并读取结果」，且**不得**输出任何「通过」字样。页面必须在完成后设置显式标记（如 `window.__lintDone = true` 并把 `{diagnostics, unavailable}` 写入 `output`）；`unavailable` 非空时同样表示「校验未运行」。
+- **不引入 `jsdom`**（此前设计的唯一新增依赖已取消）；
+- **不引入浏览器校验路径**（原 `--harness` 已删除，见 §4.4）；
+- 不新增任何 npm 依赖，不联网（载荷来自本地 shell）。
 
-SKILL.md 必须给出完整回读步骤：打开文件 → 等待完成标记 → 读取 `output` → 有诊断则修，`unavailable` 非空则报告未运行。测试必须**真的在浏览器里执行**该页面并断言其输出，只比较生成的 HTML 文本不算通过（§7.1）。
+`Node >= 22` 是唯一运行前提（与 `checkpoints.mjs`、`png.mjs` 相同）。
 
-这条路径同时是「浏览器即权威」的实现：与接收方渲染环境完全一致，且零依赖。代价是需要浏览器工具（并非所有宿主都提供），因此它不是默认路径，而是缺 jsdom 时的替代。
+### 4.4 已删除：浏览器校验路径（`--harness`）
+
+前一版设计提供 `--harness <out.html>`（把待校验源码与载荷写成一个页面，由 Agent 用浏览器工具读回诊断）。**该模式已删除**：
+
+- 它存在的唯一理由是「Node 侧需要 jsdom」，而该前提已被 §4.3 取消；
+- 它引入了浏览器工具可用性这一宿主差异，以及「打开页面 → 等完成标记 → 读回」的额外步骤；
+- 作者原型阶段实测该路径易错：生成的页面曾因 `??` 与 `||` 混用抛 `SyntaxError` 并永久停在 running，必须真的在浏览器执行才能发现。
+
+若将来确有「浏览器内自检」的需求，应作为独立特性评估，不在本 Issue 范围内。
+
+### 4.4.1 诊断内核的位置与装配契约（审查修正：TS 与 Node 脚本的缺口）
+
+诊断分类逻辑（五类分型、位置优先级、clamp）必须由**浏览器 bundle 与 Node 校验脚本共用同一份实现**；直接把内核写成 `src/*.ts` 会造成装配缺口：`lint-mermaid.mjs` 是零依赖的纯 Node 脚本，Node ≥ 22 全范围没有内置 TS 类型剥离，无法 `import` 一个 `.ts`。
+
+采用仓库**已有先例**（`png.mjs` 的 canonical + mirror 模式）解决：
+
+| 角色 | 路径 | 说明 |
+| --- | --- | --- |
+| canonical | `extensions/taco/bin/mermaid-diagnostics.mjs` | 纯 JS（**零 import**），无构建步骤 |
+| 类型声明 | `extensions/taco/bin/mermaid-diagnostics.d.mts` | 手写声明，供 `tsc` 使用（`moduleResolution: bundler`） |
+| skill 镜像 | `skills/taco/scripts/mermaid-diagnostics.mjs` | 与 canonical **字节一致**，随 skill 一起安装 |
+| 应用侧引用 | `src/mermaid.ts` 等 → `../extensions/taco/bin/mermaid-diagnostics.mjs` | 与 `src/model.ts:1`、`src/markdown-assets.ts:2`、`src/kernel/save.ts:4` 引用 `png.mjs` 的方式一致 |
+| 脚本侧引用 | `skills/taco/scripts/lint-mermaid.mjs` → `./mermaid-diagnostics.mjs` | 安装后仍然可用（同目录同级文件） |
+| 镜像守护 | 扩展 `tests/skill-pack.test.ts` 的镜像断言 | 与 `png.mjs` 的字节一致断言并列 |
+
+已验证可行（临时 worktree 实测）：`.mjs` + `.d.mts` 被 `tsc -b` 接受（exit 0），且被 vite 打进 shell bundle。
+
+`lint-mermaid.mjs` 自身仍是 `.mjs`、零外部依赖、只使用 Node 内置模块（`node:zlib`/`node:fs`/`node:url`/`node:os`/`node:path`/`node:module`）。
 
 ### 4.5 诊断提取
 
-`src/mermaid-diagnostics.ts`（新模块，两个消费方共用：脚本侧与人侧 UI）：
+`mermaid-diagnostics.mjs`（位置与装配见 §4.4.1；两个消费方共用：Node 校验脚本与人侧 UI）：
 
 ```ts
 export type MermaidDiagnosticKind =
@@ -254,8 +327,8 @@ classifyMermaidFailure(input: { stage: 'load' | 'parse' | 'render'; error?: unkn
 3. `stage === 'parse'` 且存在 `error.hash`（jison 族）→ `syntax`；位置取 `hash.loc.first_line`（+`first_column`，实测 3/3 正确），缺失时退回 `message` 的 `Parse error on line (\d+)`；两者都缺则无位置但保留 `detail`。取值后 **clamp 到所在单元的行范围**（`.mmd` 为 `[1, 行数]`，Markdown 围栏为 `[1, 围栏体行数]`），再加围栏偏移。
 4. `stage === 'parse'` 且 `name === 'UnknownDiagramError'` → `unknown-type`，无位置。
 5. `stage === 'parse'` 且 `returnedFalse === true`（`suppressErrors` 生效，**没有异常对象**）→ 廉价预判：空/纯空白/纯注释/无图表头 → `unknown-type`；其余 → `syntax`。此分支 `detail` **缺省**，不得声称保留了不存在的原始异常。
-6. `stage === 'parse'` 的**其余非白名单异常** → `runtime`（`parse` 阶段失败意味着校验环境本身不可用，例如缺 DOM 时抛的 `TypeError`），退出码 `2`；**绝不可归为 `render`**。
-7. `stage === 'render'` 的异常 → `render`，无位置；文案必须表达「渲染阶段失败」，不得写成语法错误，也不参与「语法是否有效」的判定（§2.4）。
+6. `stage === 'parse'` 的**其余非白名单异常** → `runtime`（`parse` 阶段失败意味着校验环境本身不可信，例如载荷结构变化导致的异常），退出码 `2` 且**优先于** `1`；**绝不可归为 `render`**。
+7. `stage === 'render'` 的异常 → `render`，无位置；文案必须表达「渲染阶段失败」，不得写成语法错误，也不参与「语法是否有效」的判定（§2.5）。
 
 **优先使用抛出式 `parse(source)` 并捕获**，而不是 `suppressErrors: true`：只有抛出的异常对象才带 `hash`/`result` 与原始 `message`。实测同一段悬空箭头源码，`suppressErrors` 只得到布尔 `false`（无位置、无原文），而抛出式给出完整 `Parse error on line …` 与 `hash`。规则 5 仅覆盖实现差异（CDN/桩返回布尔）的兜底。
 
@@ -269,16 +342,16 @@ Markdown fence 的行号需要换算：定位围栏起始行，源码第 1 行�
 
 只做四件事，不重排交互、不新增任何控件。
 
-1. **诊断精确化**：`.mmd`（`src/structured-file-viewer.ts`）与 Markdown 块（`src/tiptap-code-block.ts`）都改为呈现「类别 + 行:列 + 原始 `message`」，并支持复制原文；`render` 类明确标注「无位置信息」。取代 `labels.error` 的单句（§2.7-H1）。
-2. **不互相冒充**：`runtime`（载荷/CDN 不可用）、`render`、`syntax`、`unknown-type` 四种文案独立；`unavailable` 时清除 `is-loading` 假进度并给出原因（§2.7-H2）。
-3. **残留清理**：`render` 失败后按 id 精确移除 `#d{id}`；并在成功路径复查一次（§2.7-H5）。
+1. **诊断精确化**：`.mmd`（`src/structured-file-viewer.ts`）与 Markdown 块（`src/tiptap-code-block.ts`）都改为呈现「类别 + 行:列 + 原始 `message`」，并支持复制原文；`render` 类明确标注「无位置信息」。取代 `labels.error` 的单句（§2.8-H1）。
+2. **不互相冒充**：`runtime`（载荷/CDN 不可用）、`render`、`syntax`、`unknown-type` 四种文案独立；`unavailable` 时清除 `is-loading` 假进度并给出原因（§2.8-H2）。
+3. **残留清理**：`render` 失败后按 id 精确移除 `#d{id}`；并在成功路径复查一次（§2.8-H5）。
 4. **两入口一致**：Markdown 路径接上同一条诊断回调链（`src/tiptap-code-block.ts` 的 split view 需要透传，当前未接，§2.7-H4）。
 
 顺带优化（同一条因果链，非独立目标）：`parse` 作为 `render` 的前置门——无效源码不再调用 `render()`，从源头消掉大部分失败与泄漏。
 
 ### 5.1 运行时不可用的恢复触发点（审查修正：不得新增交互）
 
-现状问题（§2.7-H3）：`src/tiptap-code-block.ts:495-507` 置 `mermaidUnavailable = true` 后，`paint()` 只在 `!isMermaid` 分支复位它（`:526-533`），而渲染门又要求 `!mermaidUnavailable`（`:485-491`），于是该块在本会话内永久退化。
+现状问题（§2.8-H3）：`src/tiptap-code-block.ts:495-507` 置 `mermaidUnavailable = true` 后，`paint()` 只在 `!isMermaid` 分支复位它（`:526-533`），而渲染门又要求 `!mermaidUnavailable`（`:485-491`），于是该块在本会话内永久退化。
 
 恢复必须靠**已有的**事件触发，不引入重试按钮（按钮属于 §10 的交互改造）：
 
@@ -294,7 +367,7 @@ Markdown fence 的行号需要换算：定位围栏起始行，源码第 1 行�
 | 项 | 变化 | 兼容性 |
 | --- | --- | --- |
 | `skills/taco/scripts/lint-mermaid.mjs` | 新增（调用式校验工具） | 不进入落盘链路；不下落为必需步骤 |
-| `src/mermaid-diagnostics.ts` | 新增诊断模型与分型 | 新模块 |
+| `extensions/taco/bin/mermaid-diagnostics.mjs` + `.d.mts`（canonical）与 `skills/taco/scripts/mermaid-diagnostics.mjs`（字节镜像） | 新增诊断模型与分型，见 §4.4.1 | 纯 JS、零 import；`tsc`/vite 均可用；镜像由测试守护 |
 | `src/mermaid.ts` | 增加 parse 门与 `onDiagnostic`；移除失败残留 | 内部 |
 | `src/structured-file-viewer.ts` / `src/tiptap-code-block.ts` | 诊断呈现改为结构化 | 用户可见（文案更具体） |
 | bundle / `.mmd` 格式 | **无变化** | `text/plain` 与 `taco/files` v1 不变 |
@@ -307,17 +380,20 @@ Markdown fence 的行号需要换算：定位围栏起始行，源码第 1 行�
 ### 7.1 校验器（脚本级，可复跑）
 
 - **正确性矩阵**（A1）：**22 个输入**的期望表（18 个合法图 + 3 个语法无效 + 1 个未知类型），逐条断言 `kind` 与是否报错；未知类型必须断言为 `unknown-type` 而非 `syntax`。任何人可重放，且须覆盖 §2.2 点名的 11 个易漏报族。
+- **无 DOM 回归（关键）**：在**不安装 jsdom、不启动浏览器**的纯 Node 环境运行全部用例，断言 18/18 通过——这是 §4.2.1 旁路生效的证明，也是「退化成直连 parse」的守门断言。
+- **旁路守门**：构造函数被改写的载荷（删除锚点、或让锚点出现两次）→ 断言退出码为 `2` 且**不打印通过**，避免在未旁路状态下校验。
 - **位置换算与 clamp**（A2）：构造围栏起始于第 N 行的 `.md`，断言诊断行号落在**围栏体范围内**（不得指向闭合围栏或越界）；已实测反例：悬空箭头会把未 clamp 的映射算到闭合围栏那一行。
 - **字段优先级**：用固定样本锁定 §4.5 的取值顺序，并**分别断言行列的正确值**（不靠 clamp 掩盖偏差）：
   - 悬空箭头 `flowchart TD\n  A[Start] -->` → 第 **2** 行（`loc.first_line=2` ✓、`hash.line=2` ✓、`message` 说 3 ✗）；
   - 未闭合方括号 `flowchart TD\n  A[Start --> B[End]` → 第 **2** 行（`loc.first_line=2` ✓、`hash.line=1` ✗、`message` 说 2 ✓）；
   - sequence 缺冒号 `sequenceDiagram\n  Alice->>Bob hello` → 第 **2** 行；
   - langium 结构判定：gitGraph 非法语句 → 第 3 行第 3 列；`architecture-beta` 非法行 → 第 3 行第 8 列（同时断言 `error.name` 为 `Error` 时仍被正确判为 `syntax`）。
-- **阶段分类**：构造 `parse` 阶段的非白名单异常（例如无 DOM 时的 `TypeError`）→ `kind === 'runtime'` 且退出码 `2`，断言它**不**被归为 `render`。
+- **阶段分类**：构造 `parse` 阶段的非白名单异常 → `kind === 'runtime'` 且退出码 `2`，断言它**不**被归为 `render`。
 - **抛出式优先**：断言同一段源码在抛出式 `parse` 下产出 `detail` 与非空位置；在 `suppressErrors` 布尔路径下 `detail` 缺省但 kind 仍正确。
-- **不可用路径**（A3）：屏蔽 jsdom 时退出码为 2 且不打印通过；屏蔽 shell 载荷时同样。
-- **离线**（A4）：断开网络后对 Complete shell 场景断言仍全通过。
-- **`--harness` 等价性**：同一输入在 `--harness` 模式下产出与默认模式同构的诊断（至少 1 个合法 + 1 个非法）。
+- **不可用路径**（A3）：屏蔽/破坏载荷时退出码为 2 且不打印通过。
+- **离线**（A4）：断开网络后断言仍全通过（含「载荷来自本地 shell、过程中无任何网络请求」）。
+- **退出码混合场景**：同一目录内同时存在语法无效单元与 `runtime` 异常单元 → 断言退出码为 `2`、`--json` 同时含两类记录且顶层标记结果不完整。
+- **退出码特例**：无 Mermaid 单元时 `0` + 显式打印 `0 Mermaid unit(s) (nothing to validate)`；`--dir` 收到文件时报错并提示改用位置参数。
 
 ### 7.2 人侧
 
@@ -338,15 +414,16 @@ Markdown fence 的行号需要换算：定位围栏起始行，源码第 1 行�
 | --- | --- |
 | `skills/taco/scripts/lint-mermaid.mjs`（新增） | Agent 侧校验入口 |
 | `skills/taco/SKILL.md`、`references/bundle-format.md` | 记录「写图后自查」的最小指引（不改变落盘流程） |
-| `src/mermaid-diagnostics.ts`（新增） | 诊断分型与位置提取（脚本与人侧共用） |
+| `extensions/taco/bin/mermaid-diagnostics.mjs` + `.d.mts`（新增，canonical） | 诊断分型与位置提取（脚本与人侧共用），装配见 §4.4.1 |
+| `skills/taco/scripts/mermaid-diagnostics.mjs`（新增，字节镜像） | 随 skill 安装，供 `${SCRIPT}` 同目录引用 |
 | `src/mermaid.ts` | parse 前置门、`onDiagnostic`、残留清理 |
 | `src/structured-file-viewer.ts`、`src/tiptap-code-block.ts` | 诊断呈现与两入口一致 |
 | `src/i18n.ts`、`src/styles.css` | 四类文案与诊断样式 |
 
 ## 9. 实现任务（设计阶段不实施）
 
-1. **阶段一：诊断内核** — `src/mermaid-diagnostics.ts` + 单元测试（五类分型、jison 行号校准、langium 行列、不序列化 `error.result`）。
-2. **阶段二：校验器** — `skills/taco/scripts/lint-mermaid.mjs`：shell 载荷提取 + 临时文件 + jsdom 注入与垫片 + 目录/文件/stdin 输入 + fence 行号换算 + `--json` + 退出码三态 + `--harness`。
+1. **阶段一：诊断内核** — canonical `extensions/taco/bin/mermaid-diagnostics.mjs` + `.d.mts` + skill 字节镜像（装配与镜像守护见 §4.4.1）+ 单元测试（五类分型、jison 行号校准、langium 行列、不序列化 `error.result`）。
+2. **阶段二：校验器** — `skills/taco/scripts/lint-mermaid.mjs`：本地 Complete shell 载荷提取 + 临时文件 + **§4.2.1 旁路（含锚点断言）** + `initialize({ htmlLabels: false, … })` + 目录/文件/stdin 输入 + fence 行号换算 + `--json` + 退出码三态。**不使用 jsdom、不使用浏览器。**
 3. **阶段三：正确性基线** — 把 §2.2 矩阵固化为脚本级回归（18 合法 + 4 非法）。
 4. **阶段四：人侧最小集** — parse 前置门、四类文案、残留清理、Markdown 路径接线（A5–A7）。
 5. **阶段五：文档与最小指引** — SKILL.md / bundle-format.md 各加一段「写图后自查」，不改变任何落盘步骤。
@@ -361,9 +438,15 @@ Markdown fence 的行号需要换算：定位围栏起始行，源码第 1 行�
 3. 全屏与内联缩放的状态副本、`restoreView()` 双调（`src/tiptap-code-block.ts:337-341,410-427`）。
 4. 「实时/手动更新」开关在 Markdown 块内不可达（`src/mermaid-split-view.ts:190-212` 面板被禁用）。
 
-## 11. 待评审确认的一点
+## 11. 依赖取舍（已由实测收敛，无需再裁决）
 
-校验器把 `jsdom` 作为硬约束（§4.3）：它是本设计中**唯一**新增外部依赖，换来的是「零误报」。替代路径 `--harness`（浏览器执行）零依赖但要求宿主提供浏览器工具（§4.4）。若要求「任何情况下都零依赖」，则必须在 §4.3 与「无 DOM 会误报 12/18」之间选择后者，本设计不建议。请评审时确认这一取舍。
+前一版把 `jsdom` 列为「唯一新增依赖」，理由是「无 DOM 时 12/18 合法图误报」。经定位与实验（§2.3），该依赖**不必要**：
+
+- 唯一 DOM 需求来自 `sanitizeText` 内无条件调用的 `DOMPurify.sanitize`；
+- 旁路该调用（锚点断言 + `htmlLabels: false`）后，纯 Node **零依赖**达到 18/18、零误报，且非法输入的行号全部正确；
+- 因此本设计**不新增任何 npm 依赖、不引入浏览器路径、不联网**。
+
+结论：原先的 `jsdom` 取舍（A/B/C）作废，采用「零依赖 + 旁路」；若后续实测发现旁路在某个图族失效，再回到本节的取舍讨论。
 
 ## 12. 体积与依赖预算（prepare 估算 / develop 实测）
 
@@ -381,7 +464,7 @@ Markdown fence 的行号需要换算：定位围栏起始行，源码第 1 行�
 
 ### 12.2 原型实测方法
 
-在临时 worktree 中（不污染交付树）实现方案 §5 的最小集原型（新增 `src/mermaid-diagnostics.ts` 约 3.7 KB 源码、`src/mermaid.ts` 接线、`src/i18n.ts` 双语键、`src/styles.css` 规则），执行 `node scripts/build-shells.mjs` 并与基线比较；同时实现校验器原型 `skills/taco/scripts/lint-mermaid.mjs` 并做功能冒烟。
+**（历史记录）** 体积测量时的原型把内核临时写成 `src/mermaid-diagnostics.ts`（约 3.7 KB）；最终装配改为 §4.4.1 的 canonical `.mjs` + `.d.mts` + skill 镜像，该临时路径**不是**实施结构，体积量级不受影响。执行 `node scripts/build-shells.mjs` 并与基线比较；同时实现校验器原型 `skills/taco/scripts/lint-mermaid.mjs` 并做功能冒烟（含 §4.2.1 旁路）。
 
 ### 12.3 实测结果
 
@@ -409,9 +492,9 @@ Markdown fence 的行号需要换算：定位围栏起始行，源码第 1 行�
 
 | 项 | 结论 |
 | --- | --- |
-| 运行时新增联网 | **无**。校验器默认路径从 shell 内嵌载荷解出（离线）；`--harness` 默认内联同一载荷（离线）；`--payload cdn` 才联网。shell 与产物自身的联网行为不变（Lite 仍按既有设计在文档含 Mermaid 时按需加载 pinned CDN，FR-007a/SC-004 不变） |
-| 新增外部依赖 | **`jsdom`**，仅 Agent 侧校验器使用，属**安装期**依赖（调用目录 `npm i -D jsdom` 一次），不进入 shell、不进入 `.taco.html` 产物、不影响接收方 |
+| 运行时新增联网 | **无**。校验器从随 skill 安装的本地 Complete shell 解出解析器载荷；shell 与产物自身的联网行为不变（Lite 仍按既有设计在文档含 Mermaid 时按需加载 pinned CDN，FR-007a/SC-004 不变） |
+| 新增外部依赖 | **无**。旁路方案（§4.2.1）取消了原设计的 `jsdom`；校验器只用 Node 内置模块 |
 | 新增发布包/服务 | 无。不新增 npm 包、不新增服务、不改 `.mmd` 的 `text/plain` 存储与 bundle 格式 |
-| 版本漂移风险 | 无：默认载荷取自交付所用 shell，与接收方运行时字节一致 |
+| 版本漂移风险 | Complete 交付：无（同字节）。Lite 交付：仅同 pinned 版本号（12.0.0），字节一致性不保证（见 §4.2 的保证范围表） |
 
-**取舍（§11 复核用）**：`jsdom` 是唯一新增依赖，换来「零误报」。若要求零依赖，则只能用 `--harness`（浏览器执行）而放弃默认离线路径，或接受 §2.2 证明的 12/18 误报——两者都不建议。
+**取舍结论**：旁路方案使校验器**零新增依赖**（§11），同时保持零误报；不再存在需要在「依赖」与「正确性」之间二选一的情况。
