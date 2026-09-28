@@ -23,6 +23,13 @@ const mermaidLabels: MermaidPluginLabels = {
   resetZoom: 'Reset', zoomLevel: 'Zoom level', close: 'Close', previewTitle: 'Diagram', copy: 'Copy',
   copied: 'Copied', copyFailed: 'Copy failed', comment: 'Comment', auto: 'Auto', plainText: 'Plain text',
   loading: 'Loading', error: 'Invalid Mermaid',
+  diagnostic: {
+    syntax: 'Invalid Mermaid syntax', unknownType: 'No diagram type detected',
+    render: 'The diagram could not be rendered', runtime: 'The Mermaid runtime is unavailable',
+    noPosition: 'no position information',
+    position: (line: number, column: number) => `line ${line}, column ${column}`,
+    copyDetail: 'Copy original error', copied: 'Original error copied',
+  },
 }
 
 describe('structured file analysis and rendering', () => {
@@ -275,7 +282,8 @@ describe('structured file analysis and rendering', () => {
     })
     document.body.append(failed.element)
     await vi.waitFor(() => expect(failed.sourceEditor.element.closest<HTMLElement>('.mermaid-floating-code-panel')?.hidden).toBe(false))
-    expect(document.querySelector('.structured-diagnostic')?.textContent).toContain('unavailable')
+    // A runtime failure is its own kind, never a syntax error.
+    expect(document.querySelector('.mermaid-diagnostic.is-runtime')?.textContent).toContain('unavailable')
     expect(failed.sourceEditor.input.value).toBe(diagram.content)
 
     document.body.innerHTML = ''
@@ -287,11 +295,15 @@ describe('structured file analysis and rendering', () => {
     })
     document.body.append(renderFailed.element)
     await vi.waitFor(() => expect(renderFailed.sourceEditor.element.closest<HTMLElement>('.mermaid-floating-code-panel')?.hidden).toBe(false))
-    expect(document.querySelector('.structured-diagnostic')?.textContent).toContain('Invalid Mermaid')
+    // This stub has no `parse`, so the failure is only known to be a render failure:
+    // it must say so instead of claiming a syntax error with a position.
+    const renderDiagnostic = document.querySelector('.mermaid-diagnostic.is-render')
+    expect(renderDiagnostic?.textContent).toContain('could not be rendered')
+    expect(renderDiagnostic?.textContent).toContain('no position information')
     vi.mocked(renderFailureApi.render).mockResolvedValue({ svg: '<svg><text>Repaired</text></svg>' })
     renderFailed.sourceEditor.input.value = 'flowchart TB\nA --> B'
     renderFailed.sourceEditor.input.dispatchEvent(new Event('input', { bubbles: true }))
-    await vi.waitFor(() => expect(document.querySelector('.structured-diagnostic')).toBeNull())
+    await vi.waitFor(() => expect(document.querySelector('.mermaid-diagnostic')).toBeNull())
     expect(document.querySelector('.taco-mermaid-render svg')?.textContent).toBe('Repaired')
   })
 

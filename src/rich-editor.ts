@@ -1,5 +1,5 @@
 import type { TacoBundle, TacoFile } from './model.ts'
-import type { MermaidRuntime } from './mermaid.ts'
+import type { MermaidPluginLabels, MermaidRuntime } from './mermaid.ts'
 import type { TacoCodeBlockCommentTarget } from './mermaid-split-view.ts'
 
 export interface RichEditorMountOptions {
@@ -7,12 +7,8 @@ export interface RichEditorMountOptions {
   file: TacoFile
   bundle: TacoBundle
   readOnly: boolean
-  labels: {
-    markdownEditor: string
-    source?: string
-    hidePreview?: string
-    [key: string]: string | undefined
-  }
+  /** The Markdown editor label plus the Mermaid plugin labels this adapter reads. */
+  labels: { markdownEditor: string } & Partial<MermaidPluginLabels>
   mermaidRuntime?: MermaidRuntime
   onUpdate: (content: string, blocks?: TacoFile['blocks']) => void
   onCodeBlockComment?: (target: TacoCodeBlockCommentTarget) => void
@@ -31,7 +27,7 @@ export interface RichEditorHandle {
 }
 
 export interface RichEditorAdapter {
-  migrateBundleBlocks(bundle: TacoBundle, labels?: Record<string, string | undefined>): Array<{ path: string; message: string }>
+  migrateBundleBlocks(bundle: TacoBundle, labels?: Partial<MermaidPluginLabels>): Array<{ path: string; message: string }>
   mount(options: RichEditorMountOptions): RichEditorHandle
 }
 

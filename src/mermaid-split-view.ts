@@ -9,6 +9,7 @@ import {
   updateMermaidDirection,
   type MermaidPluginLabels,
   type MermaidPreviewElement,
+  type MermaidDiagnosticHandler,
   type MermaidRuntime,
   type MermaidTheme,
 } from './mermaid.ts'
@@ -146,8 +147,7 @@ export const createMermaidSplitView = (
     sourceEditor?: SourceEditorController
     readOnly?: boolean
     onChange?: (code: string) => void
-    onUnavailable?: (error?: unknown) => void
-    onRenderError?: (error?: unknown) => void
+    onDiagnostic?: MermaidDiagnosticHandler
     onRendered?: () => void
     onThemeChange?: (theme: MermaidTheme) => void
     onPanelToggle?: (open: boolean) => void
@@ -274,7 +274,7 @@ export const createMermaidSplitView = (
     const start = lines.slice(0, line - 1).reduce((sum, text) => sum + text.length + 1, 0)
     return { start, end: start + (lines[line - 1]?.length ?? 0) }
   }
-  const previewHost = createMermaidPreview(code, labels, undefined, options.onUnavailable, options.runtime, options.onRenderError, {
+  const previewHost = createMermaidPreview(code, labels, undefined, options.runtime, options.onDiagnostic, {
     theme: activeTheme,
     onRendered: () => {
       container.dataset.mermaidDark = previewHost.dataset.mermaidDark ?? 'false'

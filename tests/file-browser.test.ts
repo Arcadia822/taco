@@ -904,7 +904,10 @@ describe('FileBrowser', () => {
       mermaidRuntime: new MermaidRuntime(() => Promise.reject(new Error('offline'))),
     })
     await unavailable.initialPreviewReady
-    expect(document.querySelector('.structured-diagnostic')?.textContent).toContain('Mermaid')
+    // A runtime failure is its own kind and must not be presented as a syntax error.
+    const runtimeDiagnostic = document.querySelector('.mermaid-diagnostic.is-runtime')
+    expect(runtimeDiagnostic, 'the runtime diagnostic must be rendered with its own kind').not.toBeNull()
+    expect(runtimeDiagnostic?.textContent?.trim().length).toBeGreaterThan(0)
     unavailable.destroy()
   })
 
@@ -919,7 +922,9 @@ describe('FileBrowser', () => {
     document.querySelector<HTMLButtonElement>('[data-path$="diagram.mmd"]')!.click()
 
     await vi.waitFor(() => expect(document.querySelector<HTMLElement>('.mermaid-floating-code-panel')?.hidden).toBe(false))
-    expect(document.querySelector('.structured-diagnostic')?.textContent).toContain('Mermaid')
+    const renderDiagnostic = document.querySelector('.mermaid-diagnostic.is-render')
+    expect(renderDiagnostic, 'a render failure must be labelled as a render failure').not.toBeNull()
+    expect(renderDiagnostic?.textContent?.trim().length).toBeGreaterThan(0)
     expect(document.querySelector<HTMLTextAreaElement>('.source-editor-input')?.value).toBe('not a diagram')
   })
 
