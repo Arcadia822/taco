@@ -82,6 +82,7 @@ export interface MermaidSplitViewController {
   isCodePanelOpen: () => boolean
   setAllowCodePanel: (allowed: boolean) => void
   updateCode: (code: string) => void
+  retry: () => void
 }
 
 export const bindMermaidCanvasDrag = (canvas: HTMLElement): void => {
@@ -383,6 +384,7 @@ export const createMermaidSplitView = (
     previewHost,
     sourceEditor,
     updateCode,
+    retry: () => previewHost.retry(),
     setTheme: (theme) => {
       if (options.readOnly) return
       toolbar.hidden = true

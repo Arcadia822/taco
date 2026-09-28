@@ -340,6 +340,8 @@ export interface MermaidPreviewElement extends HTMLElement {
   focusEdge: (edgeId: string | null, fromNodeId?: string | null, toNodeId?: string | null) => void
   getMermaidTheme: () => MermaidTheme
   updateCode: (source: string) => void
+  /** Redraw even when the source is unchanged — used to retry after a runtime failure. */
+  retry: () => void
   setTheme: (theme: MermaidTheme) => void
 }
 let diagramSerial = 0
@@ -614,10 +616,12 @@ const renderDiagram = (
     })
     const renderSource = explicitTheme && explicitTheme !== currentTheme ? updateMermaidCodeTheme(source, currentTheme) : source
     // Lint before drawing: an invalid source never reaches render(), which is where
-    // Mermaid's unremoved error containers come from.
+    // Mermaid's unremoved error containers come from. Parse the source the reader
+    // sees, not `renderSource`: a theme rewrite changes the preamble's line count, so
+    // positions taken from it would not point at the reader's own text.
     if (typeof mermaid.parse === 'function') {
       try {
-        await mermaid.parse(renderSource)
+        await mermaid.parse(source)
       } catch (error) {
         if (surface.dataset.renderId !== id) return
         fail('parse', error)
@@ -693,6 +697,7 @@ export const createMermaidPreview = (
   host.focusNode = (nodeId: string | null) => focusNode(host, nodeId)
   host.focusEdge = (edgeId: string | null, fromNodeId?: string | null, toNodeId?: string | null) => focusEdge(host, edgeId, fromNodeId, toNodeId)
   host.getMermaidTheme = () => activeTheme
+  host.retry = () => redraw(activeTheme)
   host.setTheme = (theme) => {
     if (theme === activeTheme) return
     redraw(theme)

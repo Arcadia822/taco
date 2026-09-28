@@ -157,7 +157,6 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
       // Availability is derived from the last diagnostic, never a one-way flag: a
       // recovered runtime must be able to draw again without reloading the document.
       let mermaidUnavailable = false
-      let diagnosticKind: MermaidDiagnostic['kind'] | null = null
       let feedbackTimer: number | undefined
       let destroyed = false
 
@@ -224,7 +223,6 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
       }
 
       const setDiagnostic = (diagnostic: MermaidDiagnostic | null): void => {
-        diagnosticKind = diagnostic?.kind ?? null
         mermaidUnavailable = diagnostic?.kind === 'runtime'
         diagnosticHost.replaceChildren(
           diagnostic
@@ -236,14 +234,10 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
         )
       }
       const renderDiagnostic = (diagnostic: MermaidDiagnostic): void => {
+        // A runtime failure must not latch, but it also must not fake a source change:
+        // `paint()` sees the pending state and asks the controller to redraw.
         setDiagnostic(diagnostic)
-        const isMermaid = String(currentNode.attrs.language).toLowerCase() === 'mermaid'
-        if (diagnostic.kind === 'runtime') {
-          // A runtime failure must not latch: dropping the rendered marker lets the next
-          // paint() retry the load, so restoring the network recovers the diagram.
-          renderedMermaid = ''
-        }
-        syncMermaidChrome(isMermaid, currentNode.textContent)
+        syncMermaidChrome(String(currentNode.attrs.language).toLowerCase() === 'mermaid', currentNode.textContent)
       }
 
       const paintLineNumbers = (code: string): void => {
@@ -521,14 +515,21 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
         commentButton.disabled = !blockId || !code.trim()
         paintLineNumbers(code)
 
-        // A runtime failure clears `renderedMermaid`, so the next paint (any edit or
-        // mode switch) retries the load instead of latching on the old failure.
-        if (renderMermaid && isMermaid && (code !== renderedMermaid || !splitController)) {
-          renderedMermaid = code
+        // A pending runtime failure keeps the render decision open, so the next paint
+        // (any edit or mode switch) retries the load instead of latching on it.
+        if (renderMermaid && isMermaid && (code !== renderedMermaid || !splitController || mermaidUnavailable)) {
           if (splitController) {
-            splitController.updateCode(code)
+            if (code !== renderedMermaid) {
+              renderedMermaid = code
+              splitController.updateCode(code)
+            } else {
+              // `updateCode` ignores an identical source, so an unchanged block that
+              // failed on the runtime has to be asked to redraw explicitly.
+              splitController.retry()
+            }
             return
           }
+          renderedMermaid = code
           splitController = createMermaidSplitView(code, labels, {
             readOnly: !editor.isEditable,
             onChange: updateSource,
@@ -540,7 +541,10 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
               renderDiagnostic(diagnostic)
             },
             onRendered: () => {
-              if (diagnosticKind) setDiagnostic(null)
+              setDiagnostic(null)
+              // Clearing the diagnostic is not enough: a runtime failure hid the
+              // preview, so availability has to be re-derived here.
+              syncMermaidChrome(String(currentNode.attrs.language).toLowerCase() === 'mermaid', currentNode.textContent)
             },
             onThemeChange: (theme) => {
               currentTheme = theme
@@ -564,8 +568,8 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
           preview.replaceChildren(splitController.element)
         } else if (!isMermaid) {
           renderedMermaid = ''
-          mermaidUnavailable = false
           splitController = null
+          setDiagnostic(null)
           preview.replaceChildren()
         }
       }

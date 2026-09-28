@@ -63,6 +63,25 @@ describe('untrusted Taco input policy', () => {
     expect(svg).not.toMatch(/evil\.test|position|background|body|@import/)
   })
 
+  it('keeps a scoped child-combinator rule that label text needs, but no sibling escape', () => {
+    // Discarding every `>` selector also dropped Mermaid's label reset
+    // `#diagram text.actor > tspan { stroke: none }`, so labels inherited the 2px
+    // box stroke and read as thick, smeared glyphs. Scoped descent must survive.
+    const svg = sanitizeMermaidSvg('<svg id="diagram" xmlns="http://www.w3.org/2000/svg"><style>#diagram .actor{stroke:#28253d;fill:#fff;stroke-width:2}#diagram text.actor>tspan{fill:#28253d;stroke:none}body{color:red}#diagram ~ body{color:red}#diagram + svg{color:red}@import "https://evil.test/font";</style><text class="actor"><tspan>Alice</tspan></text></svg>')
+    const parsed = new DOMParser().parseFromString(svg, 'image/svg+xml')
+    const css = Array.from(parsed.querySelectorAll('style')).map((node) => node.textContent ?? '').join('\n')
+    // Assert the rule survived without pinning its exact serialization.
+    expect(css).toContain('#diagram text.actor>tspan{')
+    expect(css).toMatch(/#diagram text\.actor>tspan\{[^}]*stroke: none/)
+    // Runaway selectors stay out: unscoped page selectors, sibling combinators that
+    // can reach outside the SVG, and at-rules that load external resources.
+    expect(css).not.toMatch(/(^|[},])body\s*\{/)
+    expect(css).not.toContain('~')
+    expect(css).not.toContain('+')
+    expect(css).not.toContain('@import')
+    expect(css).not.toContain('evil.test')
+  })
+
   it('reports credential-bearing and outdated files without returning values', () => {
     const document = bundle()
     document.collab = { room: 'wss://relay.test/d/room', key: 'room-secret', ownerPriv: 'owner-secret' }
