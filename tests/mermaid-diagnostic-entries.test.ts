@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { Editor } from '@tiptap/core'
+import { createTacoEditorExtensions } from '../src/tiptap-editor.ts'
 import { readFileSync } from 'node:fs'
 import { completeHighlighter } from '../src/highlighter-lowlight.ts'
 import { MermaidRuntime, type MermaidApi, type MermaidPluginLabels } from '../src/mermaid.ts'
@@ -160,5 +162,104 @@ describe('mermaid diagnostics in the document entries', () => {
     const kernel = readFileSync('extensions/taco/bin/mermaid-diagnostics.mjs', 'utf8')
     expect(kernel.includes('import '), 'the shared kernel must stay importable by the Node linter').toBe(false)
     expect(/\bdocument\b|\bwindow\b/.test(kernel), 'the shared kernel must not touch the DOM').toBe(false)
+  })
+})
+
+describe('mermaid diagnostics in a Markdown code block', () => {
+  const markdown = (diagram: string): string => `# doc\n\n\`\`\`mermaid\n${diagram}\n\`\`\`\n\ntail\n`
+
+  const mount = (diagram: string, runtime: MermaidRuntime): Editor => {
+    const element = document.createElement('div')
+    element.className = 'tiptap-editor-host'
+    document.body.append(element)
+    return new Editor({
+      element,
+      extensions: createTacoEditorExtensions(labels, { renderMermaid: true, mermaidRuntime: runtime }),
+      content: markdown(diagram),
+      contentType: 'markdown',
+    })
+  }
+
+  const block = (): HTMLElement => document.querySelector<HTMLElement>('.tiptap-code-block')!
+  const state = () => ({
+    diagnostic: document.querySelector('.mermaid-diagnostic')?.className ?? null,
+    diagnosticText: document.querySelector('.mermaid-diagnostic')?.textContent ?? '',
+    previewHidden: block().querySelector<HTMLElement>('.tiptap-code-block-preview')?.hidden,
+    sourceHidden: block().querySelector<HTMLElement>('.tiptap-code-block-source')?.hidden,
+    hasSvg: Boolean(block().querySelector('.surface svg')),
+  })
+
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+    document.body.innerHTML = ''
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: false }))
+  })
+
+  it('falls back to the source with a runtime diagnostic, then draws again after an edit', async () => {
+    let online = false
+    const runtime = new MermaidRuntime(vi.fn().mockImplementation(async () => {
+      if (!online) throw new Error('cdn offline')
+      return renderingApi('Recovered')
+    }))
+    const editor = mount('flowchart TD\n  A --> B\n', runtime)
+    await vi.waitFor(() => expect(state().diagnostic).not.toBeNull())
+
+    expect(state().diagnostic).toContain('is-runtime')
+    expect(state().previewHidden, 'an unavailable runtime falls back to the source').toBe(true)
+    expect(state().sourceHidden).toBe(false)
+
+    online = true
+    // The recovery trigger is an edit, not a new control.
+    editor.commands.setContent(markdown('flowchart TD\n  A --> B\n  B --> C\n'), { contentType: 'markdown' })
+    await vi.waitFor(() => expect(state().hasSvg).toBe(true))
+    expect(state().diagnostic, 'the diagnostic clears once the diagram draws').toBeNull()
+    expect(state().previewHidden, 'the preview must become visible again').toBe(false)
+    expect(state().sourceHidden, 'the source must go back to hidden').toBe(true)
+    editor.destroy()
+  })
+
+  it('retries an unchanged source after a runtime failure instead of latching', async () => {
+    const loader = vi.fn().mockRejectedValue(new Error('cdn offline'))
+    const runtime = new MermaidRuntime(loader)
+    const editor = mount('flowchart TD\n  A --> B\n', runtime)
+    await vi.waitFor(() => expect(loader.mock.calls.length).toBeGreaterThan(0))
+
+    const callsBefore = loader.mock.calls.length
+    // A repaint with the same text (an attribute touch) must ask for a redraw.
+    let codeBlockPos = -1
+    let codeBlockAttrs: Record<string, unknown> = {}
+    editor.state.doc.forEach((child, offset) => {
+      if (child.type.name !== 'codeBlock') return
+      codeBlockPos = offset
+      codeBlockAttrs = { ...child.attrs }
+    })
+    expect(codeBlockPos).toBeGreaterThanOrEqual(0)
+    editor.view.dispatch(editor.state.tr.setNodeMarkup(codeBlockPos, undefined, { ...codeBlockAttrs, tacoBlockId: 'retry-probe' }))
+    await vi.waitFor(() => expect(loader.mock.calls.length).toBeGreaterThan(callsBefore))
+    editor.destroy()
+  })
+
+  it('drops the diagnostic when the block stops being Mermaid', async () => {
+    const runtime = new MermaidRuntime(vi.fn().mockRejectedValue(new Error('cdn offline')))
+    const editor = mount('flowchart TD\n  A --> B\n', runtime)
+    await vi.waitFor(() => expect(state().diagnostic).not.toBeNull())
+
+    editor.commands.setContent('# doc\n\n```js\nconst x = 1\n```\n', { contentType: 'markdown' })
+    await vi.waitFor(() => expect(document.querySelector('.tiptap-code-block')).not.toBeNull())
+    expect(document.querySelector('.mermaid-diagnostic')).toBeNull()
+    editor.destroy()
+  })
+
+  it('lints the source the reader sees, not the theme-rewritten render input', async () => {
+    const parse = vi.fn().mockResolvedValue({ diagramType: 'flowchart-v2' })
+    const api = { initialize: vi.fn(), parse, render: vi.fn().mockResolvedValue({ svg: '<svg><text>ok</text></svg>' }) } as unknown as MermaidApi
+    // An explicit theme that differs from the active one makes the render path rewrite
+    // the preamble (one `%%{init}%%` line becomes multi-line frontmatter).
+    const explicit = '%%{init: {"theme":"dark"}}%%\nflowchart TD\n  A --> B\n'
+    const editor = mount(explicit, new MermaidRuntime(vi.fn().mockResolvedValue(api)))
+    await vi.waitFor(() => expect(parse.mock.calls.length).toBeGreaterThan(0))
+    const linted = String(parse.mock.calls[0][0])
+    expect(linted, 'positions must map onto the reader’s own text').toContain('%%{init: {"theme":"dark"}}%%')
+    editor.destroy()
   })
 })

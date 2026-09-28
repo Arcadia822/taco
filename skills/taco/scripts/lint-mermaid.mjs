@@ -80,8 +80,10 @@ const PAYLOAD_TAG = /<script\b(?=[^>]*\bid=["']taco-asset-mermaid["'])[^>]*>([\s
 const SANITIZE_ANCHOR =
   'r.dompurifyConfig?e=My.sanitize(Qdr(e,r),r.dompurifyConfig).toString():e=My.sanitize(Qdr(e,r),{FORBID_TAGS:["style"]}).toString()'
 const SANITIZE_BYPASS = 'e=String(Qdr(e,r))'
-const FENCE_OPEN = /^[ \t]*`{3,}[ \t]*mermaid[ \t]*$/i
-const FENCE_CLOSE = /^[ \t]*`{3,}[ \t]*$/
+// CommonMark fence shape: up to three leading spaces, three or more backticks or
+// tildes, then an info string. Tracking the marker and its length is what keeps a
+// nested example inside another fence from being read as a real diagram.
+const FENCE_OPEN = /^( {0,3})(`{3,}|~{3,})[ \t]*(.*)$/
 /** Static literal lookups stay a record; the walk never mutates this. */
 const SKIPPED_DIRS = { node_modules: true }
 const MERMAID_OPTIONS = {
@@ -268,17 +270,28 @@ const isMermaidFile = (path) => {
 const fencedUnits = (path, content) => {
   const lines = content.split('\n')
   const units = []
-  for (let index = 0; index < lines.length; index++) {
+  let index = 0
+  while (index < lines.length) {
     // A CRLF document keeps its `\r` in every line; the marker still has to match.
-    if (!FENCE_OPEN.test(lines[index].replace(/\r$/, ''))) continue
+    const line = lines[index].replace(/\r$/, '')
+    const open = FENCE_OPEN.exec(line)
+    if (open === null) {
+      index += 1
+      continue
+    }
+    const marker = open[2][0]
+    const closing = new RegExp(`^ {0,3}${marker}{${open[2].length},}[ \\t]*$`)
     let end = index + 1
-    while (end < lines.length && !FENCE_CLOSE.test(lines[end].replace(/\r$/, ''))) end++
-    units.push({
-      file: displayPath(path),
-      body: lines.slice(index + 1, end).join('\n'),
-      lineOffset: index + 1,
-    })
-    index = end
+    while (end < lines.length && !closing.test(lines[end].replace(/\r$/, ''))) end++
+    // Only a top-level fence counts; the info string's first word selects the language.
+    if (/^mermaid\b/i.test(open[3].trim())) {
+      units.push({
+        file: displayPath(path),
+        body: lines.slice(index + 1, end).join('\n'),
+        lineOffset: index + 1,
+      })
+    }
+    index = end + 1
   }
   return units
 }
@@ -446,21 +459,10 @@ const emit = (report, json) => {
 }
 
 const main = async () => {
-  const options = parseArgs(process.argv.slice(2))
-  if (options.help) {
-    process.stdout.write(USAGE)
-    return 0
-  }
-  if (options.shell !== undefined && options.mermaid !== undefined) {
-    abort('use either --shell or --mermaid, not both')
-  }
-  try {
-    const report = await run(options)
-    emit(report, options.json)
-    if (!report.complete) return 2
-    return report.diagnostics.length === 0 ? 0 : 1
-  } catch (error) {
-    if (!(error instanceof Abort)) throw error
+  const argv = process.argv.slice(2)
+  // Argument errors happen before `options` exists, so the JSON flag is read raw.
+  const wantsJson = argv.includes('--json')
+  const aborted = (error) => {
     const report = {
       units: 0,
       complete: false,
@@ -474,10 +476,34 @@ const main = async () => {
         },
       ],
     }
-    const message = `error: validation did not complete - ${error.message}`
-    if (options.json) emit(report, true)
-    process.stderr.write(`${message}\n`)
+    if (wantsJson) emit(report, true)
+    process.stderr.write(`error: validation did not complete - ${error.message}\n`)
     return 2
+  }
+
+  let options
+  try {
+    options = parseArgs(argv)
+    if (options.help) {
+      process.stdout.write(USAGE)
+      return 0
+    }
+    if (options.shell !== undefined && options.mermaid !== undefined) {
+      abort('use either --shell or --mermaid, not both')
+    }
+  } catch (error) {
+    if (!(error instanceof Abort)) throw error
+    return aborted(error)
+  }
+
+  try {
+    const report = await run(options)
+    emit(report, options.json)
+    if (!report.complete) return 2
+    return report.diagnostics.length === 0 ? 0 : 1
+  } catch (error) {
+    if (!(error instanceof Abort)) throw error
+    return aborted(error)
   }
 }
 

@@ -407,6 +407,48 @@ describe('lint-mermaid.mjs', () => {
     expect(existsSync(resolve(directory, reported))).toBe(true)
   })
 
+  it('reads only top-level fences and both fence markers', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'taco-lint-fences-'))
+    mkdirSync(directory, { recursive: true })
+
+    // A mermaid fence nested inside a longer fence is an example, not a unit.
+    writeFileSync(join(directory, 'nested.md'), [
+      '````markdown', '```mermaid', 'notADiagram', '```', '````',
+    ].join('\n'))
+    const nested = spawnLint(['--dir', directory, '--json'])
+    expect(nested.status, 'a nested example must not be validated').toBe(0)
+    expect(JSON.parse(nested.stdout).units).toBe(0)
+
+    // A tilde fence is legal Markdown and must be validated like a backtick one.
+    writeFileSync(join(directory, 'tilde.md'), '~~~mermaid\nnotADiagram\n~~~\n')
+    const tilde = spawnLint([join(directory, 'tilde.md'), '--json'])
+    expect(tilde.status, 'a tilde mermaid fence must be checked').toBe(1)
+    const tildeReport = JSON.parse(tilde.stdout)
+    expect(tildeReport.diagnostics[0]).toMatchObject({ kind: 'unknown-type' })
+
+    // An indented block is code content, not a fence.
+    writeFileSync(join(directory, 'indented.md'), '    ```mermaid\n    notADiagram\n    ```\n')
+    const indented = spawnLint([join(directory, 'indented.md'), '--json'])
+    expect(indented.status).toBe(0)
+    expect(JSON.parse(indented.stdout).units).toBe(0)
+  })
+
+  it('keeps --json machine-readable when the arguments themselves are rejected', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'taco-lint-json-args-'))
+    const file = join(directory, 'ok.mmd')
+    writeFileSync(file, legal.flowchart)
+
+    const unknown = spawnLint(['--json', '--nope', file])
+    expect(unknown.status).toBe(2)
+    const unknownReport = JSON.parse(unknown.stdout)
+    expect(unknownReport).toMatchObject({ units: 0, complete: false, diagnostics: [] })
+    expect(unknownReport.runtimeFailures[0].message).toContain('Unknown option')
+
+    const exclusive = spawnLint(['--json', '--shell', shell, '--mermaid', 'x.mjs', file])
+    expect(exclusive.status).toBe(2)
+    expect(JSON.parse(exclusive.stdout).complete).toBe(false)
+  })
+
   it('rejects a file handed to --dir, and unknown options', () => {
     const directory = mkdtempSync(join(tmpdir(), 'taco-lint-args-'))
     const file = join(directory, 'ok.mmd')

@@ -194,12 +194,15 @@ export const sanitizeMermaidSvg = (svg: string): string => {
   // page selectors, or layout properties survive into the document.
   const rules: string[] = []
   if (/^[\w-]+$/.test(rootId)) {
+    const scopedToRoot = `#${rootId}`
+    // `#root > x` stays inside the SVG; `~` and `+` can reach siblings outside it,
+    // and `<`, `\`, `@` can escape or inject, so those stay banned.
+    const isScoped = (selector: string): boolean =>
+      selector === scopedToRoot || selector.startsWith(`${scopedToRoot} `) || selector.startsWith(`${scopedToRoot}>`)
+    const isSelfContained = (selector: string): boolean => !/[\\<@~+]/.test(selector)
     for (const match of themeCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
       const selectors = match[1].split(',').map((selector) => selector.trim())
-      if (selectors.some((selector) =>
-        !(selector === `#${rootId}` || selector.startsWith(`#${rootId} `))
-        || /[\\<>@~+]/.test(selector),
-      )) continue
+      if (selectors.some((selector) => !isScoped(selector) || !isSelfContained(selector))) continue
       const declarations = safeSvgDeclarations(match[2])
       if (declarations) rules.push(`${selectors.join(',')}{${declarations}}`)
     }
