@@ -1,7 +1,6 @@
 import { isSafePath, relativePath, type TacoBundle, type TacoFile } from './model.ts'
 import { decodePng } from '../extensions/taco/bin/png.mjs'
 import { inertImageAttributes } from './security.ts'
-import { createControlButton } from './ui-primitives.ts'
 
 declare const __EMBEDDED_ASSETS__: Record<string, string> | undefined
 
@@ -36,21 +35,107 @@ const pngError = (file: TacoFile): string | undefined => {
   return error
 }
 
+const svgAttribute = (tag: string, name: string): number | null => {
+  const match = new RegExp(`\\b${name}\\s*=\\s*["']([^"']*)["']`, 'i').exec(tag)
+  // Only unitless numbers are absolute pixel sizes; units and percentages fall
+  // through to the viewBox, which is always in user units.
+  if (!match || !/^\d+(?:\.\d+)?$/.test(match[1].trim())) return null
+  const value = Number.parseFloat(match[1])
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
+const svgMarkup = (content: string): string | null => {
+  const prefix = 'data:image/svg+xml'
+  if (!content.startsWith(prefix)) return content
+  const separator = content.indexOf(',')
+  if (separator === -1) return null
+  const payload = content.slice(separator + 1)
+  try {
+    return content.slice(prefix.length, separator).includes('base64')
+      ? atob(payload)
+      : decodeURIComponent(payload)
+  } catch { return null }
+}
+
+/**
+ * An SVG carrying only a viewBox has no intrinsic size, so a browser reports a
+ * 150×150 fallback and stretches the image to its container. Read the authored
+ * width/height, else the viewBox, to keep both previews at the original size.
+ */
+export const svgIntrinsicSize = (content: string): { width: number; height: number } | null => {
+  const markup = svgMarkup(content)
+  const tag = markup ? /<svg\b[^>]*>/i.exec(markup)?.[0] : undefined
+  if (!tag) return null
+  const width = svgAttribute(tag, 'width')
+  const height = svgAttribute(tag, 'height')
+  if (width !== null && height !== null) return { width, height }
+  const viewBox = /\bviewBox\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1]
+  if (!viewBox) return null
+  const parts = viewBox.trim().split(/[\s,]+/).map(Number)
+  return parts.length === 4 && parts[2] > 0 && parts[3] > 0 ? { width: parts[2], height: parts[3] } : null
+}
+
+/** True when the path names an SVG document, by declared type or extension. */
+export const isSvgFileKind = (file: TacoFile): boolean =>
+  file.mediaType === 'image/svg+xml' || /\.svg$/i.test(file.path)
+
+/**
+ * Standalone image files may only render inline payloads. `parseBundle`
+ * validates PNG bytes, but a forged `image/jpeg` file could otherwise carry an
+ * arbitrary URL in `content` and turn the preview into an unsolicited fetch
+ * (or a local-file load on `file://` pages). Authored SVG markup is encoded.
+ */
+export const mediaSource = (file: TacoFile): string | null => {
+  if (isSvgFileKind(file) && !file.content.startsWith('data:')) {
+    return `data:image/svg+xml;utf8,${encodeURIComponent(file.content)}`
+  }
+  if (/^data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=]+$/i.test(file.content)) return file.content
+  return null
+}
+
+/** Caps an image at its authored size while still shrinking inside a smaller container. */
+export const applyNaturalSize = (image: HTMLImageElement, size: { width: number; height: number } | null): void => {
+  if (!size) return
+  image.style.setProperty('--media-natural-width', `${size.width}px`)
+  image.style.setProperty('--media-natural-height', `${size.height}px`)
+}
+
 export const openPngPreview = (file: TacoFile): void => {
-  if (pngError(file)) return
+  if (file.mediaType === 'image/png' && pngError(file)) return
+  const src = mediaSource(file)
+  if (!src) return
+  document.querySelector('dialog.png-preview, dialog.media-preview-dialog')?.remove()
   const dialog = document.createElement('dialog')
-  dialog.className = 'png-preview'
+  dialog.className = 'media-preview-dialog png-preview'
   dialog.dataset.tacoTransient = ''
-  const close = createControlButton('x', 'Close', () => dialog.close(), '', true)
   const image = document.createElement('img')
-  image.src = file.content
+  image.src = src
   image.alt = file.title || file.path
+  if (isSvgFileKind(file)) applyNaturalSize(image, svgIntrinsicSize(file.content))
   dialog.setAttribute('aria-label', image.alt)
-  dialog.append(close, image)
+  dialog.append(image)
+
+  const finish = (): void => {
+    if (typeof dialog.close === 'function') dialog.close()
+    else {
+      dialog.removeAttribute('open')
+      dialog.remove()
+    }
+  }
+
+  dialog.addEventListener('cancel', (event) => {
+    event.preventDefault()
+    finish()
+  })
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) finish()
+  })
   dialog.addEventListener('close', () => dialog.remove(), { once: true })
   document.body.append(dialog)
-  dialog.showModal()
+  if (typeof dialog.showModal === 'function') dialog.showModal()
+  else dialog.setAttribute('open', '')
 }
+
 
 export const resolveEmbeddedMarkdownAssets = (
   root: ParentNode,
@@ -106,15 +191,10 @@ export const resolveEmbeddedMarkdownAssets = (
     }
     image.onerror = () => report(`Cannot decode PNG: ${asset.path}; re-export the image and repack`)
     if (image.getAttribute('src') !== asset.content) image.setAttribute('src', asset.content)
+    image.style.cursor = 'pointer'
+    image.onclick = () => openPngPreview(asset)
     previews.set(asset.path, asset)
   }
-  for (const asset of previews.values()) {
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.textContent = `View full size: ${relativePath(bundle, asset)}`
-    button.addEventListener('click', () => openPngPreview(asset))
-    tools.append(button)
-  }
-  if (root instanceof HTMLElement) root.after(tools)
+  if (tools.children.length && root instanceof HTMLElement) root.after(tools)
   return diagnostics
 }

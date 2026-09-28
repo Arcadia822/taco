@@ -12,6 +12,7 @@ import { createTacoCodeBlock } from './tiptap-code-block.ts'
 import type { TacoCodeBlockCommentTarget } from './tiptap-code-block.ts'
 import { createDocumentProperties, type DocumentPropertiesLabels } from './tiptap-document-properties.ts'
 import { CenteredBlock } from './tiptap-centered-block.ts'
+import { InlineMediaEmbed, MediaEmbed } from './tiptap-media-embed.ts'
 import type { MermaidPluginLabels, MermaidRuntime } from './mermaid.ts'
 import { fileKind, type TacoBlock, type TacoBundle } from './model.ts'
 import { inertImageAttributes, sanitizeEditorHtml } from './security.ts'
@@ -20,7 +21,7 @@ import { splitFrontmatter } from './frontmatter.ts'
 const BLOCK_TYPES = [
   'paragraph', 'heading', 'blockquote', 'codeBlock', 'bulletList', 'orderedList',
   'taskList', 'horizontalRule', 'image', 'table', 'documentProperties',
-  'centeredBlock',
+  'centeredBlock', 'mediaEmbed',
 ]
 
 const hashId = (value: string): string => {
@@ -133,6 +134,8 @@ export const createTacoEditorExtensions = (labels: MermaidPluginLabels, options:
     onComment: options.onCodeBlockComment,
   }),
   SafeImage,
+  MediaEmbed,
+  InlineMediaEmbed,
   Table.configure({ resizable: false }),
   TableRow,
   TableHeader,
@@ -185,9 +188,11 @@ export const blockHtml = (blocks: TacoBlock[] | undefined): string =>
       }
     }
     const html = container.innerHTML
-    // Older Taco files stored standalone images as top-level blocks. Keep the
-    // stable block ID for comments on the paragraph required by the inline schema.
-    if (block.type !== 'image') return html
+    // Standalone image and inline media blocks must stay inside the paragraph
+    // the inline schema requires. `block.html` nests them under `<p>`, but the
+    // HTML parser cannot parse block content there and splits the paragraph
+    // open; wrap the id-bearing paragraph around the rendered markup instead.
+    if (block.type !== 'image' && block.type !== 'inlineMediaEmbed') return html
     const paragraph = document.createElement('p')
     paragraph.setAttribute('data-taco-block-id', block.id)
     paragraph.innerHTML = html

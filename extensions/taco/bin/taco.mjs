@@ -98,8 +98,36 @@ const mediaType = (path) => {
   if (lower.endsWith('.xml')) return 'application/xml'
   if (lower.endsWith('.toml')) return 'application/toml'
   if (lower.endsWith('.png')) return 'image/png'
+  if (/\.jpe?g$/i.test(lower)) return 'image/jpeg'
+  if (lower.endsWith('.gif')) return 'image/gif'
+  if (lower.endsWith('.webp')) return 'image/webp'
+  if (lower.endsWith('.ico')) return 'image/x-icon'
+  if (lower.endsWith('.bmp')) return 'image/bmp'
+  if (lower.endsWith('.avif')) return 'image/avif'
+  if (lower.endsWith('.mp4') || lower.endsWith('.m4v')) return 'video/mp4'
+  if (lower.endsWith('.webm')) return 'video/webm'
+  if (lower.endsWith('.ogv')) return 'video/ogg'
+  if (lower.endsWith('.mov')) return 'video/quicktime'
+  if (lower.endsWith('.mp3')) return 'audio/mpeg'
+  if (lower.endsWith('.wav')) return 'audio/wav'
+  if (lower.endsWith('.ogg')) return 'audio/ogg'
+  if (lower.endsWith('.aac')) return 'audio/aac'
+  if (lower.endsWith('.m4a')) return 'audio/mp4'
+  if (lower.endsWith('.weba')) return 'audio/webm'
+  if (lower.endsWith('.flac')) return 'audio/flac'
   return 'text/plain'
 }
+
+const isBinaryMediaType = (type) =>
+  type === 'image/png' ||
+  type === 'image/jpeg' ||
+  type === 'image/gif' ||
+  type === 'image/webp' ||
+  type === 'image/x-icon' ||
+  type === 'image/bmp' ||
+  type === 'image/avif' ||
+  type.startsWith('video/') ||
+  type.startsWith('audio/')
 
 const yamlTitleFrom = (content) => {
   const normalized = content.startsWith('\uFEFF') ? content.slice(1) : content
@@ -381,6 +409,7 @@ const collectFiles = async (featureDir, rootPath, existingByPath, ignorePatterns
       }
       const type = mediaType(relativePath)
       const isPng = type === 'image/png'
+      const isBinary = isBinaryMediaType(type)
       let content
       let rawBuffer = null
       if (isPng) {
@@ -391,6 +420,9 @@ const collectFiles = async (featureDir, rootPath, existingByPath, ignorePatterns
         rawBuffer = await readFile(absolute)
         validatePngBytes(rawBuffer, relativePath)
         content = `${PNG_DATA_URL_PREFIX}${rawBuffer.toString('base64')}`
+      } else if (isBinary) {
+        rawBuffer = await readFile(absolute)
+        content = `data:${type};base64,${rawBuffer.toString('base64')}`
       } else {
         try {
           content = decoder.decode(await readFile(absolute))
@@ -672,6 +704,13 @@ export const sync = async ({
   }
 
   const changes = []
+  const binaryBytes = (file) => {
+    const match = /^data:([^;,]+);base64,([A-Za-z0-9+/=]+)$/.exec(file.content.trim())
+    if (!match) throw new Error(`Media file requires a valid base64 data URL: ${file.path} (${file.mediaType})`)
+    const bytes = Buffer.from(match[2], 'base64')
+    if (!bytes.length) throw new Error(`Media file has an empty or invalid base64 payload: ${file.path}`)
+    return bytes
+  }
   for (const file of bundle.files) {
     const target = resolve(rootDirectory, file.path)
     if (!isWithin(featureRoot, target) || target === featureRoot)
@@ -679,6 +718,7 @@ export const sync = async ({
     await assertNoSymlinkPath(rootDirectory, target)
     const exists = await pathExists(target)
     const isPng = file.mediaType === 'image/png'
+    const isBinary = isBinaryMediaType(file.mediaType)
     let currentHash = null
     let tacoHash = null
     if (isPng) {
@@ -687,6 +727,13 @@ export const sync = async ({
         currentHash = sha256(diskBuffer)
       }
       tacoHash = sha256(decodePng(file.content, file.path))
+    } else if (isBinary) {
+      const bytes = binaryBytes(file)
+      if (exists) {
+        const diskBuffer = await readFile(target)
+        currentHash = sha256(diskBuffer)
+      }
+      tacoHash = sha256(bytes)
     } else {
       const current = exists ? await readFile(target, 'utf8') : null
       currentHash = current === null ? null : sha256(current)
@@ -719,6 +766,10 @@ export const sync = async ({
       const temporary = `${change.target}.taco-${process.pid}-${randomUUID()}.tmp`
       if (change.mediaType === 'image/png') {
         await writeFile(temporary, decodePng(change.content, change.path))
+      } else if (isBinaryMediaType(change.mediaType)) {
+        const match = /^data:([^;,]+);base64,([A-Za-z0-9+/=]+)$/.exec(change.content.trim())
+        if (!match) throw new Error(`Media file requires a valid base64 data URL: ${change.path} (${change.mediaType})`)
+        await writeFile(temporary, Buffer.from(match[2], 'base64'))
       } else {
         await writeFile(temporary, change.content, 'utf8')
       }
