@@ -14,7 +14,7 @@ speckit.taco.update [feature-directory] [--ignore path-or-glob]...
 speckit.taco.review [path-to-file.taco.html]
 ```
 
-- `update` creates or refreshes `<FEATURE_DIR>/<feature-name>.taco.html` by assembling the bundle JSON into the shell (no CLI). It reads the existing Taco before overwriting it, excludes every `*.taco.html`, and preserves `docId`, `comments`, `navigation`, and every other stored bundle field. Mandatory hooks invoke it after `specify`, `clarify`, `plan`, `checklist`, `tasks`, `analyze`, `implement`, and `converge`; the Agent invariant also requires it after any canonical feature-artifact change made outside those commands.
+- `update` creates or refreshes `<FEATURE_DIR>/<feature-name>.taco.html` by assembling the bundle JSON into the shell (no CLI). That path is this extension's own convention — the generic skill's destination cascade in `skills/taco/references/output-path.md` does not apply here and is not checked against it. It reads the existing Taco before overwriting it, excludes every `*.taco.html`, and preserves `docId`, `comments`, `navigation`, and every other stored bundle field. Mandatory hooks invoke it after `specify`, `clarify`, `plan`, `checklist`, `tasks`, `analyze`, `implement`, and `converge`; the Agent invariant also requires it after any canonical feature-artifact change made outside those commands.
 - `review` consumes the review — Handoff text, the review tab's `window.taco.getReviewHandoff()` object, or the saved file's bundle — applies edits and comments to canonical files, and re-runs `update`. Handoff and the review-tab API need no save; only the saved-file channel does.
 
 ## Authoring feature artifacts

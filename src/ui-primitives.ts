@@ -39,6 +39,9 @@ export type IconName =
   | 'status-complete'
   | 'status-freeze'
   | 'workflow'
+  | 'image'
+  | 'video'
+  | 'music'
 const iconPaths: Record<IconName, string> = {
   braces: '<path d="M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5a2 2 0 0 0 2 2h1"/><path d="M16 21h1a2 2 0 0 0 2-2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1"/>',
   check: '<path d="m20 6-11 11-5-5"/>',
@@ -77,6 +80,9 @@ const iconPaths: Record<IconName, string> = {
   'status-freeze': '<rect x="6.5" y="10.5" width="11" height="9" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>',
   workflow: '<rect x="9.5" y="2" width="5" height="5" rx="1"/><rect x="2" y="17" width="5" height="5" rx="1"/><rect x="17" y="17" width="5" height="5" rx="1"/><path d="M12 7v5M4.5 17v-5h15v5"/>',
   tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8 8a2 2 0 0 0 2.828 0l7.172-7.172a2 2 0 0 0 0-2.828l-8-8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+  image: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
+  video: '<rect width="14" height="12" x="2" y="6" rx="2"/><path d="m16 9.5 4.5-3v11l-4.5-3z"/>',
+  music: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
 }
 export const el = <K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -309,6 +315,9 @@ export const createFileTypeIcon = (file: TacoFile): SVGSVGElement => {
     yaml: 'file-code',
     json: 'braces',
     mermaid: 'presentation',
+    image: 'image',
+    video: 'video',
+    audio: 'music',
     text: 'file',
   }
   const type = svgIcon(icon[kind])

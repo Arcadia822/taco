@@ -1,6 +1,6 @@
 # The `taco/files` v1 bundle contract
 
-Read this reference to author a bundle from scratch, to debug a `#taco-document` block, or whenever a Taco opens in Recovery mode. The bundled assembler (`scripts/pack.mjs`) owns the carrier — escaping, insertion, atomic write — so use it and keep those rules out of your head. This document is the authority for the model itself and for explaining why a file will not load.
+Read this reference to author a bundle from scratch, to debug a `#taco-document` block, or whenever a Taco opens in Recovery mode. It is the authority for the model itself, for the safe-write contract, and for explaining why a file will not load. **You write the block yourself** — escaping, insertion, and atomic write are described here so you can do it directly. Where `references/output-path.md` says where the file goes and when, this document says what the file contains and how to write it safely. An optional `scripts/pack.mjs` helper performs the same steps if you have Node and would rather use it; nothing in this workflow requires it.
 
 ## You are authoring a document model
 
@@ -25,7 +25,7 @@ The shell is always provided empty (`SKILL.md` → Locate the shell), so you nev
 }
 ```
 
-Mint a fresh unique `docId` for a new document and keep it forever after. Optional next: `navigation` for grouping, `checkpoints` for a review graph, `comments` for threads. The shell is a carrier, not a schema: escaping and atomically writing the block is a tool's job (`scripts/pack.mjs`), never something to hand-roll.
+Mint a fresh unique `docId` for a new document and keep it forever after. Optional next: `navigation` for grouping, `checkpoints` for a review graph, `comments` for threads. The shell is a carrier, not a schema: escaping and atomically writing the block are your job here, and the rules are below. The optional `scripts/pack.mjs` helper implements them if you would rather not do it by hand.
 
 ## Derived at render time, not stored
 
@@ -129,14 +129,16 @@ findings.filter((finding) => finding.severity !== 'info')
 
 `issues` reports collaboration credentials and runtime security; `findings` reports the document itself. Each finding is `{ code, severity, message, path? }` and covers duplicate file ids, comment anchors whose quote no longer resolves against the file, relative links that point outside the bundle or at nothing, navigation and Checkpoint paths that reference no file, and blocks the editor could not migrate. `ok` is false when there is a security issue or an `error`-severity finding. `severity: 'info'` is deliberately quiet — an unknown bundle field is preserved unchanged, not a defect.
 
-Without a browser, use the bundled checker:
+With no browser available, parse the block you wrote and check the shape rules below — required fields, `root` consistent with every `path`, paths unique and safe — then report the result as **V2** and say plainly that rendering was not verified. Never present that as a `validate()` run. `references/output-path.md` §7 defines the two levels; a parse the host cannot perform means you do not write the file at all (`unverifiable`).
+
+Where Node is available, the optional checker prints what the human will see:
 
 ```sh
 node scripts/pack.mjs verify <name.taco.html>   # relative to the installed skill
 node skills/taco/scripts/pack.mjs verify <name.taco.html>   # in a Taco checkout
 ```
 
-It parses and validates the artifact and prints what the human will see: entry, checkpoint groups with `Not created` documents, manifest or directory groups, `Unassigned` files, and open/resolved comment threads. Exit code `2` means the file loads but carries warnings — report those before asking for review.
+It parses and validates the artifact and prints: entry, checkpoint groups with `Not created` documents, manifest or directory groups, `Unassigned` files, and open/resolved comment threads. Exit code `2` means the file loads but carries warnings — report those before asking for review. It is a convenience, not a required step, and its absence never blocks a hand-off.
 
 ## Writing a document back through the runtime
 

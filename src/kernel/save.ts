@@ -143,6 +143,7 @@ async function pickHandle(
 }
 
 async function writeHandle(handle: FileHandleLike, content: string, mediaType = 'text/html'): Promise<void> {
+  const isDataUrl = /^data:([^;]+);base64,(.+)$/.exec(content.trim())
   if (mediaType === 'image/png') {
     const bytes = decodePng(content, handle.name)
     if (handle.getFile) {
@@ -151,6 +152,40 @@ async function writeHandle(handle: FileHandleLike, content: string, mediaType = 
         const current = new Uint8Array(await existing.arrayBuffer())
         if (current.length === bytes.length && current.every((byte, i) => byte === bytes[i])) return
         if (current.length) throw new Error(`Refusing to overwrite changed PNG: ${handle.name}; use CLI sync to review the conflict`)
+      }
+    }
+    const writable = await handle.createWritable()
+    await writable.write(new Blob([bytes], { type: mediaType }))
+    await writable.close()
+    if (handle.getFile) {
+      const savedFile = await handle.getFile()
+      if (savedFile.arrayBuffer) {
+        const writtenBytes = new Uint8Array(await savedFile.arrayBuffer())
+        if (writtenBytes.length !== bytes.length || writtenBytes.some((byte, i) => byte !== bytes[i])) {
+          throw new Error('The saved file did not pass write verification')
+        }
+      }
+    }
+    return
+  }
+  if (mediaType.startsWith('image/') || mediaType.startsWith('video/') || mediaType.startsWith('audio/')) {
+    // Media files are binary: a payload that is not a well-formed data URL must
+    // fail loudly instead of falling through to the text-write path, which
+    // would overwrite a binary file with a base64 string.
+    if (!isDataUrl) throw new Error(`Media file requires a valid base64 data URL: ${handle.name} (${mediaType})`)
+    let binary: string
+    try {
+      binary = atob(isDataUrl[2])
+    } catch {
+      throw new Error(`Media file has invalid base64 payload: ${handle.name}`)
+    }
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0))
+    if (handle.getFile) {
+      const existing = await handle.getFile()
+      if (existing.arrayBuffer) {
+        const current = new Uint8Array(await existing.arrayBuffer())
+        if (current.length === bytes.length && current.every((byte, i) => byte === bytes[i])) return
+        if (current.length) throw new Error(`Refusing to overwrite changed media: ${handle.name}; use CLI sync to review the conflict`)
       }
     }
     const writable = await handle.createWritable()
