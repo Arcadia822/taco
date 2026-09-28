@@ -12,6 +12,8 @@ $ARGUMENTS
 
 The user input may contain one feature-directory path followed by repeatable `--ignore <feature-relative-path-or-glob>` options. This command is also invoked by mandatory lifecycle hooks, where input is normally empty.
 
+**Placement.** Inside an initialized extension project the product belongs at `<FEATURE_DIR>/<feature-name>.taco.html` — the extension's own convention. It is not produced by the generic taco skill's destination cascade (`skills/taco/references/output-path.md`), and no conflict check runs against it: extension projects follow the extension, other directories follow that cascade. Report `basis: extension convention` when you state where the file went.
+
 ## Procedure
 
 1. Work from the repository root. Confirm `.specify/` exists. For a new Taco, require `.specify/extensions/taco/assets/taco-shell.html`; for a refresh, require the shell asset matching the existing Taco's variant. If a required path is missing, stop with that exact path.

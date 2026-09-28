@@ -9,6 +9,8 @@ canonical feature directory -> in-directory Taco -> human edits/comments
                             <- Agent review and canonical updates <-
 ```
 
+The in-directory path (`<FEATURE_DIR>/<feature-name>.taco.html`) is this extension's own convention. The generic taco skill's destination cascade (`skills/taco/references/output-path.md`) covers directories outside an extension project and is neither consulted nor conflict-checked here.
+
 ## Local installation
 
 Run from the exact initialized Spec Kit project that should receive Taco:

@@ -11,7 +11,7 @@ Taco turns a Markdown documentation directory into one portable `.taco.html`. A 
 canonical doc directory → one .taco.html → human review (browser) → agent reads Handoff → canonical doc directory
 ```
 
-Nothing to install. A `.taco.html` is plain HTML with one plaintext JSON data block, and this skill ships the assembler so you never hand-write the serialization: `scripts/pack.mjs` builds, validates, escapes, and writes the block, and `scripts/pack.mjs verify` shows the structure a reviewer will see. No CLI is part of this local workflow — `taco-cli` is the optional cloud binary for publishing and hosted events, and the `taco` binary in a Taco checkout is the optional Spec Kit extension CLI. If Node is unavailable, fall back to the manual write contract in `references/bundle-format.md`.
+Nothing to install. A `.taco.html` is plain HTML with one plaintext JSON data block, and **you write that block yourself**: `references/bundle-format.md` is the write contract (fields, escaping, atomic replace, shape rules) and `references/output-path.md` decides where the file goes. No script, CLI, or installed runtime is part of this workflow: the host's own file and JSON facilities are enough (a host that cannot parse JSON must stop with `unverifiable`). An optional `scripts/pack.mjs` helper can assemble a block, verify a file, or print the structure a reviewer will see, but nothing here depends on it, and it never chooses the destination — you resolve that and pass `--out`. `taco-cli` is the optional cloud binary for publishing and hosted events, and the `taco` binary in a Taco checkout is the optional Spec Kit extension CLI.
 
 ## When to use
 
@@ -84,7 +84,7 @@ The document lives in one plaintext block near the top of the shell:
 </script>
 ```
 
-The runtime's `parseBundle` validates this; anything corrupt puts the file into Recovery mode, so validate before you write. Read `references/bundle-format.md` before hand-writing or debugging the block: it is the authority for required and optional fields, the exact rejection rules, and the serialization contract. `scripts/pack.mjs` implements that contract; prefer it to a hand-built block.
+The runtime's `parseBundle` validates this; anything corrupt puts the file into Recovery mode, so validate before you write. Read `references/bundle-format.md` before writing or debugging the block: it is the authority for required and optional fields, the exact rejection rules, and the serialization contract. An optional `scripts/pack.mjs` helper implements that contract when you have Node and would rather use it.
 
 Bundle fields:
 
@@ -119,7 +119,7 @@ Per-file fields:
 
 - `id`: preserve the previous file's id — it is the stable key for comment anchors and block identity.
 - `title`: optional in-file display title; if kept it must be a non-empty string and must not change the `path`.
-- `sourceHash`: optional sha256 hex (64 chars) of the file bytes at pack time; recompute it whenever `content` changes.
+- `sourceHash`: optional sha256 hex (64 chars) of the file bytes at pack time. Keep it when `content` is byte-identical; when `content` changes, recompute it only if the host can compute SHA-256, and otherwise drop the field — never leave a stale hash.
 - `blocks`: optional runtime cache of per-block HTML. Keep it only when that file's `content` is byte-identical to the previous bundle's; drop it when the content changed and let the runtime rebuild it.
 
 Comments:
@@ -129,7 +129,7 @@ Comments:
 
 Writing rules:
 
-- Prefer `scripts/pack.mjs`; it performs every rule in this list. These rules are the fallback when Node is unavailable and the checklist when something fails to load.
+- These rules are the write contract: follow them directly. An optional `scripts/pack.mjs` helper implements them when you have Node and would rather use it, and it doubles as the checklist when something fails to load.
 
 - Serialize with `JSON.stringify(bundle, null, 2)`, then replace every `<` with `\u003c`. That one escape is what guarantees a literal `</script>` can never appear in the block. Escaping `>`, `&`, `\u2028`, `\u2029` is optional hardening, never a load requirement; when you do it, build the pattern with `String.fromCodePoint(0x2028)` / `(0x2029)` rather than a regex literal, which would break your script before it runs.
 - Insert the JSON into the `#taco-document` block by matching it and passing a **callback** to `replace` — `html.replace(dataBlock, () => replacement)` — or by splicing at the block's index. A plain string replacement is unsafe: `$&`, `` $` ``, `$'`, and `$1` inside the JSON would be treated as replacement patterns. Update `<title>` the same way.
@@ -138,6 +138,27 @@ Writing rules:
 - Only the data block and `<title>` change. Everything else in the shell stays byte-identical.
 - Keep bundled content self-contained: PNG assets as data URIs and no external document assets. Complete never fetches runtime dependencies; Lite fetches only its pinned public CDN libraries.
 
+## Where to write `.taco.html`
+
+Decide the destination **before** writing, and say which level applied. `references/output-path.md` is the authority; the cascade is:
+
+- **L0** the user names the location in this request — a directory, or a `.taco.html` file whose filename stem is already the canonical form of the title (then that stem is the title);
+- **L1** this run refreshes an existing `.taco.html` — keep its current path;
+- **L2** the packaged directory *is the repository root* — `<repo>/tacos/`, skipping directory probing;
+- **L3** the repository has `docs/`, `doc/`, `documents/`, or `specs/` — `tacos/` under the first one that exists;
+- **L4** a repository without any of those — `<repo>/tacos/`;
+- **L5** not inside a repository — `~/Documents/tacos/`.
+
+Rules that come with it:
+
+- The directory name is lowercase `tacos`; the filename stem is the normalized title (NFKC, non-alphanumerics except `_`/`-` become `_`, empty falls back to `Untitled`).
+- Find the repository by walking up to a `.git` directory or a `gitdir:` `.git` file — not with the `git` command. `git` is only used for the optional ignore check.
+- Refuse targets inside the skill, extension, template, `node_modules`, or `.git` directories, and refuse to write through a symlink.
+- Exclude hidden paths and every `*.taco.html` from the packaged set (built-in), and carry `packOptions.ignore` over unchanged.
+- Never copy the shell over an existing Taco: read the target into memory, build and check the new block, then replace the file through a temporary sibling and `rename`.
+- Report the level, its basis, the absolute path, filename, title, the verification level (V1/V2), warnings, and the exclusions.
+- When the Spec Kit extension is installed, the extension's own convention decides the path; report "basis: extension convention" and run no conflict check against this cascade.
+
 ## Workflow
 
 ### 0. Shape the review: decide what the human will see
@@ -145,31 +166,32 @@ Writing rules:
 Decide and state the presentation before writing anything. This is where an unexpected sidebar gets caught.
 
 - Group from the review contract and the directory itself, never from a template's names. A directory of research notes must not grow `spec` / `plan` / `tasks`; declare Checkpoints or `navigation` groups only for documents that exist or that the user explicitly scheduled.
-- Work out the resulting sidebar: which file lands in which group, what falls under `Unassigned`, and which document opens first. The derivation rules live in `references/bundle-format.md`; `scripts/pack.mjs --dry-run` prints the exact result for the real directory.
+- Work out the resulting sidebar: which file lands in which group, what falls under `Unassigned`, and which document opens first. The derivation rules live in `references/bundle-format.md`; where Node is available, the optional `scripts/pack.mjs --dry-run` prints the exact result for the real directory.
 - Keep the structure proportional to the directory. One flat Markdown document stays one file; do not add folders, files, or groups to look organized.
 
 ### 1. Author the bundle and write it into the shell
 
-You are authoring one document model — the bundle. A directory of Markdown is one input that fills `files[]`; so is a Handoff, so is an existing Taco. The shell is only the carrier: escaping, inserting, and writing it atomically belong to `scripts/pack.mjs`, never to you.
+You are authoring one document model — the bundle. A directory of Markdown is one input that fills `files[]`; so is a Handoff, so is an existing Taco. The shell is only the carrier, and the block is yours to write: read the shell into memory, build and escape the block, parse the exact string you are about to insert, then replace the file atomically. `references/bundle-format.md` is the authority for that contract; `references/output-path.md` decides where the file goes.
 
 1. If a `.taco.html` already exists at the destination, **read its bundle and shell variant first** — before you copy or overwrite anything, or you will read your own fresh copy instead of the reviewed document. Preserve Complete/Lite on refresh unless the user explicitly requested conversion.
-2. Run the bundled assembler from the skill directory (it implements the contract in `references/bundle-format.md`):
+2. Build the block yourself, in this order (authority: `references/bundle-format.md`):
 
-   ```sh
-   node scripts/pack.mjs --dir <DOC_DIR> --title "<Title>" \
-     [--out <name.taco.html>] [--shell <shell.html>] [--root <relpath>] \
-     [--entry <relpath>] [--group "<Title>=<relPath,relPath>"]... [--ignore <glob>]... [--dry-run]
-   ```
+   - enumerate the directory: UTF-8 regular files plus validated PNGs; exclude hidden paths and every `*.taco.html`, and report the exclusions;
+   - keep `docId`, `comments`, `checkpoints`, `navigation`, `packOptions`, unknown fields, and each file's `id`; keep `blocks` only while that file's content is byte-identical;
+   - serialize with `JSON.stringify(bundle, null, 2)` and escape every `<` as `\u003c`;
+   - `JSON.parse` the exact escaped string you will insert — it must round-trip — then check the shape: required fields, `root` consistent with every `path`, paths unique and safe;
+   - insert it into `#taco-document` and set `<title>` with a callback `replace` or by splicing — never a plain string replacement, where `$&`, `` $` ``, `$'`, and `$1` in the JSON would be treated as replacement patterns;
+   - write a temporary sibling, then `rename` it over the destination, so a failure leaves the previous Taco untouched.
 
-   It enumerates the directory, preserves `docId`, `comments`, `checkpoints`, `navigation`, `packOptions` and every unknown field from an existing Taco, keeps each file's `id` and any still-valid `blocks`, rejects symlinks, non-UTF-8 bytes, invalid PNGs and `.html`/`.htm` sources instead of silently dropping them, escapes and validates the data block, and writes it atomically over `<name>.taco.html`. Report the `excluded:` list it prints; pass `--ignore` explicitly when an unsupported path is meant to be omitted.
-3. Hand-build the block only when Node is unavailable: start from the minimal bundle skeleton in `references/bundle-format.md` and edit that model — do not reverse-engineer the field list from this page. Then follow the carrier rules there: read the shell into memory rather than copying it over the destination, serialize and escape, insert with a callback `replace`, `JSON.parse` the exact string you are about to insert, and write a temporary sibling then `rename` it over the destination. Until that rename succeeds, leave the previous destination untouched.
+   If you have Node and would rather not do this by hand, the optional `scripts/pack.mjs` helper performs these steps. **It does not resolve the destination** — resolve it first (see `## Where to write .taco.html`) and pass the result explicitly, because the helper's default `--out` is inside the directory being packaged: `node scripts/pack.mjs --dir <DOC_DIR> --title "<Title>" --out <resolved absolute destination> [--shell <shell.html>] [--root <relpath>] [--entry <relpath>] [--group "<Title>=<relPath,relPath>"]... [--ignore <glob>]... [--dry-run]`. `node scripts/pack.mjs verify <name.taco.html>` prints the structure a reviewer will see. Report its `excluded:` list unless you closed the loop yourself.
+3. Start from the skill's shell (or, on a refresh, the existing Taco) held in memory: only the `#taco-document` block and the escaped `<title>` may change, and every other byte stays identical.
 4. For a new document, set `format: "taco/files"`, `version: 1`, a fresh unique `docId`, `title`, `root` and `files`. Choose the Checkpoint definition from the user's or project's review requirements, if any; otherwise omit `checkpoints`, even if a starter pack contains one. The bundled `spec/` SDD graph is an example to adapt only if it fits; its stage names, document paths, and display template are not defaults that override project conventions. For a refresh, preserve the previous bundle wholesale—including `checkpoints.nodes`, `checkpoints.documents`, and any unknown fields—and replace only intended fields; keep `root`, format/version and identity unchanged. Stop on an unsupported format/version rather than downgrading it. Match existing file entries by path, preserve unknown fields and stable ids, and update content-dependent fields using the rules above.
 
 ### 2. Check what the reviewer will see
 
-- With a review tab open, run `window.taco.validate()` in its console — it checks what the renderer actually did (comment anchors, cross-document links, navigation and Checkpoint paths, unmigrated blocks). Offline, run `node scripts/pack.mjs verify <name>.taco.html` instead. Both are described in `references/bundle-format.md`.
+- Verification has two levels (`references/output-path.md` §7). **V1**: with a review tab open, run `window.taco.validate()` in its console — it checks what the renderer actually did (comment anchors, cross-document links, navigation and Checkpoint paths, unmigrated blocks) and must return `ok: true` with no error. **V2**: no browser available — parse the block you wrote and check the shape rules, then state plainly that you did not verify rendering. Never present V2 as V1, and never write at all when you cannot parse the string (report `unverifiable`). Where Node is available, the optional `scripts/pack.mjs verify <name.taco.html>` prints the structure a reviewer will see; it is a convenience, not a required step.
 - Compare the reported structure with the shape you decided in step 0: entry document, each group with its files, what sits under `Unassigned`, and open/resolved comment threads.
-- Fix a mismatch, or state it plainly, before handing the file over. A warning you shipped silently is a surprise the reviewer finds instead. Exit code `2` from `pack.mjs verify`, or any `warning`/`error` finding from `validate()`, goes in the report.
+- Fix a mismatch, or state it plainly, before handing the file over. A warning you shipped silently is a surprise the reviewer finds instead. Report the verification level you reached and every `warning`/`error` finding it produced.
 - A Checkpoint document shown as `not created` is expected only when you deliberately scheduled work that does not exist yet. Otherwise the structure was transplanted from a template: remove it.
 - Confirm the artifact loads: the data block must parse and satisfy the shape rules. A Recovery-mode file is a failed hand-off, not a preview.
 
@@ -214,4 +236,4 @@ After canonical edits, refresh the same Taco only when pending direct review edi
 
 ## Report format
 
-End each round with: files assembled/imported, exclusions, the presented structure (entry document, each group with its files, and what sits under `Unassigned`), warnings from `scripts/pack.mjs verify`, open comments handled/deferred by thread ID, files changed while handling comments, refreshed Taco path, and presentation status (`presented as a clickable file` / `opened (user-visible)` / `opened and verified (user-visible)`; report a headless boot check separately as evidence, not as opening).
+End each round with: files assembled/imported, exclusions, the presented structure (entry document, each group with its files, and what sits under `Unassigned`), the destination level and basis with the absolute path, the verification level (V1/V2) and its findings, open comments handled/deferred by thread ID, files changed while handling comments, refreshed Taco path, and presentation status (`presented as a clickable file` / `opened (user-visible)` / `opened and verified (user-visible)`; report a headless boot check separately as evidence, not as opening).
