@@ -33,13 +33,15 @@ linear: 'https://linear.app/castrel/issue/TACO-19'
 - [ ] 退出码三态：`0` 通过 / `1` 有诊断 / `2` 未运行（jsdom 或载荷不可用）；退出码 2 必须打印补救命令且**不**打印通过。
 - [ ] `--harness <out.html>`：自包含临时页（内嵌同一载荷，`--payload cdn` 可选），诊断 JSON 写入 `<output id="result">` 并置 `window.__lintDone = true`。
 - [ ] harness 退出码语义：`0` 仅表示**已写出**，必须打印「校验未运行 —— 请在浏览器中打开并读取结果」，不得出现「通过」字样；`unavailable` 非空同样表示未运行。
+- [ ] harness 载荷：默认 `--payload embedded` 把 shell 载荷以 base64 内联 + Blob URL 导入（同 `src/mermaid-complete.ts`），页面自身离线可用；给出载荷导入超时（~8s），超时写 `unavailable` 并置完成标记，不得悬挂。
+- [ ] 退出码特例：无 Mermaid 单元时 `0` + 显式打印 `0 Mermaid unit(s) (nothing to validate)`；`--dir` 收到文件时报错并提示改用位置参数。
 - [ ] 测试：不可用路径（屏蔽 jsdom / 屏蔽载荷）退出码为 2；**从独立项目 cwd 调用 skill 脚本**时 jsdom 仍能被解析到（跨目录解析回归）；harness 写出后退出码为 0 且不打印通过。
 - [ ] 测试：离线场景全通过。
 
 ## Phase 3: 正确性基线（对应 spec §2.2、A1）
 - [ ] 固化 22 个输入的期望矩阵为脚本级回归：18 合法 + 3 语法无效 + 1 未知类型（覆盖 §2.2 点名的 11 个易漏报族），逐条列出输入与期望 `kind`/退出码。
 - [ ] 断言零误报（合法图全部通过）与零误收（非法输入全部报错）。
-- [ ] **真的在浏览器中执行** `--harness` 页面并断言 `output` 内容与默认模式同构（至少 1 个合法 + 1 个非法 + 1 个 unavailable）；只比较生成的 HTML 文本不算通过。
+- [ ] **真的在浏览器中执行** `--harness` 页面并断言 `output` 内容与默认模式同构（至少 1 个合法 + 1 个非法 + 1 个 unavailable）；只比较生成的 HTML 文本不算通过。作者原型阶段已实测：生成的页面曾因 `??` 与 `||` 混用抛 `SyntaxError` 并永久停在 running——只做文本比较会漏掉该缺陷。
 
 ## Phase 4: 人侧最小集（对应 spec §5、A5–A7）
 - [ ] `src/mermaid.ts`：`parse` 作为 `render` 前置门（无效源码不调 `render`）；`onRenderError`/`onUnavailable` 替换为唯一 `onDiagnostic`；`unavailable` 清 `is-loading` 假进度并给原因与重试；失败后按 id 移除 `#d{id}` 并在成功路径复查。
@@ -55,11 +57,13 @@ linear: 'https://linear.app/castrel/issue/TACO-19'
 - [ ] `skills/taco/references/bundle-format.md`：在 `.mmd` 行附近补一句「内容层不由 bundle 校验覆盖，需用校验器自查」。
 - [ ] 不修改装配流程，不新增必需步骤（`pack.mjs` 已由用户移除，本设计不依赖）。
 
-## Phase 6: 回归
+## Phase 6: 回归与体积实测
 - [ ] `npx vitest run tests/…` 覆盖对应验收条件。
 - [ ] 全量 `npm test`；`npm run check`。
 - [ ] 手工：真实浏览器打开含三类问题的 `.taco.html`，核对人侧文案与位置（spec §7.3）。
 - [ ] 构建 `dist-single/Taco_Spec.taco.html` 与 013 的 `.taco.html`，核对诊断描述与实际一致。
+- [ ] **体积实测（AGENTS.md 强制）**：`node scripts/build-shells.mjs` 后与 spec §12.1 基线比较 Complete/Lite 字节数与 `skills/taco/` 目录增量，把**实测值**回填 spec §12.3，并写明与 §12.4 估算的偏差及原因。
+- [ ] 阈值判定：Lite 若超过 +1%（2,863 字节）或任一 shell 超过 +32 KB，必须在交付说明中主动告知用户并给出数字、原因与可选方案。
 
 ## 明确不做（spec §10，另开 Issue）
 - [ ] 预览刷新频率/闪烁、失败回落源码、缩放状态源、实时/手动开关可达性——已取证，另开 Issue；D1/D2 结论保留待用。

@@ -167,6 +167,8 @@ node scripts/lint-mermaid.mjs --harness <out.html>   # 零依赖模式（浏览�
 ```
 
 - 退出码：`0` 全部通过；`1` 存在诊断；`2` 校验**未运行**（解析器或 DOM 不可用、输入不可读）。三者必须可区分（R5）。
+- 特例：目录/文件里**一个 Mermaid 单元都没有**时退出码为 `0`，但必须显式打印 `0 Mermaid unit(s) (nothing to validate)`，不得只打印「通过」——「没有可校验对象」与「校验通过」在输出上仍可区分。
+- `--dir` 只接受目录；把文件传给 `--dir` 必须报错并提示改用位置参数（实测该误用会以退出码 2 收场，但错误信息应直接指出原因）。
 
 ### 4.2 解析器来源：shell 内嵌载荷写临时文件
 
@@ -203,7 +205,11 @@ Lite shell 场景：`taco-shell-lite.html` **没有**内嵌载荷（按设计从
 
 ### 4.4 零依赖模式：`--harness`
 
-对没有 Node 侧 `jsdom`、但**有浏览器工具**的 Agent，`--harness <out.html>` 写一个自包含临时页：内嵌同一份 mermaid 载荷（或按 `--payload cdn` 使用 pinned CDN）、内联待校验源码、把诊断 JSON 写入 `<output id="result">`。
+对没有 Node 侧 `jsdom`、但**有浏览器工具**的 Agent，`--harness <out.html>` 写一个自包含临时页：内联待校验源码，把诊断 JSON 写入 `<output id="result">`。
+
+**载荷默认必须离线内联**（实测修正）：默认 `--payload embedded` 时把同一份 shell 载荷以 base64 内联进页面，并用 Blob URL 动态导入（与 `src/mermaid-complete.ts:7-19` 同一手法），因此 harness 页面本身不需要网络。`--payload cdn` 才使用 pinned CDN，需显式选择。
+
+**载荷导入必须有超时**（实测修正）：CDN 不可达时动态 `import()` 可能长时间不 settle，页面会永远停在「running」。实现必须给载荷导入设置上限（建议 8s），超时即写入 `unavailable` 并置完成标记，不得悬挂。
 
 **退出码语义必须明确区分**（审查修正）：`--harness` 的 `0` 只表示**harness 已写出**，不表示校验通过。该模式下必须打印「校验未运行 —— 请在浏览器中打开该文件并读取结果」，且**不得**输出任何「通过」字样。页面必须在完成后设置显式标记（如 `window.__lintDone = true` 并把 `{diagnostics, unavailable}` 写入 `output`）；`unavailable` 非空时同样表示「校验未运行」。
 
@@ -358,3 +364,54 @@ Markdown fence 的行号需要换算：定位围栏起始行，源码第 1 行�
 ## 11. 待评审确认的一点
 
 校验器把 `jsdom` 作为硬约束（§4.3）：它是本设计中**唯一**新增外部依赖，换来的是「零误报」。替代路径 `--harness`（浏览器执行）零依赖但要求宿主提供浏览器工具（§4.4）。若要求「任何情况下都零依赖」，则必须在 §4.3 与「无 DOM 会误报 12/18」之间选择后者，本设计不建议。请评审时确认这一取舍。
+
+## 12. 体积与依赖预算（prepare 估算 / develop 实测）
+
+遵循 `AGENTS.md` 的「体积与依赖预算」。本节为 **prepare 阶段估算**，并附一次**原型实测**以把估算锚定在真实数字上（原型不等于最终实现，故同时给出区间）；develop 阶段必须按同一口径重测并把实测值回填到本节。
+
+### 12.1 基线（2026-09-28）
+
+| 产物 | 基线字节 |
+| --- | --- |
+| `dist-single/Taco_Spec.taco.html` | 2,835,255 |
+| `dist-single/Taco_Spec_Lite.taco.html` | 286,281 |
+| `skills/taco/taco-shell.html` | 2,730,006 |
+| `skills/taco/taco-shell-lite.html` | 181,032 |
+| `skills/taco/` 目录合计 | 13,968,819 |
+
+### 12.2 原型实测方法
+
+在临时 worktree 中（不污染交付树）实现方案 §5 的最小集原型（新增 `src/mermaid-diagnostics.ts` 约 3.7 KB 源码、`src/mermaid.ts` 接线、`src/i18n.ts` 双语键、`src/styles.css` 规则），执行 `node scripts/build-shells.mjs` 并与基线比较；同时实现校验器原型 `skills/taco/scripts/lint-mermaid.mjs` 并做功能冒烟。
+
+### 12.3 实测结果
+
+| 产物 | 基线 | 原型 | Δ | Δ% |
+| --- | --- | --- | --- | --- |
+| `dist-single/Taco_Spec.taco.html` | 2,835,255 | 2,836,043 | **+788 字节** | +0.028% |
+| `dist-single/Taco_Spec_Lite.taco.html` | 286,281 | 287,630 | **+1,349 字节** | +0.471% |
+| `skills/taco/scripts/lint-mermaid.mjs`（新增） | — | 10,601 字节（218 行） | **+10,601 字节** | skill 目录 +0.076% |
+
+原始载荷增量（压缩前，可核对）：Lite `taco-rt` +1,179 字节、`taco-rt-css` +717 字节；Complete `taco-rt` +969 字节、`taco-rt-css` +717 字节。
+校验器脚本未被误打进 shell（两个 shell 中都搜不到其内容）。
+
+### 12.4 估算区间（develop 阶段以此为准复核）
+
+| 影响面 | 估算 | 依据 |
+| --- | --- | --- |
+| Complete shell | +0.8 ~ 3 KB（+0.03% ~ 0.11%） | 原型 +788 字节；最终实现还要改 `structured-file-viewer.ts`、`tiptap-code-block.ts` 的诊断呈现与回调接线 |
+| Lite shell | +1.3 ~ 4 KB（+0.5% ~ 1.4%） | 原型 +1,349 字节；同上 |
+| `skills/taco/` | +11 ~ 16 KB（+0.08% ~ 0.11%） | 原型 10,601 字节；最终脚本含更多参数与错误分支 |
+| `.taco.html` 产物 | 每个产物随所用 shell 同幅增长（约 +1 ~ 3 KB） | 产物内嵌整个 shell |
+
+**阈值结论**：原型实测远低于 `AGENTS.md` 的告知阈值（任一 shell 增长 ≥1% 或 ≥32 KB）。**风险点是 Lite 的上界**：若最终实现把 Lite 推到 +1% 以上（>2,863 字节），按规则必须主动告知用户并给出数字。develop 阶段必须实测确认落点。
+
+### 12.5 依赖与联网
+
+| 项 | 结论 |
+| --- | --- |
+| 运行时新增联网 | **无**。校验器默认路径从 shell 内嵌载荷解出（离线）；`--harness` 默认内联同一载荷（离线）；`--payload cdn` 才联网。shell 与产物自身的联网行为不变（Lite 仍按既有设计在文档含 Mermaid 时按需加载 pinned CDN，FR-007a/SC-004 不变） |
+| 新增外部依赖 | **`jsdom`**，仅 Agent 侧校验器使用，属**安装期**依赖（调用目录 `npm i -D jsdom` 一次），不进入 shell、不进入 `.taco.html` 产物、不影响接收方 |
+| 新增发布包/服务 | 无。不新增 npm 包、不新增服务、不改 `.mmd` 的 `text/plain` 存储与 bundle 格式 |
+| 版本漂移风险 | 无：默认载荷取自交付所用 shell，与接收方运行时字节一致 |
+
+**取舍（§11 复核用）**：`jsdom` 是唯一新增依赖，换来「零误报」。若要求零依赖，则只能用 `--harness`（浏览器执行）而放弃默认离线路径，或接受 §2.2 证明的 12/18 误报——两者都不建议。
