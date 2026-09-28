@@ -125,17 +125,21 @@ Comments:
 - Preserve existing review threads and their history when refreshing; never fabricate or resolve them. Runtime normalization may change serialization, not their meaning.
 - Each thread's `anchor.path` must reference a file present in `files`. If a commented source file disappeared, retain its previous bundle entry and report it; do not silently drop the file or its comments.
 
+### Checkpoints and document status
+
+When creating, modifying, inspecting, or reporting a Checkpoint graph or its document statuses, read `references/checkpoints.md` before acting. The main workflow below still applies: preserve an existing graph and status table across refreshes; omit `checkpoints` when the review contract does not call for them.
+
+**Authoring with instructions**: When a Checkpoint document defines an `instruction` string, an Agent assigned to author, expand, or review that document **MUST read and follow its instruction** as authoritative task constraints (e.g. required sections, dependencies, or formatting rules). Checkpoint instructions can be read directly from `checkpoints.nodes[].documents[].instruction`, via `window.taco.getCheckpoints()`, or in the right panel's `Instruction` tab.
+
 Writing rules:
 
 - Prefer `scripts/pack.mjs`; it performs every rule in this list. These rules are the fallback when Node is unavailable and the checklist when something fails to load.
-
 - Serialize with `JSON.stringify(bundle, null, 2)`, then replace every `<` with `\u003c`. That one escape is what guarantees a literal `</script>` can never appear in the block. Escaping `>`, `&`, `\u2028`, `\u2029` is optional hardening, never a load requirement; when you do it, build the pattern with `String.fromCodePoint(0x2028)` / `(0x2029)` rather than a regex literal, which would break your script before it runs.
 - Insert the JSON into the `#taco-document` block by matching it and passing a **callback** to `replace` — `html.replace(dataBlock, () => replacement)` — or by splicing at the block's index. A plain string replacement is unsafe: `$&`, `` $` ``, `$'`, and `$1` inside the JSON would be treated as replacement patterns. Update `<title>` the same way.
 - `<title>` in the head must be `<bundle title> — Taco` (with `&`, `<`, `>` escaped).
 - Validate before writing: `JSON.parse` the exact escaped string you will insert (it must round-trip), then check the shape rules above. Write the whole file to a temporary sibling and rename it over the destination, so a failure never truncates the existing Taco.
 - Only the data block and `<title>` change. Everything else in the shell stays byte-identical.
 - Keep bundled content self-contained: PNG assets as data URIs and no external document assets. Complete never fetches runtime dependencies; Lite fetches only its pinned public CDN libraries.
-
 ## Workflow
 
 ### 0. Shape the review: decide what the human will see
