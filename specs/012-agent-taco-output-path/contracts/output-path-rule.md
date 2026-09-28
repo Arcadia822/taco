@@ -52,7 +52,7 @@ placeholder   = "feature"                  ; 目前唯一受支持的占位符
 
 | 来源 | 产生条件 | 规则值 |
 | --- | --- | --- |
-| S1 显式声明 | 指令文件中有 `taco-output-dir` | 声明的 `<value>`，其中的 `{feature}` 用 `docDirRel` 替换 |
+| S1 显式声明 | 指令文件中有 `taco-output-dir` | 声明的 `<value>`，其中的 `{feature}` 用 `basename(docDir)` 替换 |
 | S2 扩展约定 | 见下方"实际安装"判定 | `docDirRel`（本次被打包目录的仓库相对路径） |
 
 **S2 的"实际安装"判定**（与 `extensions/taco/commands/update.md:17` 的新建/刷新要求对齐）：
@@ -70,7 +70,7 @@ placeholder   = "feature"                  ; 目前唯一受支持的占位符
 - 只有 S2 → 用 S2。
 - S1 与 S2 同时存在：解析后**指向同一目录**则取该目录；否则 `conflict`，停止并列出两个来源。
 - 仅有 `.specify/`（已初始化 Spec Kit 但未安装 Taco 扩展）→ **不产生规则**，继续通用级联。不得因为 `.specify/` 的存在而改变输出落点。
-- `docDirRel` 为空（被打包目录就是仓库根）→ S2 不适用，记 `root_unresolvable` 告警（见 §6.4）。
+- `docDirRel` 为空（被打包目录就是仓库根）→ S2 不适用，`resolveRule` 返回 `root_unresolvable`（终止，见 §6.4）；不使用 `needs_feature`。
 
 ## 4. 解析类型与语义
 
@@ -78,15 +78,23 @@ placeholder   = "feature"                  ; 目前唯一受支持的占位符
 
 ```text
 parseFile(text)                -> { state: 'absent' | 'ok' | 'malformed', value?, line?, reason? }
-resolveRule(workspaceRoot, docDirRel, operation)
-                               -> { state: 'absent' | 'ok' | 'conflict' | 'malformed', dir?, sources[], reason? }
+resolveRule(input)             -> { state: 'absent' | 'ok' | 'conflict' | 'malformed'
+                                          | 'needs_feature' | 'root_unresolvable',
+                                    dir?, sources[], reason? }
 resolveOutputPath(options)     -> { level, dir, file, root, sources[], warnings[], error? }
+
+input = { workspaceRoot, docDirRel, docDirBase, operation,
+          existingShellVariant? }        // operation 'create' | 'refresh'
 ```
 
-- `resolveRule` **必须**接收 `docDirRel`（本次被打包目录的仓库相对 POSIX 路径）与 `operation`（`create` | `refresh`）：没有它们就无法计算 S2 的目录，也无法按操作类型判定 S2 是否成立。
+- `resolveRule` **必须**接收：
+  - `docDirRel`（本次被打包目录的仓库相对 POSIX 路径）与 `docDirBase`（其 basename）——没有它们无法计算 S2 目录，也无法替换 S1 的 `{feature}`；
+  - `operation`（`create` | `refresh`）；
+  - `existingShellVariant`（`'complete'` | `'lite'` | `null`）——刷新时判定"与既有 Taco 的 shell 变体一致"所必需；新建时为 `null`。
 - `conflict` 只可能出现在 `resolveRule`；`malformed` 可能来自任一文件。
-- `needs_feature` 的产生位置：`docDir` 缺失、`docDir` 等于仓库根、或 `docDirRel` 的 basename 无法安全作为路径段时，`resolveRule` 对外返回 `needs_feature`（由 `resolveOutputPath` 转成终止性错误），**不降级**到 L3/L4/L5。
-- `{feature}` 的取值 = `basename(docDir)`，由调用方传入的 DOC_DIR 推导，不接受手工输入的 `--feature`。
+- `needs_feature` 的产生位置：`docDirBase` 缺失或无法安全作为路径段（例如含 `/`、`.`、`..`），且该值被 S1 的 `{feature}` 或 S2 需要时——`resolveRule` 返回 `needs_feature`（由 `resolveOutputPath` 转成终止性错误），**不降级**到 L3/L4/L5。
+- `root_unresolvable` 的产生位置：`docDirRel` 为空（被打包目录就是仓库根，见 §6.4）。与 `needs_feature` 互斥：仓库根用前者，basename 不可用用后者。
+- `{feature}` 的取值 = `docDirBase`（即 `basename(docDir)`），由调用方传入的 DOC_DIR 推导，不接受手工输入的 `--feature`；`docDirRel` 只用于 S2 的目录值，不参与 `{feature}` 替换。
 
 ## 5. 决策级联
 
@@ -121,6 +129,8 @@ title = --title ?? 既有 bundle 的 title ?? portableTitleBase(root)
 ```
 
 `portableTitleBase` 与 `pack.mjs:64-69` 同算法：NFKC 归一化 → 非字母数字下划线连字符替换为 `_` → 折叠/裁剪 `_`、`-` → 空值回退 `Untitled`。
+
+**`--title` 必须"未给即不传"**：`pack.mjs:836` 用 `options.get('title') ?? priorBundle?.title ?? portableTitleBase(rootPath)`，传入空字符串会得到 `''` → stem `Untitled`，与省略时的结果不同。写盘序列只在确实有标题时才加 `--title`。
 
 **禁区优先于 L0**：目标落在 skill 目录、extension 目录、模板目录、`node_modules/`、`.git/` 之内时，无论谁指定都拒绝写盘（`forbidden`）。
 

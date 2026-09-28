@@ -53,7 +53,7 @@ Agent 自主创建 `.taco.html` 时，落盘位置目前没有规范。实际表
 | L4 | 是 git 仓库但没有上述文档目录 | `<repo>/Tacos/` | 不新建空的 `docs/` |
 | L5 | 非 git 上下文 | `~/Documents/Tacos/` | Windows 用 `%USERPROFILE%\Documents\Tacos` |
 
-文件名固定为 `<portableTitleBase(title)>.taco.html`。该归一化与 `pack.mjs:64-69` 同算法（NFKC → 非字母数字下划线连字符替换为 `_` → 裁剪 `_`/`-` → 空值回退 `Untitled`）；`pack.mjs:838-841` 会强制文件名 stem 与标题一致，因此**目标文件 = 目标目录 + 标题**，二者不可各自决定。`title` 的缺省回退也须与 `pack.mjs` 一致：`--title ?? 既有 bundle title ?? portableTitleBase(root)`。
+文件名固定为 `<portableTitleBase(title)>.taco.html`。该归一化与 `pack.mjs:64-69` 同算法（NFKC → 非字母数字下划线连字符替换为 `_` → 裁剪 `_`/`-` → 空值回退 `Untitled`）；`pack.mjs:838-841` 会强制文件名 stem 与标题一致，因此**目标文件 = 目标目录 + 标题**，二者不可各自决定。`title` 的缺省回退也须与 `pack.mjs:836` 一致：`--title ?? 既有 bundle title ?? portableTitleBase(root)`，且**未给标题时不得传空字符串**（传入 `''` 会得到 stem `Untitled`，与省略不同）。
 
 ### 3.2 L0：用户显式指定
 
@@ -72,7 +72,7 @@ LP 位于 L2 之前（`L0 > L1 > LP > L2 > L3 > L4`），理由：它是用户�
 
 | 来源 | 产生条件 | 规则值 |
 | --- | --- | --- |
-| S1 显式声明 | `AGENTS.md` / `CLAUDE.md` / `.cursorrules` 中有 `taco-output-dir:`（语法见契约） | 声明的值，可含 `{feature}` |
+| S1 显式声明 | `AGENTS.md` / `CLAUDE.md` / `.cursorrules` 中有 `taco-output-dir:`（语法见契约） | 声明的值，其中 `{feature}` 替换为 `basename(DOC_DIR)` |
 | S2 扩展约定 | 见下表"实际安装"判定 | 本次被打包目录的仓库相对路径 |
 
 **S2 的"实际安装"判定**（与 `extensions/taco/commands/update.md:17` 对齐）：
@@ -89,7 +89,7 @@ LP 位于 L2 之前（`L0 > L1 > LP > L2 > L3 > L4`），理由：它是用户�
 - 仅存在 `.specify/`（已初始化 Spec Kit 但未安装 Taco 扩展）→ **不产生规则**，继续 L3/L4/L5。不得因为 `.specify/` 的存在而改变输出落点。
 - 规则文件本身是符号链接 → 拒绝（与 `extensions/taco/bin/taco.mjs` 的 `readPolicyFile` 同策略）。
 
-`{feature}` 的取值 = **本次被打包目录（DOC_DIR）的 basename**。含 `{feature}` 但 DOC_DIR 缺失、DOC_DIR 等于仓库根、或 basename 无法安全作为路径段时 → 停止并询问用户（`needs_feature`），不降级。
+`{feature}` 的取值 = **本次被打包目录（DOC_DIR）的 basename**（`docDirRel` 只用于 S2 的目录值）。含 `{feature}` 但 DOC_DIR 缺失、或 basename 无法安全作为路径段时 → 停止并询问用户（`needs_feature`）；DOC_DIR 等于仓库根是另一类终止（`root_unresolvable`，见 3.6）。两者不降级。
 
 本项目自身（Taco 仓库）应声明 `taco-output-dir: specs/{feature}`，使设计规格与其评审产物同目录，与 `specs/011-*` 既有形态一致。
 
@@ -105,7 +105,7 @@ LP 位于 L2 之前（`L0 > L1 > LP > L2 > L3 > L4`），理由：它是用户�
 - **迁移**（仅用户显式要求，顺序固定）：读取校验旧 bundle → `mkdir -p` 新目标父目录 → 复制旧文件到新路径 → 对新路径打包（`pack.mjs` 把该副本当 prior bundle 合并）→ 校验 `docId` 与 `comments`/`checkpoints`/`navigation` 逐字段一致 → 报告新旧路径。不删除旧文件，除非用户显式要求。
 - **首次创建**：目标父目录可能不存在，写盘环节必须先 `mkdir -p` 再打包（`pack.mjs:701-703` 的 `atomicWrite` 在目标目录内写临时文件，不创建父目录）。
 - **`root` 必须显式传入**，按"刷新 → 既有 bundle 的 `root`；新建 → 项目约定；无约定 → `basename(DOC_DIR)`（= `pack.mjs:780` 默认，也是本仓库 `specs/011-*` 的既有形态）"确定，并写入报告。不依赖默认值，避免刷新时的 root 不匹配只能由 `pack.mjs:790-791` 在打包中途报错。
-- **DOC_DIR 等于仓库根**：不支持。空 `--root` 被 `pack.mjs:47-51` 拒绝；写成 `.` 虽能通过 root 校验，却会生成 `./<file>` 形式的 `files[].path`，不满足文件路径安全规则（`pack.mjs:47-49,206-208`）。此情形返回 `root_unresolvable` 并停止，提示改为指向子目录；S2 同样不适用。
+- **DOC_DIR 等于仓库根**：不支持。空 `--root` 被 `pack.mjs:47-51` 拒绝；写成 `.` 虽能通过 root 校验，却会生成 `./<file>` 形式的 `files[].path`，不满足文件路径安全规则（`pack.mjs:47-49,206-208`）。此情形返回 `root_unresolvable` 并停止，提示改为指向子目录；S2 同样不适用。该终止类型与 `needs_feature` 互斥：仓库根用前者，basename 不可安全使用用后者。
 - **目标占用预检**：目标 `.taco.html` 已存在且其 `docId` 既非本次刷新对象、也非本次迁移来源 → 停止并报告（否则 `pack.mjs:854-860` 会把别人的审阅文件当成 prior bundle 合并）。
 - **幂等**：相同输入（workspace、DOC_DIR、operation、既有文件、用户指令、规则文件内容）→ 相同目标路径、文件名与 `root`。
 
@@ -141,12 +141,13 @@ L0 的标题/文件名不一致、目标被他人占用、规则冲突、`docDir
 新增 `skills/taco/scripts/output-path.mjs`（skill 自带的 Node 辅助脚本，与 `pack.mjs`、`checkpoints.mjs` 同级同性质，**不是** `taco-cli`）：
 
 ```sh
-node skills/taco/scripts/output-path.mjs --doc-dir <dir> [--operation create|refresh] \
+node skills/taco/scripts/output-path.mjs --doc-dir <dir> --operation <create|refresh> \
   [--requested <path>] [--existing <x.taco.html>] [--title "<Title>"] \
   [--workspace <root>] [--personal] [--home <dir>] [--json]
 ```
 
-- `--doc-dir` 是**必填**输入：上下文判定、`{feature}` 与 `root` 推导都由它出发，避免"手填 feature 与真实被打包目录脱节"。
+- `--doc-dir` 与 `--operation` 是**必填**输入：上下文判定、S2 是否成立、`{feature}` 与 `root` 推导都由它们出发，避免"手填 feature 与真实被打包目录脱节"。
+- 刷新时 `--existing` 既决定 L1，也提供 `resolveRule` 判定 S2 所必需的既有 shell 变体。
 - 不提供 `--feature` 覆盖参数；需要它才能工作说明上下文不完整，应走 `needs_feature` 分支。
 - 只做解析与报告，不写文件系统（除读取规则文件、`git rev-parse`/`check-ignore`）。
 - 理由：级联的分支（规则冲突、`{feature}`、gitignore、既有文件身份）容易被不同 Agent 各自解释；固化成可测试函数后，验收从"Agent 自称遵守"变为"测试可复现"。
@@ -200,13 +201,13 @@ node skills/taco/scripts/output-path.mjs --doc-dir <dir> [--operation create|ref
 3. L1（`--existing`）在存在项目规则时仍胜出；`--requested` 与 `--existing` 同时给出 → `--requested` 胜出。
 4. LP：git 仓库内 `--personal` → 个人归档目录，而非 L2/L3/L4 结果。
 5. L2-S1：`AGENTS.md` 声明 + DOC_DIR → 规则目录；`CLAUDE.md` 声明不同值 → `conflict`；同值 → 取首个；同文件两条（含同值）→ `malformed`。
-6. L2-S2：`--operation create` 且有 `assets/taco-shell.html` 而无声明 → 命中 DOC_DIR；只有 `.specify/` 无 assets → 落到 L3；只有 `taco-shell-lite.html` 且 `create` → 不成立 S2 并给出原因，`refresh` 既有 Lite Taco → 成立。
+6. L2-S2：`--operation create` 且有 `assets/taco-shell.html` 而无声明 → 命中 DOC_DIR；只有 `.specify/` 无 assets → 落到 L3；只有 `taco-shell-lite.html` 时：`create` → 不成立 S2 并给出原因，`refresh` 既有 Lite Taco（传入 shell 变体 `lite`）→ 成立，`refresh` 既有 Complete Taco（变体 `complete`）→ 不成立。
 7. L2 冲突：S1 与 S2 同时存在且不同 → `conflict`；相同 → 取该目录。
 8. L3：仅 `docs/` → `docs/Tacos`；同时有 `docs/` 与 `specs/` → `docs/Tacos`；仅 `specs/` → `specs/Tacos`。
 9. L4：无文档目录的 git 仓库 → `<repo>/Tacos`。
 10. L5：非 git 目录 → `$HOME/Documents/Tacos`（注入 `HOME`）；`HOME`/`USERPROFILE` 皆缺失 → 停止且不返回 cwd。
 11. 非法值矩阵（绝对路径、`~`、`..`、反斜杠、通配符、`.taco.html` 结尾、未知占位符、重复占位符）→ `malformed` + 具体原因；规则出现在 fenced code block / HTML 注释 → 未声明；围栏未闭合 → `malformed`；规则文件是符号链接 → `malformed`。
-12. 禁区目标（`node_modules/`、skill 目录、extension 目录、`.git/`）→ 拒绝，即使 L0 指定；`docDir` 等于仓库根 → `root_unresolvable`；幂等（同输入两次结果深比较相等）。
+12. 禁区目标（`node_modules/`、skill 目录、extension 目录、`.git/`）→ 拒绝，即使 L0 指定；`docDir` 等于仓库根 → `root_unresolvable`；`basename` 不可安全使用 → `needs_feature`；幂等（同输入两次结果深比较相等）。
 
 行为级（真实 `pack.mjs` + 读回 bundle，13–20，共 8 项，覆盖全部主要写入路径）：
 
@@ -239,7 +240,7 @@ node skills/taco/scripts/output-path.mjs --doc-dir <dir> [--operation create|ref
 
 ```sh
 node skills/taco/scripts/output-path.mjs --doc-dir specs/012-agent-taco-output-path \
-  --title 012-agent-taco-output-path --json
+  --operation create --title 012-agent-taco-output-path --json
 ```
 
 期望命中 L2-S1、返回 `dir = specs/012-agent-taco-output-path` 与 `root = 012-agent-taco-output-path`；随后 `mkdir -p` → `pack.mjs --dir <DOC_DIR> --root <root> --out <file>` → `verify` 无 warning。

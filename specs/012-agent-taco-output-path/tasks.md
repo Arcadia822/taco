@@ -16,10 +16,10 @@ status: 'Draft'
 
 ## 阶段 3：解析器与测试
 
-- [ ] T4 新增 `skills/taco/scripts/output-path.mjs`：`parseFile` / `resolveRule(workspaceRoot, docDirRel, operation)` / `resolveOutputPath(options)` + CLI（`--doc-dir` 与 `--operation` 必填，`--requested` / `--existing` / `--title` / `--personal` / `--workspace` / `--home` / `--json`）；返回值含 `{ level, dir, file, root, sources, warnings }`。
+- [ ] T4 新增 `skills/taco/scripts/output-path.mjs`：`parseFile` / `resolveRule({ workspaceRoot, docDirRel, docDirBase, operation, existingShellVariant })` / `resolveOutputPath(options)` + CLI（`--doc-dir` 与 `--operation` 必填，`--requested` / `--existing` / `--title` / `--personal` / `--workspace` / `--home` / `--json`）；返回值含 `{ level, dir, file, root, sources, warnings }`；`--title` 未给时不得传空串给 `pack.mjs`。
 - [ ] T5 单文件解析：剥离 fenced code block 与 HTML 注释；每文件至多一条（含同值）→ `malformed`；围栏/注释未闭合 → `malformed`；规则文件为符号链接 → `malformed`。
-- [ ] T6 规则链：`RULE_FILES` 查找链、同值取首个、不同值 `conflict`；`{feature}` 在同一值中至多出现一次，重复即 `malformed`；S2 按 `operation` 判定（`create` 需 Complete shell；`refresh` 需与既有 shell 变体一致的 assets）；S1 与 S2 不同 → `conflict`；仅 `.specify/` 不产生规则。
-- [ ] T7 `{feature}` 由 `docDir` 的 basename 推导；`docDir` 缺失 / 等于仓库根 / 段不安全 → `needs_feature` 或 `root_unresolvable`，不降级；不提供 `--feature` 覆盖。
+- [ ] T6 规则链：`RULE_FILES` 查找链、同值取首个、不同值 `conflict`；`{feature}` 由 `docDirBase` 替换且在同一值中至多出现一次，重复即 `malformed`（`docDirRel` 只用于 S2）；S2 按 `operation` 判定（`create` 需 Complete shell；`refresh` 需与既有 shell 变体一致的 assets，变体由 `existingShellVariant` 传入）；S1 与 S2 不同 → `conflict`；仅 `.specify/` 不产生规则。
+- [ ] T7 `{feature}` 由 `docDir` 的 basename 推导；`docDir` 缺失或 basename 段不安全 → `needs_feature`；`docDir` 等于仓库根 → `root_unresolvable`（两者互斥），均不降级；不提供 `--feature` 覆盖。
 - [ ] T8 `root` 推导：刷新取既有 bundle 的 `root`；新建取项目约定值，无约定取 `basename(docDir)`；`docDir` 等于仓库根 → `root_unresolvable` 停止。
 - [ ] T9 `title` 缺省回退与 `pack.mjs` 对齐（`--title ?? 既有 bundle title ?? portableTitleBase(root)`）；`portableTitleBase` 与 `pack.mjs:64-69` 同算法并有断言。
 - [ ] T10 路径安全：`realpath` 已存在前缀的包含性判定、禁区拒绝（skill/extension/templates/`node_modules`/`.git`）、L0 绝对路径同样受禁区约束；目标文件为符号链接 → 拒绝；目标 `docId` 冲突预检。

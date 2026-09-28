@@ -40,10 +40,12 @@ export function parseFile(text)
 
 // 规则链：读取 RULE_FILES（S1）+ 判定扩展安装（S2），再合并比较
 //   workspaceRoot 仓库根；docDirRel 被打包目录的仓库相对 POSIX 路径；
-//   operation 'create' | 'refresh' 决定 S2 的成立条件
-// -> { state: 'absent' | 'ok' | 'conflict' | 'malformed' | 'needs_feature',
+//   docDirBase 其 basename（用于替换 S1 的 {feature}）；
+//   operation 'create' | 'refresh'；existingShellVariant 'complete' | 'lite' | null
+// -> { state: 'absent' | 'ok' | 'conflict' | 'malformed'
+//          | 'needs_feature' | 'root_unresolvable',
 //      dir?, sources[], reason? }
-export async function resolveRule(workspaceRoot, docDirRel, operation)
+export async function resolveRule({ workspaceRoot, docDirRel, docDirBase, operation, existingShellVariant })
 
 // 级联
 // -> { level, dir, file, root, sources[], warnings[], error? }
@@ -53,6 +55,8 @@ export async function resolveOutputPath(options)
 `options`：`{ docDir, operation, requestedPath?, existingTacoPath?, title?, personal?, workspaceRoot?, homeDir?, env? }`。
 
 - `docDir` **必填**；`operation` **必填**（`create` | `refresh`）。二者共同决定上下文判定、S2 判定、`{feature}` 取值与 `root` 建议值。
+- `existingTacoPath`（刷新/迁移）除决定 L1 外，还提供 S2 判定所必需的既有 shell 变体。
+- 失败类型互斥：`docDir` 等于仓库根 → `root_unresolvable`；`basename(docDir)` 无法安全使用 → `needs_feature`。
 - `personal`（CLI `--personal`）是 LP 级别的显式触发输入。
 - 不提供 `--feature` 覆盖；上下文不完整时返回 `needs_feature`。
 - `title` 缺省回退必须与 `pack.mjs` 对齐：`--title ?? 既有 bundle title ?? portableTitleBase(root)`；导出与 `pack.mjs:64-69` 同算法的 `portableTitleBase`，并在测试中断言一致。
@@ -64,7 +68,7 @@ export async function resolveOutputPath(options)
 3. `requestedPath` → `L0`（校验形态：目录，或 stem 对齐的 `.taco.html`；否则 `malformed`）。
 4. `existingTacoPath` 且无 `requestedPath` → `L1`。
 5. `personal` 或会话已声明的个人意图 → `LP`。
-6. `resolveRule(workspaceRoot, docDirRel, operation)`：`ok` → `L2`；`conflict` / `malformed` / `needs_feature` → 终止。
+6. `resolveRule({ workspaceRoot, docDirRel, docDirBase, operation, existingShellVariant })`：`ok` → `L2`；`conflict` / `malformed` / `needs_feature` / `root_unresolvable` → 终止。
 7. 探测 `docs` → `doc` → `documents` → `specs`（仅目录，按序）→ `L3` = `<found>/Tacos`。
 8. git 仓库 → `L4` = `<repo>/Tacos`；否则 `L5` = `<home>/Documents/Tacos`（`HOME ?? USERPROFILE`，皆缺 → `needs_home`）。
 9. `root` 推导（见 2.4）与公共后置：路径安全（`realpath` 已存在前缀的包含性 + 禁区）、`{feature}` 替换后再次校验、目标文件符号链接拒绝、目标 `docId` 冲突预检、`git check-ignore` 告警。
@@ -73,19 +77,41 @@ export async function resolveOutputPath(options)
 
 解析器不写文件系统。写盘由 Agent 按契约与 SKILL.md 的顺序执行：
 
+新建（`OP=create`；`TITLE` 可选，未给则不加 `--title`）：
+
 ```sh
 RESULT=$(node skills/taco/scripts/output-path.mjs --doc-dir "$DOC_DIR" \
-  --operation "${OP}" --title "$TITLE" --json)
+  --operation create ${REQUESTED:+--requested "$REQUESTED"} ${TITLE:+--title "$TITLE"} --json)
 OUT=$(jq -r .file <<<"$RESULT"); ROOT=$(jq -r .root <<<"$RESULT")
 mkdir -p "$(dirname "$OUT")"          # pack.mjs 不创建父目录
-node skills/taco/scripts/pack.mjs --dir "$DOC_DIR" --root "$ROOT" --title "$TITLE" --out "$OUT"
+node skills/taco/scripts/pack.mjs --dir "$DOC_DIR" --root "$ROOT" \
+  ${TITLE:+--title "$TITLE"} --out "$OUT"
 node skills/taco/scripts/pack.mjs verify "$OUT"
 ```
 
+刷新（`OP=refresh`；`OUT`/`ROOT` 都来自既有 Taco，不重新推导）：
+
+```sh
+RESULT=$(node skills/taco/scripts/output-path.mjs --doc-dir "$DOC_DIR" \
+  --operation refresh --existing "$EXISTING" --json)
+OUT=$(jq -r .file <<<"$RESULT"); ROOT=$(jq -r .root <<<"$RESULT")
+node skills/taco/scripts/pack.mjs --dir "$DOC_DIR" --root "$ROOT" --out "$OUT"
+node skills/taco/scripts/pack.mjs verify "$OUT"
+```
+
+迁移（用户显式要求，父目录可能不存在）：
+
+```sh
+mkdir -p "$(dirname "$NEW")"   # 先建目录，否则下一步 cp 失败
+cp "$EXISTING" "$NEW"          # 复制后 $NEW 上的 bundle 与旧文件逐字段相同
+node skills/taco/scripts/pack.mjs --dir "$DOC_DIR" --root "$ROOT" --title "$TITLE" --out "$NEW"
+# 校验 docId 与 comments/checkpoints/navigation 逐字段一致；不删除旧文件
+```
+
+- `--title` **按需传递**：`pack.mjs:836` 收到空字符串会得到 stem `Untitled`，与省略不同。
 - **刷新**：`ROOT` 与 `OUT` 都取自既有 Taco（`--existing`），不重新推导。
-- **迁移**：`mkdir -p` 新父目录 → `cp <旧> <新>` → 对 `<新>` 打包（`pack.mjs` 把该副本当 prior bundle 合并）→ 校验 `docId` 与 `comments`/`checkpoints`/`navigation` 逐字段一致；不删除旧文件。
 - **目标占用预检**：`OUT` 已存在且其 `docId ≠ 本次 docId（刷新对象的或迁移来源的）` → 停止，不调用 pack。
-- **DOC_DIR 等于仓库根**：解析器返回 `root_unresolvable`，停止并提示改为指向子目录（`pack.mjs` 不接受空 `--root`）。
+- **DOC_DIR 等于仓库根**：解析器返回 `root_unresolvable`，停止并提示改为指向子目录（空 `--root` 被 `pack.mjs:47-51` 拒绝；写成 `.` 会生成 `./<file>` 形式、不满足文件路径安全规则的 `files[].path`）。
 
 ### 2.4 `root` 推导
 
