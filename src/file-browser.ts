@@ -1045,21 +1045,7 @@ export class FileBrowser {
     this.instructionPanel.id = 'taco-instruction-panel'
     this.instructionPanel.setAttribute('role', 'tabpanel')
     this.instructionContent = el('div', 'instruction-body')
-    const copyBtn = el('button', 'instruction-copy-button', this.t.copyInstruction) as HTMLButtonElement
-    copyBtn.type = 'button'
-    copyBtn.addEventListener('click', async () => {
-      const instruction = this.getSelectedInstruction()
-      if (!instruction) return
-      try {
-        await navigator.clipboard.writeText(instruction)
-        this.toast(this.t.instructionCopied)
-      } catch {
-        // Clipboard write failed
-      }
-    })
-    const toolbar = el('div', 'instruction-toolbar')
-    toolbar.append(copyBtn)
-    this.instructionPanel.append(toolbar, this.instructionContent)
+    this.instructionPanel.append(this.instructionContent)
 
     panel.append(header, this.outlineList, this.commentList, this.instructionPanel)
     return panel
