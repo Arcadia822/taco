@@ -1161,21 +1161,27 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 }
 .media-document-preview {
   display: block;
+}
+.media-document-preview.image-preview {
+  cursor: pointer;
   max-width: 100%;
   max-height: 100%;
   width: auto;
   height: auto;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, .12), 0 2px 6px -1px rgba(0, 0, 0, .05);
-}
-.media-document-preview.image-preview {
-  cursor: pointer;
   object-fit: contain;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 .media-document-preview.video-preview {
   max-width: 100%;
   max-height: 100%;
+  width: auto;
+  height: auto;
   background: #000;
+  border: none;
+  border-radius: 6px;
+  box-shadow: none;
 }
 .media-document-preview.audio-preview {
   width: 100%;
@@ -1183,16 +1189,18 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 }
 .media-preview-dialog,
 .png-preview {
-  width: min(90vw, 1000px);
-  max-height: min(90vh, 900px);
+  width: fit-content;
+  max-width: min(92vw, 1200px);
+  max-height: min(92vh, 900px);
   padding: 16px;
-  overflow: auto;
+  margin: auto;
   border: 1px solid var(--line-strong);
   border-radius: 14px;
   background: var(--surface);
   color: var(--ink);
   box-shadow: 0 4px 20px -2px rgba(0, 0, 0, .12), 0 2px 6px -1px rgba(0, 0, 0, .05);
   cursor: pointer;
+  box-sizing: border-box;
 }
 .media-preview-dialog::backdrop,
 .png-preview::backdrop {
@@ -1202,13 +1210,12 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .media-preview-dialog img,
 .png-preview img {
   display: block;
-  margin: 0 auto;
-  max-width: 100%;
-  max-height: calc(90vh - 48px);
+  max-width: min(88vw, 1160px);
+  max-height: min(86vh, 860px);
   width: auto;
   height: auto;
   object-fit: contain;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: default;
 }
 
