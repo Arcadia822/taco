@@ -109,6 +109,9 @@ function validateCheckpoints(value, root) {
       if (document.optional !== void 0 && typeof document.optional !== "boolean") {
         return fail(`${atDocument}.optional`, "Optional must be a boolean");
       }
+      if (document.instruction !== void 0 && typeof document.instruction !== "string") {
+        return fail(`${atDocument}.instruction`, "Instruction must be a string");
+      }
     }
   }
   for (let i = 0; i < checkpoint.nodes.length; i++) {
@@ -147,7 +150,11 @@ function checkpointMembership(state) {
   const membership = /* @__PURE__ */ new Map();
   for (const node of state.nodes) {
     for (const document of node.documents) {
-      membership.set(document.path, { nodeId: node.id, optional: document.optional === true });
+      membership.set(document.path, {
+        nodeId: node.id,
+        optional: document.optional === true,
+        ...document.instruction !== void 0 && { instruction: document.instruction }
+      });
     }
   }
   return membership;
@@ -178,6 +185,7 @@ function resolveCheckpoints(bundle) {
         return {
           path: ref.path,
           optional: ref.optional === true,
+          ...ref.instruction !== void 0 && { instruction: ref.instruction },
           status: record?.status ?? "todo",
           exists: exists.has(ref.path),
           ...record && { updatedAt: record.updatedAt }

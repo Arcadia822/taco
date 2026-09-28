@@ -5,6 +5,7 @@ export type DocumentStatus = 'todo' | 'in_progress' | 'complete' | 'freeze'
 export interface CheckpointDocumentRef {
   path: string
   optional?: boolean
+  instruction?: string
 }
 
 export interface CheckpointNode {
@@ -30,6 +31,7 @@ export interface CheckpointsState {
 export interface ResolvedCheckpointDocument {
   path: string
   optional: boolean
+  instruction?: string
   status: DocumentStatus
   exists: boolean
   updatedAt?: string
@@ -189,6 +191,9 @@ export function validateCheckpoints(
       if (document.optional !== undefined && typeof document.optional !== 'boolean') {
         return fail(`${atDocument}.optional`, 'Optional must be a boolean')
       }
+      if (document.instruction !== undefined && typeof document.instruction !== 'string') {
+        return fail(`${atDocument}.instruction`, 'Instruction must be a string')
+      }
     }
   }
   for (let i = 0; i < checkpoint.nodes.length; i++) {
@@ -227,11 +232,15 @@ export function validateCheckpoints(
 
 export function checkpointMembership(
   state: CheckpointsState,
-): ReadonlyMap<string, { nodeId: string; optional: boolean }> {
-  const membership = new Map<string, { nodeId: string; optional: boolean }>()
+): ReadonlyMap<string, { nodeId: string; optional: boolean; instruction?: string }> {
+  const membership = new Map<string, { nodeId: string; optional: boolean; instruction?: string }>()
   for (const node of state.nodes) {
     for (const document of node.documents) {
-      membership.set(document.path, { nodeId: node.id, optional: document.optional === true })
+      membership.set(document.path, {
+        nodeId: node.id,
+        optional: document.optional === true,
+        ...(document.instruction !== undefined && { instruction: document.instruction }),
+      })
     }
   }
   return membership
@@ -269,6 +278,7 @@ export function resolveCheckpoints(bundle: {
         return {
           path: ref.path,
           optional: ref.optional === true,
+          ...(ref.instruction !== undefined && { instruction: ref.instruction }),
           status: record?.status ?? 'todo',
           exists: exists.has(ref.path),
           ...(record && { updatedAt: record.updatedAt }),

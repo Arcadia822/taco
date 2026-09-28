@@ -71,4 +71,26 @@ describe('checkpoint invariants', () => {
     expect(resolveCheckpoints({ ...bundle, checkpoints: next }).nodes[0].aggregate).toBe('freeze')
     expect(setDocumentStatus(next, path('optional'), 'freeze', timestamp)).toBe(next)
   })
+
+  it('validates instruction and surfaces it on resolved documents', () => {
+    const value = state()
+    value.nodes[0].documents[0].instruction = 'Must cover API models'
+    const validResult = validateCheckpoints(value, root)
+    expect(validResult.ok).toBe(true)
+
+    const resolved = resolveCheckpoints({ root, files: [{ path: path('a') }], checkpoints: value })
+    expect(resolved.valid).toBe(true)
+    const docA = resolved.documents.find((d) => d.path === path('a'))
+    expect(docA?.instruction).toBe('Must cover API models')
+
+    // Invalid non-string instruction
+    // @ts-expect-error testing invalid type
+    value.nodes[0].documents[0].instruction = 123
+    const invalidResult = validateCheckpoints(value, root)
+    expect(invalidResult).toMatchObject({
+      ok: false,
+      path: 'checkpoints.nodes[0].documents[0].instruction',
+      err: 'Instruction must be a string',
+    })
+  })
 })

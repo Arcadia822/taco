@@ -12,7 +12,7 @@ export interface OutlineControllerOptions {
 export class OutlineController {
   private list: HTMLElement | null = null
   private frame = 0
-
+  private headingCount = 0
   constructor(private readonly options: OutlineControllerOptions) {}
 
   mount(list: HTMLElement): void {
@@ -34,6 +34,7 @@ export class OutlineController {
       return
     }
     const headings = this.headings()
+    this.headingCount = headings.length
     const occurrences = new Map<string, number>()
     if (!headings.length) {
       this.list.append(el('p', 'outline-empty', this.options.getNoHeadingsLabel()))
@@ -79,11 +80,12 @@ export class OutlineController {
     const targetTop = Math.max(0, viewer.scrollTop + heading.getBoundingClientRect().top - viewerTop - 8)
     viewer.scrollTo({ top: targetTop, behavior })
   }
-
+  hasHeadings(): boolean {
+    return this.headingCount > 0
+  }
   private headings(): HTMLElement[] {
     return Array.from(this.options.getViewer().querySelectorAll<HTMLElement>('.tiptap h1, .tiptap h2, .tiptap h3'))
   }
-
   private findVisibleHeading(id: string): HTMLElement | null {
     const outlineIndex = Array.from(this.list?.querySelectorAll<HTMLButtonElement>('.outline-link') ?? [])
       .findIndex((link) => link.dataset.headingId === id)

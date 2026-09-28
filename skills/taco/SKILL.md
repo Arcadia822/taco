@@ -100,6 +100,8 @@ Bundle fields:
 
 When creating, modifying, inspecting, or reporting a Checkpoint graph or its document statuses, read `references/checkpoints.md` before acting. The main workflow below still applies: preserve an existing graph and status table across refreshes; omit `checkpoints` when the review contract does not call for them.
 
+**Authoring with instructions**: When a Checkpoint document defines an `instruction` string, an Agent assigned to author, expand, or review that document **MUST read and follow its instruction** as authoritative task constraints (e.g. required sections, dependencies, or formatting rules). Checkpoint instructions can be read directly from `checkpoints.nodes[].documents[].instruction`, via `window.taco.getCheckpoints()`, or in the right panel's `Instruction` tab.
+
 ### File media types
 
 `mediaType` by carrier:
