@@ -233,7 +233,7 @@ node scripts/check-update.mjs [--json] [--repo <url|path>] [--api-base <url>] [-
   - `TACO_UPDATE_CACHE_DIR` → 覆盖缓存目录（测试用；默认 `${XDG_CACHE_HOME:-$HOME/.cache}/taco`）。
 - **两个覆盖参数的分工**（`--repo`、`--api-base`）：`--repo` 覆盖 git 通道的仓库（仅测试/镜像；被覆盖时禁用 HTTP 回退），`--api-base` 覆盖 HTTP 回退的地址（仅测试夹具）。生产默认值分别为 `https://github.com/Arcadia822/taco.git` 与 `https://api.github.com`。取值约束见 §5.2。
 - **CLI 探测的信任前提**（`taco-cli`）：仅在可执行文件解析为**绝对路径、且为常规可执行文件**时执行 `taco-cli --version`；否则 `cli:null`。本机已安装的 CLI 视为用户已授权在其环境执行的程序——Agent 自动执行 `--version` 与该用户手动执行同一命令属同一信任级别，此前提写入 §5.5。
-- **副作用**：只写一个缓存文件（见 §5.2），不读取项目内容，不外发任何本地数据（见 AC-4）。检查脚本自身的输出（原始日志行）不得作为交付内容展示给用户（见 §5.4 禁止项）。
+- **副作用**：只写一个缓存文件（见 §5.2）；不读取项目**文档**内容（唯一的项目内读取是扩展清单里的 `version`），不外发任何本地数据（见 AC-4）。检查脚本自身的输出（原始日志行）不得作为交付内容展示给用户（见 §5.4 禁止项）。
 
 ### 5.4 触发契约与文案（写入 `SKILL.md`）
 
