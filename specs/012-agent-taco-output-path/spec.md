@@ -22,7 +22,7 @@ Agent 自主创建 `.taco.html` 时，落盘位置没有规范：产物经常落
 1. **确定性的产出位置级联**：工程项目、普通文档目录、非项目个人场景都能推出唯一目标路径，并给出可核对的依据。
 2. **项目级规则**：项目用 `.taco/config.yaml` 声明输出目录；已安装扩展的项目由扩展既有约定覆盖；两者不一致时明确拒绝。
 3. **零外部依赖的落盘**：创建/修改 Taco 不需要脚本、CLI 或运行时；Agent 直接写 `.taco.html` 的 `#taco-document` 数据块。skill 只提供引导与最佳实践。
-4. 划清三条互不影响的边界：**产物位置**、**bundle `root` 与内部引用**、**模板/示例来源位置**。
+4. 划清三条互不影响的边界：**产物位置**、**bundle 内部引用**（`root`、`files[].path`、Checkpoint 文档路径）、**模板/示例来源位置**。
 
 ### 2.2 非目标
 
@@ -34,7 +34,7 @@ Agent 自主创建 `.taco.html` 时，落盘位置没有规范：产物经常落
 
 ## 3. 零外部依赖的约束（本设计的硬约束）
 
-用户明确要求：**创建与修改 Taco 时不依赖任何外部依赖；skill 只是引导与最佳实践；Agent 直接修改 `.taco.html` 文件。**
+用户明确要求：**创建与修改 Taco 时不依赖任何外部依赖**；**skill 只是引导与最佳实践**；**Agent 直接修改 Taco 文件本体**（`.taco.html`）。
 
 因此本设计的落盘方式固定为：
 
@@ -75,7 +75,7 @@ Agent 自主创建 `.taco.html` 时，落盘位置没有规范：产物经常落
 
 ### 4.3 L2：项目规则
 
-**S1 `.taco/config.yaml`（仓库根）**
+**S1 配置文件**（`.taco/config.yaml`，仓库根）
 
 ```yaml
 version: 1
@@ -184,7 +184,7 @@ outputDir: specs/{feature}
 
 ### 10.1 已确认（用户决策，按此实现）
 
-1. 项目规则载体：**`.taco/config.yaml`**（不用 AGENTS.md 单行键）。
+1. 项目规则载体：**项目配置文件名** `.taco/config.yaml`（不用 AGENTS.md 单行键）。
 2. **不采纳**确定性解析脚本；级联是纯文档规则。
 3. L3 探测顺序：`docs` → `doc` → `documents` → `specs`。
 4. L0 文件形态：**文件名决定标题**（bundle 标题 = 用户给的文件名 stem）。
@@ -197,6 +197,6 @@ outputDir: specs/{feature}
 
 ### 10.2 待决项（不在本设计内单方面处理）
 
-1. **`pack.mjs` 的处置**：现状（`80a4899` 引入、`SKILL.md:132` 与 `docs/agent-installation.md` 以其为主流程）与决策 10 矛盾；可选方向：移除、降级为可选的校验工具并改写文档、或按 GitHub #59 的首选改为旁挂形态（`<name>.taco/` + `bundle.json` + 真实文件）。需要用户定方向后另开范围处理。
+1. **pack.mjs 的处置**：现状（`80a4899` 引入、`SKILL.md:132` 与 `docs/agent-installation.md` 以其为主流程）与决策 10 矛盾；可选方向：移除、降级为可选的校验工具并改写文档、或按 GitHub #59 的首选改为旁挂形态（`<name>.taco/` + `bundle.json` + 真实文件）。需要用户定方向后另开范围处理。
 2. `extensions/taco/` 侧是否也统一到 `.taco/config.yaml`（当前设计中扩展只被承认为 S2）。
 3. 级联是否需要在 `SKILL.md` 之外再做机器可读的自我校验（当前设计选择了"不引入脚本"）。
