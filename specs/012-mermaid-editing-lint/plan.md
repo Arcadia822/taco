@@ -11,19 +11,19 @@
 
 ## Phase 2: 渲染管线与状态机（对应 spec §4.2–4.3、§4.5）
 - [ ] `src/mermaid.ts`：`MermaidApi` 增加可选 `parse(text, { suppressErrors })`。
-- [ ] `MermaidRuntime` 增加 lint 入口：与 `enqueue` 共用队列；输入后 debounce ~250ms，单飞保留最新待执行。
-- [ ] `renderDiagram`：移除同步 `surface is-loading` 清空；渲染中保留上一张 SVG，`host.dataset.mermaidState` / `mermaidStale` 驱动轻量指示。
-- [ ] 失败路径：`onRenderError` 升级为 `onDiagnostic(diagnostic)`；`unavailable` 时清除 `is-loading` 假进度并写 `mermaidState='unavailable'`。
+- [ ] `MermaidRuntime` 增加 lint 入口：与 `enqueue` 共用队列；输入后 debounce ~800ms（可调 500–1000ms），单飞保留最新待执行。
+- [ ] `renderDiagram`：状态显式迁移——`rendering` 态清空旧图（D1：不保留），`host.dataset.mermaidState` 驱动展示。
+- [ ] 失败路径：`onRenderError` 升级为 `onDiagnostic(diagnostic)`；`unavailable` 时清除 `is-loading` 假进度并写 `mermaidState='unavailable'`；错误状态下诊断「静默重试」，仅结果变化才更新显示。
 - [ ] 渲染失败后移除 `#d{id}` 残留容器；成功路径复查一次。
 - [ ] 删除无调用方的 `applyPreview` 参数链。
-- [ ] 测试：状态迁移、渲染中保留旧图（A3）、5 次失败后无 `div[id^="d"]` 增长（A4）、`parse=false` 时 `render` 未被调用。
+- [ ] 测试：状态迁移、渲染中不残留旧图（A3）、5 次失败后无 `div[id^="d"]` 增长（A4）、`parse=false` 时 `render` 未被调用、debounce 单飞（连续输入编译次数有上限）。
 
 ## Phase 3: 入口一致性（对应 spec §4.4）
-- [ ] `src/tiptap-code-block.ts`：`source.hidden` 判据改为 `isMermaid && !mermaidUnavailable && state === 'valid'`；`preview.hidden = !isMermaid`。
-- [ ] 传 `allowCodePanel: true`，恢复 `panelButton` 显示；接上 `onRenderError`（经 split view 透传 `onDiagnostic`）。
-- [ ] `src/structured-file-viewer.ts`：`.mmd` 的诊断节点改用 `MermaidDiagnostic`（类别 + 位置 + `detail` 折叠/复制）。
+- [ ] `src/tiptap-code-block.ts`：`source.hidden` 判据改为 `isMermaid && !mermaidUnavailable && state === 'valid'`；`preview.hidden = !isMermaid || state !== 'valid'`（失败整体回落源码，D2）。
+- [ ] 接上 `onRenderError`（经 split view 透传 `onDiagnostic`）；源码区顶部渲染诊断摘要（类别 + 位置 + `detail` 折叠/复制）。
+- [ ] `src/structured-file-viewer.ts`：`.mmd` 采用同一语义——失败时回落源码编辑器 + 顶部诊断摘要，不再强制展开浮动代码面板。
 - [ ] 删除死类 `is-source-visible`。
-- [ ] 测试：同一段无效源码在两入口产出同类诊断（A1/A5）；有效图表 A7 行为不回归。
+- [ ] 测试：同一段无效源码在两入口产出同类诊断与一致的回落行为（A1/A5）；有效图表 A7 行为不回归。
 
 ## Phase 4: 运行时可用性（对应 spec §4.6）
 - [ ] `mermaidUnavailable` 改为可复位：`paint()` 依据状态派生；提供「重试加载」；下一次编辑自动重试一次。
@@ -39,7 +39,7 @@
 
 ## Phase 6: 文案与回归
 - [ ] `src/i18n.ts`：新增 spec §4.8 全部键，`zh-Hans` / `en` 双语。
-- [ ] `src/styles.css`：为 `data-mermaid-state` / `data-mermaid-stale` 提供状态样式（诊断摘要、过期标记、重试按钮）。
+- [ ] `src/styles.css`：为 `data-mermaid-state` 提供状态样式（`rendering` 指示、诊断摘要、回落源码态、重试按钮）。
 - [ ] 全量 `npm test`；手工清单 M1–M7 逐条记录。
 - [ ] 更新 `docs/` 与 README 中 Mermaid 交互描述（若有出入）。
 

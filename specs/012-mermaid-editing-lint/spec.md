@@ -18,10 +18,10 @@ TACO-19（GitHub #51）指出：Taco 里 Mermaid 的「源码 / 预览」交互�
 - Markdown 文档内的 ```` ```mermaid ```` 代码块（`src/tiptap-code-block.ts`）；
 - 独立的 `.mmd` 文件（`src/structured-file-viewer.ts`）。
 
-目标是让 Mermaid 的编辑过程变成「可定位、可修正、不闪烁、不误导」：
+目标是让 Mermaid 的编辑过程变成「可定位、可修正、不误导、可恢复」：
 
 1. 编辑期给出带**错误类别**与**行列（可得时）**的诊断，并保留底层原始信息；
-2. 预览不再因每次按键而清空，仍有图可参照；
+2. 预览不再因每次按键而被高频清空（debounce + 单飞），清空窗口可控；
 3. 源码错误、运行时不可用、渲染期失败三类状态互不冒充；
 4. 出现错误时源码始终可编辑，且 Markdown 与 `.mmd` 入口趋于一致。
 
@@ -53,7 +53,7 @@ surface.dataset.renderId = id
 | 连续按键后 | `surface is-loading` | `Loading` | **否** |
 | 队列中渲染完成后 | `surface` | `Render-2` | 是 |
 
-结论：输入过程中预览长期空白；「一边看图一边改」在语法正确时也无法做到。这是本 Issue 最主要的体验痛点。
+结论：输入过程中预览长期空白；「一边看图一边改」在语法正确时也无法做到。这是本 Issue 最主要的体验痛点（按 D1 裁决，以 debounce + 单飞缓解，而非保留旧图，见 §4.2/§8）。
 
 ### 2.2 语法错误时源码不可达，且与错误文案自相矛盾
 
@@ -150,9 +150,9 @@ Mermaid 在 `render()` 失败时会向 `document.body` 注入临时容器 `div#d
 
 - **A1** 在 Markdown 代码块与 `.mmd` 两处，把无效源码改成有效源码：诊断出现、消失、预览恢复三者均与**当前**源码一致；两个入口的类别文案与源码可达性一致。
 - **A2** 模拟 Mermaid 运行时不可用（阻断 CDN）：提示原因（不是语法错误），编辑器仍可用；**恢复网络后无需重载文档即可重新出图**。
-- **A3** 编辑过程中预览不再清空：连续输入时上一张有效图保持可见，并带明确的「对应的是修改前源码」标记。
+- **A3** 编辑过程中预览不被高频清空：输入触发编译的频率由 debounce 控制（默认 ~800ms + 单飞），渲染期间预览呈现明确的 `rendering` 态而非旧图冒充当前结果（D1：不保留旧图）。
 - **A4** 连续 N（≥5）次渲染失败后，`document.body` 中 `div[id^="d"]` 数量不增长。
-- **A5** 出现语法错误时，Markdown 块的源码区与 `.mmd` 的代码面板都**自动可用**，用户可在同一视图内修正。
+- **A5** 出现语法错误时，Markdown 块与 `.mmd` 都**整体回落为可编辑的原始源码**并附顶部诊断摘要，用户可在同一视图内修正（D2）。
 - **A6** 每一类失败都能取得：类别、面向用户的消息、底层原始信息；可定位时附行列。
 - **A7** 有效图表的主题切换、方向切换、复制、行/节点评论、全屏缩放行为与改动前一致。
 - **A8** 复现清单（见 §6.2）逐条验证并记录结果。
@@ -206,7 +206,7 @@ parse?: (
 ```
 
 - lint 流程：`parse(source, { suppressErrors: true })` 返回 `false` → 出诊断、**不调用 `render()`**（也就不会产生 §2.5 的残留）；返回结果对象 → 进入渲染。
-- 时机：输入后 **debounce ~250ms**；进行中只保留最新一次待执行（单飞），避免连击时刷队列。实测解析成本：常规图 3–13ms、120 节点流程图 69ms（jsdom 环境），debounce 后可接受。
+- 时机（按 D1 裁决：**不保留旧预览，因此必须降低实时编译频率**）：输入后 **debounce ~800ms** 起步（默认值，允许后续按手感调整到 500–1000ms 区间）；进行中只保留最新一次待执行（单飞），连击不排队；诊断面板若已显示错误，则改为「静默重试」——仅当结果变化（错误消失或位置改变）才更新显示，避免闪烁。实测解析成本：常规图 3–13ms、120 节点流程图 69ms（jsdom 环境），800ms debounce 后开销可接受。
 - lint 与渲染共用同一个 `MermaidRuntime`，并在首次 `initialize` 之后执行，保证 `layout: 'elk'`、`securityLevel: 'strict'` 等配置对两者一致。
 - 空内容 / 纯空白：**不 lint、不报语法错误**，UI 表达为「尚未识别图表类型」的中性态。
 - 已知局限（必须承认，不得掩盖）：`parse` 通过不等于可渲染（§2.3 的 `classDiagram` `TypeError`）。因此 `render` 阶段的失败仍归为 `render` 类，且**不得**被说成语法错误。
@@ -222,23 +222,28 @@ empty → linting → rendering → valid
 ```
 
 - `host.dataset.mermaidState`：上列状态之一。
-- `host.dataset.mermaidStale`：`'true'` 表示「面内显示的是上一次成功渲染的图，与当前源码不一致」。
-- `rendering` 期间**保留**上一张 SVG，仅在角落显示轻量更新指示（不再清空 `surface`）→ 解 §2.1。
-- 失败时：`invalid` + `mermaidStale='false'`（不显示旧图），面内呈现诊断摘要（类别 + 消息 + 可得的位置）；`unavailable` 时面内呈现原因而非「正在渲染」→ 解 §2.4。
+- **渲染期间（按 D1 裁决）清空旧图并显示 `rendering` 态**：不保留旧 SVG；配合 §4.2 的低频编译（debounce ~800ms + 单飞），让「清空到出图」的时间窗可控。
+- 失败时：`invalid`，面内呈现诊断摘要（类别 + 消息 + 可得的位置 + `detail` 折叠/复制）；`unavailable` 时面内呈现原因而非「正在渲染」→ 解 §2.4。
+- 状态转换必须显式：`rendering` 不得回退到 `valid`（除非真正渲染成功）；`invalid` 与 `valid` 之间只经 `linting/rendering` 迁移，保证「诊断出现、消失与预览恢复」都来自当前源码（A1）。
 - `applyPreview` 参数当前无任何调用方（`src/mermaid.ts:491,555,564,588` 全链路无实参），按「删除死代码」处理，不保留。
 
 ### 4.4 源码可达性
 
-- Markdown 块的可见性判据从「运行时是否可用」改为「**当前是否处于有效渲染**」：
+按 D2 裁决：**错误时整个预览窗体展示原始代码**（不保留旧图、不叠加面板），有效时维持「预览优先」。
+
+- Markdown 块的可见性判据改为「**当前是否处于有效渲染**」：
 
 ```ts
+// state === 'valid' → 预览；其余（invalid/unavailable/rendering/empty）→ 原始源码
 source.hidden  = isMermaid && !mermaidUnavailable && state === 'valid'
-preview.hidden = !isMermaid
+preview.hidden = !isMermaid || state !== 'valid'
 ```
 
-- 恢复块内的「代码面板」按钮（`panelButton.hidden` 不再恒真），并传 `allowCodePanel: true`，使「源码 / 预览」切换在块内可达，与 `.mmd` 的 `standalone-mermaid-source` 一致；这也是「实时/手动更新」开关可达的前提（解 §2.7-3）。
+- 也就是说：语法错误、渲染期失败、运行时不可用三种情况下，**代码块整体回落为可编辑的原始源码**（FR-007a 的语义扩展到所有失败形态），诊断以**源码区域顶部的一行摘要**呈现（类别 + 位置 + 可展开的 `detail`），而不是替换源码。
+- `.mmd` 入口采用同一语义：失败时内容区回落到源码编辑器 + 顶部诊断摘要（与 Markdown 一致），不再强制展开浮动代码面板。
 - `onRenderError` 必须在 Markdown 路径接线，使其具备与 `.mmd` 相同的回调能力（解 §2.6）。
 - 死钩子 `is-source-visible` 直接删除（样式表中不存在），可见性只由 `hidden` 与 `data-mermaid-state` 驱动。
+- 不新增块内「源码/预览」切换按钮：有效图表保持预览优先，双击/按钮进全屏的既有操作不变（R7）。
 
 ### 4.5 失败残留清理
 
@@ -256,12 +261,12 @@ preview.hidden = !isMermaid
 
 1. **单一视口状态源**：把内联 `scale/translate` 与全屏 zoom 收敛到 split view 的 `getViewport()/setViewport()`，删除 `tiptap-code-block.ts` 中的状态副本。
 2. **`restoreView()` 幂等化**：消除 `closeDialog()` 与 `close` 事件的双重调用。
-3. **选择联动**：`syncSelection`/`onNodeHover` 目前用 `code === renderedCode` 判断是否可映射到行（`src/mermaid-split-view.ts:283-291,353`），在「保留旧图」语义下须改为与 `renderedSource` 显式比对，避免高亮错行。
-4. **缩放与预览共存**：明确「保留旧图 + 内联缩放」时的交互优先级（缩放不因状态切换被重置）。
+3. **选择联动**：`syncSelection`/`onNodeHover` 目前用 `code === renderedCode` 判断是否可映射到行（`src/mermaid-split-view.ts:283-291,353`），在「预览可能与源码不一致（渲染中/失败）」的语义下须改为与 `renderedSource` 显式比对，避免高亮错行。
+4. **缩放与状态共存**：明确「渲染中/失败回落源码 + 内联缩放」时的交互优先级（缩放状态不因状态切换被悄悄重置）。
 
 ### 4.8 文案与国际化
 
-新增键（`zh-Hans` / `en` 双语，`src/i18n.ts`）：`mermaidDiagnosticSyntax`、`mermaidDiagnosticUnknownType`、`mermaidDiagnosticRuntime`、`mermaidDiagnosticRender`、`mermaidDiagnosticSanitizer`、`mermaidDiagnosticPosition(line, column)`、`mermaidRetry`、`mermaidStaleNotice`、`mermaidEmptyDiagram`、`mermaidCopyDetail`。
+新增键（`zh-Hans` / `en` 双语，`src/i18n.ts`）：`mermaidDiagnosticSyntax`、`mermaidDiagnosticUnknownType`、`mermaidDiagnosticRuntime`、`mermaidDiagnosticRender`、`mermaidDiagnosticSanitizer`、`mermaidDiagnosticPosition(line, column)`、`mermaidRetry`、`mermaidEmptyDiagram`、`mermaidCopyDetail`。
 现有 `mermaidError`（`src/i18n.ts:64,128`）保留为兜底，不再作为唯一信息。
 
 ## 5. 契约与兼容
@@ -269,9 +274,9 @@ preview.hidden = !isMermaid
 | 项 | 变化 | 兼容性 |
 | --- | --- | --- |
 | `MermaidApi` | 新增可选 `parse` | 可选；CDN 与测试桩缺省时不启用 lint 前置，退化为现有 `render` 失败路径 |
-| `MermaidPreviewElement` | 新增状态读取（`data-mermaid-state` / `data-mermaid-stale`），`updateCode` 语义收紧为「不清空旧图」 | DOM 契约新增，旧读取方不受影响 |
+| `MermaidPreviewElement` | 新增状态读取（`data-mermaid-state`）；`updateCode` 语义收紧为「状态显式迁移」 | DOM 契约新增，旧读取方不受影响 |
 | `createMermaidSplitView` | 新增 `onDiagnostic`；`onRenderError` 保持 | 增量 |
-| `createTacoCodeBlock` | `allowCodePanel` 在 Mermaid 块内改为可用 | 用户可见行为变化（正是本 Issue 目标） |
+| `createTacoCodeBlock` | 失败形态下整体回落为源码（用户可见行为变化，正是本 Issue 目标） | 用户可见行为变化 |
 | Bundle / 文件格式 | **无变化** | 不涉及 `taco/files` v1 |
 
 `security` 边界不变：渲染产物仍必须经 `sanitizeMermaidSvg`；`sanitizer` 类失败必须有独立文案，不得冒充语法错误。
@@ -281,7 +286,8 @@ preview.hidden = !isMermaid
 ### 6.1 自动化
 
 - `src/mermaid-diagnostics.ts` 单元测试：五类错误对象的分类、jison 行号校准与 clamp、langium 行列、`error.result` 不被序列化、`detail` 保留原文。
-- `createMermaidPreview` 状态机测试：`empty/linting/rendering/valid/invalid/unavailable` 迁移；渲染中保留旧图（A3）；失败时 `stale=false`。
+- `createMermaidPreview` 状态机测试：`empty/linting/rendering/valid/invalid/unavailable` 迁移；渲染中不残留旧图、明确 `rendering` 态（A3，D1）；失败后进入 `invalid` 且不显示旧图。
+- lint 频率测试：连续输入时编译次数受 debounce + 单飞约束（A3，D1）。
 - 残留测试：连续 5 次 `render` 失败后 `document.body` 中 `div[id^="d"]` 计数不变（A4）。
 - lint 前置测试：`parse` 返回 `false` 时 `render` 未被调用。
 - 双入口一致性测试：同一段无效源码在 Markdown 块与 `.mmd` 中产出同类诊断与等价的源码可达性（A1、A8）。
@@ -291,13 +297,13 @@ preview.hidden = !isMermaid
 
 | # | 路径 | 期望 |
 | --- | --- | --- |
-| M1 | Markdown 内新建 ```` ```mermaid ```` 块并逐字输入 | 可输入；不报假语法错误；预览在有效后出现 |
-| M2 | 有效 → 删成无效（如删掉箭头右侧） | 诊断出现并给出行/列；源码自动可用；旧图不被当成本结果 |
-| M3 | 无效 → 补回有效 | 诊断消失、预览恢复、`stale` 归位 |
+| M1 | Markdown 内新建 ```` ```mermaid ```` 块并逐字输入 | 可输入；空块不报语法错误；预览在有效后出现；连续输入时编译频率受 debounce 约束 |
+| M2 | 有效 → 删成无效（如删掉箭头右侧） | 诊断出现并给出行/列；块整体回落为可编辑源码 + 顶部诊断摘要（D2）；不显示旧图 |
+| M3 | 无效 → 补回有效 | 诊断消失、预览恢复，且恢复只来自当前源码（A1） |
 | M4 | DevTools 离线后加载含 Mermaid 的文档 | 提示运行时不可用原因；源码可编辑；恢复网络后重试可出图 |
-| M5 | 连续快速输入 20 次 | 预览不闪空；无 `div[id^="d"]` 累积 |
+| M5 | 连续快速输入 20 次 | 预览不闪频（编译次数 ≈ 输入时长 / debounce）；无 `div[id^="d"]` 累积 |
 | M6 | 主题/方向切换、复制、行评论、节点评论、双击全屏、全屏内缩放与退出 | 与改动前一致；退出全屏后内联缩放状态合理 |
-| M7 | 同一段无效源码分别在 Markdown 与 `.mmd` | 诊断类别与源码可达性一致 |
+| M7 | 同一段无效源码分别在 Markdown 与 `.mmd` | 诊断类别、位置信息与「回落为源码」行为一致 |
 
 ### 6.3 证据留存
 
@@ -315,33 +321,29 @@ preview.hidden = !isMermaid
 | `src/i18n.ts`、`src/styles.css` | 文案与状态样式 |
 | `src/security.ts` | 只读依赖（`security:*` 归类） |
 
-## 8. 待裁决项
-
-以下两点会实质改变体验与契约，无法仅由 Issue 与仓库证据推定，需人工确认（推荐项已标注）。
+## 8. 已裁决项
 
 ### D1 编辑/失败期间是否保留上一张成功预览
 
-Issue 要求「不让旧预览或通用错误掩盖当前状态」，但 §2.1 的闪空同样是主要痛点；两者张力需要定夺。
+**裁决：A1 —— 不保留旧预览；同时降低实时编译频率以缓解闪空。**
 
-| 选项 | 行为 | 取舍 |
-| --- | --- | --- |
-| A1（不保留） | 失败或重新渲染时清空为诊断 | 最不误导；代价是编辑期间几乎看不到图，闪空痛点不解决 |
-| A2（保留 + 显式标记，推荐） | 保留旧图并显示「预览对应修改前的源码」标记（`data-mermaid-stale`） | 兼顾「边看边改」与不掩盖；需保证标记醒目、可关闭 |
-| A3（保留 + 淡化） | 旧图淡化 40% 并一键「回到上次有效渲染」 | 信息最全；实现与交互最复杂，可能造成视觉噪音 |
+- 渲染期间不显示旧 SVG（`rendering` 态明确表达「正在按当前源码重画」，旧图不冒充当前结果，满足「不让旧预览掩盖当前状态」）。
+- 以 debounce（默认 ~800ms，可在 500–1000ms 调整）+ 单飞约束编译频率，使清空窗口可控（§4.2）。
+- 已在错误状态下改为「静默重试」：仅当诊断结果变化才更新显示，避免反复闪烁。
 
 ### D2 Markdown 块内源码的常驻入口
 
-| 选项 | 行为 | 取舍 |
-| --- | --- | --- |
-| B1（恢复代码面板按钮 + 错误时自动展开，推荐） | 块内提供「源码 / 预览」切换，与 `.mmd` 一致 | 直接满足 R8/R6；改动面较大 |
-| B2（仅错误时自动展开） | 有效时保持现状，失败时自动展开源码 | 改动最小；「实时/手动更新」开关仍只能全屏内使用 |
-| B3（维持全屏唯一入口） | 只改文案与诊断 | 被验收 3 明确禁止（「避免只改变错误文案」），不推荐 |
+**裁决：错误时整个窗体展示原始代码。**
+
+- 有效时维持预览优先（既有全屏入口不变，R7）。
+- 任何失败形态（syntax / render / sanitizer / runtime）下，代码块整体回落为可编辑原始源码，诊断以源码区顶部摘要呈现；`.mmd` 同语义（R8）。
+- 不新增块内「源码/预览」切换按钮（与 B1 方案不同，明确记录为**未采纳**）。
 
 ## 9. 实现任务（设计阶段不实施）
 
 1. **阶段一：诊断内核** — `src/mermaid-diagnostics.ts` + 单元测试（五类分型、位置提取、不序列化 error）。
-2. **阶段二：渲染管线与状态机** — `MermaidApi.parse` 接入、lint 前置 + debounce、状态机与 `data-*`、残留清理（A3/A4）。
-3. **阶段三：入口一致性** — Markdown 块可见性、`onRenderError` 接线、块内代码面板、`.mmd` 诊断对齐（A1/A5）。
+2. **阶段二：渲染管线与状态机** — `MermaidApi.parse` 接入、lint 前置 + debounce ~800ms + 单飞、状态机与 `data-*`、渲染期清空旧图、残留清理（A3/A4）。
+3. **阶段三：入口一致性** — Markdown 块与 `.mmd` 的「失败回落为源码 + 顶部诊断摘要」（A1/A5）、`onRenderError` 接线。
 4. **阶段四：运行时可用性** — 不可用提示、重试与自动恢复（A2）。
 5. **阶段五：交互收敛** — 视口状态源、`restoreView` 幂等、选择联动（R6），先真机复核 §2.7。
 6. **阶段六：文案与回归** — i18n 双语、全量测试与手工清单 M1–M7。
