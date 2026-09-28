@@ -155,7 +155,9 @@ const I18N = {
       ['阶段任务要求', '为检查点文件配置可选指令，右侧面板自动展示编写规范'],
       ['4 级生命周期', 'todo、in_progress、complete 与 freeze 状态追踪'],
       ['下一步建议', '根据已标记的前序阶段推导 frontier，供人与 Agent 参考'],
+      ['无需内容锁', '状态保存在数据块中，不做哈希校验或强制门禁'],
     ],
+    sectionCpDocInstruction: '必须先补齐匿名凭据的字段、有效期与回收路径，以及幂等键冲突的处理分支，再冻结 openapi.yaml 契约。',
     sectionCpBadge: 'CHECKPOINTS DAG',
     sectionCpDemoTemplate: '008 宿主协议规范',
     sectionCpStage1: '01 规范定义',
@@ -267,7 +269,9 @@ const I18N = {
       ['Document Instructions', 'Configure optional instructions per checkpoint file and view requirements in the right panel'],
       ['4-State Lifecycle', 'Track documents through todo, in_progress, complete, and freeze'],
       ['Suggested Next Steps', 'Derive a frontier from marked predecessors for people and agents to consider'],
+      ['No Content Lock', 'State lives in the data block without hash checks or enforced gates'],
     ],
+    sectionCpDocInstruction: 'Must enumerate every anonymous-credential field with its lifetime and revocation path, and the idempotency-key conflict handling, before openapi.yaml is frozen.',
     sectionCpBadge: 'CHECKPOINTS DAG',
     sectionCpDemoTemplate: '008 Host Protocol',
     sectionCpStage1: '01 Specification',
@@ -917,9 +921,12 @@ export default function HomePage() {
                     <span className="cp-node__frontier-tag">FRONTIER</span>
                   </div>
                   <div className="cp-node__docs">
-                    <div className="cp-doc-item">
-                      <span className="cp-doc-item__icon cp-doc-item__icon--complete" />
-                      <span className="cp-doc-item__path">data-model.mmd</span>
+                    <div className="cp-doc">
+                      <div className="cp-doc-item">
+                        <span className="cp-doc-item__icon cp-doc-item__icon--complete" />
+                        <span className="cp-doc-item__path">data-model.mmd</span>
+                      </div>
+                      <p className="cp-doc-instruction">{t.sectionCpDocInstruction}</p>
                     </div>
                     <div className="cp-doc-item">
                       <span className="cp-doc-item__icon cp-doc-item__icon--complete" />

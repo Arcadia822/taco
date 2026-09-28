@@ -873,6 +873,9 @@ body {
   flex-direction: column;
   gap: 6px;
 }
+.cp-doc {
+  min-width: 0;
+}
 .cp-doc-item {
   display: flex;
   align-items: center;
@@ -880,6 +883,13 @@ body {
   font-family: var(--mono);
   font-size: 12px;
   color: #a1a1aa;
+}
+.cp-doc-instruction {
+  margin: 4px 0 0;
+  padding-left: 15px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #71717a;
 }
 .cp-doc-item__icon {
   width: 7px;
