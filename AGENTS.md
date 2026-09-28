@@ -27,6 +27,18 @@ When a user asks an agent to install, use, package, or review Taco, read `README
 - Treat collaboration-enabled Taco files as potentially credential-bearing. Follow `docs/agent-installation.md` before sending their contents to any external model, service, log, or ticket. Local inspection remains allowed, and revocation or key reset is an explicit user action.
 - Tacobin deploys only from a pushed `tacobin-v*` tag. `packages/host/vercel.json` disables Git-triggered Vercel deployments, and the tag drives the Deploy Tacobin workflow, which calls the project's Deploy Hook; a branch push, a pull request, or the tag by itself publishes nothing.
 
+# 体积与依赖预算（prepare 估算 / develop 实测）
+
+每个需求都必须给出体积与依赖影响，并在两个阶段各做一次，缺一不可：
+
+- **prepare（设计/规划）阶段：必须估算。** 在设计源文件（`specs/<feature>/spec.md`）中写明：本次改动预计增加的字节数或比例，落在哪些产物上（skill 目录、Complete shell、Lite shell、`.taco.html` 产物、发布包），以及是否引入新的依赖或联网行为。没有数字的估算不算完成，禁止只写「影响很小」。
+- **develop（实现）阶段：必须实测。** 实现后按同一口径重新测量，并与估算并列记录（估算值 / 实测值 / 偏差及原因）。实测方式：构建对应产物并比较字节数，例如
+  - `node scripts/build-shells.mjs` 后比较 `dist-single/Taco_Spec.taco.html` 与 `dist-single/Taco_Spec_Lite.taco.html`；
+  - skill 目录用 `du`/`wc` 比较 `skills/taco/`；
+  - 结论写入 PR 描述与设计源文件。
+- **阈值与告知义务：任一 shell（`skills/taco/taco-shell.html`、`skills/taco/taco-shell-lite.html` 及其镜像 `extensions/taco/assets/`、`dist-single/`）相对当前基线增长 ≥ 1%，或绝对增量 ≥ 32 KB，即视为「较大增大」，必须在交付说明中**主动、明确地告知用户**，给出数字、原因与可选替代方案；未达阈值也应在实测记录中给出数字。
+- **基线（2026-09-28，`dist-single` 构建产物）**：`Taco_Spec.taco.html` 2,835,255 字节；`Taco_Spec_Lite.taco.html` 286,281 字节；`skills/taco/taco-shell.html` 2,730,006 字节；`skills/taco/taco-shell-lite.html` 181,032 字节。基线变化时同步更新本节。
+
 # Semantic commit messages
 
 All commits in this repository MUST follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
