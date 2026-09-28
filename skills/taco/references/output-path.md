@@ -8,7 +8,7 @@ This reference is the authority for **where an Agent writes a Taco, what it is c
 
 It does not cover the data block itself. The field list, serialization, escaping, form rules, and safe-write contract live in `bundle-format.md`; this reference only requires that the new bundle is parsed and shape-checked **before** anything is written.
 
-Nothing here requires a script, a CLI, or a runtime. The Agent writes the `#taco-document` data block directly.
+Nothing here requires a script, a CLI, or an installed runtime: the Agent uses the host's own file and JSON facilities to write the `#taco-document` block directly. A host that cannot parse JSON cannot satisfy the pre-write check in §5.1 and must stop with `unverifiable`.
 
 ## 1. Where the product goes
 
@@ -50,7 +50,7 @@ Absolute paths are allowed.
 Walk up from the directory being packaged (default: the current directory):
 
 1. a `.git/` **directory** → the repository root is its parent;
-2. a `.git` **file** whose content looks like `gitdir: <path>` (worktree or submodule) → the repository root is the appropriate ancestor of that git directory;
+2. a `.git` **file** whose content looks like `gitdir: <path>` (worktree or submodule) → the repository root is the **parent directory of that `.git` file**; the `gitdir:` line only confirms the marker, and the path it names may live under another checkout;
 3. no `.git` before the filesystem root → outside any repository → L5.
 
 The `git` command is used only for the optional ignore check (§6). If it is missing, report `gitignore-unavailable`: the repository decision does not change, and "the command is unavailable" is never reported as "outside a repository". If the decision is L5 while the directory carries a project marker (`package.json`, `pyproject.toml`, …), add the `workspaceRoot-not-git` warning.
@@ -85,7 +85,7 @@ The personal archive is `Documents/tacos` under `HOME ?? USERPROFILE`. When both
 | title | keep the existing bundle's title; if the target filename stem does not equal its normalized form, report the conflict and stop (never rename silently, never rewrite the title) |
 | each file's `id` | carry over (comment anchors and block identity depend on it) |
 | `blocks` | keep **only** while that file's new content is byte-identical to the previous content; drop it as soon as the content changes and let the runtime rebuild it |
-| `sourceHash` | recompute when the content changed, keep it when it did not |
+| `sourceHash` | keep the existing value when the content is byte-identical; when the content changed, recompute it only if the host can compute SHA-256, otherwise drop the field — it is optional in `bundle-format.md`, and never leave a stale hash |
 | packaged set | built-in exclusions and `packOptions.ignore` per §4 |
 
 ### 5.3 Migration (only when the user asks for it)
@@ -93,11 +93,10 @@ The personal archive is `Documents/tacos` under `HOME ?? USERPROFILE`. When both
 The occupancy check comes **before any write**:
 
 1. read the old file's data block and check `docId`, `comments`, `checkpoints`, unknown fields;
-2. when the target already exists — **even with the same `docId`** — stop by default: the target may be another copy of the same review that has since advanced its review state, and overwriting would discard that state silently. Continue only after the user explicitly authorizes the overwrite **and** the report lists the differences between the target and the source (comment counts, Checkpoint statuses, field differences);
-3. create the target's parent directory;
-4. run the sequence in §5.1;
-5. check that the new file's `docId` and its `comments`/`checkpoints`/`navigation` match the old file field by field;
-6. report "old path → new path". Do **not** delete the old file unless the user explicitly asks.
+2. resolve occupancy (§5.4) **before touching the filesystem**: a target with a **different** `docId` is never overwritten — it is someone else's review, so the run stops with `conflict` even if the user asked for the migration. A target with the **same** `docId` (a copy of this review) also stops by default; continue only when the user explicitly authorizes the overwrite **and** the report lists the differences between the target and the source (comment counts, Checkpoint statuses, field differences);
+3. run the sequence in §5.1 unchanged — step 5 validates the exact bundle first, and step 6 creates the parent directory only after that validation passes. Do not create directories earlier;
+4. check that the new file's `docId` and its `comments`/`checkpoints`/`navigation` match the old file field by field;
+5. report "old path → new path". Do **not** delete the old file unless the user explicitly asks.
 
 ### 5.4 Occupancy rules
 
@@ -105,8 +104,8 @@ The occupancy check comes **before any write**:
 | --- | --- |
 | Target does not exist | create a new Taco |
 | Target is the file being refreshed (resolves to the same path) | refresh it |
-| Target exists with a different `docId` | `conflict`, stop |
-| Target exists with the same `docId` (migration) | stop by default; overwrite only with explicit authorization after reporting the differences |
+| Target exists with a different `docId` | `conflict`, stop — never overwritten, migration request or not |
+| Target exists with the same `docId` but is not the file being refreshed (migration target) | stop by default; overwrite only with explicit authorization after reporting the differences |
 
 ### 5.5 Shell variant
 
@@ -149,7 +148,7 @@ When the Taco Spec Kit extension is installed, the product's location is decided
 - does not require the extension to read this reference or any skill file (the extension installs independently and is self-contained);
 - expects the Agent to report "basis: extension convention" when it follows that convention inside an extension project.
 
-So there is exactly one rule source per project: extension projects follow the extension, everything else follows the cascade above, and a custom location comes from the user (L0).
+So there is exactly one rule source per project: inside an extension project the extension command's own path applies and is not overridden by L0; every other directory follows the cascade above, where a custom location comes from the user (L0).
 
 ## 9. Examples
 

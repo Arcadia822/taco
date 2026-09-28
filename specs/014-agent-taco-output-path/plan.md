@@ -10,7 +10,7 @@ status: 'Draft'
 本特性**只改文档**：不新增代码、脚本或测试文件，只新增一份随 skill 安装的契约文档（`references/output-path.md`）。
 
 ```text
-权威契约（设计期：specs/012-*/contracts/output-path-rule.md）
+权威契约（设计期草稿留档：specs/014-*/contracts/output-path-rule.md，已降级为指针）
       │ 实现时译为英文迁入
       ▼
 skills/taco/references/output-path.md        ← 唯一权威，随 skill 安装
@@ -30,7 +30,7 @@ skills/taco/references/output-path.md        ← 唯一权威，随 skill 安装
 
 1. **定目标**：按级联（spec.md §4）确定产物目录、文件名与标题；产出报告行 `L? → <绝对路径>（依据：…）`。命中 L0 文件形态时标题取该文件名 stem（且 stem 必须是规范形式）。
 2. **读入内存**：读目标文件（若存在）的 `#taco-document` 数据块，以及所选 shell（若目标不存在）。**不得**先把 shell 复制到目标路径；既有数据块无法解析则停止（`malformed`）。
-3. **占用判定**：目标不存在 → 新建；解析为同一路径 → 刷新；别的 `docId` → 停止；同 `docId` 但非同一文件 → 默认停止（迁移需用户显式授权并先报告状态差异）。
+3. **占用判定**：目标不存在 → 新建；解析为同一路径 → 刷新；别的 `docId` → 一律冲突停止（用户要求迁移也不覆盖）；同 `docId` 但非同一文件 → 默认停止（迁移需用户显式授权并先报告状态差异）。
 4. **构造新 bundle**：按下表保留字段，生成完整 JSON。
 
 | 字段 | 规则 |
@@ -39,7 +39,7 @@ skills/taco/references/output-path.md        ← 唯一权威，随 skill 安装
 | 标题 | 刷新时保留既有 bundle 的标题；目标文件名 stem 与其归一化结果不一致 → 报告冲突并停止 |
 | 每个 file 的 `id` | 保留 |
 | `blocks` | 仅当该文件新旧内容字节完全相同时保留；内容变化即丢弃 |
-| `sourceHash` | 内容变化时重算 |
+| `sourceHash` | 内容不变时保留原值；内容变化且宿主具备 SHA-256 能力时重算，否则删除该可选字段（不留过期哈希） |
 | 打包集合 | 排除隐藏路径（以 `.` 开头）与所有 `*.taco.html`；刷新时沿用既有 `packOptions.ignore`；若产物目录等于被打包目录，报 `output-in-input` 告警 |
 
 5. **转义与自校验**（落盘前提）：按 `references/bundle-format.md` 序列化并转义；对**将要写入的那一份字符串**做解析校验与形态校验（必需字段、`root` 与各 `path` 一致、path 唯一且安全）。宿主没有解析能力 → 停止（`unverifiable`），不写文件。
@@ -47,7 +47,7 @@ skills/taco/references/output-path.md        ← 唯一权威，随 skill 安装
 7. **原子替换**：完整 HTML 写到同目录临时文件 → `rename` 覆盖目标；失败保留原文件。
 8. **校验与报告**：按校验阶梯取 V1/V2 中最高的可用级别，并写明级别（V2 必须声明"未做运行校验"）。
 
-迁移（仅用户显式要求）：第 3 步改为"目标已存在即默认停止"，只有用户显式授权覆盖、且报告已列出目标与来源的状态差异后才继续；之后走 4–8 步，并校验 `docId` 与 `comments`/`checkpoints`/`navigation` 逐字段一致；不删旧文件。
+迁移（仅用户显式要求）：先按上表判定占用（不同 `docId` 直接冲突停止；同 `docId` 副本默认停止，只有用户显式授权并已报告状态差异才继续），**不提前创建目录**；之后走 4–8 步（含步骤 5 的写前自校验与步骤 6 的建目录），并校验 `docId` 与 `comments`/`checkpoints`/`navigation` 逐字段一致；不删旧文件。
 
 ## 3. 上下文判定
 

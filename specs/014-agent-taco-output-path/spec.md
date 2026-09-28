@@ -92,13 +92,13 @@ L0 的精确语义见 4.2；各场景的验收样例见 §8.2（那是样例，�
 
 ### 4.5 报告与告警
 
-落盘前给出可核对的结论，并在报告里写明：命中级别与依据、产物绝对路径、文件名、标题、校验阶梯级别（V1/V2）与结果，以及 `gitignored`、`gitignore-unavailable`、`workspaceRoot-not-git`、`output-in-input` 告警与排除项清单。失败（`malformed`/`conflict`/`needs_home`/`unverifiable`/`forbidden`）一律不落盘。
+落盘前给出可核对的结论，并在报告里写明：命中级别与依据、产物绝对路径、文件名、标题、校验阶梯级别（V1/V2）与结果，以及 `gitignored`、`gitignore-unavailable`、`workspaceRoot-not-git`、`output-in-input` 告警与排除项清单。失败（`malformed`/`conflict`/`needs_home`/`unverifiable`/`forbidden`）一律不落盘；写前不创建任何目录。
 
 ## 5. 刷新、迁移与首次创建
 
 - **落盘顺序固定**：定目标 → 读入内存（既有文件的数据块与所选 shell）→ 占用判定 → 构造新 bundle → 转义并对将写入的字符串自校验 → 创建父目录 → 同目录临时文件 + 原子 `rename` → 校验与报告。**不得**先把 shell 复制到目标路径（那会在校验失败时破坏既有 Taco，且新父目录不存在时直接失败）。
-- **刷新（L1）**：保留 `docId`、`comments`、`navigation`、`checkpoints`（含状态）、每个 file 的 `id`、未知字段；标题保留既有 bundle 的值，若目标文件名 stem 与其归一化结果不一致则报告冲突并停止；`blocks` 仅在该文件新旧内容字节完全相同时保留，内容变化即丢弃并由运行时重建；`sourceHash` 随内容变化重算。
-- **迁移（仅用户显式要求）**：占用预检早于任何写操作。目标已存在即**默认停止**——即使 `docId` 与来源相同，目标也可能是同一 review 的另一个副本并已独立推进评审状态。只有用户显式授权覆盖、且 Agent 已把目标与来源的状态差异列在报告里，才继续。之后按固定顺序落盘、校验 `docId` 与 `comments`/`checkpoints`/`navigation` 逐字段一致，并报告新旧路径；不删除旧文件，除非用户显式要求。
+- **刷新（L1）**：保留 `docId`、`comments`、`navigation`、`checkpoints`（含状态）、每个 file 的 `id`、未知字段；标题保留既有 bundle 的值，若目标文件名 stem 与其归一化结果不一致则报告冲突并停止；`blocks` 仅在该文件新旧内容字节完全相同时保留，内容变化即丢弃并由运行时重建；`sourceHash` 在内容字节不变时保留原值，内容变化时**仅在宿主具备 SHA-256 能力时**重算，否则删除该可选字段（绝不留下过期哈希）。
+- **迁移（仅用户显式要求）**：占用预检早于任何写操作，且不使用 `mkdir` 等提前写盘。`docId` 与来源**不同**的目标一律冲突停止（那是别人的评审，用户要求迁移也不覆盖）；`docId` 与来源**相同**的副本默认也停止，只有用户显式授权覆盖、且 Agent 已把目标与来源的状态差异列在报告里，才继续。之后按固定顺序落盘（校验通过后才建目录）、校验 `docId` 与 `comments`/`checkpoints`/`navigation` 逐字段一致，并报告新旧路径；不删除旧文件，除非用户显式要求。
 - **首次创建**：父目录不存在则先创建；变体新建默认 Complete，用户显式要求或接收者可靠联网可用 Lite，刷新沿用既有 `taco-shell-variant`；所需 shell 不存在则停止并给出路径，不换变体顶替。
 - **产物与被打包集合互斥**：打包时排除隐藏路径（以 `.` 开头的文件/目录）与所有 `*.taco.html`；刷新时沿用既有 bundle 的 `packOptions.ignore`；若产物目录等于被打包目录，落盘后报 `output-in-input` 告警。
 - **幂等**：相同输入 → 相同产物目录、文件名与标题。
@@ -129,7 +129,7 @@ L0 的精确语义见 4.2；各场景的验收样例见 §8.2（那是样例，�
 | `extensions/taco/commands/update.md` | 一句：扩展项目的产物位置由扩展自身约定决定（与通用级联无关），可选链接 |
 | `extensions/taco/skills/taco-speckit/SKILL.md` | 同上，一行 |
 | `extensions/taco/README.md` | 同上，一行 |
-| `specs/012-*/contracts/output-path-rule.md` | 实现后降级为指针文件 |
+| `specs/014-*/contracts/output-path-rule.md` | 已降级为指向 `skills/taco/references/output-path.md` 的指针文件 |
 
 不涉及：`src/`、`packages/**`、模板镜像（`skills/taco/templates/` 是生成产物，不手改）、`pack.mjs` 文件本体与 `tests/skill-pack.test.ts`。
 
