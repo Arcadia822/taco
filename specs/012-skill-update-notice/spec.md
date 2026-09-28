@@ -309,7 +309,9 @@ node scripts/check-update.mjs [--json] [--repo <url|path>] [--timeout <ms>] [--c
 15. **`VERSION` 同步**：`tests/version.test.ts` 断言 `skills/taco/VERSION.trim() === packageJson.version`。
 16. **构建生成**：`node scripts/sync-skill-version.mjs` 对临时目录运行时写入 `"<version>\n"` 且幂等（第二次运行报告 `unchanged`，不重写文件）。
 17. **`taco-cli` 侧的超时与限额**（与第 7、8 项等价的 CLI 用例）：`--cli-bin` 分别指向挂起桩与无限输出桩 → `cli.installed=null`、`cli.updateAvailable=null`、`ok=true`，且 **`skill` 的更新提示仍可用**（验证 CLI 探测失败不连带失效）。
-18. **项目级 Git 配置隔离**：在临时目录构造一个含恶意 `.git/config`（`url.<evil>.insteadOf = https://github.com/`、`http.extraheader`）的仓库，**以该目录为 cwd** 启动脚本并指向本地 `--repo` → 断言探测按指定仓库完成、未采用重写规则（子进程 cwd 为中立目录）；同一测试断言未产生任何认证相关请求头。
+18. **项目级 Git 配置隔离**（两项可观测断言，不用「本地传输＋HTTP 头」这种不可观测的组合）：
+    - 在临时目录构造含恶意 `.git/config`（`url.<evil>.insteadOf = https://github.com/`、`http.extraheader`）的仓库，**以该目录为 cwd** 启动脚本并指向本地 `--repo` → 断言探测按指定仓库完成、重写规则未生效（证明子进程使用了中立 cwd）。
+    - 用**与脚本相同的加固参数与中立 cwd** 运行 `git config --list --show-origin`（由测试自身 spawn，只读）→ 断言生效配置中不存在来自用户全局、系统或该恶意仓库的 `http.extraheader` / `url.*.insteadOf` 条目。这是对「有效配置已隔离」的直接观测；**不声称已观测到真实 HTTPS 请求头**（那需要受控 HTTPS 端点，属实现期可选项）。
 
 ### 8.2 手工 smoke（必须真实执行，作为交付证据）
 
@@ -352,3 +354,25 @@ node scripts/check-update.mjs [--json] [--repo <url|path>] [--timeout <ms>] [--c
 3. §5.1 的 `VERSION` 载体与「构建生成」方案是否认可；是否希望改为 SKILL.md frontmatter（会引入非 Agent Skills 规范字段，故未采用）。
 4. §5.4 文案模板的措辞与「未升级」表述是否需要调整。
 5. §5.5/AC-4：是否接受把「零本地内容外发」的保证限定为**脚本自身**，并如实披露「每会话自动执行一次 `taco-cli --version`」这一残余风险（可关闭）？替代方案是不自动探测 `PATH` 上的 CLI（会削弱 Issue 要求的「安装了 taco-cli 就一并检查」）。
+
+---
+
+## 11. 独立审查结论（2026-09-28）
+
+两位独立审查者（设计审查、安全审查，均非本文作者）对完整方案做了三轮证据化审查。下表是全部 findings 与处置；所有处置均已落进本文件，并有两轮「接受/仍有异议」的复核记录。
+
+| 编号 | 审查者 | 严重度 | 结论 | 处置 |
+| :--- | :--- | :--- | :--- | :--- |
+| DR-1 | 设计 | major | 策略文本变更会让既有安装落入 `manual-merge`（fail-safe） | 接受事实并如实记录（§7 / §9.8 / §8.2 两个组合烟测）；**不**新增 managed block 跨版本替换机制，交由用户决策（§10.2） |
+| DR-2 | 设计 | major | `check` 先测试后构建，VERSION 同步会被测试先挡住 | 接受：新增 `npm run sync:version`，发版在 `npm run check` 前执行（§6.1、plan 阶段 1） |
+| DR-3 | 设计 | major | 部分成功语义（`ok`/`reason`/组件独立）未定义 | 接受：§5.3「组件独立性（部分成功规则）」+「缺失」与「不可解析」拆分 |
+| DR-4 | 设计 | major→minor | CLI 子进程缺超时；超时桩可能残留派生进程 | 接受：所有探测独立限时 + 进程组级 `SIGKILL`（§5.2、§8.1 第 7/17 项） |
+| DR-5 | 设计 | major | 非默认 `--repo` 仍回退固定 GitHub API 会产生错误结论 | 接受：仅在默认仓库且 `git` 不可用时回退（§5.2、§8.1 第 11 项） |
+| DR-6 | 设计 | minor | 超时/禁用开关测试不可靠；AC-6 的「零写操作」表述与正常打包冲突 | 接受：可记录桩 + 两类睡眠桩；AC-6 证据改为结构审查 + 排除正常打包写入（§8.2、§8.3） |
+| DR-7 | 设计 | minor | 预发布/缺组件 tag 的行为未定义 | 接受：只接受三段纯数字 tag；缺 tag ⇒ `null` 且 `ok` 不变；移除 `remote-tag-unparseable` |
+| SR-1 | 安全 | major | 仅隔离全局/系统 Git 配置挡不住项目级 `.git/config` | 接受：子进程 cwd 固定中立目录 + `git config --list --show-origin` 可观测断言（§5.2、§5.5、§8.1 第 18 项） |
+| SR-2 | 安全 | major | 自动执行 `PATH` 上的 `taco-cli` 与「零外发」绝对保证冲突 | 接受其第二方案：AC-4 收窄为**脚本自身**范围 + `SKILL.md` 强制披露 + 可关闭；残余风险与替代方案列入 §10.5，**实施前需用户认可该安全取舍** |
+| SR-3 | 安全 | minor | 计划未覆盖 CLI 子进程超时/超限 | 接受：§8.1 第 17 项 |
+| SR-4 | 安全 | minor | `--repo` 参数与协议边界未规定 | 接受：协议/路径白名单 + `--` 终止符（§5.2、§8.1 第 12 项） |
+
+终局复核结果：设计审查者回复「无剩余异议」（并给出 §8.2/§8.1/§5.2 的行号锚点）；安全审查者对 SR-1、SR-3 判定接受，SR-2 为**有条件接受**——实施前必须取得用户对该安全取舍的明确认可。因此本设计保持 `Draft`：未经用户确认不得视为 frozen/approved，也不得据此开始实现。
