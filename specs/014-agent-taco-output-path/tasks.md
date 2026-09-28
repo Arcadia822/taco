@@ -30,11 +30,11 @@ status: 'Draft'
 ## 阶段 5：验证
 
 - [x] T10 文档一致性检查（级联顺序与级别命名、失败类型集合、小写 `tacos`、校验阶梯、落盘顺序，四处文本一致；无第二份权威；无配置机制残留；落盘步骤不把脚本/CLI 当必经路径）。
-- [x] T11 五类验收场景走查（spec.md §8.2），每类记录"产物位置"与"bundle 内部引用"两组结果。
-- [x] T12 逐分支走查（spec.md §8.3）并留下记录：隐藏路径与 `*.taco.html` 均被排除、刷新沿用既有 `packOptions.ignore`；非规范 L0 文件名（拒绝并给规范名）；非 `.taco.html` 文件（拒绝）；L2（仓库内有 `docs/` 时仍落 `<repo>/tacos/`）；L3 的 `docs` 优先于 `specs`；L4；L5 无 `HOME` 停止；无 `git` 命令仍能识别仓库；禁区目标；`unverifiable`（无解析能力时不落盘）；既有数据块损坏（`malformed`）；`output-in-input`；迁移到不存在的父目录；迁移目标已存在（默认停止、授权后覆盖并报告状态差异）；内容变化后 `blocks` 被丢弃。
-- [x] T13 校验阶梯实测：至少一次 V1（打开标签页 `window.taco.validate()` 得 `ok: true`，报告中写明级别）；至少一次 V2（仅解析核对并声明"未做运行校验"）。
+- [ ] T11 五类验收场景走查（spec.md §8.2），每类记录"产物位置"与"bundle 内部引用"两组结果。
+- [ ] T12 逐分支走查（spec.md §8.3）并留下记录：隐藏路径与 `*.taco.html` 均被排除、刷新沿用既有 `packOptions.ignore`；非规范 L0 文件名（拒绝并给规范名）；非 `.taco.html` 文件（拒绝）；L2（仓库内有 `docs/` 时仍落 `<repo>/tacos/`）；L3 的 `docs` 优先于 `specs`；L4；L5 无 `HOME` 停止；无 `git` 命令仍能识别仓库；禁区目标；`unverifiable`（无解析能力时不落盘）；既有数据块损坏（`malformed`）；`output-in-input`；迁移到不存在的父目录；迁移目标已存在（默认停止、授权后覆盖并报告状态差异）；内容变化后 `blocks` 被丢弃。
+- [ ] T13 校验阶梯实测：至少一次 V1（打开标签页 `window.taco.validate()` 得 `ok: true`，报告中写明级别）；至少一次 V2（仅解析核对并声明"未做运行校验"）。
 - [x] T14 `npm test` 与 `npm run check` 通过，并在报告里明确这三项既有测试只作回归防护。
-- [x] T15 若改动涉及 `skills/` 与 `packages/host/`，按 AGENTS.md 提出并执行 skill 与官网同步方案；官网如无相关内容则明确说明不涉及。
+- [ ] T15 若改动涉及 `skills/` 与 `packages/host/`，按 AGENTS.md 提出并执行 skill 与官网同步方案；官网如无相关内容则明确说明不涉及。
 
 ## 阶段 6：交付
 
