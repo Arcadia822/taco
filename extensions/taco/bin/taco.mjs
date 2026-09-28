@@ -101,11 +101,20 @@ const mediaType = (path) => {
   if (/\.jpe?g$/i.test(lower)) return 'image/jpeg'
   if (lower.endsWith('.gif')) return 'image/gif'
   if (lower.endsWith('.webp')) return 'image/webp'
-  if (lower.endsWith('.mp4')) return 'video/mp4'
+  if (lower.endsWith('.ico')) return 'image/x-icon'
+  if (lower.endsWith('.bmp')) return 'image/bmp'
+  if (lower.endsWith('.avif')) return 'image/avif'
+  if (lower.endsWith('.mp4') || lower.endsWith('.m4v')) return 'video/mp4'
   if (lower.endsWith('.webm')) return 'video/webm'
+  if (lower.endsWith('.ogv')) return 'video/ogg'
+  if (lower.endsWith('.mov')) return 'video/quicktime'
   if (lower.endsWith('.mp3')) return 'audio/mpeg'
   if (lower.endsWith('.wav')) return 'audio/wav'
   if (lower.endsWith('.ogg')) return 'audio/ogg'
+  if (lower.endsWith('.aac')) return 'audio/aac'
+  if (lower.endsWith('.m4a')) return 'audio/mp4'
+  if (lower.endsWith('.weba')) return 'audio/webm'
+  if (lower.endsWith('.flac')) return 'audio/flac'
   return 'text/plain'
 }
 
@@ -114,6 +123,9 @@ const isBinaryMediaType = (type) =>
   type === 'image/jpeg' ||
   type === 'image/gif' ||
   type === 'image/webp' ||
+  type === 'image/x-icon' ||
+  type === 'image/bmp' ||
+  type === 'image/avif' ||
   type.startsWith('video/') ||
   type.startsWith('audio/')
 
@@ -692,6 +704,13 @@ export const sync = async ({
   }
 
   const changes = []
+  const binaryBytes = (file) => {
+    const match = /^data:([^;,]+);base64,([A-Za-z0-9+/=]+)$/.exec(file.content.trim())
+    if (!match) throw new Error(`Media file requires a valid base64 data URL: ${file.path} (${file.mediaType})`)
+    const bytes = Buffer.from(match[2], 'base64')
+    if (!bytes.length) throw new Error(`Media file has an empty or invalid base64 payload: ${file.path}`)
+    return bytes
+  }
   for (const file of bundle.files) {
     const target = resolve(rootDirectory, file.path)
     if (!isWithin(featureRoot, target) || target === featureRoot)
@@ -708,13 +727,13 @@ export const sync = async ({
         currentHash = sha256(diskBuffer)
       }
       tacoHash = sha256(decodePng(file.content, file.path))
-    } else if (isBinary && /^data:[^;]+;base64,/.test(file.content)) {
+    } else if (isBinary) {
+      const bytes = binaryBytes(file)
       if (exists) {
         const diskBuffer = await readFile(target)
         currentHash = sha256(diskBuffer)
       }
-      const b64 = file.content.slice(file.content.indexOf(',') + 1)
-      tacoHash = sha256(Buffer.from(b64, 'base64'))
+      tacoHash = sha256(bytes)
     } else {
       const current = exists ? await readFile(target, 'utf8') : null
       currentHash = current === null ? null : sha256(current)
@@ -747,9 +766,10 @@ export const sync = async ({
       const temporary = `${change.target}.taco-${process.pid}-${randomUUID()}.tmp`
       if (change.mediaType === 'image/png') {
         await writeFile(temporary, decodePng(change.content, change.path))
-      } else if (isBinaryMediaType(change.mediaType) && /^data:[^;]+;base64,/.test(change.content)) {
-        const b64 = change.content.slice(change.content.indexOf(',') + 1)
-        await writeFile(temporary, Buffer.from(b64, 'base64'))
+      } else if (isBinaryMediaType(change.mediaType)) {
+        const match = /^data:([^;,]+);base64,([A-Za-z0-9+/=]+)$/.exec(change.content.trim())
+        if (!match) throw new Error(`Media file requires a valid base64 data URL: ${change.path} (${change.mediaType})`)
+        await writeFile(temporary, Buffer.from(match[2], 'base64'))
       } else {
         await writeFile(temporary, change.content, 'utf8')
       }

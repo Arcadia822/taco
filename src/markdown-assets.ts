@@ -37,7 +37,9 @@ const pngError = (file: TacoFile): string | undefined => {
 
 const svgAttribute = (tag: string, name: string): number | null => {
   const match = new RegExp(`\\b${name}\\s*=\\s*["']([^"']*)["']`, 'i').exec(tag)
-  if (!match || match[1].includes('%')) return null
+  // Only unitless numbers are absolute pixel sizes; units and percentages fall
+  // through to the viewBox, which is always in user units.
+  if (!match || !/^\d+(?:\.\d+)?$/.test(match[1].trim())) return null
   const value = Number.parseFloat(match[1])
   return Number.isFinite(value) && value > 0 ? value : null
 }
@@ -73,10 +75,23 @@ export const svgIntrinsicSize = (content: string): { width: number; height: numb
   return parts.length === 4 && parts[2] > 0 && parts[3] > 0 ? { width: parts[2], height: parts[3] } : null
 }
 
-export const mediaSource = (file: TacoFile): string =>
-  file.mediaType === 'image/svg+xml' && !file.content.startsWith('data:')
-    ? `data:image/svg+xml;utf8,${encodeURIComponent(file.content)}`
-    : file.content
+/** True when the path names an SVG document, by declared type or extension. */
+export const isSvgFileKind = (file: TacoFile): boolean =>
+  file.mediaType === 'image/svg+xml' || /\.svg$/i.test(file.path)
+
+/**
+ * Standalone image files may only render inline payloads. `parseBundle`
+ * validates PNG bytes, but a forged `image/jpeg` file could otherwise carry an
+ * arbitrary URL in `content` and turn the preview into an unsolicited fetch
+ * (or a local-file load on `file://` pages). Authored SVG markup is encoded.
+ */
+export const mediaSource = (file: TacoFile): string | null => {
+  if (isSvgFileKind(file) && !file.content.startsWith('data:')) {
+    return `data:image/svg+xml;utf8,${encodeURIComponent(file.content)}`
+  }
+  if (/^data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=]+$/i.test(file.content)) return file.content
+  return null
+}
 
 /** Caps an image at its authored size while still shrinking inside a smaller container. */
 export const applyNaturalSize = (image: HTMLImageElement, size: { width: number; height: number } | null): void => {
@@ -87,14 +102,16 @@ export const applyNaturalSize = (image: HTMLImageElement, size: { width: number;
 
 export const openPngPreview = (file: TacoFile): void => {
   if (file.mediaType === 'image/png' && pngError(file)) return
+  const src = mediaSource(file)
+  if (!src) return
   document.querySelector('dialog.png-preview, dialog.media-preview-dialog')?.remove()
   const dialog = document.createElement('dialog')
   dialog.className = 'media-preview-dialog png-preview'
   dialog.dataset.tacoTransient = ''
   const image = document.createElement('img')
-  image.src = mediaSource(file)
+  image.src = src
   image.alt = file.title || file.path
-  if (file.mediaType === 'image/svg+xml') applyNaturalSize(image, svgIntrinsicSize(file.content))
+  if (isSvgFileKind(file)) applyNaturalSize(image, svgIntrinsicSize(file.content))
   dialog.setAttribute('aria-label', image.alt)
   dialog.append(image)
 

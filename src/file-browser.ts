@@ -50,7 +50,7 @@ import { createUnifiedDiff } from './kernel/diff.ts'
 
 import { OutlineController } from './outline-controller.ts'
 
-import { applyNaturalSize, mediaSource, openPngPreview, svgIntrinsicSize } from './markdown-assets.ts'
+import { applyNaturalSize, isSvgFileKind, mediaSource, openPngPreview, svgIntrinsicSize } from './markdown-assets.ts'
 import { hasCollabSecrets } from './security.ts'
 import { frontmatterTitle, parseFrontmatter } from './frontmatter.ts'
 
@@ -719,11 +719,16 @@ export class FileBrowser {
     if (kind === 'image') {
       const container = el('div', 'media-document-container')
       const image = el('img', 'media-document-preview image-preview')
-      image.src = mediaSource(file)
-      image.alt = file.title || fallbackFileTitle(file)
-      if (file.mediaType === 'image/svg+xml') applyNaturalSize(image, svgIntrinsicSize(file.content))
-      image.addEventListener('click', () => openPngPreview(file))
-      container.append(image)
+      const src = mediaSource(file)
+      if (src) {
+        image.src = src
+        image.alt = file.title || fallbackFileTitle(file)
+        if (isSvgFileKind(file)) applyNaturalSize(image, svgIntrinsicSize(file.content))
+        image.addEventListener('click', () => openPngPreview(file))
+        container.append(image)
+      } else {
+        container.append(el('p', 'empty-state', this.t.mediaUnsupported))
+      }
       this.viewer.append(container)
     } else if (kind === 'video') {
       const container = el('div', 'media-document-container')

@@ -168,8 +168,17 @@ async function writeHandle(handle: FileHandleLike, content: string, mediaType = 
     }
     return
   }
-  if (isDataUrl && (mediaType.startsWith('image/') || mediaType.startsWith('video/') || mediaType.startsWith('audio/'))) {
-    const binary = atob(isDataUrl[2])
+  if (mediaType.startsWith('image/') || mediaType.startsWith('video/') || mediaType.startsWith('audio/')) {
+    // Media files are binary: a payload that is not a well-formed data URL must
+    // fail loudly instead of falling through to the text-write path, which
+    // would overwrite a binary file with a base64 string.
+    if (!isDataUrl) throw new Error(`Media file requires a valid base64 data URL: ${handle.name} (${mediaType})`)
+    let binary: string
+    try {
+      binary = atob(isDataUrl[2])
+    } catch {
+      throw new Error(`Media file has invalid base64 payload: ${handle.name}`)
+    }
     const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0))
     if (handle.getFile) {
       const existing = await handle.getFile()

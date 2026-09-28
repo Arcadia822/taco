@@ -341,14 +341,18 @@ export const isMediaFileKind = (kind: FileKind): kind is MediaFileKind => kind i
 export function fileKind(file: TacoFile): FileKind {
   const lower = file.path.toLowerCase()
   const mediaType = file.mediaType.toLowerCase()
-  if (mediaType === 'text/markdown' || lower.endsWith('.md')) return 'markdown'
-  if (lower.endsWith('.mmd')) return 'mermaid'
-  if (mediaType.includes('yaml') || /\.ya?ml$/.test(lower)) return 'yaml'
-  if (mediaType.includes('json') || lower.endsWith('.json')) return 'json'
-  // The declared MIME type wins; the extension only classifies when the type is generic.
+  // The declared MIME type wins over every extension-based classification.
   if (mediaType.startsWith('image/')) return 'image'
   if (mediaType.startsWith('video/')) return 'video'
   if (mediaType.startsWith('audio/')) return 'audio'
+  if (mediaType === 'text/markdown') return 'markdown'
+  if (mediaType.includes('yaml')) return 'yaml'
+  if (mediaType.includes('json')) return 'json'
+  // Extension fallbacks, for bundles whose media types are generic.
+  if (lower.endsWith('.md')) return 'markdown'
+  if (lower.endsWith('.mmd')) return 'mermaid'
+  if (/\.ya?ml$/.test(lower)) return 'yaml'
+  if (/\.json$/.test(lower)) return 'json'
   if (/\.(png|jpe?g|gif|webp|svg|ico|bmp|avif)$/i.test(lower)) return 'image'
   if (/\.(mp4|webm|ogv|mov|m4v)$/i.test(lower)) return 'video'
   if (/\.(mp3|wav|ogg|aac|m4a|weba|flac)$/i.test(lower)) return 'audio'

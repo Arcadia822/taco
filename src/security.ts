@@ -10,7 +10,7 @@ export const MAX_FRAME_BYTES = 2 * 1024 * 1024
 export const SUPPORTED_BLOCK_TYPES = new Set([
   'paragraph', 'heading', 'blockquote', 'codeBlock', 'bulletList', 'orderedList',
   'taskList', 'horizontalRule', 'image', 'table', 'documentProperties',
-  'centeredBlock',
+  'centeredBlock', 'mediaEmbed', 'inlineMediaEmbed',
 ])
 
 const EDITOR_TAGS = [
@@ -39,14 +39,20 @@ export const safeLinkUrl = (value: string): string | null => {
 
 export const safeMediaUrl = (value: string): string | null => {
   const url = value.trim()
-  if (!url) return null
-  if (/^file:/i.test(url) || /^[a-z]:\\/i.test(url) || /^\/\//.test(url)) return null
+  if (!url || url.includes('\\')) return null
+  if (/^file:/i.test(url) || /^[a-z]:/i.test(url) || /^\/\//.test(url)) return null
   if (/^data:(image\/(?:png|jpeg|jpg|gif|webp|svg\+xml|ico|bmp|avif)|video\/(?:mp4|webm|ogg)|audio\/(?:mpeg|wav|ogg|aac|mp4|webm|flac));base64,[a-z0-9+/=]+$/i.test(url)) {
     return url
   }
   if (/^https?:\/\//i.test(url)) return url
-  if (isRelativeReference(url) && !url.startsWith('/')) return url
-  return null
+  // Relative references may only name a path inside the bundle: no leading
+  // slash, no `..` segments, no empty segments, so the browser can never
+  // resolve them to a host file outside the reviewed document root.
+  if (!isRelativeReference(url) || url.startsWith('/')) return null
+  const [path] = url.split(/[?#]/)
+  const segments = path.split('/')
+  if (segments.some((segment) => segment === '' || segment === '.' || segment === '..')) return null
+  return url
 }
 
 export const safeRasterDataUrl = (value: string): string | null =>
@@ -98,7 +104,15 @@ const postProcessEditorHtml = (html: string): string => {
       const safe = src ? safeLinkUrl(src) : null
       if (safe && /^https?:\/\//i.test(safe)) {
         element.setAttribute('src', safe)
-        element.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation')
+        // allow-scripts + allow-same-origin on a same-origin frame lets its
+        // scripts reach the parent DOM, so same-origin embeds stay scriptless.
+        const sameOrigin = (() => {
+          try { return new URL(safe).origin === globalThis.location?.origin }
+          catch { return false }
+        })()
+        element.setAttribute('sandbox', sameOrigin
+          ? 'allow-presentation'
+          : 'allow-scripts allow-presentation')
         element.setAttribute('loading', 'lazy')
       } else {
         element.remove()
