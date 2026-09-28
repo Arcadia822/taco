@@ -467,7 +467,10 @@ describe('taco update check', () => {
     expect(second.skill).toEqual(first.skill)
 
     const cachePath = join(cacheDir, 'update-check.json')
-    const poisoned = JSON.parse(readFileSync(cachePath, 'utf8')) as { checkedAt: string; latest: { skill: string } }
+    const raw = readFileSync(cachePath, 'utf8')
+    expect(raw).not.toContain(repo)
+    expect((JSON.parse(raw) as { target: string }).target).toMatch(/^[0-9a-f]{64}$/)
+    const poisoned = JSON.parse(raw) as { checkedAt: string; latest: { skill: string } }
     poisoned.checkedAt = new Date(Date.now() - 60 * 60 * 1000).toISOString()
     poisoned.latest.skill = '0.99.0'
     writeFileSync(cachePath, JSON.stringify(poisoned))
@@ -501,9 +504,12 @@ describe('taco update check', () => {
     mkdirSync(join(project, '.specify'), { recursive: true })
     symlinkSync(join(outside, 'extensions'), join(project, '.specify', 'extensions'))
 
-    const repo = localRepo(['v0.11.0'])
-    const payload = await runJson(['--json', '--repo', repo, '--no-cli', '--no-cache'], {}, project)
+    // No --repo override: the extension walk must run, and the linked directory
+    // must not count as an installed extension (so no releases request follows).
+    const fixture = await apiFixture({ tags: [['v0.11.0']], releases: [{ tag_name: 'v0.12.0', assets: [{ name: 'taco-extension-v0.12.0.zip' }] }] })
+    const payload = await runJson(['--json', '--api-base', fixture.apiBase, '--no-cli', '--no-cache'], { PATH: pathWithoutGit() }, project)
     expect(payload.extension).toBeNull()
+    expect(fixture.requests.some((entry) => entry.url.includes('/releases'))).toBe(false)
   })
 
   it('reports a stalled response body as a timeout instead of an unreachable network', async () => {

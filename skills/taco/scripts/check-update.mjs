@@ -21,6 +21,7 @@
 // fail the Taco work that triggered it.
 
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { lstat, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
@@ -404,6 +405,11 @@ const findExtensionVersion = async (startDir) => {
 
 const cacheFile = (options) => join(options.cacheDir, 'update-check.json')
 
+// The cache identifies its remote by digest: a mirror path or an overridden API
+// base must never be written to disk as a literal path or URL.
+const targetDigest = (options) =>
+  createHash('sha256').update(`repo\u0000${options.repo}\u0000apiBase\u0000${options.apiBase}`).digest('hex')
+
 const versionOrNull = (value) => value === null || (typeof value === 'string' && SEMVER.test(value))
 
 // The cache is an untrusted file: it must describe this exact remote, be fresh,
@@ -411,7 +417,7 @@ const versionOrNull = (value) => value === null || (typeof value === 'string' &&
 const usableSnapshot = (parsed, options, needsExtension) => {
   if (parsed?.schema !== CACHE_SCHEMA || typeof parsed.checkedAt !== 'string') return null
   if (parsed.source !== 'git-ls-remote' && parsed.source !== 'github-tags-api') return null
-  if (parsed.target?.repo !== options.repo || parsed.target?.apiBase !== options.apiBase) return null
+  if (parsed.target !== targetDigest(options)) return null
   if (typeof parsed.extensionProbed !== 'boolean') return null
   if (needsExtension && parsed.extensionProbed !== true) return null
   const latest = parsed.latest
@@ -566,7 +572,7 @@ const probeRemote = async (options, needsExtension, skillUnknown) => {
   const snapshot = {
     schema: CACHE_SCHEMA,
     checkedAt: new Date().toISOString(),
-    target: { repo: options.repo, apiBase: options.apiBase },
+    target: targetDigest(options),
     source,
     latest: { skill: latest.skill, cli: latest.cli, extension: extensionLatest },
     extensionProbed: needsExtension,

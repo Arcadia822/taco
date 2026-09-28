@@ -188,7 +188,7 @@ Agent 开始 Taco 工作 → 一次轻量更新检查 → 正常完成交付
 - **重定向**：HTTP 回退的 `fetch` 固定使用 `redirect: "error"`——任何重定向都视为失败（映射为 `http-error`）并静默。
 - **限额**：HTTP 回退命中 403/429 或 `x-ratelimit-remaining: 0` ⇒ `rate-limited`。
 - **扩展（可选组件）的探测**：扩展的「更新」不仅取决于版本号，还取决于**该版本是否发布了可安装包**（实测仅 `v0.6.0` 有 `taco-extension-v0.6.0.zip`，后续 tag 无资产）。因此仅当 §5.1 找到已安装的扩展清单时，额外发起一次 `GET https://api.github.com/repos/Arcadia822/taco/releases?per_page=100`，取**带可安装扩展包的 release** 中版本号最高者作为 `extension.latest`（资产名匹配 `^taco-extension-v(\d+\.\d+\.\d+)\.zip$`）；没有任何可用资产 ⇒ `extension.latest=null`、不提示。这是本特性唯一使用 releases 端点的场景（tag 通道拿不到资产信息）。该请求失败只让扩展项变为 `null`，不影响 `skill`/`cli` 的结论与 `ok`。
-- **结果缓存（15 分钟 TTL）**：检查成功后把**仅含版本比较结果与探测目标**的缓存（字段为 `{ schema, checkedAt, target: { repo, apiBase }, source, latest: { skill, cli, extension }, extensionProbed }`）写入 `${XDG_CACHE_HOME:-$HOME/.cache}/taco/update-check.json`（大小 < 2 KiB）。TTL 默认 15 分钟（`TACO_UPDATE_CACHE_TTL` 秒，`0` 表示禁用），`--no-cache` 强制忽略并刷新。规则：只有**成功**的远端读取才写入；缓存命中即直接复用（`cached: true`），不发任何网络请求（含扩展的 releases 请求）。缓存**无条件视为不可信输入**：命中前必须校验 schema、`source` 白名单、`checkedAt` 是否在 TTL 内、`target.repo`/`target.apiBase` 与本次完全一致、`extensionProbed` 为布尔且满足本次需要、三个 `latest` 字段均为 `null` 或三段纯数字版本；任一不符即忽略缓存并重新探测。缓存缺失/损坏/被篡改/不可读/写入失败一律忽略，绝不因此失败或阻断；缓存不写入任何项目内容、凭据或文件路径。
+- **结果缓存（15 分钟 TTL）**：检查成功后把**仅含版本比较结果与探测目标摘要**的缓存（字段为 `{ schema, checkedAt, target, source, latest: { skill, cli, extension }, extensionProbed }`；`target` 是 `repo` + `apiBase` 的 SHA-256 十六进制摘要，固定长度且不含原始路径或 URL）写入 `${XDG_CACHE_HOME:-$HOME/.cache}/taco/update-check.json`（大小 < 2 KiB）。TTL 默认 15 分钟（`TACO_UPDATE_CACHE_TTL` 秒，`0` 表示禁用），`--no-cache` 强制忽略并刷新。规则：只有**成功**的远端读取才写入；缓存命中即直接复用（`cached: true`），不发任何网络请求（含扩展的 releases 请求）。缓存**无条件视为不可信输入**：命中前必须校验 schema、`source` 白名单、`checkedAt` 是否在 TTL 内、`target` 摘要与本次探测目标完全一致、`extensionProbed` 为布尔且满足本次需要、三个 `latest` 字段均为 `null` 或三段纯数字版本；任一不符即忽略缓存并重新探测。缓存缺失/损坏/被篡改/不可读/写入失败一律忽略，绝不因此失败或阻断；缓存不写入任何项目内容、凭据或文件路径（目标以不可逆摘要表示）。
 
 ### 5.3 检查脚本契约（新增 `skills/taco/scripts/check-update.mjs`）
 
@@ -274,7 +274,7 @@ node scripts/check-update.mjs [--json] [--repo <url|path>] [--api-base <url>] [-
 | `--api-base` 覆盖 | 调用方可指向任意地址 | 只接受 `https://api.github.com` 或环回测试夹具；`fetch` 使用 `redirect: "error"`，异域 `Link` 不跟随（分页地址由基址构造） |
 | 资源占用 | 子进程挂起、响应体异常膨胀或派生进程残留 | 每次探测独立硬超时、64 KiB 响应上限、进程组级 `SIGKILL`（仅 `taco-cli` 子进程） |
 
-**残余风险（明示、本期不消除）**：脚本无法证明被执行的 `taco-cli` 只做只读输出。若本机 CLI 已被替换，其行为超出本机制可控范围——这与「Agent 会执行本机任意命令」的既有信任模型同源，本特性只新增「每会话自动执行一次 `--version`」。处理方式是**如实披露 + 可关闭**（`--no-cli`、`TACO_UPDATE_CHECK=off`），而不是假装 AC-4 能覆盖外部程序；AC-4 因此显式限定为「脚本自身的读写与网络请求」。消除该残余风险需要对 CLI 做沙箱隔离，属于本期范围之外（见 §9.7）；用户已认可该残余风险，记录见 §11.3。
+**残余风险（明示、本期不消除）**：脚本无法证明被执行的 `taco-cli` 只做只读输出。若本机 CLI 已被替换，其行为超出本机制可控范围——这与「Agent 会执行本机任意命令」的既有信任模型同源，本特性只新增「每会话自动执行一次 `--version`」。处理方式是**如实披露 + 可关闭**（`--no-cli`、`TACO_UPDATE_CHECK=off`），而不是假装 AC-4 能覆盖外部程序；AC-4 因此显式限定为「脚本自身不读取项目文档内容（扩展清单里的 `version` 除外）、只写入版本比较缓存与目标摘要，且不外发任何本地数据」。消除该残余风险需要对 CLI 做沙箱隔离，属于本期范围之外（见 §9.7）；用户已认可该残余风险，记录见 §11.3。
 
 ---
 
