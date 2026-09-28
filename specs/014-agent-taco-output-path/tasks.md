@@ -56,7 +56,7 @@ status: 'Draft'
 | L3 / L4 | fixture 仓库（`git init`）：有 `docs/` → 产物落 `<repo>/docs/tacos/`；无候选目录 → 落 `<repo>/tacos/`；两产物 V1 通过 |
 | L5 | 非仓库目录（无 `.git`）→ 决策为 `~/Documents/tacos/`，**未写入真实家目录**（仅记录决策） |
 | 隐藏路径与产物排除 | fixture 内 `.env`、`.hidden.md`、`old.taco.html` 均未进入 bundle（只打包 `draft.md`、`spec.md`），产物中不含 `SECRET=1` |
-| 回归 | `npm test` 445/445、`npm run format:check`、`npm run build`（构建后 `git status` 无差异） |
+| 回归 | `npm run check`（= `format:check` + `npm test`（44 files / 445 tests passed）+ `build`）整条通过；构建后 `git status` 无额外差异 |
 | 技能安装同步 | 已同步到 `~/.agents/skills/taco/` 并核对：两个 shell 的 `#taco-document` 为空块、`<title>Taco</title>`、无远程 script/link src 与远程 module import；`templates/` 与 `extensions/taco/templates/` 逐字节一致 |
 | 官网 | `packages/host/` 无相关文案，不涉及（已核查） |
 

@@ -119,7 +119,7 @@ Per-file fields:
 
 - `id`: preserve the previous file's id — it is the stable key for comment anchors and block identity.
 - `title`: optional in-file display title; if kept it must be a non-empty string and must not change the `path`.
-- `sourceHash`: optional sha256 hex (64 chars) of the file bytes at pack time; recompute it whenever `content` changes.
+- `sourceHash`: optional sha256 hex (64 chars) of the file bytes at pack time. Keep it when `content` is byte-identical; when `content` changes, recompute it only if the host can compute SHA-256, and otherwise drop the field — never leave a stale hash.
 - `blocks`: optional runtime cache of per-block HTML. Keep it only when that file's `content` is byte-identical to the previous bundle's; drop it when the content changed and let the runtime rebuild it.
 
 Comments:
