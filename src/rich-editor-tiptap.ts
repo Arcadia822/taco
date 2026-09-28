@@ -15,10 +15,10 @@ import type { MermaidPluginLabels } from './mermaid.ts'
 export class TiptapRichEditorAdapter implements RichEditorAdapter {
   migrateBundleBlocks(
     bundle: Parameters<typeof migrateTacoBundleBlocks>[0],
-    labels?: Record<string, string | undefined>,
+    labels?: Partial<MermaidPluginLabels>,
   ): Array<{ path: string; message: string }> {
-    const mermaidLabels = (labels ?? {}) as unknown as Parameters<typeof migrateTacoBundleBlocks>[1]
-    return migrateTacoBundleBlocks(bundle, mermaidLabels)
+    // Migration only rebuilds blocks; the full label set is not needed there.
+    return migrateTacoBundleBlocks(bundle, (labels ?? {}) as Parameters<typeof migrateTacoBundleBlocks>[1])
   }
 
   mount(options: RichEditorMountOptions): RichEditorHandle {
@@ -63,6 +63,7 @@ export class TiptapRichEditorAdapter implements RichEditorAdapter {
       direction: labels.direction,
       liveUpdate: labels.liveUpdate,
       updateDiagram: labels.updateDiagram,
+      diagnostic: labels.diagnostic,
     }
 
     const extensions = createTacoEditorExtensions(mermaidLabels, {

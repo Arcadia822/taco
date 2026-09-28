@@ -211,6 +211,7 @@ You are authoring one document model — the bundle. A directory of Markdown is 
 - Compare the reported structure with the shape you decided in step 0: entry document, each group with its files, what sits under `Unassigned`, and open/resolved comment threads.
 - Fix a mismatch, or state it plainly, before handing the file over. A warning you shipped silently is a surprise the reviewer finds instead. Report the verification level you reached and every `warning`/`error` finding it produced.
 - A Checkpoint document shown as `not created` is expected only when you deliberately scheduled work that does not exist yet. Otherwise the structure was transplanted from a template: remove it.
+- Validate every diagram before you ship it. `node scripts/lint-mermaid.mjs <file.mmd|file.md>...` (or `--dir <docDir>`) parses each `.mmd` file and every ```` ```mermaid ```` fence with the same Mermaid build the Complete shell embeds, so a pass here means it parses in the file the reviewer opens. Exit code `0` = all parsed, `1` = diagnostics (each with kind, `line:column` and the raw parser text), `2` = the check could not run at all — `2` is never a pass. A diagram that fails here would otherwise reach the reviewer as one generic browser error.
 - Confirm the artifact loads: the data block must parse and satisfy the shape rules. A Recovery-mode file is a failed hand-off, not a preview.
 
 ### 3. Present and open it for the human

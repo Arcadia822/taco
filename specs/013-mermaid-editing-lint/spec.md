@@ -466,16 +466,26 @@ Markdown fence 的行号需要换算：定位围栏起始行，源码第 1 行�
 
 **（历史记录）** 体积测量时的原型把内核临时写成 `src/mermaid-diagnostics.ts`（约 3.7 KB）；最终装配改为 §4.4.1 的 canonical `.mjs` + `.d.mts` + skill 镜像，该临时路径**不是**实施结构，体积量级不受影响。执行 `node scripts/build-shells.mjs` 并与基线比较；同时实现校验器原型 `skills/taco/scripts/lint-mermaid.mjs` 并做功能冒烟（含 §4.2.1 旁路）。
 
-### 12.3 实测结果
+### 12.3 实测结果（develop 阶段，`node scripts/build-shells.mjs`）
 
-| 产物 | 基线 | 原型 | Δ | Δ% |
-| --- | --- | --- | --- | --- |
-| `dist-single/Taco_Spec.taco.html` | 2,835,255 | 2,836,043 | **+788 字节** | +0.028% |
-| `dist-single/Taco_Spec_Lite.taco.html` | 286,281 | 287,630 | **+1,349 字节** | +0.471% |
-| `skills/taco/scripts/lint-mermaid.mjs`（新增） | — | 10,601 字节（218 行） | **+10,601 字节** | skill 目录 +0.076% |
+原型值（prepare 阶段的可行性锚点）与最终实现并列如下：
 
-原始载荷增量（压缩前，可核对）：Lite `taco-rt` +1,179 字节、`taco-rt-css` +717 字节；Complete `taco-rt` +969 字节、`taco-rt-css` +717 字节。
-校验器脚本未被误打进 shell（两个 shell 中都搜不到其内容）。
+| 产物 | 基线 | 原型 | 最终实现 | Δ（最终） | Δ% | 估算区间 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `dist-single/Taco_Spec.taco.html` | 2,835,255 | 2,836,043 | **2,837,703** | **+2,448 字节** | +0.086% | +0.8 ~ 3 KB ✓ |
+| `dist-single/Taco_Spec_Lite.taco.html` | 286,281 | 287,630 | **288,570** | **+2,289 字节** | +0.800% | +1.3 ~ 4 KB ✓ |
+| `skills/taco/taco-shell.html` | 2,730,006 | — | **2,732,454** | **+2,448 字节** | +0.090% | — |
+| `skills/taco/taco-shell-lite.html` | 181,032 | — | **183,321** | **+2,289 字节** | **+1.264%** | 超阈值 |
+| `skills/taco/` 目录合计 | 13,968,819 | — | **13,992,204** | **+23,385 字节** | +0.167% | +11 ~ 16 KB（**超出估算上界**） |
+| 其中 `scripts/mermaid-diagnostics.mjs`（新增，镜像） | — | — | 6,674 字节 | | | |
+| 其中 `scripts/lint-mermaid.mjs`（新增） | — | — | 17,172 字节 | | | |
+
+偏差记录：
+
+- **Lite 越过 1% 告知阈值**（+1.264%）。原因是 Lite 载荷基数小（177 KB），而本次新增的是四处真实代码：共享内核、`mermaidDiagnosticNode`、四类双语文案、CSS 与 parse 前置门。已在交付说明中按 AGENTS.md 主动告知用户，并给出数字与可选方案。
+- **skill 目录超出估算上界**（估算 +11~16 KB，实测 +23.8 KB）。原因是校验器原型（10.6 KB）在实现中长出完整 CLI 面：参数解析、退出码三态、路径与符号链接处理、帮助文本、错误分支。
+- Complete 两行如实测低于原型偏差量级，未出现压缩比反向放大的情况。
+- 校验器脚本未被误打进 shell（两个 shell 中都不含其内容）。
 
 ### 12.4 估算区间（develop 阶段以此为准复核）
 

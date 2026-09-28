@@ -12,6 +12,7 @@ import typescript from 'highlight.js/lib/languages/typescript'
 import xml from 'highlight.js/lib/languages/xml'
 import yaml from 'highlight.js/lib/languages/yaml'
 import { createLowlight } from 'lowlight'
+import type { MermaidDiagnostic } from '../extensions/taco/bin/mermaid-diagnostics.mjs'
 import {
   defaultMermaidTheme,
   extractMermaidDirectionFromCode,
@@ -40,6 +41,7 @@ const lowlight = createLowlight({
 })
 lowlight.registerAlias('plaintext', ['text', 'txt', 'mermaid'])
 
+import { mermaidDiagnosticNode } from './mermaid.ts'
 import {
   bindMermaidCanvasDrag,
   createMermaidSplitView,
@@ -152,7 +154,10 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
       let codePanelVisible = false
       let splitController: MermaidSplitViewController | null = null
       let renderedMermaid = ''
+      // Availability is derived from the last diagnostic, never a one-way flag: a
+      // recovered runtime must be able to draw again without reloading the document.
       let mermaidUnavailable = false
+      let diagnosticKind: MermaidDiagnostic['kind'] | null = null
       let feedbackTimer: number | undefined
       let destroyed = false
 
@@ -204,6 +209,10 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
       const content = document.createElement('code')
       source.append(lineNumbers, content)
 
+      const diagnosticHost = document.createElement('div')
+      diagnosticHost.className = 'tiptap-code-block-diagnostic'
+      diagnosticHost.contentEditable = 'false'
+
       const preview = document.createElement('div')
       preview.className = 'tiptap-code-block-preview'
       preview.contentEditable = 'false'
@@ -212,6 +221,29 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
         if (languageName) return displayLanguage(languageName)
         const detected = String(lowlight.highlightAuto(code).data?.language ?? '')
         return detected ? `${labels.auto} · ${displayLanguage(detected)}` : labels.plainText
+      }
+
+      const setDiagnostic = (diagnostic: MermaidDiagnostic | null): void => {
+        diagnosticKind = diagnostic?.kind ?? null
+        mermaidUnavailable = diagnostic?.kind === 'runtime'
+        diagnosticHost.replaceChildren(
+          diagnostic
+            ? mermaidDiagnosticNode(diagnostic, labels, {
+                copyDetail: labels.diagnostic?.copyDetail ?? 'Copy original error',
+                copied: labels.diagnostic?.copied ?? 'Copied',
+              })
+            : document.createTextNode(''),
+        )
+      }
+      const renderDiagnostic = (diagnostic: MermaidDiagnostic): void => {
+        setDiagnostic(diagnostic)
+        const isMermaid = String(currentNode.attrs.language).toLowerCase() === 'mermaid'
+        if (diagnostic.kind === 'runtime') {
+          // A runtime failure must not latch: dropping the rendered marker lets the next
+          // paint() retry the load, so restoring the network recovers the diagram.
+          renderedMermaid = ''
+        }
+        syncMermaidChrome(isMermaid, currentNode.textContent)
       }
 
       const paintLineNumbers = (code: string): void => {
@@ -445,6 +477,26 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
         showModal(dialog)
       }
 
+      /**
+       * Visibility derived from the current availability state. Split out of paint()
+       * so the diagnostic callback can refresh the chrome without re-entering the
+       * render decision.
+       */
+      const syncMermaidChrome = (isMermaid: boolean, code: string): void => {
+        dom.classList.toggle('is-source-visible', isMermaid && mermaidUnavailable)
+        const showMermaidTools = isMermaid && !mermaidUnavailable
+        themeSelect.hidden = !showMermaidTools
+        directionSelect.hidden = !showMermaidTools || !isMermaidDirectionSupported(code)
+        panelButton.hidden = true
+        themeSelect.disabled = !editor.isEditable
+        directionSelect.disabled = !editor.isEditable
+        panelButton.classList.toggle('is-active', codePanelVisible)
+        panelButton.setAttribute('aria-pressed', String(codePanelVisible))
+        zoomButton.hidden = !isMermaid || mermaidUnavailable
+        preview.hidden = !isMermaid || mermaidUnavailable
+        source.hidden = isMermaid && !mermaidUnavailable
+      }
+
       const paint = (): void => {
         const languageName = String(currentNode.attrs.language ?? '').toLocaleLowerCase()
         const code = currentNode.textContent
@@ -457,30 +509,21 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
         }
         dom.dataset.tacoBlockId = blockId
         dom.classList.toggle('is-mermaid', isMermaid)
-        dom.classList.toggle('is-source-visible', isMermaid && mermaidUnavailable)
         language.textContent = languageLabel(languageName, code)
         content.className = languageName ? `language-${languageName}` : ''
-        const showMermaidTools = isMermaid && !mermaidUnavailable
-        themeSelect.hidden = !showMermaidTools
-        directionSelect.hidden = !showMermaidTools || !isMermaidDirectionSupported(code)
-        panelButton.hidden = true
-        themeSelect.disabled = !editor.isEditable
-        directionSelect.disabled = !editor.isEditable
+        syncMermaidChrome(isMermaid, code)
         const codeDir = isMermaid ? extractMermaidDirectionFromCode(code) : undefined
         if (codeDir && codeDir !== currentDirection) {
           currentDirection = codeDir
           directionSelect.value = codeDir
         }
-        panelButton.classList.toggle('is-active', codePanelVisible)
-        panelButton.setAttribute('aria-pressed', String(codePanelVisible))
-        zoomButton.hidden = !isMermaid || mermaidUnavailable
         commentButton.hidden = !onComment
         commentButton.disabled = !blockId || !code.trim()
-        preview.hidden = !isMermaid || mermaidUnavailable
-        source.hidden = isMermaid && !mermaidUnavailable
         paintLineNumbers(code)
 
-        if (renderMermaid && isMermaid && !mermaidUnavailable && (code !== renderedMermaid || !splitController)) {
+        // A runtime failure clears `renderedMermaid`, so the next paint (any edit or
+        // mode switch) retries the load instead of latching on the old failure.
+        if (renderMermaid && isMermaid && (code !== renderedMermaid || !splitController)) {
           renderedMermaid = code
           if (splitController) {
             splitController.updateCode(code)
@@ -492,16 +535,12 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
             runtime: mermaidRuntime,
             allowCodePanel: false,
             initialTheme: currentTheme,
-            onUnavailable: () => {
+            onDiagnostic: (diagnostic) => {
               if (destroyed || String(currentNode.attrs.language).toLowerCase() !== 'mermaid') return
-              mermaidUnavailable = true
-              dom.classList.add('is-source-visible')
-              themeSelect.hidden = true
-              directionSelect.hidden = true
-              panelButton.hidden = true
-              zoomButton.hidden = true
-              preview.hidden = true
-              source.hidden = false
+              renderDiagnostic(diagnostic)
+            },
+            onRendered: () => {
+              if (diagnosticKind) setDiagnostic(null)
             },
             onThemeChange: (theme) => {
               currentTheme = theme
@@ -577,7 +616,7 @@ export const createTacoCodeBlock = (labels: MermaidPluginLabels, options: TacoCo
 
       actions.append(themeSelect, directionSelect, panelButton, zoomButton, commentButton, copyButton)
       tools.append(language, actions)
-      dom.append(tools, preview, source)
+      dom.append(tools, diagnosticHost, preview, source)
       paint()
 
       return {

@@ -273,6 +273,14 @@ describe('skill packer', () => {
     expect(mirrored.equals(canonical), 'skills/taco/scripts/png.mjs must stay byte-identical').toBe(true)
   })
 
+  it('ships the same Mermaid diagnostics kernel the runtime enforces', () => {
+    const mirrored = readFileSync(resolve('skills/taco/scripts/mermaid-diagnostics.mjs'))
+    const canonical = readFileSync(resolve('extensions/taco/bin/mermaid-diagnostics.mjs'))
+    expect(mirrored.equals(canonical), 'skills/taco/scripts/mermaid-diagnostics.mjs must stay byte-identical').toBe(true)
+    // The linter imports the mirror directly, so it must stay dependency-free.
+    expect(canonical.includes('import '), 'the diagnostics kernel must not import anything').toBe(false)
+  })
+
   it('refuses a PNG the runtime would reject', () => {
     const directory = join(fixtureDir(), 'broken-png')
     // A PNG signature and nothing else: the old check accepted it, then the artifact opened in Recovery.

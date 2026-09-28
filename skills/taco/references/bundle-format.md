@@ -99,6 +99,9 @@ Document content never decides classification: frontmatter keys do not route a f
 
 Non-UTF-8 bytes, symbolic links, and non-regular files are not silently skipped: stop, or exclude them explicitly.
 
+`.mmd` content is carried as opaque text: the bundle rules below validate its path and media type, never its diagram syntax. Run `node scripts/lint-mermaid.mjs` (see `SKILL.md` step 2) before handing the file over — otherwise the reviewer's browser is the first thing to parse the diagram, and it reports a failure as one generic sentence.
+
+
 ## Writing the data block
 
 ```html

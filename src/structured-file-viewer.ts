@@ -13,6 +13,7 @@ import {
   type MermaidTheme,
 } from './mermaid.ts'
 import { bindMermaidCanvasDrag, createMermaidSplitView, iconButton, type MermaidSplitViewController } from './mermaid-split-view.ts'
+import { mermaidDiagnosticNode } from './mermaid.ts'
 import { createSegmentedControl } from './segmented-control.ts'
 import { createSourceEditor, type SourceEditorController } from './source-editor.ts'
 import { fileName, type TacoFile } from './model.ts'
@@ -698,13 +699,11 @@ export const createStructuredFileViewer = (options: StructuredFileViewerOptions)
         syncMermaidControls()
         options.onPreviewSettled?.()
       },
-      onUnavailable: () => {
-        diagnostics.replaceChildren(diagnosticNode(options.labels.mermaidUnavailable))
-        mermaidView?.toggleCodePanel(true)
-        options.onPreviewSettled?.()
-      },
-      onRenderError: () => {
-        diagnostics.replaceChildren(diagnosticNode(options.mermaidLabels.error))
+      onDiagnostic: (diagnostic) => {
+        diagnostics.replaceChildren(mermaidDiagnosticNode(diagnostic, options.mermaidLabels, {
+          copyDetail: options.mermaidLabels.diagnostic?.copyDetail ?? 'Copy original error',
+          copied: options.mermaidLabels.diagnostic?.copied ?? 'Copied',
+        }))
         mermaidView?.toggleCodePanel(true)
         options.onPreviewSettled?.()
       },

@@ -1,4 +1,5 @@
 import { sanitizeMermaidSvg } from './security.ts'
+import { classifyMermaidFailure, type MermaidDiagnostic } from '../extensions/taco/bin/mermaid-diagnostics.mjs'
 import { Document, isMap, isScalar, parseDocument, visit } from 'yaml'
 
 const MERMAID_CDN_URL = 'https://cdn.jsdelivr.net/npm/mermaid@12.0.0/dist/mermaid.esm.min.mjs'
@@ -160,6 +161,8 @@ export const updateMermaidCodeTheme = (source: string, theme: MermaidTheme): str
 export interface MermaidApi {
   initialize: (config: Record<string, unknown>) => void
   render: (id: string, source: string) => Promise<{ svg: string }>
+  /** Present on the pinned Mermaid build; linting degrades to render-only when absent. */
+  parse?: (text: string, options?: { suppressErrors?: boolean }) => Promise<false | { diagramType: string; config?: Record<string, unknown> }>
   mermaidAPI?: { getConfig: () => { themeVariables?: Record<string, unknown> } }
 }
 
@@ -226,6 +229,17 @@ export interface MermaidPluginLabels {
   updateDiagram?: string
   lineComment?: string
   nodeComment?: string
+  /** Per-kind diagnostic copy; the four kinds must never share one sentence. */
+  diagnostic?: {
+    syntax: string
+    unknownType: string
+    render: string
+    runtime: string
+    position: (line: number, column: number) => string
+    noPosition: string
+    copyDetail: string
+    copied: string
+  }
 }
 
 export interface MermaidEdgeInfo {
@@ -331,7 +345,6 @@ export interface MermaidPreviewElement extends HTMLElement {
 let diagramSerial = 0
 
 type ApplyPreview = (preview: HTMLElement) => void
-type MermaidFailure = (error?: unknown) => void
 
 const cssToken = (styles: CSSStyleDeclaration, name: string, fallback: string): string =>
   styles.getPropertyValue(name).trim() || fallback
@@ -483,15 +496,75 @@ const bindSvgNodeInteractions = (
   }
 }
 
+export type MermaidDiagnosticHandler = (diagnostic: MermaidDiagnostic) => void
+
+/** Compact, localized one-line summary of a diagnostic for a preview surface. */
+export const mermaidDiagnosticSummary = (diagnostic: MermaidDiagnostic, labels: MermaidPluginLabels): string => {
+  const copy = labels.diagnostic
+  const kindText = copy
+    ? diagnostic.kind === 'unknown-type'
+      ? copy.unknownType
+      : copy[diagnostic.kind]
+    : diagnostic.message
+  if (diagnostic.line === undefined) {
+    const reason = diagnostic.kind === 'runtime' && diagnostic.detail ? ` · ${diagnostic.detail.split('\n')[0]}` : ''
+    return `${kindText}${reason || (copy ? ` · ${copy.noPosition}` : '')}`
+  }
+  const column = diagnostic.column ?? 1
+  return `${kindText} · ${copy ? copy.position(diagnostic.line, column) : `${diagnostic.line}:${column}`}`
+}
+
+/**
+ * Per-kind diagnostic node: localized kind summary, the position, and the raw
+ * parser text with a copy action. Shared by the `.mmd` diagnostics region and the
+ * Markdown code block so both entries present the same message.
+ */
+export const mermaidDiagnosticNode = (
+  diagnostic: MermaidDiagnostic,
+  labels: MermaidPluginLabels,
+  copy: { copyDetail: string; copied: string },
+): HTMLElement => {
+  const node = document.createElement('p')
+  node.className = `mermaid-diagnostic is-${diagnostic.kind}`
+  node.setAttribute('role', 'alert')
+  const summary = document.createElement('span')
+  summary.className = 'mermaid-diagnostic-summary'
+  summary.textContent = mermaidDiagnosticSummary(diagnostic, labels)
+  node.append(summary)
+  if (diagnostic.detail) {
+    const detail = document.createElement('pre')
+    detail.className = 'mermaid-diagnostic-detail'
+    detail.textContent = diagnostic.detail
+    const copyButton = document.createElement('button')
+    copyButton.type = 'button'
+    copyButton.className = 'mermaid-diagnostic-copy'
+    copyButton.textContent = copy.copyDetail
+    copyButton.addEventListener('click', () => {
+      void navigator.clipboard?.writeText(diagnostic.detail ?? '').then(() => {
+        copyButton.textContent = copy.copied
+      }).catch(() => {})
+    })
+    node.append(detail, copyButton)
+  }
+  return node
+}
+
+/**
+ * Mermaid injects a temporary `#d{id}` container into `document.body` and leaves it
+ * behind when `render()` throws, so a failed edit leaks one error SVG per attempt.
+ */
+const removeMermaidArtifacts = (id: string): void => {
+  for (const candidate of [`d${id}`, `i${id}`]) document.getElementById(candidate)?.remove()
+}
+
 const renderDiagram = (
   host: HTMLElement,
   surface: HTMLElement,
   source: string,
   labels: MermaidPluginLabels,
   applyPreview?: ApplyPreview,
-  onUnavailable?: MermaidFailure,
   runtime: MermaidRuntime = defaultMermaidRuntime,
-  onRenderError?: MermaidFailure,
+  onDiagnostic?: MermaidDiagnosticHandler,
   options?: MermaidRenderOptions,
 ): void => {
   const explicitTheme = extractMermaidThemeFromCode(source)
@@ -501,6 +574,17 @@ const renderDiagram = (
   surface.textContent = labels.loading
   surface.dataset.renderId = id
 
+  const fail = (stage: 'load' | 'parse' | 'render', error: unknown): void => {
+    const diagnostic = classifyMermaidFailure({ stage, error, source })
+    if (stage === 'load') host.dataset.mermaidUnavailable = 'true'
+    else removeMermaidArtifacts(id)
+    surface.className = 'surface is-error'
+    surface.textContent = mermaidDiagnosticSummary(diagnostic, labels)
+    surface.title = diagnostic.detail ?? ''
+    onDiagnostic?.(diagnostic)
+    applyPreview?.(host.cloneNode(true) as HTMLElement)
+  }
+
   const draw = async (): Promise<void> => {
     if (surface.dataset.renderId !== id) return
     let mermaid: MermaidApi
@@ -508,8 +592,7 @@ const renderDiagram = (
       mermaid = await runtime.load()
     } catch (error) {
       if (surface.dataset.renderId !== id) return
-      host.dataset.mermaidUnavailable = 'true'
-      onUnavailable?.(error)
+      fail('load', error)
       return
     }
 
@@ -529,13 +612,27 @@ const renderDiagram = (
       ),
       flowchart: { curve: 'basis' },
     })
+    const renderSource = explicitTheme && explicitTheme !== currentTheme ? updateMermaidCodeTheme(source, currentTheme) : source
+    // Lint before drawing: an invalid source never reaches render(), which is where
+    // Mermaid's unremoved error containers come from.
+    if (typeof mermaid.parse === 'function') {
+      try {
+        await mermaid.parse(renderSource)
+      } catch (error) {
+        if (surface.dataset.renderId !== id) return
+        fail('parse', error)
+        return
+      }
+      if (surface.dataset.renderId !== id) return
+    }
     try {
-      const renderSource = explicitTheme && explicitTheme !== currentTheme ? updateMermaidCodeTheme(source, currentTheme) : source
       const { svg } = await mermaid.render(id, renderSource)
       if (surface.dataset.renderId !== id) return
       surface.className = 'surface'
+      surface.title = ''
       surface.innerHTML = sanitizeMermaidSvg(svg)
       delete host.dataset.mermaidUnavailable
+      removeMermaidArtifacts(id)
       host.dataset.mermaidTheme = currentTheme
       host.dataset.mermaidLook = effectiveLook
       host.dataset.mermaidDark = String(isDark)
@@ -548,9 +645,8 @@ const renderDiagram = (
       options?.onRendered?.()
     } catch (error) {
       if (surface.dataset.renderId !== id) return
-      surface.className = 'surface is-error'
-      surface.textContent = labels.error
-      onRenderError?.(error)
+      fail('render', error)
+      return
     }
     applyPreview?.(host.cloneNode(true) as HTMLElement)
   }
@@ -562,9 +658,8 @@ export const createMermaidPreview = (
   source: string,
   labels: MermaidPluginLabels,
   applyPreview?: ApplyPreview,
-  onUnavailable?: MermaidFailure,
   runtime: MermaidRuntime = defaultMermaidRuntime,
-  onRenderError?: MermaidFailure,
+  onDiagnostic?: MermaidDiagnosticHandler,
   options?: MermaidRenderOptions,
 ): MermaidPreviewElement => {
   const host = document.createElement('div') as unknown as MermaidPreviewElement
@@ -586,9 +681,8 @@ export const createMermaidPreview = (
       source,
       labels,
       applyPreview,
-      onUnavailable,
       runtime,
-      onRenderError,
+      onDiagnostic,
       { ...options, theme: activeTheme },
     )
   }
