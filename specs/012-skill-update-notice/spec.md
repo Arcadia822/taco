@@ -126,7 +126,7 @@ Agent 开始 Taco 工作 → 一次轻量更新检查 → 正常完成交付
 | AC-1 | `skills/taco/SKILL.md` 明确规约「会前一次检查 → 交付 → 有更新才一句话提醒 → 绝不自主升级」的契约 | Issue 验收标准 1、3 |
 | AC-2 | `docs/agent-installation.md`（Agent 安装指南）包含同一契约、**npx skills 优先的安装入口**、安装文件清单（含 `VERSION`）与验证清单更新；`extensions/taco/policies/taco-agent-policy.md` 的新版本对新装/干净安装的 Spec Kit 项目生效（既有安装受 `prepare-policy` 的 fail-safe 约束，详见 §7） | Issue 验收标准 1「及相关 Agent 指南」 |
 | AC-3 | 失败路径（离线、超时、`git` 缺失、`VERSION` 缺失或不可解析）一律 `exit code 0` + `ok:false` + `reason`，绝不让 Taco 工作失败；`taco-cli` 未安装或版本不可解析属于正常降级（`cli:null` 或 `cli.installed:null`），不影响 `ok`，也不阻断工作 | Issue 验收标准 2 |
-| AC-4 | **脚本自身**不读取项目内容、不外发任何本地数据：请求只读取远端公开的 tag/发布列表，不携带本地路径、项目内容或凭据；唯一的本地写入是仅含版本比较结果的缓存文件（15 分钟 TTL，`--no-cache` 或 `TACO_UPDATE_CACHE_TTL=0` 可完全禁用，读取/写入失败不影响结果）；脚本自动执行的唯一本机程序是 `taco-cli --version`（可由 `--no-cli` / `TACO_UPDATE_CHECK=off` 关闭），其自身行为由用户环境的信任模型承担（§5.5） | 本规格安全性要求 |
+| AC-4 | **脚本自身**不读取项目文档内容、不外发任何本地数据（唯一的项目内读取是从扩展清单取 `version`，唯一的本地写入是版本比较缓存）：请求只读取远端公开的 tag/发布列表，不携带本地路径、项目内容或凭据；唯一的本地写入是仅含版本比较结果的缓存文件（15 分钟 TTL，`--no-cache` 或 `TACO_UPDATE_CACHE_TTL=0` 可完全禁用，读取/写入失败不影响结果）；脚本自动执行的唯一本机程序是 `taco-cli --version`（可由 `--no-cli` / `TACO_UPDATE_CHECK=off` 关闭），其自身行为由用户环境的信任模型承担（§5.5） | 本规格安全性要求 |
 | AC-5 | 存在可用更新时输出的提醒文案与 §5.4 模板一致，且**明确声明未升级**；无更新或结果未知时不输出任何字样 | Issue 期望行为 2 |
 | AC-6 | 任何路径下都不会触发安装/升级命令：脚本只发起一次 GitHub Tags API 的 GET 与一次 `taco-cli --version`，不含任何写文件或安装路径；SKILL.md 以 MUST NOT 级别禁止自主升级；该约束由结构审查 + 真实流程烟测保证（无法由单元测试证明） | Issue 验收标准 3 |
 | AC-7 | 单元/端到端测试覆盖：有更新、无更新、版本领先、`cli` 缺失/不可解析、**扩展缺失/有更新/无 archive/响应超限**、`VERSION` 缺失/不可解析、远端不可达/超时/输出超限、禁用开关短路、**缓存命中/TTL 过期/损坏/禁用/写失败**、重定向被拒、异域 Link 不跟随、预发布 tag、JSON 契约字段 | §8 |
@@ -188,7 +188,7 @@ Agent 开始 Taco 工作 → 一次轻量更新检查 → 正常完成交付
 - **重定向**：HTTP 回退的 `fetch` 固定使用 `redirect: "error"`——任何重定向都视为失败（映射为 `http-error`）并静默。
 - **限额**：HTTP 回退命中 403/429 或 `x-ratelimit-remaining: 0` ⇒ `rate-limited`。
 - **扩展（可选组件）的探测**：扩展的「更新」不仅取决于版本号，还取决于**该版本是否发布了可安装包**（实测仅 `v0.6.0` 有 `taco-extension-v0.6.0.zip`，后续 tag 无资产）。因此仅当 §5.1 找到已安装的扩展清单时，额外发起一次 `GET https://api.github.com/repos/Arcadia822/taco/releases?per_page=100`，取**带可安装扩展包的 release** 中版本号最高者作为 `extension.latest`（资产名匹配 `^taco-extension-v(\d+\.\d+\.\d+)\.zip$`）；没有任何可用资产 ⇒ `extension.latest=null`、不提示。这是本特性唯一使用 releases 端点的场景（tag 通道拿不到资产信息）。该请求失败只让扩展项变为 `null`，不影响 `skill`/`cli` 的结论与 `ok`。
-- **结果缓存（15 分钟 TTL）**：检查成功后把**仅含版本比较结果**的缓存写入 `${XDG_CACHE_HOME:-$HOME/.cache}/taco/update-check.json`（`{ schema, checkedAt, source, skill, cli, extension }`，大小 < 2 KiB）。TTL 默认 15 分钟（`TACO_UPDATE_CACHE_TTL` 秒，`0` 表示禁用），`--no-cache` 强制忽略并刷新。规则：只有**成功**的远端读取才写入；缓存命中即直接复用（`cached: true`），不发任何网络请求（含扩展的 releases 请求）；缓存缺失/损坏/不可读/写入失败一律忽略并回落到正常探测，绝不因此失败或阻断；缓存不写入任何项目内容、凭据或文件路径。
+- **结果缓存（15 分钟 TTL）**：检查成功后把**仅含版本比较结果与探测目标**的缓存（字段为 `{ schema, checkedAt, target: { repo, apiBase }, source, latest: { skill, cli, extension }, extensionProbed }`）写入 `${XDG_CACHE_HOME:-$HOME/.cache}/taco/update-check.json`（大小 < 2 KiB）。TTL 默认 15 分钟（`TACO_UPDATE_CACHE_TTL` 秒，`0` 表示禁用），`--no-cache` 强制忽略并刷新。规则：只有**成功**的远端读取才写入；缓存命中即直接复用（`cached: true`），不发任何网络请求（含扩展的 releases 请求）。缓存**无条件视为不可信输入**：命中前必须校验 schema、`source` 白名单、`checkedAt` 是否在 TTL 内、`target.repo`/`target.apiBase` 与本次完全一致、`extensionProbed` 为布尔且满足本次需要、三个 `latest` 字段均为 `null` 或三段纯数字版本；任一不符即忽略缓存并重新探测。缓存缺失/损坏/被篡改/不可读/写入失败一律忽略，绝不因此失败或阻断；缓存不写入任何项目内容、凭据或文件路径。
 
 ### 5.3 检查脚本契约（新增 `skills/taco/scripts/check-update.mjs`）
 
@@ -206,7 +206,7 @@ node scripts/check-update.mjs [--json] [--repo <url|path>] [--api-base <url>] [-
   | `schema` | `"taco-update-check/1"` | 契约标识（固定值） |
   | `checkedAt` | string | 检查时刻，ISO 8601 UTC |
   | `ok` | boolean | **传输与本地主对象**是否可用：远端探测成功 **且** skill 版本标记可读。为 `false` 时调用方必须静默 |
-  | `reason` | string \| null | `ok:false` 时的机器可读原因，取值集合：`disabled`、`git-unavailable`、`network-unavailable`、`timeout`、`rate-limited`、`http-error`、`output-limit-exceeded`、`installed-version-marker-missing`、`installed-version-unreadable`；`ok:true` 时为 `null` |
+  | `reason` | string \| null | `ok:false` 时的机器可读原因，取值集合：`disabled`、`git-unavailable`、`network-unavailable`、`timeout`、`rate-limited`、`http-error`、`output-limit-exceeded`、`installed-version-marker-missing`、`installed-version-unreadable`、`internal-error`（最外层未知异常兜底）；`ok:true` 时为 `null` |
   | `source` | `"git-ls-remote"` \| `"github-tags-api"` \| null | 实际生效的探测通道；`ok:false` 时为 `null` |
   | `skill` | object | `{ installed: string\|null, latest: string\|null, updateAvailable: boolean\|null }` |
   | `cli` | object \| null | 与 `skill` 同构；本机未安装 `taco-cli`（或未通过信任检查）时为 `null` |
@@ -326,7 +326,7 @@ node scripts/check-update.mjs [--json] [--repo <url|path>] [--api-base <url>] [-
 | 通过 `npx skills` 安装 | 与拷贝安装等价：`VERSION` 与 `scripts/` 都在 `./.claude/skills/taco/`（或 `~/.claude/skills/taco/`）内，检查照常工作 | 实测 `add --copy` 复制整个 skill 目录；`skills-lock.json` 只记录 `source`/`sourceType`/`computedHash`，不含 semver，故版本来源仍是 `VERSION`；升级走 `npx skills@latest update taco` |
 | 项目装过扩展，但远端没有可安装的扩展包 | `extension.latest=null`、不提示 | 「有 tag 但无 archive」不算可用更新（§5.2） |
 | 工作目录不在任何 Spec Kit 项目内 | `extension:null` | 不做任何扩展请求 |
-| 缓存文件缺失/损坏/不可写 | 忽略缓存并正常探测 | 缓存是优化不是依赖；任何缓存异常都不得改变结论或阻断 |
+| 缓存文件缺失/损坏/被篡改（例如 `latest` 里塞入非版本字符串）/目标不匹配/不可写 | 忽略缓存并正常探测 | 缓存是无条件不可信的优化，不是依赖；任何缓存异常都不得改变结论或阻断 |
 | 已安装 Taco Spec Kit 扩展的项目，重跑 `prepare-policy` | 返回 `manual-merge` 并拒绝写入 | `extensions/taco/bin/taco.mjs` 要求既有 managed block 与新策略**完全一致**才允许替换；策略文本变更即触发 fail-safe。既有行为，本期沿用，合并方式见 `extensions/taco/README.md` |
 | 仓库 checkout 内工作（贡献者） | 版本通常等于或领先最近 tag → 静默 | 贡献者环境本身即最新源 |
 
@@ -352,21 +352,22 @@ node scripts/check-update.mjs [--json] [--repo <url|path>] [--api-base <url>] [-
 6. **覆盖仓库时不回退**（`--repo`）：`--repo <不存在路径>` + git 失败 → `ok=false`、`source=null`，且夹具**收到 0 次请求**（`reason` 为 `network-unavailable` 或 `git-unavailable`）。
 7. **cli 降级三种形态**：`--no-cli` → `cli=null`；`--cli-bin` 指向不存在的绝对路径 → `cli=null`（信任检查拒绝）；`--cli-bin` 指向输出非 JSON 的桩 → `cli.installed=null`、`cli.updateAvailable=null`，且 `ok=true`、`skill` 结论照常（组件独立性）。
 8. **版本标记异常**（`VERSION`）：无 `VERSION` → `ok=false, reason="installed-version-marker-missing"`；内容为 `abc` → `ok=false, reason="installed-version-unreadable"`；两者 `updateAvailable=null`，且**不得只报告 cli 更新**。
-9. **超时与进程组终止**：`git` 桩两种写法各测一次——（a）`exec sleep 5`、（b）`sh -c 'sleep 5'`（睡眠为派生进程）；`--timeout 200` 下断言 `reason="timeout"`、总耗时远小于 5 s、两种写法后都不残留相关进程。
-10. **输出超限**：`git` 桩输出 > 64 KiB，以及夹具返回 > 64 KiB → `reason="output-limit-exceeded"`，连接/子进程被终止，不阻塞。
-11. **HTTP 错误映射与限额**：403（带 `x-ratelimit-remaining: 0`）、403（无该头）、429 → `rate-limited`；500 → `http-error`；200 但响应体非 JSON → `http-error`；DNS/连接失败 → `network-unavailable`。
-12. **重定向与跨域 Link**：夹具对第 1 页返回 302（指向另一主机）→ `ok=false`、`reason="http-error"` 且**没有任何请求发往重定向目标**；夹具返回异域 `Link: rel="next"` → 第 2 页请求仍发往初始基址，无新主机收到请求。
-13. **HTTP 分页**：第 1 页 100 条不含本体 tag 且带 `Link: rel="next"`，第 2 页含 `v0.11.0` → `skill.latest="0.11.0"`；无 `next` 且无匹配 → `latest=null`、`ok=true`；断言**最多 2 次请求**。
-14. **预发布/缺失 tag**：仅含 `v1.2.0-rc.1`、`v1.2`、`release-1` → `skill.latest=null`、`ok=true`、无提示；无 `taco-cli-v*` → `cli.latest=null`、`cli.updateAvailable=null`、`ok=true`（不得判成传输失败）。git 与 HTTP 两条通道各测一次。
-15. **参数边界**：`--repo -x`、`--repo ftp://host`、`--api-base http://example.com`、`--api-base ftp://host`、未知 flag → `exit code 2`（`--repo` 只接受 `https://` 或绝对路径；`--api-base` 只接受 `https://api.github.com` 或环回地址）。
-16. **禁用开关短路**：`TACO_UPDATE_CHECK=off` + 记录型 `git` 桩 + 夹具 → `reason="disabled"`，且**桩未被调用、夹具收到 0 次请求**（证明短路，而非「调用后失败」）。
-17. **契约字段**：`--json` 键集合恰为 `schema`/`checkedAt`/`ok`/`reason`/`source`/`skill`/`cli`；各字段类型、semver 正则、`null` 语义与 §5.3 表格一致；子对象键集合精确断言（不新增 JSON Schema 校验依赖）。
-18. **版本标记同步**（`VERSION`）：`tests/version.test.ts` 断言 `skills/taco/VERSION.trim() === packageJson.version`。
-19. **构建生成**：`node scripts/sync-skill-version.mjs` 对临时目录运行时写入 `"<version>\n"` 且幂等（第二次运行报告 `unchanged`，不重写文件）。
-20. **CLI 侧的超时与限额**：`--cli-bin` 分别指向挂起桩与无限输出桩 → `cli.installed=null`、`cli.updateAvailable=null`、`ok=true`，且 skill 的更新提示仍可用；挂起用例断言子进程被终止且不残留。
-21. **扩展（可选组件）**：在临时目录构造 `.specify/extensions/taco/extension.yml`（`version: 0.6.0`），releases 夹具里 `v0.11.0` 无资产、`v0.6.0` 带 `taco-extension-v0.6.0.zip` → `extension={installed:0.6.0, latest:0.6.0, updateAvailable:false}`（有更新的本体 tag、但没有更新的可安装包 ⇒ 不提示）；夹具改为 `v0.12.0` 带 `taco-extension-v0.12.0.zip` → `updateAvailable=true`；无扩展清单时 → `extension:null` 且夹具请求数不增加。
-22. **releases 响应体积**：夹具返回约 165 KB 的合法 releases JSON（含 `taco-extension-*.zip` 资产）→ `extension.updateAvailable=true`（证明该端点不受 64 KiB 上限约束）；夹具返回 2 MiB 响应 → `extension={installed, latest:null, updateAvailable:null}` 且 `ok=true`。
-23. **缓存**：同一 `TACO_UPDATE_CACHE_DIR` 连续两次运行 → 第二次 `cached=true` 且夹具请求数为 0；把 `checkedAt` 改成超过 TTL → 重新探测；写入损坏 JSON → 回落探测且结论正确；`--no-cache` 与 `TACO_UPDATE_CACHE_TTL=0` → 不读不写；缓存目录不可写 → 结论不变、`exit code 0`。
+9. **限额头与超时参数**：夹具返回 `200` + `x-ratelimit-remaining: 0` → `rate-limited`（即使状态码是 200）；`--timeout 2147483648` 与 `--timeout 0` → `exit code 2`。
+10. **超时与进程组终止**：`git` 桩两种写法各测一次——（a）`exec sleep 5`、（b）`sh -c 'sleep 5'`（睡眠为派生进程）；`--timeout 200` 下断言 `reason="timeout"`、总耗时远小于 5 s、两种写法后都不残留相关进程。
+11. **输出超限**：`git` 桩输出 > 64 KiB，以及夹具返回 > 64 KiB → `reason="output-limit-exceeded"`，连接/子进程被终止，不阻塞。
+12. **HTTP 错误映射与限额**：403（带 `x-ratelimit-remaining: 0`）、403（无该头）、429 → `rate-limited`；500 → `http-error`；200 但响应体非 JSON → `http-error`；DNS/连接失败 → `network-unavailable`。
+13. **重定向与跨域 Link**：夹具对第 1 页返回 302（指向另一主机）→ `ok=false`、`reason="http-error"` 且**没有任何请求发往重定向目标**；夹具返回异域 `Link: rel="next"` → 第 2 页请求仍发往初始基址，无新主机收到请求。
+14. **HTTP 分页**：第 1 页 100 条不含本体 tag 且带 `Link: rel="next"`，第 2 页含 `v0.11.0` → `skill.latest="0.11.0"`；无 `next` 且无匹配 → `latest=null`、`ok=true`；断言**最多 2 次请求**。
+15. **预发布/缺失 tag**：仅含 `v1.2.0-rc.1`、`v1.2`、`release-1` → `skill.latest=null`、`ok=true`、无提示；无 `taco-cli-v*` → `cli.latest=null`、`cli.updateAvailable=null`、`ok=true`（不得判成传输失败）。git 与 HTTP 两条通道各测一次。
+16. **参数边界**：`--repo -x`、`--repo ftp://host`、`--api-base http://example.com`、`--api-base ftp://host`、未知 flag → `exit code 2`（`--repo` 只接受 `https://` 或绝对路径；`--api-base` 只接受 `https://api.github.com` 或环回地址）。
+17. **禁用开关短路**：`TACO_UPDATE_CHECK=off` + 记录型 `git` 桩 + 夹具 → `reason="disabled"`，且**桩未被调用、夹具收到 0 次请求**（证明短路，而非「调用后失败」）。
+18. **契约字段**：`--json` 键集合恰为 `schema`/`checkedAt`/`ok`/`reason`/`source`/`skill`/`cli`；各字段类型、semver 正则、`null` 语义与 §5.3 表格一致；子对象键集合精确断言（不新增 JSON Schema 校验依赖）。
+19. **版本标记同步**（`VERSION`）：`tests/version.test.ts` 断言 `skills/taco/VERSION.trim() === packageJson.version`。
+20. **构建生成**：`node scripts/sync-skill-version.mjs` 对临时目录运行时写入 `"<version>\n"` 且幂等（第二次运行报告 `unchanged`，不重写文件）。
+21. **CLI 侧的超时与限额**：`--cli-bin` 分别指向挂起桩与无限输出桩 → `cli.installed=null`、`cli.updateAvailable=null`、`ok=true`，且 skill 的更新提示仍可用；挂起用例断言子进程被终止且不残留。
+22. **扩展（可选组件）**：在临时目录构造 `.specify/extensions/taco/extension.yml`（`version: 0.6.0`），releases 夹具里 `v0.11.0` 无资产、`v0.6.0` 带 `taco-extension-v0.6.0.zip` → `extension={installed:0.6.0, latest:0.6.0, updateAvailable:false}`（有更新的本体 tag、但没有更新的可安装包 ⇒ 不提示）；夹具改为 `v0.12.0` 带 `taco-extension-v0.12.0.zip` → `updateAvailable=true`；无扩展清单时 → `extension:null` 且夹具请求数不增加。
+23. **releases 响应体积**：夹具返回约 165 KB 的合法 releases JSON（含 `taco-extension-*.zip` 资产）→ `extension.updateAvailable=true`（证明该端点不受 64 KiB 上限约束）；夹具返回 2 MiB 响应 → `extension={installed, latest:null, updateAvailable:null}` 且 `ok=true`。
+24. **缓存**：同一 `TACO_UPDATE_CACHE_DIR` 连续两次运行 → 第二次 `cached=true` 且夹具请求数为 0；把 `checkedAt` 改到 TTL 之外 → 重新探测；写入损坏 JSON、把 `latest.skill` 改成 `bad`、把 `source` 改成白名单外的值、把 `target` 指向另一个仓库 → 一律忽略缓存并重新探测；`--no-cache` 与 `TACO_UPDATE_CACHE_TTL=0` → 不读不写；缓存目录不可写 → 结论不变、`exit code 0`。
 
 ### 8.2 手工 smoke（必须真实执行，作为交付证据）
 
@@ -381,11 +382,11 @@ node scripts/check-update.mjs [--json] [--repo <url|path>] [--api-base <url>] [-
 ### 8.3 与验收标准的映射
 
 - AC-1 → §5.4 契约文本 + `SKILL.md` 改动评审；AC-2 → §6 文档改动 + 8.2 的最后一项。
-- AC-3 → 8.1 第 5、6、8、9、10、11、12、15 项。
-- AC-4 → 8.1 第 3、4、16 项（git 加固、配置隔离、禁用时零调用/零请求）+ 第 5 项的请求头断言（无凭据、无本地内容）+ 第 22 项的缓存边界 + §5.5 + 代码结构审查；范围限定见 AC-4 本身。
-- AC-5 → 8.1 第 1、2、7、14、20、21、22 项 + §5.4 文案断言。
+- AC-3 → 8.1 第 5、6、8、9、10、11、12、13、16 项。
+- AC-4 → 8.1 第 3、4、17 项（git 加固、配置隔离、禁用时零调用/零请求）+ 第 5 项的请求头断言（无凭据、无本地内容）+ 第 23 项的缓存边界 + §5.5 + 代码结构审查；范围限定见 AC-4 本身。
+- AC-5 → 8.1 第 1、2、7、15、21、22、23 项 + §5.4 文案断言。
 - AC-6 → §5.4 禁止项 + 代码结构审查（仅 `git ls-remote`／一次 HTTP GET 与一次 `taco-cli --version`，无写路径）+ 8.2 的流程证据（排除正常打包写入）；**该项无法由单元测试证明**。
-- AC-7 → 8.1 第 1–23 项；AC-8 → 8.1 第 18、19 项。
+- AC-7 → 8.1 第 1–24 项；AC-8 → 8.1 第 19、20 项。
 
 ---
 

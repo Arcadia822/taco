@@ -1,5 +1,5 @@
 import { execFile, execFileSync, spawnSync } from 'node:child_process'
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -115,7 +115,10 @@ exit ${code}
 interface FixtureOptions {
   tags?: string[][]
   releases?: unknown[]
-  roundTrip?: (url: string, body: string) => { status: number; body?: string; headers?: Record<string, string> } | null
+  roundTrip?: (
+    url: string,
+    body: string,
+  ) => { status: number; body?: string; headers?: Record<string, string>; hang?: boolean } | null
 }
 
 /** Loopback API fixture: one page of tags plus optional releases and overrides. */
@@ -128,6 +131,11 @@ const apiFixture = async (options: FixtureOptions = {}) => {
     const override = options.roundTrip?.(url, '')
     if (override) {
       response.writeHead(override.status, override.headers ?? {})
+      if (override.hang) {
+        // Headers only: the client must abort on its own timeout.
+        response.write(override.body ?? '')
+        return
+      }
       response.end(override.body ?? '')
       return
     }
@@ -471,6 +479,80 @@ describe('taco update check', () => {
     expect((await runJson(['--json', '--repo', repo, '--no-cli'], { TACO_UPDATE_CACHE_DIR: cacheDir }, tempDir('taco-update-cwd-'))).skill.latest).toBe('0.11.0')
   })
 
+  it('never reuses a cached comparison for a different probe target', async () => {
+    const first = localRepo(['v0.11.0'])
+    const second = localRepo(['v0.10.0', 'taco-cli-v0.9.9'])
+    const cacheDir = tempDir('taco-update-cache-')
+    const warm = await runJson(['--json', '--repo', first, '--no-cli'], { TACO_UPDATE_CACHE_DIR: cacheDir }, tempDir('taco-update-cwd-'))
+    expect(warm.cached).toBe(false)
+
+    const reuse = await runJson(['--json', '--repo', first, '--no-cli'], { TACO_UPDATE_CACHE_DIR: cacheDir }, tempDir('taco-update-cwd-'))
+    expect(reuse.cached).toBe(true)
+
+    const other = await runJson(['--json', '--repo', second, '--no-cli'], { TACO_UPDATE_CACHE_DIR: cacheDir }, tempDir('taco-update-cwd-'))
+    expect(other.cached).toBe(false)
+    expect(other.skill.latest).toBe('0.10.0')
+  })
+
+  it('ignores an extension manifest reached through a symlinked directory', async () => {
+    const outside = tempDir('taco-update-outside-')
+    write(join(outside, 'extensions/taco/extension.yml'), "extension:\n  id: 'taco'\n  version: '0.5.0'\n")
+    const project = tempDir('taco-update-linked-')
+    mkdirSync(join(project, '.specify'), { recursive: true })
+    symlinkSync(join(outside, 'extensions'), join(project, '.specify', 'extensions'))
+
+    const repo = localRepo(['v0.11.0'])
+    const payload = await runJson(['--json', '--repo', repo, '--no-cli', '--no-cache'], {}, project)
+    expect(payload.extension).toBeNull()
+  })
+
+  it('reports a stalled response body as a timeout instead of an unreachable network', async () => {
+    const stalled = await apiFixture({
+      roundTrip: () => ({ status: 200, headers: { 'content-type': 'application/json' }, body: '{"half":', hang: true }),
+    })
+    const started = Date.now()
+    const payload = await runJson(['--json', '--api-base', stalled.apiBase, '--no-cli', '--no-cache', '--timeout', '300'], {
+      PATH: pathWithoutGit(),
+    })
+    expect(Date.now() - started).toBeLessThan(3000)
+    expect(payload).toMatchObject({ ok: false, reason: 'timeout' })
+    expect(stalled.requests).toHaveLength(1)
+  })
+
+  it('discards a cache whose payload is not version-shaped', async () => {
+    const repo = localRepo(['v0.11.0'])
+    const cacheDir = tempDir('taco-update-cache-')
+    await runJson(['--json', '--repo', repo, '--no-cli'], { TACO_UPDATE_CACHE_DIR: cacheDir }, tempDir('taco-update-cwd-'))
+
+    const cachePath = join(cacheDir, 'update-check.json')
+    const tampered = JSON.parse(readFileSync(cachePath, 'utf8')) as Record<string, unknown> & { latest: { skill: unknown } }
+    tampered.latest.skill = 'bad'
+    writeFileSync(cachePath, JSON.stringify(tampered))
+    const afterBadVersion = await runJson(['--json', '--repo', repo, '--no-cli'], { TACO_UPDATE_CACHE_DIR: cacheDir }, tempDir('taco-update-cwd-'))
+    expect(afterBadVersion.cached).toBe(false)
+    expect(afterBadVersion.skill.latest).toBe('0.11.0')
+
+    await runJson(['--json', '--repo', repo, '--no-cli'], { TACO_UPDATE_CACHE_DIR: cacheDir }, tempDir('taco-update-cwd-'))
+    const badSource = JSON.parse(readFileSync(cachePath, 'utf8')) as Record<string, unknown>
+    badSource.source = 'evil-origin'
+    writeFileSync(cachePath, JSON.stringify(badSource))
+    expect((await runJson(['--json', '--repo', repo, '--no-cli'], { TACO_UPDATE_CACHE_DIR: cacheDir }, tempDir('taco-update-cwd-'))).cached).toBe(false)
+  })
+
+  it('treats an exhausted rate-limit budget on a 200 as rate-limited', async () => {
+    const fixture = await apiFixture({
+      roundTrip: () => ({ status: 200, headers: { 'content-type': 'application/json', 'x-ratelimit-remaining': '0' }, body: '[]' }),
+    })
+    const payload = await runJson(['--json', '--api-base', fixture.apiBase, '--no-cli', '--no-cache'], { PATH: pathWithoutGit() })
+    expect(payload).toMatchObject({ ok: false, reason: 'rate-limited', source: null })
+  })
+
+  it('rejects a timeout above the timer range', async () => {
+    const result = await run(['--json', '--timeout', '2147483648'])
+    expect(result.status).toBe(2)
+    expect(result.stderr).toContain('usage: check-update.mjs')
+  })
+
   it('honours --no-cache and TACO_UPDATE_CACHE_TTL=0, and survives an unwritable cache', async () => {
     const repo = localRepo(['v0.11.0'])
     const cacheDir = tempDir('taco-update-cache-')
@@ -511,6 +593,7 @@ describe('taco update check', () => {
       ['--api-base', 'ftp://host'],
       ['--cli-bin', 'taco-cli'],
       ['--timeout', '0'],
+      ['--timeout', '-1'],
       ['--nope'],
     ]) {
       const result = await run([...args, '--json'])

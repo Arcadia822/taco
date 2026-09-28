@@ -113,7 +113,9 @@ const parseOptions = (argv, env) => {
       }
       case '--timeout': {
         const timeout = Number(value)
-        if (!Number.isInteger(timeout) || timeout <= 0) throw new UsageError('--timeout requires a positive integer')
+        if (!Number.isInteger(timeout) || timeout <= 0 || timeout > 2147483647) {
+          throw new UsageError('--timeout requires an integer between 1 and 2147483647 milliseconds')
+        }
         options.timeoutMs = timeout
         index += 1
         break
@@ -326,7 +328,17 @@ const getJson = async (url, timeoutMs, limit = RESPONSE_LIMIT) => {
   if (!response.ok) {
     throw new HttpFailure(response.status === 403 || response.status === 429 ? 'rate-limited' : 'http-error')
   }
-  const text = await readCapped(response, limit)
+  // An exhausted budget is reported even on a 200, so a cached answer is never
+  // mistaken for a fresh one.
+  if (response.headers.get('x-ratelimit-remaining') === '0') throw new HttpFailure('rate-limited')
+  let text
+  try {
+    text = await readCapped(response, limit)
+  } catch (error) {
+    if (error instanceof HttpFailure) throw error
+    // Aborting mid-body is a timeout, not a transport failure.
+    throw new HttpFailure(error?.name === 'TimeoutError' || error?.name === 'AbortError' ? 'timeout' : 'network-unavailable')
+  }
   try {
     return { body: JSON.parse(text), link: response.headers.get('link') ?? '' }
   } catch {
@@ -359,15 +371,27 @@ const readTagNames = (stdout) =>
 // Returns the installed extension version, null when a manifest exists but its
 // version cannot be read, and undefined when no manifest is found (in which case
 // the extension is not part of this check at all).
+const isRealDirectory = async (path) => {
+  const info = await lstat(path).catch(() => null)
+  return info !== null && !info.isSymbolicLink() && info.isDirectory()
+}
+
 const findExtensionVersion = async (startDir) => {
   let current = resolve(startDir)
   for (let depth = 0; depth <= MAX_PROJECT_WALK; depth += 1) {
-    const manifest = join(current, '.specify', 'extensions', 'taco', 'extension.yml')
-    const info = await lstat(manifest).catch(() => null)
-    if (info && !info.isSymbolicLink() && info.isFile()) {
-      const raw = await readFile(manifest, 'utf8').catch(() => '')
-      const value = raw.match(/^\s{2}version:\s*['"]?([^'"\s]+)['"]?\s*$/m)?.[1] ?? null
-      return value && SEMVER.test(value) ? value : null
+    // Every component must be a real directory: a symlinked `.specify` must not
+    // lead the walk outside the project.
+    const specify = join(current, '.specify')
+    const extensions = join(specify, 'extensions')
+    const taco = join(extensions, 'taco')
+    if ((await isRealDirectory(specify)) && (await isRealDirectory(extensions)) && (await isRealDirectory(taco))) {
+      const manifest = join(taco, 'extension.yml')
+      const info = await lstat(manifest).catch(() => null)
+      if (info && !info.isSymbolicLink() && info.isFile()) {
+        const raw = await readFile(manifest, 'utf8').catch(() => '')
+        const value = raw.match(/^\s{2}version:\s*['"]?([^'"\s]+)['"]?\s*$/m)?.[1] ?? null
+        return value && SEMVER.test(value) ? value : null
+      }
     }
     const parent = dirname(current)
     if (parent === current) break
@@ -380,18 +404,30 @@ const findExtensionVersion = async (startDir) => {
 
 const cacheFile = (options) => join(options.cacheDir, 'update-check.json')
 
+const versionOrNull = (value) => value === null || (typeof value === 'string' && SEMVER.test(value))
+
+// The cache is an untrusted file: it must describe this exact remote, be fresh,
+// and carry only version-shaped values before it may replace a live probe.
+const usableSnapshot = (parsed, options, needsExtension) => {
+  if (parsed?.schema !== CACHE_SCHEMA || typeof parsed.checkedAt !== 'string') return null
+  if (parsed.source !== 'git-ls-remote' && parsed.source !== 'github-tags-api') return null
+  if (parsed.target?.repo !== options.repo || parsed.target?.apiBase !== options.apiBase) return null
+  if (typeof parsed.extensionProbed !== 'boolean') return null
+  if (needsExtension && parsed.extensionProbed !== true) return null
+  const latest = parsed.latest
+  if (!latest || typeof latest !== 'object') return null
+  if (![latest.skill, latest.cli, latest.extension].every(versionOrNull)) return null
+  const age = (Date.now() - Date.parse(parsed.checkedAt)) / 1000
+  if (!Number.isFinite(age) || age < 0 || age > options.ttlSeconds) return null
+  return { source: parsed.source, latest: { skill: latest.skill, cli: latest.cli, extension: latest.extension } }
+}
+
 const readCache = async (options, needsExtension) => {
   if (!options.cache || options.ttlSeconds === 0) return null
   const raw = await readFile(cacheFile(options), 'utf8').catch(() => null)
   if (raw === null) return null
   try {
-    const parsed = JSON.parse(raw)
-    if (parsed?.schema !== CACHE_SCHEMA || typeof parsed.checkedAt !== 'string') return null
-    if (!parsed.latest || typeof parsed.latest !== 'object') return null
-    const age = (Date.now() - Date.parse(parsed.checkedAt)) / 1000
-    if (!Number.isFinite(age) || age < 0 || age > options.ttlSeconds) return null
-    if (needsExtension && parsed.extensionProbed !== true) return null
-    return { source: parsed.source ?? null, latest: parsed.latest }
+    return usableSnapshot(JSON.parse(raw), options, needsExtension)
   } catch {
     return null
   }
@@ -530,6 +566,7 @@ const probeRemote = async (options, needsExtension, skillUnknown) => {
   const snapshot = {
     schema: CACHE_SCHEMA,
     checkedAt: new Date().toISOString(),
+    target: { repo: options.repo, apiBase: options.apiBase },
     source,
     latest: { skill: latest.skill, cli: latest.cli, extension: extensionLatest },
     extensionProbed: needsExtension,
