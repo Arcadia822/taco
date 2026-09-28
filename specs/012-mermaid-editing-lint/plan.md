@@ -24,7 +24,7 @@ linear: 'https://linear.app/castrel/issue/TACO-19'
 - [ ] `renderDiagram`：状态显式迁移——`rendering` 态清空旧图（D1：不保留），`host.dataset.mermaidState` 驱动展示。
 - [ ] 三条输入分支落地（spec §4.2 分支矩阵）：`parse=false` / `parse` 抛异常 / `parse` 缺省（render 失败按异常分类，不误报 `render` 类）。
 - [ ] lint 输入与渲染输入对齐：`renderSource = updateMermaidCodeTheme(...)` 改写场景下的行列映射或同输入策略。
-- [ ] 失败路径：`onRenderError` 升级为 `onDiagnostic(diagnostic)`；`initialize` 抛错纳入失败边界（归 `runtime`，转 `unavailable`，可重试）；`unavailable` 时清除 `is-loading` 假进度。
+- [ ] 失败路径：`onRenderError`/`onUnavailable` 替换为 `onDiagnostic(diagnostic)`（唯一回调链，旧回调移除）；`initialize` 抛错纳入失败边界（归 `runtime`，转 `unavailable`，可重试）；`unavailable` 时清除 `is-loading` 假进度。
 - [ ] **诊断摘要容器**：独立于 `preview.hidden` 的摘要节点（Markdown 块源码区顶部 / `.mmd` 内容区顶部），由 `onDiagnostic` 统一更新，含「重试加载」按钮。
 - [ ] `MermaidRuntime`/preview 提供 `retry()`：源码不变也强制重新 `load()+render`，成功后广播 `valid`。
 - [ ] 渲染成功回调携带成功源码：`onRendered(renderedSource)`（或版本号）供 split view 与块节点比对。
@@ -34,7 +34,7 @@ linear: 'https://linear.app/castrel/issue/TACO-19'
 
 ## Phase 3: 入口一致性（对应 spec §4.4）
 - [ ] `src/tiptap-code-block.ts`：`source.hidden` 判据改为 `isMermaid && !mermaidUnavailable && state === 'valid'`；`preview.hidden = !isMermaid || state !== 'valid'`（失败整体回落源码，D2）。
-- [ ] 接上 `onRenderError`（经 split view 透传 `onDiagnostic`）；源码区顶部渲染诊断摘要（类别 + 位置 + `detail` 折叠/复制）。
+- [ ] 接上 `onDiagnostic`（preview → split view → 摘要节点的唯一回调链，替换 `onRenderError`/`onUnavailable`）；源码区顶部渲染诊断摘要（类别 + 位置 + `detail` 折叠/复制）。
 - [ ] `src/structured-file-viewer.ts`：`.mmd` 采用同一语义——失败时回落源码编辑器 + 顶部诊断摘要，不再强制展开浮动代码面板。
 - [ ] 删除死类 `is-source-visible`。
 - [ ] 测试：同一段无效源码在两入口产出同类诊断与一致的回落行为（A1/A5）；有效图表 A7 行为不回归。
@@ -50,7 +50,7 @@ linear: 'https://linear.app/castrel/issue/TACO-19'
 - [ ] split view 提供 `getViewport()/setViewport()`，`src/tiptap-code-block.ts` 全屏进出改用该 API。
 - [ ] `restoreView()` 幂等化。
 - [ ] 渲染来源三态：`currentSource` / `requestedSource` / `renderedSource`（成功回调回传），节点/行映射仅在 `currentSource === renderedSource` 时启用。
-- [ ] 手动预览模式：编辑即 dirty（预览面提示「对应旧源码」且源码保持可编辑），点击「更新图表」才 lint/render；不把旧图当当前预览。
+- [ ] 手动预览模式：编辑即 dirty——移除/隐藏旧 SVG、摘要区提示「源码已修改」，源码保持可编辑；点击「更新图表」才 lint/render；不把旧图当当前预览。
 - [ ] 手工清单 M6/M11 验证。
 
 ## Phase 6: 文案与回归
