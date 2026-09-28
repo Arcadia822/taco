@@ -122,7 +122,12 @@ const SafeImage = Image.extend({
 
 export const createTacoEditorExtensions = (labels: MermaidPluginLabels, options: TacoEditorExtensionOptions = {}) => [
   StarterKit.configure({ codeBlock: false, code: false, paragraph: false, link: false, trailingNode: false }),
-  Code.extend({ excludes: 'bold italic strike underline code' }),
+  // Emphasis may wrap a code span (`**`x`**`, valid GFM). Excluding emphasis from
+  // `code` made marked's nested output an illegal mark set, which ProseMirror
+  // rejected with "Invalid collection of marks for node text" and the whole
+  // editor fell back to source view. Keep only self-exclusion so text can never
+  // carry two `code` marks; the document then round-trips byte-for-byte.
+  Code.extend({ excludes: 'code' }),
   ImageParagraph,
   ImageLink,
   TacoBlockIdentity,

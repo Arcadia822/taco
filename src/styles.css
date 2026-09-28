@@ -368,6 +368,11 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .tiptap-editor-host .tiptap blockquote > :first-child { margin-top: 0; }
 .tiptap-editor-host .tiptap blockquote > :last-child { margin-bottom: 0; }
 .tiptap-editor-host .tiptap code { display: inline; margin: 0 1px; padding: 3px 6px; border: 1px solid var(--doc-line); border-radius: 6px; background: color-mix(in srgb, var(--doc-ink) 4%, transparent); color: var(--doc-muted); font: 500 .875em/1.6 var(--mono); }
+/* The `font` shorthand above resets weight/style/decoration, so emphasis that
+   wraps a code span (`**`x`**`) must restate them or it renders invisibly. */
+.tiptap-editor-host .tiptap :is(strong, b) code { font-weight: 700; }
+.tiptap-editor-host .tiptap :is(em, i) code { font-style: italic; }
+.tiptap-editor-host .tiptap :is(s, del, strike) code { text-decoration: line-through; }
 .tiptap-editor-host .tiptap pre { position: relative; overflow: auto; margin: 28px 0; padding: 18px 20px; border: 1px solid var(--doc-line); border-radius: 8px; background: var(--doc-soft); box-shadow: none; color: var(--doc-muted); font: 500 13px/1.55 var(--mono); }
 .tiptap-editor-host .tiptap pre code { margin: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; }
 .tiptap-editor-host .tiptap .tableWrapper { overflow-x: auto; margin: 22px 0; }
