@@ -7,7 +7,7 @@ status: 'Draft'
 
 ## 1. 实现策略
 
-本特性**只改文档**，不含代码、不新增文件：
+本特性**只改文档**：不新增代码、脚本或测试文件，只新增一份随 skill 安装的契约文档（`references/output-path.md`）。
 
 ```text
 权威契约（设计期：specs/012-*/contracts/output-path-rule.md）
@@ -40,7 +40,7 @@ skills/taco/references/output-path.md        ← 唯一权威，随 skill 安装
 | 每个 file 的 `id` | 保留 |
 | `blocks` | 仅当该文件新旧内容字节完全相同时保留；内容变化即丢弃 |
 | `sourceHash` | 内容变化时重算 |
-| 打包集合 | 排除所有 `*.taco.html`；若产物目录等于被打包目录，报 `output-in-input` 告警 |
+| 打包集合 | 排除隐藏路径（以 `.` 开头）与所有 `*.taco.html`；刷新时沿用既有 `packOptions.ignore`；若产物目录等于被打包目录，报 `output-in-input` 告警 |
 
 5. **转义与自校验**（落盘前提）：按 `references/bundle-format.md` 序列化并转义；对**将要写入的那一份字符串**做解析校验与形态校验（必需字段、`root` 与各 `path` 一致、path 唯一且安全）。宿主没有解析能力 → 停止（`unverifiable`），不写文件。
 6. **备目录**：目标父目录不存在则创建（临时文件必须与目标同目录）。
@@ -92,7 +92,7 @@ skills/taco/references/output-path.md        ← 唯一权威，随 skill 安装
 
 按 spec.md §8 执行，并留下可复现记录（输入目录、产物绝对路径、失败码、数据块读取与状态比对）：
 
-1. **文档一致性**：级联顺序与级别命名（L0/L1/L2/L3/L4/L5）、失败类型集合、小写 `tacos`、校验阶梯（V1/V2）、落盘顺序，四处文本一致；只有一份完整级联与失败语义表；落盘步骤不把脚本/CLI 当作必经路径；**不残留任何项目级输出配置的表述**（`.taco/config.yaml`、规则冲突判定等）。
+1. **文档一致性**：级联顺序与级别命名（L0/L1/L2/L3/L4/L5）、失败类型集合、小写 `tacos`、校验阶梯（V1/V2）、落盘顺序，四处文本一致；只有一份完整级联与失败语义表；落盘步骤不把脚本/CLI 当作必经路径；**不残留任何项目级输出配置的规范性表述**（规则、组件与操作步骤中不得再出现 `.taco/config.yaml`、`outputDir` 或规则冲突判定；仅允许否定性说明）。
 2. **五类验收场景**：每类同时核对产物位置与 bundle 内部引用。
 3. **逐分支走查**：非规范 L0 文件名、非 `.taco.html` 文件、L2（仓库内有 `docs/` 时仍落 `<repo>/tacos/`）、L3 顺序、L4、L5 无 `HOME`、无 `git` 命令、禁区、`unverifiable`、损坏的既有数据块、`output-in-input`、迁移到不存在的父目录、迁移目标已存在、内容变化后 `blocks` 丢弃。
 4. **校验阶梯实测**：至少一次 V1（打开标签页跑 `window.taco.validate()` 得 `ok: true`）与一次 V2（仅解析核对并声明"未做运行校验"）。

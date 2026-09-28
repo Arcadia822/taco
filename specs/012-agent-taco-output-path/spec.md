@@ -52,14 +52,14 @@ Agent 自主创建 `.taco.html` 时，落盘位置没有规范：产物经常落
 
 ### 4.1 优先级总表
 
-| 级别 | 条件 | 产物 |
-| --- | --- | --- |
-| L0 | 用户本次显式给出输出位置 | 见 4.2 |
-| L1 | 本次是刷新既有 `.taco.html` | 该文件现有路径 |
-| L2 | **被打包目录就是仓库根**（L0、L1 未命中时） | `<repo>/tacos/` |
-| L3 | 仓库内存在 `docs/`、`doc/`、`documents/`、`specs/` | 首个存在者之下的 `tacos/` |
-| L4 | 是仓库但没有上述目录 | `<repo>/tacos/` |
-| L5 | 不在任何仓库内 | `~/Documents/tacos/` |
+级联摘要（**规范性定义**在契约 §2：条件、失败语义、顺序均以那里为准，本节只作索引）：
+
+- **L0** 用户本次显式给出输出位置 → 见 4.2
+- **L1** 刷新既有 `.taco.html` → 该文件现有路径
+- **L2** 被打包目录就是仓库根（L0、L1 未命中时）→ `<repo>/tacos/`
+- **L3** 仓库内存在 `docs`/`doc`/`documents`/`specs` 之一 → 首个存在者之下的 `tacos/`
+- **L4** 是仓库但没有上述目录 → `<repo>/tacos/`
+- **L5** 不在任何仓库内 → `~/Documents/tacos/`
 
 顺序固定，取第一个可用级；目录名统一小写 `tacos`（个人归档 `~/Documents/tacos/`，Windows 为 `%USERPROFILE%\Documents\tacos`）。
 
@@ -98,7 +98,7 @@ Agent 自主创建 `.taco.html` 时，落盘位置没有规范：产物经常落
 - **刷新（L1）**：保留 `docId`、`comments`、`navigation`、`checkpoints`（含状态）、每个 file 的 `id`、未知字段；标题保留既有 bundle 的值，若目标文件名 stem 与其归一化结果不一致则报告冲突并停止；`blocks` 仅在该文件新旧内容字节完全相同时保留，内容变化即丢弃并由运行时重建；`sourceHash` 随内容变化重算。
 - **迁移（仅用户显式要求）**：占用预检早于任何写操作。目标已存在即**默认停止**——即使 `docId` 与来源相同，目标也可能是同一 review 的另一个副本并已独立推进评审状态。只有用户显式授权覆盖、且 Agent 已把目标与来源的状态差异列在报告里，才继续。之后按固定顺序落盘、校验 `docId` 与 `comments`/`checkpoints`/`navigation` 逐字段一致，并报告新旧路径；不删除旧文件，除非用户显式要求。
 - **首次创建**：父目录不存在则先创建；变体新建默认 Complete，用户显式要求或接收者可靠联网可用 Lite，刷新沿用既有 `taco-shell-variant`；所需 shell 不存在则停止并给出路径，不换变体顶替。
-- **产物与被打包集合互斥**：打包时排除所有 `*.taco.html`；若产物目录等于被打包目录，落盘后报 `output-in-input` 告警。
+- **产物与被打包集合互斥**：打包时排除隐藏路径（以 `.` 开头的文件/目录）与所有 `*.taco.html`；刷新时沿用既有 bundle 的 `packOptions.ignore`；若产物目录等于被打包目录，落盘后报 `output-in-input` 告警。
 - **幂等**：相同输入 → 相同产物目录、文件名与标题。
 
 ## 6. 关键决策与取舍
@@ -147,7 +147,7 @@ Agent 自主创建 `.taco.html` 时，落盘位置没有规范：产物经常落
 | --- | --- | --- |
 | 用户指定输出位置 | 用户说"生成到 `./tmp/roguelike-tactics-game.taco.html`" | 产物即该文件；bundle 标题 = `roguelike-tactics-game`；`root` 仍为被评审目录 |
 | 项目自定义模板/CP 位置 | 项目在 `review/policy/` 放模板，用户显式指定产物到 `review/tacos/` | 产物在指定位置；模板位置不变、未被复制 |
-| 无 CP 的普通文档 | `notes/` 目录，无 Checkpoints | 产物按级联落位（本仓库外无 `docs/` 时落 `<repo>/tacos/`）；bundle 顶层无 `checkpoints` |
+| 无 CP 的普通文档 | 仓库内 `notes/` 目录（记录该仓库实际存在哪些候选目录），无 Checkpoints | 产物落**实际存在的首个候选目录**之下的 `tacos/`（例如只有 `specs/` 时是 `<repo>/specs/tacos/`）；四个候选目录都不存在时才落 `<repo>/tacos/`；bundle 顶层无 `checkpoints` |
 | 仅参考 SDD 示例的新 Taco | 参考 `templates/spec/`，被打包目录 = `specs/012-agent-taco-output-path` | 产物不在模板目录；Checkpoint 文档 path 以实际 `root` 为前缀 |
 | 原路径原状态刷新 | 修改 canonical 文档后重刷新既有 Taco | 路径、标题与 `root` 不变；`docId`/`comments`/`navigation`/`checkpoints` 保留；内容更新且 `blocks` 按内容是否变化处理 |
 

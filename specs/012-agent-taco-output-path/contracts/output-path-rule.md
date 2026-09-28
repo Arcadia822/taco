@@ -69,7 +69,7 @@ status: 'Draft'
 
 - 产物路径按 `realpath` 的**已存在前缀**判定：不得落在禁区（§2.1）之内，也不得通过中途替换的符号链接指向这些位置。
 - 产物文件已存在且是符号链接 → 拒绝。
-- 产物必须落在被打包集合之外：打包时排除所有 `*.taco.html`。若产物目录**等于**被打包目录，落盘后报 `output-in-input` 告警。
+- 产物必须落在被打包集合之外：打包时排除**隐藏路径**（任何以 `.` 开头的文件或目录，例如 `.env`）与所有 `*.taco.html`。刷新时沿用既有 bundle 的 `packOptions.ignore`，并把它与本次排除项一并写入新的 `packOptions`。若产物目录**等于**被打包目录，落盘后报 `output-in-input` 告警。
 
 ## 3. 落盘、刷新、迁移
 
@@ -93,7 +93,7 @@ status: 'Draft'
 | 每个 file 的 `id` | 保留（评论锚点与 block 身份依赖它） |
 | `blocks` | 仅在**该文件新旧内容字节完全相同**时保留；内容变化即丢弃，由运行时重建 |
 | `sourceHash` | 内容变化时重算，未变则保持 |
-| 打包集合 | 排除所有 `*.taco.html`（含产物自身） |
+| 打包集合 | 排除隐藏路径与所有 `*.taco.html`（含产物自身）；刷新时沿用既有 `packOptions.ignore` |
 
 ### 3.3 迁移（仅用户显式要求）
 
@@ -144,7 +144,7 @@ status: 'Draft'
 - 产物**绝对路径**、**文件名**、**标题**；
 - 校验阶梯级别（V1/V2）与结果；
 - 告警：`gitignored`（产物被忽略 → 仍落盘，**不改** `.gitignore`）、`gitignore-unavailable`、`workspaceRoot-not-git`、`output-in-input`；
-- 排除项清单。
+- 排除项清单（隐藏路径、`*.taco.html`、既有的 `packOptions.ignore` 命中项），沿用既有报告口径。
 
 失败类型集合（全部**不落盘**）：`malformed`、`conflict`、`needs_home`、`unverifiable`、`forbidden`。不"取最合理的一个"。
 
