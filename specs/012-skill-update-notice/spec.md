@@ -168,7 +168,7 @@ Agent 开始 Taco 工作 → 一次轻量更新检查 → 正常完成交付
 - **超时**：每次尝试独立 3000 ms（`--timeout` 可调）；只有一次尝试失败才允许切换通道，因此最坏约 2×超时（约 6 s），且只发生在失败路径。**不重试同一通道**。
 - **输出上限**：git 的 stdout 与 HTTP 响应体各 64 KiB，超限即终止该尝试并跳过。
 - **git 执行隔离**：精简环境变量（仅 `PATH`、`HOME`、`LANG`）与 `GIT_CONFIG_GLOBAL=/dev/null`、`GIT_CONFIG_SYSTEM=/dev/null`、`GIT_TERMINAL_PROMPT=0`、`GIT_ASKPASS`/`SSH_ASKPASS` 置为不可用、`-c credential.helper=`；**子进程 cwd 固定在中立目录**（`os.tmpdir()`）（绝不在项目/仓库目录内启动，挡住项目级 `.git/config` 的 `url.*.insteadOf` 与 `http.extraheader`）；仓库参数前插入 `--` 终止选项。
-  - 代价（明示）：仅通过 Git 配置文件设置代理的环境下，git 通道会失败并静默——这是刻意的隐私优先取舍（此时若 `--repo` 未被覆盖，HTTP 回退仍有机会成功）。
+  - 代价（明示）：仅通过 Git 配置文件设置代理的环境下，git 通道会失败并静默——这是刻意的隐私优先取舍。注意回退通道不保证能补救：Node 的 `fetch` 默认不读取 `HTTP_PROXY`/`HTTPS_PROXY` 以外的代理配置，代理仅写在 Git 配置里的环境两条通道都可能失败并静默。
 - **子进程终止**：`git` 与 `taco-cli` 均以独立进程组启动（`detached: true`），超时或超限时以 `process.kill(-pid, 'SIGKILL')` 终止**整个进程组**，避免 git 的远程助手或 CLI 的派生进程残留。
 - **参数边界**：`--repo` 只接受 `https://` 开头的 URL 或绝对本地路径（本地路径仅供测试与镜像），拒绝以 `-` 开头、其他协议与相对路径。
 - **HTTP 回退地址边界**：`--api-base` 只接受两类取值——默认 `https://api.github.com`，或本地测试夹具 `http://127.0.0.1:<port>` / `http://localhost:<port>`；其他主机与协议一律 `exit 2`。
