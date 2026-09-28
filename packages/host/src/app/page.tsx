@@ -152,9 +152,9 @@ const I18N = {
     sectionCpDesc: '为项目定义文档依赖关系，查看每个阶段的进度和下一步建议。状态随 Taco 文件一起交接；重命名或删除必需文件后，原要求会显示为未创建。检查点不会锁定内容或阻止跨阶段编辑。',
     sectionCpPoints: [
       ['依赖图 (DAG)', '定义规范到任务的串并行阶段依赖，支持多分支与汇合'],
+      ['阶段任务要求', '为检查点文件配置可选指令，右侧面板自动展示编写规范'],
       ['4 级生命周期', 'todo、in_progress、complete 与 freeze 状态追踪'],
       ['下一步建议', '根据已标记的前序阶段推导 frontier，供人与 Agent 参考'],
-      ['无需内容锁', '状态保存在数据块中，不做哈希校验或强制门禁'],
     ],
     sectionCpBadge: 'CHECKPOINTS DAG',
     sectionCpDemoTemplate: '008 宿主协议规范',
@@ -264,9 +264,9 @@ const I18N = {
     sectionCpDesc: 'Define document dependencies and see stage progress and suggested next steps. A renamed or deleted required file remains visible as uncreated. Status travels with the Taco file; checkpoints do not lock content or block out-of-order edits.',
     sectionCpPoints: [
       ['DAG Stages', 'Define serial and parallel dependencies from spec to tasks with fan-in'],
+      ['Document Instructions', 'Configure optional instructions per checkpoint file and view requirements in the right panel'],
       ['4-State Lifecycle', 'Track documents through todo, in_progress, complete, and freeze'],
       ['Suggested Next Steps', 'Derive a frontier from marked predecessors for people and agents to consider'],
-      ['No Content Lock', 'State lives in the data block without hash checks or enforced gates'],
     ],
     sectionCpBadge: 'CHECKPOINTS DAG',
     sectionCpDemoTemplate: '008 Host Protocol',
