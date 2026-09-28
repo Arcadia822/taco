@@ -9,9 +9,39 @@ input: |-
   TACO-19: 优化 Mermaid 编辑交互并提供编写时语法诊断（lint）
 ---
 
+## 0. 靶心修正（2026-09-28，重要）
+
+**本设计的靶心从「给人看的编辑器交互」改为「Agent 创建/编辑 Taco 时的 Mermaid 校验」。界面是服务人的，因此人侧只需可读的诊断，不需要按 Agent 的便利重做交互。**
+
+同时**撤回**初稿中的一条错误断言：初稿 §2.3 写「`classDiagram` 非法成员：`parse()` 通过、`render()` 抛 `TypeError`，证明只做 parse 前置不足以判定可渲染」。经真机浏览器复核（pinned mermaid 12.0.0 + Taco 自身配置），该用例 **parse 与 render 均通过**；当时的 `TypeError` 来自测试环境缺少 `SVGElement.getBBox` 垫片，不是 mermaid 的行为。以该错误断言推导出的「parse 不足」结论一并作废。
+
+修正后的证据（受控矩阵，21 个用例含 18 个合法图，同一份 pinned mermaid）：
+
+| payload | DOM | 合法图正确通过 | 漏报 | 把非法当合法 |
+| --- | --- | --- | --- | --- |
+| shell 内嵌 | 无 | 6/18 | **12** | 0 |
+| shell 内嵌 | jsdom | **18/18** | 0 | 0 |
+| CDN 镜像 | 无 | 6/18 | **12** | 0 |
+| CDN 镜像 | jsdom | **18/18** | 0 | 0 |
+
+- **纯 Node（无 DOM）的 Mermaid 校验不可用**：`stateDiagram-v2`、`classDiagram`、`gantt`、`journey`、`mindmap`、`timeline`、`quadrantChart`、`sankey`、`kanban`、`c4`、`pie title` 等 **12 个合法图被判为无效**。根因：`setupDompurifyHooks` 抛 `TypeError: My.addHook is not a function` —— 这些图族要经 DOMPurify，而 DOMPurify 无法在无 DOM 环境初始化。若把这种实现做成门禁，会**拦下正确文档**。
+- **jsdom 层即足**：18/18 正确、零误收，且与 payload 无关 → 可直接复用 **Complete shell 内嵌的 mermaid 载荷**（`<script id="taco-asset-mermaid" type="taco/deflate-b64">`，deflate-raw + base64，`zlib.inflateRawSync` 即可解出），与接收方运行时**字节一致**、离线、无需 `npm i mermaid`。
+- **render 阶段只能作参考**：真机 headless Chromium 中合法 `mindmap` 源码 render 直接 `TypeError`（`Cannot read properties of null (reading 're')`），jsdom 下 render 对 mindmap 亦假失败；因此 render 判定**不得**作为语法结论，只能标注为「渲染阶段失败（无位置）」。
+- **泄漏在真机成立**：真实浏览器连续渲染失败时 `body > div[id^="d"]` 数量 1→2→3→4 单调增长，且成功渲染不会清理历史残留。
+
+据此，§3 之后的需求/方案面向 Agent 侧校验重写；原 D1/D2 交互裁决仍然有效，但降级为可选范围（见 §8）。
+
 ## 1. 背景与目标
 
-TACO-19（GitHub #51）指出：Taco 里 Mermaid 的「源码 / 预览」交互存在可用性问题，编写无效 Mermaid 时只得到一句通用错误，缺少**指向源码**的可操作诊断；同时需要把「源码错误」与「Mermaid 运行时加载失败」区分开，并梳理实时/手动预览、源码面板、缩放之间的交互。
+TACO-19（GitHub #51）指出：Taco 里 Mermaid 的「源码 / 预览」交互存在可用性问题，编写无效 Mermaid 时只得到一句通用错误，缺少**指向源码**的可操作诊断。
+
+**真实痛点（经用户澄清）**：Taco 的 Agent 工作流**要求 Agent 编写 Mermaid**（`skills/taco/SKILL.md:39` 与 `extensions/taco/policies/taco-agent-policy.md:21` 都指示把流程/时序/状态设计写成 `diagrams/*.mmd`），但 Agent 侧**没有任何 Mermaid 校验**：
+
+- `skills/taco/scripts/pack.mjs:59` 把 `.mmd` 映射为 `text/plain` 后即视为不透明文本；
+- `validateBundle`（`pack.mjs:387`）只校验 bundle 信封结构；
+- `verify`（`pack.mjs:900` 附近）只打印结构与导航警告。
+
+结果是：**Agent 写坏图没人告诉它**，第一发现者是打开浏览器的人，而人只看到一句通用错误。这既是 Agent 侧的检测缺失，也让人无法据此修正，更无法把问题回传给 Agent。
 
 本特性覆盖两个入口，并要求两者表现一致：
 
@@ -94,7 +124,7 @@ onRenderError?.(error)
 | jison（flowchart / sequence 等） | `flowchart TD` + 悬空箭头 | `error.hash.line`、`error.hash.loc{first_line,last_line,first_column,last_column}`、`hash.token`、`hash.expected[]`，`message` 含 `Parse error on line N` 与指示线 | **字段互相矛盾**：同一输入 `hash.line=3`、`loc.first_line=2`、`message` 说 "line 4"，不能盲信 |
 | langium（gitGraph 等） | `gitGraph` + 非法语句 | `error.name === 'MermaidParseError'`，`error.result.parserErrors[0].token.{startLine,startColumn,endLine,endColumn,startOffset,endOffset}`；`message` 为 `Parse error on line 3, column 3: …` | 精确可用；但 `error.result` 极大且自引用，**绝不可整体序列化或写日志** |
 | 未识别类型 | 空内容、纯 `%%` 注释、未知图表头 | `error.name === 'UnknownDiagramError'`，无位置 | 与「语法错误」不是一回事 |
-| 渲染期非解析错误 | `classDiagram` 非法成员 | `parse()` **通过**，`render()` 抛 `TypeError` | 证明**只做 parse 前置不足以判定可渲染** |
+| 渲染期非解析错误 | 需在真实浏览器复核 | 见 §0：初稿把 `classDiagram` 用例判为「parse 通过、render 抛 TypeError」，已撤回；真机下该用例 parse/render 均通过，当时的 `TypeError` 是测试环境缺 `getBBox` 垫片所致 |
 
 ### 2.4 运行时不可用与语法错误混同，且不可恢复
 
@@ -213,7 +243,7 @@ parse?: (
   2. `parse` 可用但抛异常（`suppressErrors` 未生效或桩实现）：按异常对象分类，`detail` 保留原始 message；
   3. `parse` 缺省（CDN/桩不提供）：退化为 `render` 失败路径，但渲染抛出的解析异常仍按 `syntax`/`unknown-type` 分类，不得误报为 `render`。
 - **lint 输入与渲染输入一致**（审查修正）：`renderDiagram` 在显式主题与当前主题不同时会改写源码（`renderSource = updateMermaidCodeTheme(source, …)`，`src/mermaid.ts:542-543`）。**实现必须二选一并落地**（测试只是验证手段，不能替代）：要么让 lint 与 render 使用同一份**不改写**的输入，要么建立渲染输入到可编辑源码的**确定性行列映射**（记录改写引入/删除的行数并平移）。不得只加测试而保留漂移。
-- 已知局限（必须承认，不得掩盖）：`parse` 通过不等于可渲染（§2.3 的 `classDiagram` `TypeError`）。因此 `render` 阶段的失败仍归为 `render` 类，且**不得**被说成语法错误。
+- 已知局限（必须承认，不得掩盖）：`parse` 通过不等于人能看见图——真机 headless 环境中合法 `mindmap` 的 render 仍会失败（§0）。因此 `render` 阶段的失败必须归为 `render` 类并标注「无位置信息」，**不得**被说成语法错误，也不得用来否定 parse 的通过结论。
 
 ### 4.3 预览状态机
 
