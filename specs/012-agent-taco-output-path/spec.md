@@ -27,7 +27,7 @@ Agent 自主创建 `.taco.html` 时，落盘位置没有规范：产物经常落
 ### 2.2 非目标
 
 - 不改变 `taco/files` v1 的字段与语义；不规定 `root` 与内部引用路径的合法性判定（属 `references/bundle-format.md`）。
-- 不规定序列化与转义算法（同上）。
+- 不规定序列化与转义算法（同上）；但 `references/bundle-format.md` 的"脚本优先/工具独占写入/无浏览器必跑脚本"表述属于本次要收敛的范围（§7）。
 - 不新增脚本、不新增 CLI 能力、不引入云端行为。
 - 不自动创建或修改项目配置，不自动修改 `.gitignore`，不自动迁移或删除既有 Taco。
 - 不在本设计内删除 `pack.mjs`（是否删除属独立范围，见 §10.2）。
@@ -39,7 +39,7 @@ Agent 自主创建 `.taco.html` 时，落盘位置没有规范：产物经常落
 因此设计固定两件事：
 
 1. **落盘方式**：读入既有文件与 shell 到内存 → 构造并校验完整 bundle → 创建父目录（若需要）→ 写同目录临时文件 → 原子 `rename`。全程只写 `#taco-document` 数据块与 `<title>`，文件其余字节不动。不调用脚本、不调用 `taco-cli`、不调用扩展 CLI。
-2. **校验方式**：按校验阶梯（契约 §6）自上而下取一级——V1 打开标签页跑 `window.taco.validate()`；V2 用宿主自身的读取能力解析并按 `references/bundle-format.md` 的形态规则核对，并声明"未做运行校验"；V3 报告"未验证"。**不得**把低级别表述成已运行渲染校验。
+2. **校验方式**：写前自校验是落盘前提（对将写入的字符串解析并核对形态规则）；宿主没有解析能力则**停止**（`unverifiable`），不写文件。写后用校验阶梯声明结果：V1 打开标签页跑 `window.taco.validate()`；V2 仅解析核对并声明"未做运行校验"。**不得**把 V2 表述成 V1。
 
 与仓库现状的关系（如实记录，并在实现阶段一并收敛）：
 
@@ -55,14 +55,15 @@ Agent 自主创建 `.taco.html` 时，落盘位置没有规范：产物经常落
 | --- | --- | --- |
 | L0 | 用户本次显式给出输出位置 | 见 4.2 |
 | L1 | 本次是刷新既有 `.taco.html` | 该文件现有路径 |
-| L2 | 项目规则成立（`.taco/config.yaml` 的 `outputDir`，或已装扩展），**且被打包目录不是仓库根** | 规则目录 |
+| LR | **被打包目录就是仓库根**（L0、L1 未命中时） | `<repo>/tacos/` |
+| L2 | 项目规则成立（`.taco/config.yaml` 的 `outputDir`，或已装扩展） | 规则目录 |
 | L3 | 仓库内存在 `docs/`、`doc/`、`documents/`、`specs/` | 首个存在者之下的 `tacos/` |
-| L4 | 是仓库（含仓库根打包）但没有上述目录 | `<repo>/tacos/` |
+| L4 | 是仓库但没有上述目录 | `<repo>/tacos/` |
 | L5 | 不在任何仓库内 | `~/Documents/tacos/` |
 
 顺序固定，取第一个可用级；目录名统一小写 `tacos`（含个人归档 `~/Documents/tacos/`，Windows 为 `%USERPROFILE%\Documents\tacos`）。
 
-**仓库根例外**：被打包目录就是仓库根时，项目规则不适用（`{feature}` 无意义、扩展约定亦不成立），直接落 `<repo>/tacos/`。L0 与 L1 仍然优先——用户显式指定的位置与既有 Taco 的路径不改道。该例外保证"同一输入只有一个结果"。
+**LR：仓库根打包是独立级别，跳过 L2 与 L3。** 被打包目录就是仓库根时，`{feature}` 无意义、扩展约定不成立，"仓库内存在 `docs/`/`specs/`"的探测也与打包整个仓库无关，因此项目规则与目录探测都不适用，直接落 `<repo>/tacos/`。L0 与 L1 仍然优先。这样同一输入只有一个结果，即使仓库内存在 `docs/`。
 
 ### 4.2 L0：用户显式指定
 
@@ -104,7 +105,7 @@ outputDir: specs/{feature}
 
 ### 4.5 报告与告警
 
-落盘前给出可核对的结论，并在报告里写明：命中级别与依据、产物绝对路径、文件名、标题、校验阶梯级别（V1/V2/V3）与结果，以及 `gitignored`、`config-untracked`、`gitignore-unavailable`、`workspaceRoot-not-git`、`output-in-input` 告警与排除项清单。失败（`malformed`/`conflict`/`needs_feature`/`needs_home`/`forbidden`）一律不落盘。
+落盘前给出可核对的结论，并在报告里写明：命中级别与依据、产物绝对路径、文件名、标题、校验阶梯级别（V1/V2）与结果，以及 `gitignored`、`config-untracked`、`gitignore-unavailable`、`workspaceRoot-not-git`、`output-in-input` 告警与排除项清单。失败（`malformed`/`conflict`/`needs_feature`/`needs_home`/`forbidden`）一律不落盘。
 
 ## 5. 刷新、迁移与首次创建
 
@@ -121,7 +122,7 @@ outputDir: specs/{feature}
 | --- | --- | --- |
 | 项目规则放 `.taco/config.yaml` | 与项目级配置的直觉一致，不侵入 Agent 指令文件，与 TACO-34 提案的 `.taco/` 家族同族 | 多一个文件与一套 YAML 失败语义（重复键、非 mapping、版本不符都要定义） |
 | 零外部依赖，落盘 = 直接写数据块 | 用户硬要求；与 `AGENTS.md` 的 "Data-block-only editing" 一致 | 序列化与转义风险回到 Agent 一侧；必须把 SKILL.md 与安装指南的主流程一并改写（范围比"加一节"大） |
-| 校验阶梯 V1/V2/V3 | 无脚本时仍要能自证到什么程度，且必须如实声明级别 | 低级别下"解析通过"不等于"界面正确"，只能明示局限 |
+| 校验阶梯 V1/V2 | 无脚本时仍要能自证到什么程度，且必须如实声明级别 | V2 下"解析通过"不等于"界面正确"，只能明示局限 |
 | 仓库识别不用 `git` 命令 | 零外部依赖必须自洽；否则无 git 的沙箱会被误判为个人场景 | 需要处理 `.git` 文件（worktree/submodule）形态 |
 | 刷新优先于项目规则 | 项目规则变化不得静默搬走正在评审的 Taco | 迁移必须显式，且要新增"目标已存在即默认拒绝"的占用规则 |
 | 文件名决定标题，且文件名须是规范形式 | 用户决策（4）+ 保存流程的命名不变量；拒绝非规范名可避免"用户给的名字"被浏览器保存改写 | 显式指定 `My Design.taco.html` 这类名字会被拒绝，需给出规范名建议 |
@@ -135,6 +136,7 @@ outputDir: specs/{feature}
 | --- | --- |
 | `skills/taco/references/output-path.md`（新增） | **权威契约**（由 `contracts/output-path-rule.md` 译为英文迁入；安装可见） |
 | `skills/taco/SKILL.md` | 新增 `## Where to write .taco.html`；并把开篇、bundle 写入规则、`## Workflow`、校验（`### 2`）与报告章节改为**直接写数据块**为默认流程；`pack.mjs` 若提及，只作完全可选的辅助 |
+| `skills/taco/references/bundle-format.md` | 删除"assembler 拥有载体 / 写块是工具工作 / 无浏览器必须跑脚本"的表述，改为同等的安全写入规则 + 写前自校验 + V1/V2 阶梯；保留序列化、转义、原子替换与形态规则；明确与 `output-path.md` 的职责边界 |
 | `docs/agent-installation.md` | Assemble 步骤改为直接写数据块；reference 清单补 `output-path.md`；补一句"产物目录由级联决定" |
 | `.taco/config.yaml`（本仓库，新增） | `version: 1` + `outputDir: specs/{feature}` |
 | `extensions/taco/commands/update.md` | 一句：扩展项目 ⇒ 产物在 feature 目录（契约中的 S2），可选链接 |
@@ -178,7 +180,7 @@ outputDir: specs/{feature}
 | --- | --- |
 | 无脚本后序列化/转义/保留字段全靠书面契约，Agent 可能出错 | 落盘顺序写成可照做的七步；自校验步骤强制对**将写入的字符串**解析；权威规则指向 `references/bundle-format.md` |
 | `SKILL.md` 与安装指南当前以 `pack.mjs` 为主流程 | 纳入实现范围一并改写（§7）；`pack.mjs` 只作完全可选的辅助 |
-| 低阶校验（V2/V3）下"解析通过"被误当成"界面正确" | 报告必须写明阶梯级别；V3 直接写"未验证" |
+| V2 下"解析通过"被误当成"界面正确" | 报告必须写明阶梯级别；V2 必须写"未做运行校验"。宿主连解析能力都没有时不落盘（`unverifiable`），不存在未验证产物 |
 | 仓库根打包时 bundle `root` 的合法性 | 归落盘流程按 `references/bundle-format.md` 处理，不在本设计内；产物位置由仓库根例外唯一确定 |
 | 配置被 gitignore，队友/CI 得到不同路径 | `config-untracked` 告警；不自动改 `.gitignore` |
 | L3 探测在 `docs/` 与 `specs/` 并存时给出非预期结果 | 官方覆盖手段是 `.taco/config.yaml`；报告打印命中级与探测依据 |
@@ -197,7 +199,7 @@ outputDir: specs/{feature}
 8. 本仓库自我声明：`.taco/config.yaml` 写 `outputDir: specs/{feature}`。
 9. 交付节奏：先落设计，确认后再实现。
 10. 零外部依赖：创建/修改 Taco 不依赖脚本、CLI 或运行时；Agent 直接写数据块；skill 只做引导。本设计据此把 `SKILL.md` 与安装指南的主流程改写纳入实现范围。
-11. 校验采用 V1/V2/V3 阶梯，并如实声明级别。
+11. 校验采用 V1/V2 阶梯并如实声明级别；写前自校验是落盘前提，无解析能力时停止（`unverifiable`），不写未验证产物。
 
 ### 10.2 待决项
 

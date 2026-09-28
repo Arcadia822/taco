@@ -42,10 +42,10 @@ skills/taco/references/output-path.md        ← 唯一权威，随 skill 安装
 | `sourceHash` | 内容变化时重算 |
 | 打包集合 | 排除所有 `*.taco.html`；若产物目录等于被打包目录，报 `output-in-input` 告警 |
 
-5. **转义与自校验**：按 `references/bundle-format.md` 序列化并转义；对**将要写入的那一份字符串**做解析校验与形态校验（必需字段、`root` 与各 `path` 一致、path 唯一且安全）。
+5. **转义与自校验**（落盘前提）：按 `references/bundle-format.md` 序列化并转义；对**将要写入的那一份字符串**做解析校验与形态校验（必需字段、`root` 与各 `path` 一致、path 唯一且安全）。宿主没有解析能力 → 停止（`unverifiable`），不写文件。
 6. **备目录**：目标父目录不存在则创建（临时文件必须与目标同目录）。
 7. **原子替换**：完整 HTML 写到同目录临时文件 → `rename` 覆盖目标；失败保留原文件。
-8. **校验与报告**：按校验阶梯（spec.md §8 / 契约 §6）取 V1–V3 中最高的可用级别，并写明级别。
+8. **校验与报告**：按校验阶梯（spec.md §8 / 契约 §6）取 V1/V2 中最高的可用级别，并写明级别（V2 必须声明"未做运行校验"）。
 
 迁移（仅用户显式要求）：第 3 步改用"目标已存在即默认停止"的规则，只有用户显式授权覆盖、且报告已列出目标与来源的状态差异后才继续；之后走 4–8 步，并校验 `docId` 与 `comments`/`checkpoints`/`navigation` 逐字段一致；不删旧文件。
 
@@ -54,7 +54,7 @@ skills/taco/references/output-path.md        ← 唯一权威，随 skill 安装
 - **仓库识别不依赖 git 命令**：从被打包目录（缺省 cwd）向上查找 `.git/` 目录，或内容形如 `gitdir: <路径>` 的 `.git` 文件（worktree/submodule）；到文件系统根仍未找到 → 不在仓库内（L5）。
 - `git` 命令只服务可选的忽略检查：`git check-ignore` 命中 → `gitignored` 告警；命令不可用 → `gitignore-unavailable` 告警，均不改变仓库判定。
 - `HOME ?? USERPROFILE` 皆缺失 → `needs_home`，停止，不落到 cwd。
-- 被打包目录是仓库根 → 项目规则不适用，产物落 `<repo>/tacos/`（契约 §4 的仓库根例外）。
+- 被打包目录是仓库根 → 命中 LR：跳过项目规则与目录探测，产物落 `<repo>/tacos/`（契约 §4）。
 
 ## 4. 文档接线
 
@@ -72,13 +72,17 @@ skills/taco/references/output-path.md        ← 唯一权威，随 skill 安装
 - **把现有以脚本为主流程的表述收敛为零依赖**：开篇的 "this skill ships the assembler … prefer `scripts/pack.mjs`"、bundle 写入规则、`## Workflow` 步骤 1 的命令示例、`### 2. Check what the reviewer will see`、`## Report format` 中依赖脚本退出码/输出结构的表述，都改为"直接写数据块 + 校验阶梯"。
 - `pack.mjs` 与 `references/bundle-format.md` 的手工写块契约关系需重新表述：手工写块是**默认**路径，脚本（若保留）是可选辅助，绝不作为创建、刷新或校验的必经路径。
 
-### 4.3 `docs/agent-installation.md`
+### 4.3 `skills/taco/references/bundle-format.md`
+
+它目前把脚本写成"拥有载体"的工具与无浏览器时的验证手段（现状：`assembler owns carrier`、"写块是工具工作"、"无浏览器时运行脚本"）。实现阶段需把这三处改为：写块由 Agent 直接完成、写前自校验是落盘前提、校验按 V1/V2 阶梯声明；**保留**序列化、转义、原子替换与形态规则（它们是安全写块的事实依据）。职责边界：`output-path.md` 管"写到哪里、什么时候写、写完怎么声明"，`bundle-format.md` 管"数据块本身长什么样、如何安全写入"。
+
+### 4.4 `docs/agent-installation.md`
 
 - Assemble 步骤改为直接写数据块（含落盘七步与校验阶梯），并把脚本改为可选辅助。
 - reference 清单补 `output-path.md`。
 - 补一句：产物目录由级联决定（不再默认写 cwd），并说明这是相对旧版的有意行为变更。
 
-### 4.4 `.taco/config.yaml`（本仓库自我应用）
+### 4.5 `.taco/config.yaml`（本仓库自我应用）
 
 ```yaml
 version: 1
@@ -87,7 +91,7 @@ outputDir: specs/{feature}
 
 使设计规格与其评审产物同目录（与 `specs/011-*` 既有形态一致），并作为该契约的真实用例。已确认不冲突 `tests/agent-instructions.test.ts` 与 `tests/templates.test.ts` 的现有断言。
 
-### 4.5 `extensions/taco/`
+### 4.6 `extensions/taco/`
 
 `commands/update.md`、`skills/taco-speckit/SKILL.md`、`README.md` 各加一句：已安装扩展 ⇒ 产物在 feature 目录（契约中的 S2），附可选链接。不复制语法表，不要求扩展依赖 skill 的 reference。
 
@@ -95,9 +99,9 @@ outputDir: specs/{feature}
 
 按 spec.md §8 执行，并留下可复现记录（输入目录、前/后绝对路径、失败码、数据块读取与状态比对）：
 
-1. **文档一致性**：级联顺序与级别命名、仓库根例外、失败类型集合、小写 `tacos`、校验阶梯、落盘顺序，四处文本一致；只有一份完整语法表；落盘步骤不把脚本/CLI 当作必经路径。
+1. **文档一致性**：级联顺序与级别命名（L0/L1/LR/L2/L3/L4/L5）、失败类型集合、小写 `tacos`、校验阶梯（V1/V2）、落盘顺序，四处文本一致；只有一份完整语法表；落盘步骤不把脚本/CLI 当作必经路径。
 2. **五类验收场景**：每类同时核对产物位置与 bundle `root`/内部引用。
-3. **逐分支走查**：配置缺键/版本错/顶层非 mapping/重复键、S1–S2 冲突、仓库根打包（叠加 S1 存在）、非规范 L0 文件名、L3 顺序、L4、L5 无 `HOME`、无 `git` 命令、禁区、`output-in-input`、迁移到不存在的父目录、迁移目标已存在、内容变化后 `blocks` 丢弃。
+3. **逐分支走查**：配置缺键/版本错/顶层非 mapping/重复键、S1–S2 冲突、仓库根打包（仓库内有 `docs/` 时仍落 `<repo>/tacos/`）、非规范 L0 文件名、L3 顺序、L4、L5 无 `HOME`、无 `git` 命令、禁区、`output-in-input`、`unverifiable`（无解析能力时不落盘）、迁移到不存在的父目录、迁移目标已存在、内容变化后 `blocks` 丢弃。
 4. **校验阶梯实测**：至少一次 V1（打开标签页跑 `window.taco.validate()` 得 `ok: true`）与一次 V2（仅解析核对并声明"未做运行校验"）。
 5. **回归**：`npm test` 与 `npm run check` 通过；两项既有测试只作回归防护，不作为级联或手写数据块正确性的证明。
 
@@ -115,11 +119,12 @@ outputDir: specs/{feature}
 1. 契约稿评审通过（不改动 `pack.mjs` 文件本体）。
 2. 契约译为英文迁入 `skills/taco/references/output-path.md`；中文稿降级为指针；逐条核对语义。
 3. `SKILL.md`：新增输出位置章节 + 主流程收敛为零依赖（§4.2）。
-4. `docs/agent-installation.md`：Assemble 步骤与 reference 清单。
-5. `.taco/config.yaml` 落盘（本仓库自我应用）。
-6. `extensions/taco/` 三处一句话。
-7. 五类场景 + 逐分支走查 + 校验阶梯实测 + `npm test`/`npm run check`。
-8. 交付 `.taco.html` 供人工核对，并在报告里给出级别/依据/路径/文件名/标题/校验级别/告警。
+4. `references/bundle-format.md`：脚本优先与工具独占写入的表述收敛（§4.3）。
+5. `docs/agent-installation.md`：Assemble 步骤与 reference 清单。
+6. `.taco/config.yaml` 落盘（本仓库自我应用）。
+7. `extensions/taco/` 三处一句话。
+8. 五类场景 + 逐分支走查 + 校验阶梯实测 + `npm test`/`npm run check`。
+9. 交付 `.taco.html` 供人工核对，并在报告里给出级别/依据/路径/文件名/标题/校验级别/告警。
 
 ## 8. 交付
 
