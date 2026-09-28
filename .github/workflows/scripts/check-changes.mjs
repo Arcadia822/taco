@@ -8,7 +8,7 @@
  * which components have changes and recommend version bump type.
  *
  * Usage:
- *   node skills/taco-release/scripts/check-changes.mjs [--ref <ref>] [--json]
+ *   node .github/workflows/scripts/check-changes.mjs [--ref <ref>] [--json]
  */
 
 import { execSync } from 'node:child_process'
