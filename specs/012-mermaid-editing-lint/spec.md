@@ -209,10 +209,10 @@ parse?: (
 - 时机（按 D1 裁决：**不保留旧预览，因此必须降低实时编译频率**）：输入后 **debounce ~800ms** 起步（默认值，允许后续按手感调整到 500–1000ms 区间）；进行中只保留最新一次待执行（单飞），连击不排队；诊断面板若已显示错误，则改为「静默重试」——仅当结果变化（错误消失或位置改变）才更新显示，避免闪烁。实测解析成本：常规图 3–13ms、120 节点流程图 69ms（jsdom 环境），800ms debounce 后开销可接受。
 - lint 与渲染共用同一个 `MermaidRuntime`，并在首次 `initialize` 之后执行，保证 `layout: 'elk'`、`securityLevel: 'strict'` 等配置对两者一致。
 - **分支矩阵**（审查修正）：lint 与诊断必须覆盖三条输入分支——
-  1. `parse` 可用且返回 `false`：按抛出的异常分类（`false` 本身无错误对象，`detail` 只能给出来自 `parse` 抛错路径的缓存或省略，**不得**声称保留了不存在的原始异常）；
-  2. `parse` 可用但抛异常（`suppressErrors` 未生效或桩实现）：按异常分类；
+  1. `parse` 可用且返回 `false`（`suppressErrors` 生效，**没有异常对象**）：类别只能按「未识别图表类型 vs 语法错误」两步细化——先对源码做廉价的预判（空/纯注释/无图表头 → `unknown-type`），其余一律 `syntax`；此分支 `detail` **缺省**（如实不展示底层信息，只给通用语法错误文案），不得声称保留了不存在的原始异常；
+  2. `parse` 可用但抛异常（`suppressErrors` 未生效或桩实现）：按异常对象分类，`detail` 保留原始 message；
   3. `parse` 缺省（CDN/桩不提供）：退化为 `render` 失败路径，但渲染抛出的解析异常仍按 `syntax`/`unknown-type` 分类，不得误报为 `render`。
-- **lint 输入与渲染输入一致**（审查修正）：`renderDiagram` 在显式主题与当前主题不同时会改写源码（`renderSource = updateMermaidCodeTheme(source, …)`，`src/mermaid.ts:542-543`）。lint 必须针对**实际渲染输入**执行；若两者输入不同，须建立渲染输入到可编辑源码的行列映射，或在测试中覆盖「源码含主题配置前缀」的场景，保证行列不漂移。
+- **lint 输入与渲染输入一致**（审查修正）：`renderDiagram` 在显式主题与当前主题不同时会改写源码（`renderSource = updateMermaidCodeTheme(source, …)`，`src/mermaid.ts:542-543`）。**实现必须二选一并落地**（测试只是验证手段，不能替代）：要么让 lint 与 render 使用同一份**不改写**的输入，要么建立渲染输入到可编辑源码的**确定性行列映射**（记录改写引入/删除的行数并平移）。不得只加测试而保留漂移。
 - 已知局限（必须承认，不得掩盖）：`parse` 通过不等于可渲染（§2.3 的 `classDiagram` `TypeError`）。因此 `render` 阶段的失败仍归为 `render` 类，且**不得**被说成语法错误。
 
 ### 4.3 预览状态机
@@ -247,7 +247,7 @@ preview.hidden = !isMermaid || state !== 'valid'
 
 - 也就是说：语法错误、渲染期失败、运行时不可用三种情况下，**代码块整体回落为可编辑的原始源码**（FR-007a 的语义扩展到所有失败形态），诊断以**源码区域顶部的一行摘要**呈现（类别 + 位置 + 可展开的 `detail`），而不是替换源码。
 - `.mmd` 入口采用同一语义：失败时内容区回落到源码编辑器 + 顶部诊断摘要（与 Markdown 一致），不再强制展开浮动代码面板。
-- `onRenderError` 必须在 Markdown 路径接线，使其具备与 `.mmd` 相同的回调能力（解 §2.6）。
+- `onDiagnostic` 必须在 Markdown 路径接线（`onRenderError`/`onUnavailable` 被其替换，见 §5），使其具备与 `.mmd` 相同的回调能力（解 §2.6）。
 - 死钩子 `is-source-visible` 直接删除（样式表中不存在），可见性只由 `hidden` 与 `data-mermaid-state` 驱动。
 - 不新增块内「源码/预览」切换按钮：有效图表保持预览优先，双击/按钮进全屏的既有操作不变（R7）。
 
@@ -273,7 +273,7 @@ preview.hidden = !isMermaid || state !== 'valid'
    - `requestedSource`：最近一次提交给 lint/render 的内容；
    - `renderedSource`：**最近一次实际渲染成功的原始源码**（由 preview 在成功回调中回传，如 `onRendered(renderedSource)` 携带版本号）。
    现有 `renderedCode` 是「已请求」而非「已成功」，直接改名不能修复映射错误。节点/行映射（`syncSelection`、`onNodeHover`、行评论）只允许在 `currentSource === renderedSource` 时启用。
-4. **手动预览模式的当前性**（审查修正）：手动模式下编辑源码必须立即把状态标记为 dirty（预览面显示「预览对应旧源码，点击更新」并回落/保持源码可编辑，绝不把旧图呈现为当前预览），点击「更新图表」后才执行 lint/render；不得沿用 `state === 'valid'` 让旧图继续隐藏源码。
+4. **手动预览模式的当前性**（审查修正）：手动模式下编辑源码必须立即把状态标记为 dirty——按 D1 统一语义，**移除/隐藏旧 SVG**（不保留任何旧图），提示「源码已修改，点击『更新图表』重新渲染」放入独立诊断摘要区域，源码保持可编辑；点击「更新图表」后才执行 lint/render。不得沿用 `state === 'valid'` 让旧图继续隐藏源码。
 5. **缩放与状态共存**：明确「渲染中/失败回落源码 + 内联缩放」时的交互优先级（缩放状态不因状态切换被悄悄重置）。
 
 ### 4.8 文案与国际化
@@ -287,7 +287,7 @@ preview.hidden = !isMermaid || state !== 'valid'
 | --- | --- | --- |
 | `MermaidApi` | 新增可选 `parse` | 可选；CDN 与测试桩缺省时不启用 lint 前置，退化为现有 `render` 失败路径 |
 | `MermaidPreviewElement` | 新增状态读取（`data-mermaid-state`）；`updateCode` 语义收紧为「状态显式迁移」 | DOM 契约新增，旧读取方不受影响 |
-| `createMermaidSplitView` | 新增 `onDiagnostic`；`onRenderError` 保持 | 增量 |
+| `createMermaidSplitView` | `onRenderError`/`onUnavailable` 被替换为 `onDiagnostic(diagnostic)`（唯一回调链：preview → split view → 两入口各自摘要节点）；旧回调**移除**，不留兼容别名 | 内部 API，两入口同步接线 |
 | `createTacoCodeBlock` | 失败形态下整体回落为源码（用户可见行为变化，正是本 Issue 目标） | 用户可见行为变化 |
 | Bundle / 文件格式 | **无变化** | 不涉及 `taco/files` v1 |
 
@@ -303,7 +303,7 @@ preview.hidden = !isMermaid || state !== 'valid'
 - `createMermaidPreview` 状态机测试：`empty/linting/rendering/valid/invalid/unavailable` 迁移；渲染中不残留旧图、明确 `rendering` 态（A3，D1）；失败后进入 `invalid` 且不显示旧图；`initialize` 抛错进入 `unavailable` 且可重试。
 - lint 频率测试：连续输入时编译次数受 debounce + 单飞约束（A3，D1）。
 - 强制重试测试：源码不变、仅调用 `retry()` 时重新 `load()+render` 并恢复 `valid`（A2）。
-- 手动预览模式测试：编辑源码即 dirty（不把旧图当当前预览）、点击更新后才 lint/render、失败后恢复（A1/A5）。
+- 手动预览模式测试：编辑源码即 dirty——移除/隐藏旧 SVG、摘要区提示、源码可编辑（D1 一致）；点击更新后才 lint/render、失败后恢复（A1/A5）。
 - 主题改写测试：源码含显式主题配置时 lint 输入与渲染输入一致、行列映射正确。
 - 残留测试：连续 5 次 `render` 失败后 `document.body` 中 `div[id^="d"]` 计数不变（A4）。
 - lint 前置测试：`parse` 返回 `false` 时 `render` 未被调用。
@@ -325,7 +325,7 @@ preview.hidden = !isMermaid || state !== 'valid'
 | M8 | `parse` 通过但渲染失败（`classDiagram` 非法成员） | 归为 `render` 类而非语法错误；可重试 |
 | M9 | `sanitizeMermaidSvg` 拒绝（构造超大/非法 SVG） | 归为 `sanitizer` 类，独立文案 |
 | M10 | 纯注释 / 未识别图表头 | `unknown-type` 中性态，不算语法错误 |
-| M11 | 手动预览模式下把有效源码改成无效 | 旧图不冒充当前预览；源码可编辑；点击更新后才出现诊断 |
+| M11 | 手动预览模式下把有效源码改成无效 | 旧 SVG 被移除/隐藏；摘要区提示源码已修改；源码可编辑；点击更新后才 lint/render |
 | M12 | 离线失败后不编辑源码、仅点击「重试加载」 | 重新加载并恢复 `valid`（A2） |
 
 ### 6.3 证据留存
@@ -366,7 +366,7 @@ preview.hidden = !isMermaid || state !== 'valid'
 
 1. **阶段一：诊断内核** — `src/mermaid-diagnostics.ts` + 单元测试（五类分型、位置提取、不序列化 error）。
 2. **阶段二：渲染管线与状态机** — `MermaidApi.parse` 接入、lint 前置 + debounce ~800ms + 单飞、状态机与 `data-*`、渲染期清空旧图、残留清理（A3/A4）。
-3. **阶段三：入口一致性** — Markdown 块与 `.mmd` 的「失败回落为源码 + 顶部诊断摘要」（A1/A5）、`onRenderError` 接线。
+3. **阶段三：入口一致性** — Markdown 块与 `.mmd` 的「失败回落为源码 + 顶部诊断摘要」（A1/A5）、`onDiagnostic` 接线（替换 `onRenderError`）。
 4. **阶段四：运行时可用性** — 不可用提示、重试与自动恢复（A2）。
 5. **阶段五：交互收敛** — 视口状态源、`restoreView` 幂等、选择联动（R6），先真机复核 §2.7。
 6. **阶段六：文案与回归** — i18n 双语、全量测试与手工清单 M1–M12。
