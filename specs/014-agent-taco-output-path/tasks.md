@@ -1,6 +1,6 @@
 ---
-title: '012-agent-taco-output-path 实施任务'
-feature_id: '012-agent-taco-output-path'
+title: '014-agent-taco-output-path 实施任务'
+feature_id: '014-agent-taco-output-path'
 created: '2026-09-28'
 status: 'Draft'
 ---
@@ -12,7 +12,7 @@ status: 'Draft'
 ## 阶段 2：契约落位
 
 - [ ] T2 把契约**语义等价地译为英文**写入 `skills/taco/references/output-path.md`，逐条核对语义一致。
-- [ ] T3 把 `specs/012-agent-taco-output-path/contracts/output-path-rule.md` 替换为指针文件（标题 + 迁移说明 + 链接）。
+- [ ] T3 把 `specs/014-agent-taco-output-path/contracts/output-path-rule.md` 替换为指针文件（标题 + 迁移说明 + 链接）。
 - [ ] T4 校验只有一份权威：`contracts/output-path-rule.md`（实现后为 `references/output-path.md`）是**唯一**给出完整级联与失败语义的位置；其它文本只允许级别名摘要与链接（`spec.md` §4.1 已改为摘要）。
 
 ## 阶段 3：主流程收敛为零依赖

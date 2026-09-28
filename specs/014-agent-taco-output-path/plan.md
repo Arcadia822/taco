@@ -1,6 +1,6 @@
 ---
-title: '012-agent-taco-output-path 技术方案'
-feature_id: '012-agent-taco-output-path'
+title: '014-agent-taco-output-path 技术方案'
+feature_id: '014-agent-taco-output-path'
 created: '2026-09-28'
 status: 'Draft'
 ---
@@ -62,7 +62,7 @@ skills/taco/references/output-path.md        ← 唯一权威，随 skill 安装
 
 ### 4.1 权威契约的落位
 
-1. 设计期：`specs/012-agent-taco-output-path/contracts/output-path-rule.md`（中文）。
+1. 设计期：`specs/014-agent-taco-output-path/contracts/output-path-rule.md`（中文）。
 2. 实现第一步：**语义等价地译为英文**写入 `skills/taco/references/output-path.md`（skill 侧文档沿用既有英文），逐条核对语义一致（级联与 L2 跳过 L3、L0 规范文件名、保留字段与 `blocks` 规则、占用规则、落盘八步、校验阶梯、失败类型与告警、与扩展的关系）。
 3. 同时把中文稿替换为指针（标题 + 迁移说明 + 链接），此后不再演进。
 

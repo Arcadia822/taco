@@ -1,6 +1,6 @@
 ---
-title: '012-agent-taco-output-path'
-feature_id: '012-agent-taco-output-path'
+title: '014-agent-taco-output-path'
+feature_id: '014-agent-taco-output-path'
 created: '2026-09-28'
 status: 'Draft'
 issue: 'https://github.com/Arcadia822/taco/issues/39'
@@ -150,7 +150,7 @@ L0 的精确语义见 4.2；各场景的验收样例见 §8.2（那是样例，�
 | 用户指定输出位置 | 用户说"生成到 `./tmp/roguelike-tactics-game.taco.html`" | 产物即该文件；bundle 标题 = `roguelike-tactics-game`；`root` 仍为被评审目录 |
 | 项目自定义模板/CP 位置 | 项目在 `review/policy/` 放模板，用户显式指定产物到 `review/tacos/` | 产物在指定位置；模板位置不变、未被复制 |
 | 无 CP 的普通文档 | 仓库内 `notes/` 目录（记录该仓库实际存在哪些候选目录），无 Checkpoints | 产物落**实际存在的首个候选目录**之下的 `tacos/`（例如只有 `specs/` 时是 `<repo>/specs/tacos/`）；四个候选目录都不存在时才落 `<repo>/tacos/`；bundle 顶层无 `checkpoints` |
-| 仅参考 SDD 示例的新 Taco | 参考 `templates/spec/`，被打包目录 = `specs/012-agent-taco-output-path` | 产物不在模板目录；Checkpoint 文档 path 以实际 `root` 为前缀 |
+| 仅参考 SDD 示例的新 Taco | 参考 `templates/spec/`，被打包目录 = `specs/014-agent-taco-output-path` | 产物不在模板目录；Checkpoint 文档 path 以实际 `root` 为前缀 |
 | 原路径原状态刷新 | 修改 canonical 文档后重刷新既有 Taco | 路径、标题与 `root` 不变；`docId`/`comments`/`navigation`/`checkpoints` 保留；内容更新且 `blocks` 按内容是否变化处理 |
 
 ### 8.3 逐分支走查（每个分支一条记录）
