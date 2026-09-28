@@ -280,11 +280,18 @@ const fencedUnits = (path, content) => {
       continue
     }
     const marker = open[2][0]
+    const info = open[3]
+    // CommonMark: a backtick fence's info string may not contain a backtick, so
+    // `\`\`\`mermaid`example` is ordinary text rather than a fence.
+    if (marker === '`' && info.includes('`')) {
+      index += 1
+      continue
+    }
     const closing = new RegExp(`^ {0,3}${marker}{${open[2].length},}[ \\t]*$`)
     let end = index + 1
     while (end < lines.length && !closing.test(lines[end].replace(/\r$/, ''))) end++
     // Only a top-level fence counts; the info string's first word selects the language.
-    if (/^mermaid\b/i.test(open[3].trim())) {
+    if (/^mermaid\b/i.test(info.trim())) {
       units.push({
         file: displayPath(path),
         body: lines.slice(index + 1, end).join('\n'),

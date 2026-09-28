@@ -426,6 +426,12 @@ describe('lint-mermaid.mjs', () => {
     const tildeReport = JSON.parse(tilde.stdout)
     expect(tildeReport.diagnostics[0]).toMatchObject({ kind: 'unknown-type' })
 
+    // A backtick info string may not contain a backtick, so this is plain text.
+    writeFileSync(join(directory, 'not-a-fence.md'), '```mermaid`example\nnotADiagram\n')
+    const notAFence = spawnLint([join(directory, 'not-a-fence.md'), '--json'])
+    expect(notAFence.status, 'a backtick inside the info string is not a fence').toBe(0)
+    expect(JSON.parse(notAFence.stdout).units).toBe(0)
+
     // An indented block is code content, not a fence.
     writeFileSync(join(directory, 'indented.md'), '    ```mermaid\n    notADiagram\n    ```\n')
     const indented = spawnLint([join(directory, 'indented.md'), '--json'])

@@ -3,7 +3,7 @@ import { Editor } from '@tiptap/core'
 import { createTacoEditorExtensions } from '../src/tiptap-editor.ts'
 import { readFileSync } from 'node:fs'
 import { completeHighlighter } from '../src/highlighter-lowlight.ts'
-import { MermaidRuntime, type MermaidApi, type MermaidPluginLabels } from '../src/mermaid.ts'
+import { MermaidRuntime, createMermaidPreview, type MermaidApi, type MermaidPluginLabels } from '../src/mermaid.ts'
 import { setDefaultHighlighter } from '../src/source-editor.ts'
 import { createStructuredFileViewer, structuredFileLabels } from '../src/structured-file-viewer.ts'
 import type { TacoFile } from '../src/model.ts'
@@ -252,14 +252,25 @@ describe('mermaid diagnostics in a Markdown code block', () => {
 
   it('lints the source the reader sees, not the theme-rewritten render input', async () => {
     const parse = vi.fn().mockResolvedValue({ diagramType: 'flowchart-v2' })
-    const api = { initialize: vi.fn(), parse, render: vi.fn().mockResolvedValue({ svg: '<svg><text>ok</text></svg>' }) } as unknown as MermaidApi
-    // An explicit theme that differs from the active one makes the render path rewrite
-    // the preamble (one `%%{init}%%` line becomes multi-line frontmatter).
+    const render = vi.fn().mockResolvedValue({ svg: '<svg><text>ok</text></svg>' })
+    const api = { initialize: vi.fn(), parse, render } as unknown as MermaidApi
+    // A source with an explicit theme adopts that theme, so the rewrite only happens
+    // once the reader picks a different one: `setTheme` is that real path.
     const explicit = '%%{init: {"theme":"dark"}}%%\nflowchart TD\n  A --> B\n'
-    const editor = mount(explicit, new MermaidRuntime(vi.fn().mockResolvedValue(api)))
-    await vi.waitFor(() => expect(parse.mock.calls.length).toBeGreaterThan(0))
-    const linted = String(parse.mock.calls[0][0])
-    expect(linted, 'positions must map onto the reader’s own text').toContain('%%{init: {"theme":"dark"}}%%')
-    editor.destroy()
+    const view = createMermaidPreview(explicit, labels, undefined, new MermaidRuntime(vi.fn().mockResolvedValue(api)))
+    document.body.append(view)
+    await vi.waitFor(() => expect(render.mock.calls.length).toBe(1))
+    expect(String(render.mock.calls[0][1]), 'an unchanged theme renders the source as written').toBe(explicit)
+
+    view.setTheme('neo')
+    await vi.waitFor(() => expect(render.mock.calls.length).toBe(2))
+
+    const renderedInput = String(render.mock.calls[1][1])
+    expect(renderedInput, 'the theme rewrite must actually happen for this test to mean anything').not.toBe(explicit)
+    expect(renderedInput.split('\n').length).toBeGreaterThan(explicit.split('\n').length)
+    for (const call of parse.mock.calls) {
+      expect(String(call[0]), 'positions must map onto the reader’s own text').toBe(explicit)
+    }
   })
+
 })
