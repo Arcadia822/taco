@@ -62,7 +62,7 @@ jobs:
       - name: Inspect changes across components
         id: check
         run: |
-          node skills/taco-release/scripts/check-changes.mjs --json > /tmp/report.json
+          node scripts/check-changes.mjs --json > /tmp/report.json
           cat /tmp/report.json
 
           echo "taco_has_changes=$(jq -r '.components[] | select(.name=="taco") | .hasChanges' /tmp/report.json)" >> "$GITHUB_OUTPUT"
@@ -119,7 +119,7 @@ jobs:
 
           # 1. 更新版本声明与 Changelog
           npm version "$NEW_VER" --no-git-tag-version
-          node skills/taco-release/scripts/generate-release-notes.mjs \
+          node scripts/generate-release-notes.mjs \
             --from "$LAST_TAG" \
             --version "$NEW_VER" \
             --update-changelog \

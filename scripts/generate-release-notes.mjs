@@ -7,7 +7,7 @@
  * and changelog entries from git history between tags.
  *
  * Usage:
- *   node skills/taco-release/scripts/generate-release-notes.mjs \
+ *   node scripts/generate-release-notes.mjs \
  *     [--from <tag>] [--to <ref>] [--version <version>] [--update-changelog] [--outfile <path>]
  */
 
