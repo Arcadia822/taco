@@ -11,6 +11,15 @@ describe('release version', () => {
     expect(extensionVersion).toBe(packageJson.version)
   })
 
+  it('keeps the installed-version marker aligned with the Taco application', () => {
+    // skills/taco/VERSION is what the update check reports as the installed
+    // version, so it must match the released package version (see
+    // scripts/sync-skill-version.mjs and specs/012-skill-update-notice).
+    const marker = readFileSync(resolve('skills/taco/VERSION'), 'utf8').trim()
+
+    expect(marker).toBe(packageJson.version)
+  })
+
   it('supports the validated Spec Kit 0.16 and 1.x release lines', () => {
     const manifest = readFileSync(resolve('extensions/taco/extension.yml'), 'utf8')
     const specKitRange = manifest.match(/^\s{2}speckit_version:\s*['"]([^'"]+)['"]\s*$/m)?.[1]

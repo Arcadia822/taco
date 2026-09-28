@@ -129,7 +129,7 @@ Agent 开始 Taco 工作 → 一次轻量更新检查 → 正常完成交付
 | AC-4 | **脚本自身**不读取项目内容、不外发任何本地数据：请求只读取远端公开的 tag/发布列表，不携带本地路径、项目内容或凭据；唯一的本地写入是仅含版本比较结果的缓存文件（15 分钟 TTL，`--no-cache` 或 `TACO_UPDATE_CACHE_TTL=0` 可完全禁用，读取/写入失败不影响结果）；脚本自动执行的唯一本机程序是 `taco-cli --version`（可由 `--no-cli` / `TACO_UPDATE_CHECK=off` 关闭），其自身行为由用户环境的信任模型承担（§5.5） | 本规格安全性要求 |
 | AC-5 | 存在可用更新时输出的提醒文案与 §5.4 模板一致，且**明确声明未升级**；无更新或结果未知时不输出任何字样 | Issue 期望行为 2 |
 | AC-6 | 任何路径下都不会触发安装/升级命令：脚本只发起一次 GitHub Tags API 的 GET 与一次 `taco-cli --version`，不含任何写文件或安装路径；SKILL.md 以 MUST NOT 级别禁止自主升级；该约束由结构审查 + 真实流程烟测保证（无法由单元测试证明） | Issue 验收标准 3 |
-| AC-7 | 单元/端到端测试覆盖：有更新、无更新、版本领先、`cli` 缺失/不可解析、**扩展缺失/有更新/无 archive**、`VERSION` 缺失/不可解析、远端不可达/超时/输出超限、禁用开关短路、**缓存命中/TTL 过期/损坏/禁用/写失败**、重定向被拒、异域 Link 不跟随、预发布 tag、JSON 契约字段 | §8 |
+| AC-7 | 单元/端到端测试覆盖：有更新、无更新、版本领先、`cli` 缺失/不可解析、**扩展缺失/有更新/无 archive/响应超限**、`VERSION` 缺失/不可解析、远端不可达/超时/输出超限、禁用开关短路、**缓存命中/TTL 过期/损坏/禁用/写失败**、重定向被拒、异域 Link 不跟随、预发布 tag、JSON 契约字段 | §8 |
 | AC-8 | `skills/taco/VERSION` 与 `package.json` 版本在构建后一致（发版时在 `npm run check` 之前同步），并有测试守护 | §6.1 |
 
 ---
@@ -179,7 +179,7 @@ Agent 开始 Taco 工作 → 一次轻量更新检查 → 正常完成交付
 约束与加固（安全审查结论，必须实现）：
 
 - **超时**：每次尝试独立 3000 ms（`--timeout` 可调）；只有一次尝试失败才允许切换通道，因此最坏约 2×超时（约 6 s），且只发生在失败路径。**不重试同一通道**。
-- **输出上限**：git 的 stdout 与 HTTP 响应体各 64 KiB，超限即终止该尝试并跳过。
+- **输出上限**：git 的 stdout 与 tags 响应体各 64 KiB；releases 响应体 1 MiB（该端点天然携带 assets 元数据，实测约 96 KB，远超 64 KiB）。超限即终止该尝试并跳过；扩展查询超限只让 `extension.latest=null`，不影响 `ok` 与其它组件。
 - **git 执行隔离**：精简环境变量（仅 `PATH`、`HOME`、`LANG`）与 `GIT_CONFIG_GLOBAL=/dev/null`、`GIT_CONFIG_SYSTEM=/dev/null`、`GIT_TERMINAL_PROMPT=0`、`GIT_ASKPASS`/`SSH_ASKPASS` 置为不可用、`-c credential.helper=`；**子进程 cwd 固定在中立目录**（`os.tmpdir()`）（绝不在项目/仓库目录内启动，挡住项目级 `.git/config` 的 `url.*.insteadOf` 与 `http.extraheader`）；仓库参数前插入 `--` 终止选项。
   - 代价（明示）：仅通过 Git 配置文件设置代理的环境下，git 通道会失败并静默——这是刻意的隐私优先取舍。注意回退通道不保证能补救：Node 的 `fetch` 默认不读取 `HTTP_PROXY`/`HTTPS_PROXY` 以外的代理配置，代理仅写在 Git 配置里的环境两条通道都可能失败并静默。
 - **子进程终止**：`git` 与 `taco-cli` 均以独立进程组启动（`detached: true`），超时或超限时以 `process.kill(-pid, 'SIGKILL')` 终止**整个进程组**，避免 git 的远程助手或 CLI 的派生进程残留。
@@ -365,7 +365,8 @@ node scripts/check-update.mjs [--json] [--repo <url|path>] [--api-base <url>] [-
 19. **构建生成**：`node scripts/sync-skill-version.mjs` 对临时目录运行时写入 `"<version>\n"` 且幂等（第二次运行报告 `unchanged`，不重写文件）。
 20. **CLI 侧的超时与限额**：`--cli-bin` 分别指向挂起桩与无限输出桩 → `cli.installed=null`、`cli.updateAvailable=null`、`ok=true`，且 skill 的更新提示仍可用；挂起用例断言子进程被终止且不残留。
 21. **扩展（可选组件）**：在临时目录构造 `.specify/extensions/taco/extension.yml`（`version: 0.6.0`），releases 夹具里 `v0.11.0` 无资产、`v0.6.0` 带 `taco-extension-v0.6.0.zip` → `extension={installed:0.6.0, latest:0.6.0, updateAvailable:false}`（有更新的本体 tag、但没有更新的可安装包 ⇒ 不提示）；夹具改为 `v0.12.0` 带 `taco-extension-v0.12.0.zip` → `updateAvailable=true`；无扩展清单时 → `extension:null` 且夹具请求数不增加。
-22. **缓存**：同一 `TACO_UPDATE_CACHE_DIR` 连续两次运行 → 第二次 `cached=true` 且夹具请求数为 0；把 `checkedAt` 改成超过 TTL → 重新探测；写入损坏 JSON → 回落探测且结论正确；`--no-cache` 与 `TACO_UPDATE_CACHE_TTL=0` → 不读不写；缓存目录不可写 → 结论不变、`exit code 0`。
+22. **releases 响应体积**：夹具返回约 165 KB 的合法 releases JSON（含 `taco-extension-*.zip` 资产）→ `extension.updateAvailable=true`（证明该端点不受 64 KiB 上限约束）；夹具返回 2 MiB 响应 → `extension={installed, latest:null, updateAvailable:null}` 且 `ok=true`。
+23. **缓存**：同一 `TACO_UPDATE_CACHE_DIR` 连续两次运行 → 第二次 `cached=true` 且夹具请求数为 0；把 `checkedAt` 改成超过 TTL → 重新探测；写入损坏 JSON → 回落探测且结论正确；`--no-cache` 与 `TACO_UPDATE_CACHE_TTL=0` → 不读不写；缓存目录不可写 → 结论不变、`exit code 0`。
 
 ### 8.2 手工 smoke（必须真实执行，作为交付证据）
 
@@ -382,9 +383,9 @@ node scripts/check-update.mjs [--json] [--repo <url|path>] [--api-base <url>] [-
 - AC-1 → §5.4 契约文本 + `SKILL.md` 改动评审；AC-2 → §6 文档改动 + 8.2 的最后一项。
 - AC-3 → 8.1 第 5、6、8、9、10、11、12、15 项。
 - AC-4 → 8.1 第 3、4、16 项（git 加固、配置隔离、禁用时零调用/零请求）+ 第 5 项的请求头断言（无凭据、无本地内容）+ 第 22 项的缓存边界 + §5.5 + 代码结构审查；范围限定见 AC-4 本身。
-- AC-5 → 8.1 第 1、2、7、14、20、21 项 + §5.4 文案断言。
+- AC-5 → 8.1 第 1、2、7、14、20、21、22 项 + §5.4 文案断言。
 - AC-6 → §5.4 禁止项 + 代码结构审查（仅 `git ls-remote`／一次 HTTP GET 与一次 `taco-cli --version`，无写路径）+ 8.2 的流程证据（排除正常打包写入）；**该项无法由单元测试证明**。
-- AC-7 → 8.1 第 1–22 项；AC-8 → 8.1 第 18、19 项。
+- AC-7 → 8.1 第 1–23 项；AC-8 → 8.1 第 18、19 项。
 
 ---
 

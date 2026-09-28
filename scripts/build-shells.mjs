@@ -49,3 +49,6 @@ run('scripts/sync-extension-shell.mjs', [])
 
 console.log('\n=== Building Template HTMLs ===')
 run('scripts/build-template-htmls.mjs', [])
+
+console.log('\n=== Synchronizing the Skill Version Marker ===')
+run('scripts/sync-skill-version.mjs', [])

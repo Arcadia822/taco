@@ -40,7 +40,7 @@ canonical spec directory → 一个 .taco.html → 人类评审 → Agent 同步
 https://github.com/Arcadia822/taco
 ```
 
-Agent 会读取 Taco repo 中的说明，执行默认的 **CLI-free skill 安装**：把完整的 `skills/taco/` 目录（Agent 指南、生产 shell、按需加载的参考文档与读取脚本、文档示例）安装到自己的 skill 目录。这就是完整安装；此后 Agent 可以在任意目录用 skill 自带的 shell 组装 `.taco.html` 评审文件，完全离线，不需要 npm 包、CLI 或任何构建。更深入的集成 —— 用于项目级接线的 Spec Kit extension 命令/hooks/policy，或用于云端发布（TacoHub/Tacobin）的 `taco-cli` —— 都属于需要显式请求的独立步骤，详见 [`docs/agent-installation.md`](docs/agent-installation.md)。
+Agent 会读取 Taco repo 中的说明安装完整的 `skills/taco/` 目录（Agent 指南、生产 shell、按需加载的参考文档与读取脚本、文档示例）：优先执行 `npx skills@latest add arcadia822/taco --skill=taco`，不可用时回退为拷贝该目录。这就是完整安装；此后 Agent 可以在任意目录用 skill 自带的 shell 组装 `.taco.html` 评审文件，完全离线，不需要 npm 包、CLI 或任何构建。该 skill 还会在每个工作会话开始时把自身的 `VERSION` 与最新发布版本比一次，发现更新时只在回复末尾用一句话告知，绝不自行升级。更深入的集成 —— 用于项目级接线的 Spec Kit extension 命令/hooks/policy，或用于云端发布（TacoHub/Tacobin）的 `taco-cli` —— 都属于需要显式请求的独立步骤，详见 [`docs/agent-installation.md`](docs/agent-installation.md)。
 
 是否使用 Checkpoint 取决于用户和项目的评审要求。随 skill 提供的 `spec/` SDD 阶段图只是可改写的示例，不是默认阶段方案，也不决定生成的 Taco 要存在哪里。只有处理 Checkpoint 时才需要加载对应的详细协议参考；普通评审不必设置 Checkpoint。
 

@@ -125,19 +125,23 @@ jobs:
             --update-changelog \
             --outfile /tmp/release-notes.md
 
-          # 2. 执行完整验证与构建（包含测试与产物重新构建同步）
+          # 2. 先同步 skills/taco/VERSION（check 的顺序是 format → test → build，
+          #    版本号 bump 后必须在测试前同步，否则 tests/version.test.ts 会失败）
+          npm run sync:version
+
+          # 3. 执行完整验证与构建（包含测试与产物重新构建同步）
           NODE_OPTIONS="${NODE_OPTIONS:-} --no-experimental-webstorage" npm run check
 
-          # 3. 提交变更与打 Tag
+          # 4. 提交变更与打 Tag
           git add package.json package-lock.json extensions/ dist-single/ skills/taco/
           git commit -m "chore(release): taco v$NEW_VER"
           git tag -a "v$NEW_VER" -m "Taco v$NEW_VER"
 
-          # 4. 推送到远程仓库
+          # 5. 推送到远程仓库
           git push origin main
           git push origin "v$NEW_VER"
 
-          # 5. 发布 GitHub Release
+          # 6. 发布 GitHub Release
           gh release create "v$NEW_VER" \
             --repo "$GITHUB_REPOSITORY" \
             --title "Taco v$NEW_VER" \

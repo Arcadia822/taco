@@ -65,3 +65,9 @@
 - Read every open comment and its complete history, modify canonical files to
   address actionable feedback, then update the same Taco once direct edits are
   handled. A blocked review must retain the original Taco without a false refresh.
+- Before the first Taco action of a work session, run the installed skill's
+  `scripts/check-update.mjs --json` once and, only when a component reports
+  `updateAvailable: true`, close the final reply with the single sentence from
+  that skill's `references/update-notice.md`. Never install or upgrade anything
+  without an explicit user request, and stay silent when the check fails or finds
+  nothing. `TACO_UPDATE_CHECK=off` disables the check.

@@ -27,6 +27,24 @@ Decide whether to use Checkpoints from the review contract, not the task label o
 
 Never transplant a pack's `bundle.json` structure into a directory that does not contain its paths. A copied Checkpoint graph or `navigation` manifest renders empty groups and `Not created` placeholder rows — a document that looks broken instead of simple. The packs supply prose to adapt (`template.md`); their `bundle.json` is a working example of *those* files, not a layout to impose.
 
+### Check for updates once per work session
+
+Before the first Taco action of a work session (packing, refreshing, or consuming a review), check whether a newer published version exists. Run it from this skill directory:
+
+```sh
+node scripts/check-update.mjs --json
+```
+
+It reads the installed version from this skill directory's `VERSION`, resolves the newest published tag over `git ls-remote` (falling back to the GitHub tags API through Node's built-in `fetch` when `git` is unavailable), and reports any newer `taco` skill, `taco-cli` (only when that CLI is installed here), or Taco Spec Kit extension (only when this project has one installed, and only when a newer release actually ships a `taco-extension-*.zip`). It makes no other network request, never reads your documents, never sends local paths or credentials, and keeps at most a 15-minute version cache in your user cache directory.
+
+Contract:
+
+- Check once per work session, not once per command, and not in a loop.
+- Report nothing unless a component's `updateAvailable` is `true` and `ok` is `true`. `ok: false` (offline, no marker, rate limit, any failure) means silence — say nothing about updates and do not retry or block.
+- Never install or upgrade anything on your own: no `npm install -g`, no `npx skills update`, no re-copying files. The check only reports.
+- Keep the raw output to yourself: the user sees at most one sentence, at the end of the final reply, using the wording in `references/update-notice.md`.
+- The script runs `taco-cli --version` on this machine when that CLI exists (the only program it starts). Disable the whole check with `TACO_UPDATE_CHECK=off`, or just the CLI probe with `--no-cli`.
+
 ### Optional hosted review
 
 Local assembly and Handoff never require `taco-cli` or a Host. When explicitly publishing a Taco to a remote Host, read `references/publishing.md` first; when consuming hosted review events, read `references/reviewing.md` first. Both references are part of this same skill, not a second CLI-only guide. A hosted publication is public by default; inspect the payload and credential boundary before sending it.
@@ -215,3 +233,5 @@ After canonical edits, refresh the same Taco only when pending direct review edi
 ## Report format
 
 End each round with: files assembled/imported, exclusions, the presented structure (entry document, each group with its files, and what sits under `Unassigned`), warnings from `scripts/pack.mjs verify`, open comments handled/deferred by thread ID, files changed while handling comments, refreshed Taco path, and presentation status (`presented as a clickable file` / `opened (user-visible)` / `opened and verified (user-visible)`; report a headless boot check separately as evidence, not as opening).
+
+If the session's update check found an available update (`updateAvailable === true`), close the final reply with exactly one sentence from `references/update-notice.md`, in the conversation's language. Say nothing when there is no update or the check could not run.
