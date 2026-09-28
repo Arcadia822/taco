@@ -2,12 +2,12 @@
 
 /**
  * generate-release-notes.mjs
- * 
+ *
  * Generates Conventional Commits compatible release notes
  * and changelog entries from git history between tags.
  *
  * Usage:
- *   node skills/taco-release/scripts/generate-release-notes.mjs \
+ *   node .github/workflows/scripts/generate-release-notes.mjs \
  *     [--from <tag>] [--to <ref>] [--version <version>] [--update-changelog] [--outfile <path>]
  */
 
@@ -47,7 +47,10 @@ for (let i = 0; i < args.length; i++) {
 if (!fromTag) {
   // Find latest v* tag
   const raw = run(`git tag -l "v[0-9]*.[0-9]*.[0-9]*" --sort=-v:refname`)
-  const tags = raw.split('\n').map(t => t.trim()).filter(Boolean)
+  const tags = raw
+    .split('\n')
+    .map((t) => t.trim())
+    .filter(Boolean)
   fromTag = tags[0] || null
 }
 
@@ -72,7 +75,10 @@ const range = `${fromTag}..${toRef}`
 // Retrieve git log with full body to parse breaking changes
 // format: commit-hash%x1fsubject%x1fbody%x1fauthor-name
 const rawLogs = run(`git log ${range} --pretty=format:"%H%x1f%s%x1f%b%x1f%an%x1e"`)
-const rawEntries = rawLogs.split('\x1e').map(s => s.trim()).filter(Boolean)
+const rawEntries = rawLogs
+  .split('\x1e')
+  .map((s) => s.trim())
+  .filter(Boolean)
 
 const features = []
 const bugFixes = []
@@ -161,7 +167,13 @@ if (others.length > 0) {
   markdown += `\n`
 }
 
-if (breaking.length === 0 && features.length === 0 && bugFixes.length === 0 && perf.length === 0 && others.length === 0) {
+if (
+  breaking.length === 0 &&
+  features.length === 0 &&
+  bugFixes.length === 0 &&
+  perf.length === 0 &&
+  others.length === 0
+) {
   markdown += `* Maintenance release, dependency updates, and internal synchronizations.\n\n`
 }
 
@@ -185,13 +197,13 @@ if (updateChangelog) {
       console.log(`Updated changelog at ${p}`)
     }
   }
-    const extYmlPath = 'extensions/taco/extension.yml'
-    if (existsSync(extYmlPath)) {
-      const original = readFileSync(extYmlPath, 'utf8')
-      const updated = original.replace(/(\n\s+version:\s*)[^\n]+/, `$1'${version}'`)
-      writeFileSync(extYmlPath, updated, 'utf8')
-      console.log(`Updated extension manifest at ${extYmlPath}`)
-    }
+  const extYmlPath = 'extensions/taco/extension.yml'
+  if (existsSync(extYmlPath)) {
+    const original = readFileSync(extYmlPath, 'utf8')
+    const updated = original.replace(/(\n\s+version:\s*)[^\n]+/, `$1'${version}'`)
+    writeFileSync(extYmlPath, updated, 'utf8')
+    console.log(`Updated extension manifest at ${extYmlPath}`)
   }
+}
 
 console.log(markdown.trim())

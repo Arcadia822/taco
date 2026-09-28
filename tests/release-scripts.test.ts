@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
-const checkChangesScript = resolve('skills/taco-release/scripts/check-changes.mjs')
-const releaseNotesScript = resolve('skills/taco-release/scripts/generate-release-notes.mjs')
+const checkChangesScript = resolve('.github/workflows/scripts/check-changes.mjs')
+const releaseNotesScript = resolve('.github/workflows/scripts/generate-release-notes.mjs')
 
 const fixtures: string[] = []
 

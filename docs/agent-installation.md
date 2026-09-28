@@ -16,21 +16,52 @@ Select by the **recipient's opening environment**, not the Agent's installation-
 
 ## Install from a GitHub repo URL
 
-When the user gives the Taco repository URL (e.g. `https://github.com/Arcadia822/taco`), the default action is the **CLI-free skill installation**:
+When the user gives the Taco repository URL (e.g. `https://github.com/Arcadia822/taco`), install the **`taco` skill**. Prefer the skills ecosystem CLI, because it resolves the repository, picks the skill, and reports the exact destination for the active harness; fall back to copying the directory when that CLI cannot run (no network, no npm, unknown harness).
 
-1. Fetch the raw skill directory from the repo (or a local clone):
+### Preferred: `npx skills`
+
+```bash
+npx skills@latest add arcadia822/taco --skill=taco
+# non-interactive (pick the harness explicitly):
+npx skills@latest add arcadia822/taco --skill=taco -g -a claude-code -y
+npx skills@latest list        # verify what is installed
+```
+
+This installs the whole `skills/taco/` directory — `SKILL.md`, both shells, `references/**`, `scripts/**`, `templates/**`, and `VERSION` — into the harness skill location (`./.claude/skills/taco/` for a project install, the user directory with `-g`). It records `skills-lock.json` next to a project install. It reports the destination; verify the file list below in that directory before reporting success.
+
+If `npx`, npm, or the network is unavailable, or the installed directory is missing files it should contain, fall back to the copy flow. Do not mix the two in one install.
+
+### Fallback: copy the skill directory
+
+When the CLI cannot be used, fetch the raw skill directory from the repo (or a local clone):
+
+1. Fetch these files:
    - `skills/taco/SKILL.md`
    - `skills/taco/taco-shell.html` and `skills/taco/taco-shell-lite.html`
    - `skills/taco/templates/**`
    - `skills/taco/references/**`
+   - `skills/taco/scripts/**` (optional utilities; the update notice below reuses one of them)
+   - `skills/taco/VERSION` (the installed-version marker the update notice reads)
 2. Copy them into the harness's skill location (for example `~/.claude/skills/taco/` or the equivalent for the active agent harness), keeping the files together in one `taco/` directory.
-3. Verify before reporting success. Every check below is required:
-   - `SKILL.md`, both `taco-shell.html` and `taco-shell-lite.html`, `references/`, and `templates/` live in that one skill directory. `scripts/` is **not** required: copy it only when you also want the optional utilities (a block assembler/verifier and the Checkpoint reader), whose absence never blocks local assembly. The `SKILL.md` routes the bundle contract to `references/bundle-format.md`, the destination cascade to `references/output-path.md`, Checkpoint work to `references/checkpoints.md`, and hosted publication/review to their own references; each template example keeps its `README.md`, `template.md`, `bundle.json`, and `empty.taco.html` beside one another.
+3. Verify before reporting success — for either installation path. Every check below is required:
+   - `SKILL.md`, both `taco-shell.html` and `taco-shell-lite.html`, `references/`, and `templates/` live in that one skill directory. `scripts/**` and `VERSION` are **not** required for assembly: copy them only when you also want the optional utilities (a block assembler/verifier and the Checkpoint reader) and the once-per-session update notice; without them local assembly is unaffected and the notice simply never runs. The `SKILL.md` routes the bundle contract to `references/bundle-format.md`, the destination cascade to `references/output-path.md`, Checkpoint work to `references/checkpoints.md`, and hosted publication/review to their own references; each template example keeps its `README.md`, `template.md`, `bundle.json`, and `empty.taco.html` beside one another.
    - Each shell's single `#taco-document` block is empty — exactly `<script type="application/taco+json" id="taco-document"></script>` — the `<title>` is generic, and the block carries no `docId`, `files`, `comments`, `navigation`, `access`, or `packOptions`. A block that still contains a bundled document means you copied the wrong file; replace it before use.
    - Complete and template packs are self-contained: every script, style, font, and image is inline or a `data:` URI. Lite likewise embeds its own runtime but loads only the external libraries required by bundled file types from pinned public CDNs; do not promise offline rich editing in Lite.
    - `SKILL.md` states that the data block is filled before the file is opened; only that block and the escaped HTML title may change.
    - Read `SKILL.md` once to confirm it describes the shell and routes optional references that exist in the installed directory. The bundled `spec/` SDD graph is an example, not a required Checkpoint policy; project-owned review rules take precedence.
-4. Done. Report the installed skill path. Running the packaging flow once against a scratch directory is useful internal evidence, but it is not required, and a headless load is never user-visible presentation (see below).
+4. Done. Report the installed skill path and which path you used (`npx skills` or copy). Running the packaging flow once against a scratch directory is useful internal evidence, but it is not required, and a headless load is never user-visible presentation (see below).
+
+### Update notice
+
+When the skill directory carries `VERSION` and `scripts/check-update.mjs`, run `node scripts/check-update.mjs --json` from that directory once per work session, before the first Taco action, and — only when a component's `updateAvailable` is `true` — close the final reply with the single sentence from `references/update-notice.md`. A minimal install that omits `scripts/**` has no check to run: skip it silently. Never upgrade on the user's behalf; the script only reports and the user decides. `TACO_UPDATE_CHECK=off` disables the check entirely.
+
+This mechanism needs one bootstrap step: a skill snapshot installed before this contract exists has no `check-update.mjs` and no `VERSION`, so it cannot check anything. Re-installing (preferably through `npx skills@latest add arcadia822/taco --skill=taco`, or `npx skills@latest update taco` for an existing `npx skills` install) adds it.
+
+### Uninstalling or updating
+
+- `npx skills@latest update taco` updates an `npx skills` install; `npx skills@latest remove taco` removes it.
+- A copied install is updated by repeating the copy flow above and re-running the verification list.
+- Do not hand-edit `VERSION`: it is generated from `package.json` at release time by `npm run sync:version`.
 
 Do not install npm packages, download `taco-cli`, or run any build for the default install. Do not modify the target project. If the user's request is explicitly about cloud publishing (TacoHub/Tacobin), see "Install taco-cli" below.
 

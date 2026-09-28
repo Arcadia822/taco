@@ -2,13 +2,13 @@
 
 /**
  * check-changes.mjs
- * 
+ *
  * Inspects commits between the latest tags of taco, taco-cli, and tacobin
  * against a target git ref (default: origin/main or HEAD) and determines
  * which components have changes and recommend version bump type.
  *
  * Usage:
- *   node skills/taco-release/scripts/check-changes.mjs [--ref <ref>] [--json]
+ *   node .github/workflows/scripts/check-changes.mjs [--ref <ref>] [--json]
  */
 
 import { execSync } from 'node:child_process'
@@ -43,16 +43,9 @@ const COMPONENTS = [
     displayName: 'Taco (本体 / Core)',
     tagPattern: 'v[0-9]*.[0-9]*.[0-9]*',
     tagPrefix: 'v',
-    paths: [
-      'src',
-      'extensions',
-      'skills/taco',
-      'dist-single',
-      'package.json',
-      'scripts'
-    ],
+    paths: ['src', 'extensions', 'skills/taco', 'dist-single', 'package.json', 'scripts'],
     versionFiles: ['package.json', 'extensions/taco/extension.yml'],
-    releaseType: 'github-release + changelog + tag v*'
+    releaseType: 'github-release + changelog + tag v*',
   },
   {
     name: 'taco-cli',
@@ -61,7 +54,7 @@ const COMPONENTS = [
     tagPrefix: 'taco-cli-v',
     paths: ['packages/cli'],
     versionFiles: ['packages/cli/package.json'],
-    releaseType: 'ci release-cli.yml (npm + binary + github-release) via tag taco-cli-v*'
+    releaseType: 'ci release-cli.yml (npm + binary + github-release) via tag taco-cli-v*',
   },
   {
     name: 'tacobin',
@@ -70,14 +63,17 @@ const COMPONENTS = [
     tagPrefix: 'tacobin-v',
     paths: ['packages/host', 'examples'],
     versionFiles: ['packages/host/package.json'],
-    releaseType: 'ci deploy-tacobin.yml (Vercel deploy hook) via tag tacobin-v*'
-  }
+    releaseType: 'ci deploy-tacobin.yml (Vercel deploy hook) via tag tacobin-v*',
+  },
 ]
 
 function getLatestTag(pattern) {
   const raw = run(`git tag -l "${pattern}" --sort=-v:refname`)
   if (!raw) return null
-  const tags = raw.split('\n').map(t => t.trim()).filter(Boolean)
+  const tags = raw
+    .split('\n')
+    .map((t) => t.trim())
+    .filter(Boolean)
   return tags[0] || null
 }
 
@@ -90,7 +86,7 @@ function parseSemver(tag, prefix) {
     minor: parseInt(match[2], 10),
     patch: parseInt(match[3], 10),
     prerelease: match[4] || null,
-    raw: versionStr
+    raw: versionStr,
   }
 }
 
@@ -116,7 +112,10 @@ function analyzeCommits(tag, ref, paths) {
     return { count: 0, commits: [], bump: 'none', breaking: [], feats: [], fixes: [], others: [] }
   }
 
-  const lines = rawLog.split('\x1e').map(s => s.trim()).filter(Boolean)
+  const lines = rawLog
+    .split('\x1e')
+    .map((s) => s.trim())
+    .filter(Boolean)
   const commits = []
   const breaking = []
   const feats = []
@@ -160,7 +159,7 @@ function analyzeCommits(tag, ref, paths) {
     breaking,
     feats,
     fixes,
-    others
+    others,
   }
 }
 
@@ -168,7 +167,7 @@ const report = {
   targetRef: resolvedRef,
   targetSha: headSha,
   timestamp: new Date().toISOString(),
-  components: []
+  components: [],
 }
 
 for (const comp of COMPONENTS) {
@@ -177,7 +176,8 @@ for (const comp of COMPONENTS) {
   const analysis = analyzeCommits(latestTag, resolvedRef, comp.paths)
 
   const hasChanges = analysis.count > 0
-  const nextVersion = hasChanges && currentVersion ? recommendNextVersion(currentVersion, analysis.bump) : null
+  const nextVersion =
+    hasChanges && currentVersion ? recommendNextVersion(currentVersion, analysis.bump) : null
 
   report.components.push({
     name: comp.name,
@@ -191,7 +191,7 @@ for (const comp of COMPONENTS) {
     releaseType: comp.releaseType,
     monitoredPaths: comp.paths,
     versionFiles: comp.versionFiles,
-    details: analysis
+    details: analysis,
   })
 }
 
@@ -212,11 +212,15 @@ for (const c of report.components) {
   console.log(`   - 上次发版 Tag:   ${c.latestTag || '(无历史 tag)'}`)
   console.log(`   - 当前版本号:     ${c.currentVersion || 'N/A'}`)
   console.log(`   - 监控目录范围:   ${c.monitoredPaths.join(', ')}`)
-  console.log(`   - 是否存在变更:   ${c.hasChanges ? `⚠️ 是 (${c.commitCount} 个新提交)` : '✅ 否 (无新提交)'}`)
+  console.log(
+    `   - 是否存在变更:   ${c.hasChanges ? `⚠️ 是 (${c.commitCount} 个新提交)` : '✅ 否 (无新提交)'}`,
+  )
 
   if (c.hasChanges) {
     anyChanges = true
-    console.log(`   - 推荐版本变更:   ${c.recommendedBump.toUpperCase()} -> ${c.recommendedVersion}`)
+    console.log(
+      `   - 推荐版本变更:   ${c.recommendedBump.toUpperCase()} -> ${c.recommendedVersion}`,
+    )
     console.log(`   - 触发发版操作:   ${c.releaseType}`)
     console.log(`   - 涉及版本文件:   ${c.versionFiles.join(', ')}`)
     console.log(`   - 提交明细:`)
@@ -232,7 +236,10 @@ for (const c of report.components) {
 
 console.log(`------------------------------------------------------`)
 if (anyChanges) {
-  const changedList = report.components.filter(c => c.hasChanges).map(c => c.displayName).join('、')
+  const changedList = report.components
+    .filter((c) => c.hasChanges)
+    .map((c) => c.displayName)
+    .join('、')
   console.log(`🔔 判定结论：今晚需要为 [${changedList}] 执行发版流程。`)
 } else {
   console.log(`💤 判定结论：当前所有组件均无未发布的变动，今晚无需执行任何发版。`)
