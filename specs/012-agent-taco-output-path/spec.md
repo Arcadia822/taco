@@ -105,7 +105,7 @@ outputDir: specs/{feature}
 
 ### 4.5 报告与告警
 
-落盘前给出可核对的结论，并在报告里写明：命中级别与依据、产物绝对路径、文件名、标题、校验阶梯级别（V1/V2）与结果，以及 `gitignored`、`config-untracked`、`gitignore-unavailable`、`workspaceRoot-not-git`、`output-in-input` 告警与排除项清单。失败（`malformed`/`conflict`/`needs_feature`/`needs_home`/`forbidden`）一律不落盘。
+落盘前给出可核对的结论，并在报告里写明：命中级别与依据、产物绝对路径、文件名、标题、校验阶梯级别（V1/V2）与结果，以及 `gitignored`、`config-untracked`、`gitignore-unavailable`、`workspaceRoot-not-git`、`output-in-input` 告警与排除项清单。失败（`malformed`/`conflict`/`needs_feature`/`needs_home`/`unverifiable`/`forbidden`）一律不落盘。
 
 ## 5. 刷新、迁移与首次创建
 
@@ -126,7 +126,7 @@ outputDir: specs/{feature}
 | 仓库识别不用 `git` 命令 | 零外部依赖必须自洽；否则无 git 的沙箱会被误判为个人场景 | 需要处理 `.git` 文件（worktree/submodule）形态 |
 | 刷新优先于项目规则 | 项目规则变化不得静默搬走正在评审的 Taco | 迁移必须显式，且要新增"目标已存在即默认拒绝"的占用规则 |
 | 文件名决定标题，且文件名须是规范形式 | 用户决策（4）+ 保存流程的命名不变量；拒绝非规范名可避免"用户给的名字"被浏览器保存改写 | 显式指定 `My Design.taco.html` 这类名字会被拒绝，需给出规范名建议 |
-| L0 不适用于仓库根的规则例外 | 决策 6（落 `<repo>/tacos/`）与 L2 的自有配置冲突，必须让同一输入只有一个结果 | 需要在契约里显式声明例外优先级 |
+| 仓库根打包独立成 LR 级别（跳过 L2 与 L3） | 决策 6（落 `<repo>/tacos/`）与 L2 的自有配置冲突，必须让同一输入只有一个结果；`docs/` 存在也不能改道 | 级联多一个级别，且必须与 L0/L1 的优先级关系写清楚 |
 | 不新增"个人/跨项目"级别 | 用户决策：只按仓库上下文判定 | 在仓库内处理个人文档时，用户必须显式给路径（L0） |
 | 不新增自动化测试 | 本特性无代码产物；对文档措辞做源文本断言不构成有效覆盖 | 验收依赖可复现的人工走查记录（§8），确定性弱于自动化测试 |
 
@@ -168,7 +168,7 @@ outputDir: specs/{feature}
 
 ### 8.3 逐分支走查（每个分支一条记录）
 
-必须实测并记录：配置缺 `outputDir`、`version: 2`、顶层非 mapping、重复键；S1 与 S2 冲突；仓库根打包（叠加 S1 存在时也落 `<repo>/tacos/`）；`--requested` 非规范文件名（拒绝并给规范名）；DOC_DIR 等于仓库根的级联结果；L3 的 `docs` 优先于 `specs`；L4；L5（`HOME` 缺失时停止）；无 `git` 命令时仍能识别仓库；禁区目标；产物与被打包目录相同（`output-in-input`）；迁移到不存在的父目录；迁移目标已存在（默认停止，授权后覆盖并报告状态差异）；内容变化后 `blocks` 被丢弃。
+必须实测并记录：配置缺 `outputDir`、`version: 2`、顶层非 mapping、重复键；S1 与 S2 冲突；仓库根打包（叠加 S1 存在、且仓库内有 `docs/` 时仍落 `<repo>/tacos/`）；`unverifiable`（宿主无解析能力时不落盘）；`--requested` 非规范文件名（拒绝并给规范名）；DOC_DIR 等于仓库根的级联结果；L3 的 `docs` 优先于 `specs`；L4；L5（`HOME` 缺失时停止）；无 `git` 命令时仍能识别仓库；禁区目标；产物与被打包目录相同（`output-in-input`）；迁移到不存在的父目录；迁移目标已存在（默认停止，授权后覆盖并报告状态差异）；内容变化后 `blocks` 被丢弃。
 
 ### 8.4 回归
 
@@ -194,7 +194,7 @@ outputDir: specs/{feature}
 3. L3 探测顺序：`docs` → `doc` → `documents` → `specs`。
 4. L0 文件形态：文件名决定标题（bundle 标题 = 文件名 stem）；本设计补充约束：stem 必须是规范形式，否则拒绝并给出规范名建议。
 5. 不新增"个人/跨项目"级别，只按仓库上下文判定。
-6. 被打包目录是仓库根时不停止，产物落 `<repo>/tacos/`；本设计把它实现为 L2 的显式例外，以保证同一输入只有一个结果。
+6. 被打包目录是仓库根时不停止，产物落 `<repo>/tacos/`；本设计把它实现为独立级别 LR（排在 L1 之后、跳过 L2 与 L3），以保证同一输入只有一个结果。
 7. 目录名全小写：`docs/tacos/`、`<repo>/tacos/`、`~/Documents/tacos/`。
 8. 本仓库自我声明：`.taco/config.yaml` 写 `outputDir: specs/{feature}`。
 9. 交付节奏：先落设计，确认后再实现。
