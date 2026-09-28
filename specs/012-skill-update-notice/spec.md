@@ -107,12 +107,12 @@ Agent 开始 Taco 工作 → 一次轻量更新检查 → 正常完成交付
 | 编号 | 验收条件 | 对应来源 |
 | :--- | :--- | :--- |
 | AC-1 | `skills/taco/SKILL.md` 明确规约「会前一次检查 → 交付 → 有更新才一句话提醒 → 绝不自主升级」的契约 | Issue 验收标准 1、3 |
-| AC-2 | `docs/agent-installation.md`（Agent 安装指南）与 `extensions/taco/policies/taco-agent-policy.md`（Spec Kit 项目内策略）包含同一契约的可执行表述与安装文件清单更新 | Issue 验收标准 1「及相关 Agent 指南」 |
-| AC-3 | 检查脚本在离线、超时、`git` 缺失、`taco-cli` 缺失、版本标记缺失时一律返回可用结果（exit code 0、`ok:false` + `reason`），绝不让 Taco 工作失败 | Issue 验收标准 2 |
+| AC-2 | `docs/agent-installation.md`（Agent 安装指南）包含同一契约的可执行表述、安装文件清单（含 `VERSION`）与验证清单更新；`extensions/taco/policies/taco-agent-policy.md` 的新版本对新装/干净安装的 Spec Kit 项目生效（既有安装受 `prepare-policy` 的 fail-safe 约束，详见 §7） | Issue 验收标准 1「及相关 Agent 指南」 |
+| AC-3 | 失败路径（离线、超时、`git` 缺失、`VERSION` 缺失或不可解析）一律 `exit code 0` + `ok:false` + `reason`，绝不让 Taco 工作失败；`taco-cli` 未安装或版本不可解析属于正常降级（`cli:null` 或 `cli.installed:null`），不影响 `ok`，也不阻断工作 | Issue 验收标准 2 |
 | AC-4 | 更新检查不写入任何文件、不读取项目文档内容、不发送任何本地内容或凭据到网络 | 本规格安全性要求 |
 | AC-5 | 存在可用更新时输出的提醒文案与 §5.4 模板一致，且**明确声明未升级**；无更新或结果未知时不输出任何字样 | Issue 期望行为 2 |
-| AC-6 | 任何路径下都不会触发安装/升级命令：脚本不含安装能力，SKILL.md 以 MUST NOT 级别禁止自主升级 | Issue 验收标准 3 |
-| AC-7 | 单元/端到端测试覆盖：有更新、无更新、离线容错、`taco-cli` 缺失、`VERSION` 缺失，以及 JSON 契约校验 | §8 |
+| AC-6 | 任何路径下都不会触发安装/升级命令：脚本只 spawn `git ls-remote` 与 `taco-cli --version`，不含任何写文件或安装路径；SKILL.md 以 MUST NOT 级别禁止自主升级；该约束由结构审查 + 真实流程烟测保证（无法由单元测试证明） | Issue 验收标准 3 |
+| AC-7 | 单元/端到端测试覆盖：有更新、无更新、版本领先、`cli` 缺失/不可解析、`VERSION` 缺失/不可解析、远端不可达/超时/输出超限、禁用开关短路、预发布 tag、非默认 `--repo` 不回退 GitHub API、JSON 契约字段 | §8 |
 | AC-8 | `skills/taco/VERSION` 与 `package.json` 版本在构建后一致，并有测试守护 | §6.1 |
 
 ---
@@ -145,14 +145,22 @@ Agent 开始 Taco 工作 → 一次轻量更新检查 → 正常完成交付
    - 一次请求返回全部 tag；无认证、无速率限制（实测 25 tag ≈ 1.3 s）。
    - `^v(\d+\.\d+\.\d+)$` → taco 本体最新版本（`taco-cli-v*`、`tacobin-v*` 因前缀不同天然排除）。
    - `^taco-cli-v(\d+\.\d+\.\d+)$` → taco-cli 最新版本。
-2. **回退：GitHub Releases API**（仅当 `git` 不可用时）`GET https://api.github.com/repos/Arcadia822/taco/releases?per_page=100`，从 `tag_name` 取同样的两类版本。
-3. 两者都失败 → `ok:false` + `reason`，静默。
+2. **回退：GitHub Releases API**（**仅当 `--repo` 未被覆盖**且 `git` 不可用时）`GET https://api.github.com/repos/Arcadia822/taco/releases?per_page=100`，从 `tag_name` 取同样的两类版本。
+3. 两者都失败 → `ok:false` + `reason`，静默。**`--repo` 被覆盖时不得回退**到 GitHub API（本地路径或第三方仓库与默认仓库无关，回退会产生错误结论）：此时直接 `ok:false, reason:"network-unavailable"` 或 `"git-unavailable"`。
 
-约束：
+Tag 解析规则：
 
-- 默认超时 3000 ms（`--timeout` 可调），超时即放弃，**不重试**。对 `git` 子进程用硬超时终止（`SIGKILL`），对 HTTP 用 `AbortSignal.timeout`。
+- 只接受形如 `v<x>.<y>.<z>` / `taco-cli-v<x>.<y>.<z>` 的**三段纯数字** tag；预发布与非匹配 tag（`v1.2.0-rc.1`、`v1.2`、`release-1` 等）一律忽略，不做 semver range 匹配。
+- 若远端没有任何可用的本体 tag（或没有任何可用的 `taco-cli` tag），该组件 `latest=null`、`updateAvailable=null`——这是「无法比较」，不是传输失败：`ok` 不受影响，也不输出提示。缺少 `taco-cli` tag 绝不能被当成网络故障。
+
+约束与加固（安全审查结论，必须实现）：
+
+- **默认超时 3000 ms（`--timeout` 可调）适用于每一次探测**（`git` 子进程、`taco-cli` 子进程、HTTP 请求）；超时即 `SIGKILL` 子进程并放弃该项，**不重试**。HTTP 使用 `AbortSignal.timeout`。
+- **输出上限**：`git` 与 `taco-cli` 的 stdout 各截断至 64 KiB，超限即终止该探测并跳过（避免超长输出拖垮会话）。
+- **Git 执行环境隔离**：以精简环境变量（仅 `PATH`、`HOME`、`LANG`）与 `GIT_CONFIG_GLOBAL=/dev/null`、`GIT_CONFIG_SYSTEM=/dev/null`、`GIT_TERMINAL_PROMPT=0`、`GIT_ASKPASS`/`SSH_ASKPASS` 置为不可用、`-c credential.helper=` 运行，避免继承用户的 `http.extraheader`、`url.*.insteadOf`、代理或凭据助手；不使用 `gh` CLI，不读取任何凭据。
+  - 代价（明示）：仅通过 Git 配置文件设置代理的环境下，探测会失败并静默——这是刻意的隐私优先取舍。
+- **参数边界**：生产调用固定 `https://github.com/Arcadia822/taco.git`；`--repo` 覆盖值只接受 `https://` 开头的 URL 或绝对本地路径，拒绝以 `-` 开头的值、其他协议与相对路径；向 git 传参时在仓库参数前插入 `--` 终止选项。
 - **不做结果缓存**：首选探测无速率限制，且契约规定每次工作会话最多检查一次；引入缓存会带来陈旧结果与额外状态文件，收益不成立（见 §9）。
-- 不使用 `gh` CLI、不使用任何凭据；只读公开 tag/发布列表。
 
 ### 5.3 检查脚本契约（新增 `skills/taco/scripts/check-update.mjs`）
 
@@ -163,22 +171,31 @@ node scripts/check-update.mjs [--json] [--repo <url|path>] [--timeout <ms>] [--c
 - **默认输出**：一行人类可读摘要（英文，供日志阅读），例如
   `Taco update check: skill 0.11.0 -> 0.12.0 (update available); cli 0.1.4 -> 0.2.1 (update available)`。
   无更新时输出 `Taco update check: up to date (skill 0.11.0)`。
-- **`--json`**：输出单个 JSON 对象，契约见 `contracts/taco-update-check.schema.json`（`schema: "taco-update-check/1"`）。字段：
-  - `ok`：远端与本地版本是否都成功读取。
-  - `reason`：`ok:false` 时的机器可读原因（如 `network-unavailable`、`git-unavailable`、`installed-version-marker-missing`、`timeout`）。
-  - `source`：实际使用的探测通道（`git-ls-remote` / `github-releases-api`），失败为 `null`。
-  - `skill`：`{ installed, latest, updateAvailable }`；`latest`/`updateAvailable` 未知时为 `null`。
-  - `cli`：同上；未安装为 `null`。
-- **退出码**：检查完成一律 `exit 0`（含 `ok:false`）——检查失败不是脚本失败，不得让调用方误判为打包失败。参数用法错误（未知 flag）返回 `exit 2`，因为那属于 Agent/作者错误，需要被立刻发现。
+- **`--json`**：输出单个 JSON 对象（契约标识 `schema: "taco-update-check/1"`），字段集合与类型即为接口契约，测试逐字段断言（本仓库无 JSON Schema 校验器，故不引入额外依赖）：
+
+  | 字段 | 类型 | 语义 |
+  | :--- | :--- | :--- |
+  | `schema` | `"taco-update-check/1"` | 契约标识（固定值） |
+  | `checkedAt` | string | 检查时刻，ISO 8601 UTC |
+  | `ok` | boolean | **传输与本地主对象**是否可用：远端探测成功 **且** skill 版本标记可读。为 `false` 时调用方必须静默 |
+  | `reason` | string \| null | `ok:false` 时的机器可读原因，取值集合：`disabled`、`git-unavailable`、`github-api-unavailable`、`network-unavailable`、`timeout`、`output-limit-exceeded`、`installed-version-marker-missing`、`installed-version-unreadable`；`ok:true` 时为 `null` |
+  | `source` | `"git-ls-remote"` \| `"github-releases-api"` \| null | 实际生效的探测通道；`ok:false` 时为 `null` |
+  | `skill` | object | `{ installed: string\|null, latest: string\|null, updateAvailable: boolean\|null }` |
+  | `cli` | object \| null | 与 `skill` 同构；本机未安装 `taco-cli`（或未通过信任检查）时为 `null` |
+
+  `installed`/`latest` 为无 `v` 前缀的三段 semver 字符串（`^\d+\.\d+\.\d+$`），不可读时为 `null`；`updateAvailable` 仅在两者都已知时给出布尔值，否则为 `null`。
+- **组件独立性（部分成功规则）**：`skill` 与 `cli` 各自独立判定，一个组件不可比较绝不使另一个失效：
+  - 远端可达 + `VERSION` 可读 → `ok:true`；`skill.updateAvailable` 按比较结果给出。
+  - `VERSION` 缺失 → `ok:false`、`reason:"installed-version-marker-missing"`、`skill.installed/updateAvailable=null`；`VERSION` 存在但不可解析 → `ok:false`、`reason:"installed-version-unreadable"`。两种情况下调用方一律静默，**不得**只报告 `cli` 的更新（主对象未知时不做任何提示，避免半截结论）。
+  - `taco-cli` 不存在 → `cli:null`，`ok` 与 `skill` 不受影响。
+  - `taco-cli` 存在但 `--version` 不可解析、超时或超输出上限 → `cli.installed=null`、`cli.updateAvailable=null`，`ok` 保持 `true`，`skill` 的结论照常可用；人类可读摘要中标注该项被跳过（不写入 `reason`，因为 `reason` 只描述 `ok:false`）。
+  - 远端可达但某组件没有任何可用 tag → 该组件 `latest=null`、`updateAvailable=null`（见 §5.2），`ok` 保持 `true`。
+- **退出码**：检查完成一律 `exit 0`（含 `ok:false`）——检查失败不是脚本失败，不得让调用方误判为打包失败。参数用法错误（未知 flag、`--repo` 取值不被允许）返回 `exit 2`，因为那属于 Agent/作者错误，需要被立刻发现。
 - **环境变量**：
-  - `TACO_UPDATE_CHECK=off` → 立即输出 `ok:false, reason:"disabled"` 并 `exit 0`（不发起任何请求）。
-  - `TACO_CLI_BIN` → 覆盖 `taco-cli` 可执行文件路径（与 `--cli-bin` 等价），用于非标准安装位置与测试。
-- **语义**：
-  - 版本比较为严格三段 semver 数值比较；仅当 `latest > installed` 时 `updateAvailable = true`。
-  - 已安装版本高于远端（例如仓库 checkout 领先于最近 tag）→ `updateAvailable = false`，静默。
-  - `VERSION` 缺失或不可解析 → `skill.installed = null`、`updateAvailable = null`、`ok:false`、`reason:"installed-version-marker-missing"`。
-  - `taco-cli --version` 输出不可解析（过旧版本）→ `cli.installed = null`，不提示。
-- **副作用**：零写入、零本地内容外发（见 AC-4）。
+  - `TACO_UPDATE_CHECK=off` → 立即输出 `ok:false, reason:"disabled"` 并 `exit 0`；**不 spawn 任何子进程、不发起任何请求**。
+  - `TACO_CLI_BIN` → 覆盖 `taco-cli` 可执行文件路径（与 `--cli-bin` 等价）。与 `--cli-bin` 同为**受信调用方 / 测试专用**入口，取值不得来自项目内容（见 §5.5）。
+- **`taco-cli` 探测的信任前提**：仅在可执行文件解析为**绝对路径、且为常规可执行文件**时执行 `taco-cli --version`；否则 `cli:null`。本机已安装的 CLI 视为用户已授权在其环境执行的程序——Agent 自动执行 `--version` 与该用户手动执行同一命令属同一信任级别，此前提写入 §5.5。
+- **副作用**：零写入、零本地内容外发（见 AC-4）。检查脚本自身的输出（原始日志行）不得作为交付内容展示给用户（见 §5.4 禁止项）。
 
 ### 5.4 触发契约与文案（写入 `SKILL.md`）
 
@@ -197,7 +214,20 @@ node scripts/check-update.mjs [--json] [--repo <url|path>] [--timeout <ms>] [--c
 - 不得在未获用户明确授权时执行任何安装/升级命令（`npm install -g`、拷贝 skill 文件、`specify extension add` 等）。
 - 不得因检查结果中断、延迟或改写主线交付内容；提醒只能出现在**最终回复末尾**，一句话，不展开、不重复。
 - 不得在无更新、检查失败或结果未知时输出任何更新相关字样。
+- 不得把检查命令的原始输出（`--json` 内容或英文日志行）贴给用户；用户可见的只有上表的一句话模板。
 - 不得把检查结果或 Taco 内容（含协作凭据）外发到任何外部服务；检查只读取远端公开 tag 列表。
+
+### 5.5 信任边界与残余风险
+
+| 项 | 前提/风险 | 处理 |
+| :--- | :--- | :--- |
+| 远端 tag 列表 | 探测结果会被 Agent 转述给用户；仓库被转移/劫持或网络中间人可影响结果 | 只用于陈述「有可用版本」，不执行任何安装/写入；文案只嵌入受锚定的三段数字版本号，因此恶意 tag 名无法注入 Markdown 或控制字符 |
+| Git 环境 | 用户全局 Git 配置可能携带认证头、URL 重写或代理 | 以 §5.2 的环境隔离配置运行；代价是「仅靠 Git 配置走代理」的环境探测失败并静默 |
+| 本机 `taco-cli` | 在 `PATH` 上被替换的可执行文件会被自动执行 | 仅接受解析为绝对路径的常规可执行文件；信任级别等同于用户手动运行该 CLI；`--cli-bin`/`TACO_CLI_BIN` 仅限受信调用方与测试 |
+| `--repo` 覆盖 | 调用方可指向任意位置 | 仅限 `https://` URL 与绝对本地路径，拒绝 `-` 前缀与其他协议，git 参数以 `--` 终止；非默认 `--repo` 不回退 GitHub API |
+| 资源占用 | 子进程挂起或输出失控 | 每次探测独立硬超时 + 64 KiB 输出上限，超限终止并跳过 |
+
+残余风险（明示、本期不消除）：脚本无法证明被执行的 `taco-cli` 只做只读输出；若本机 CLI 已被替换，其副作用超出本机制可控范围。消除该风险需要对 CLI 做沙箱隔离，属于本期范围之外（见 §9）。
 
 ---
 
@@ -208,20 +238,25 @@ node scripts/check-update.mjs [--json] [--repo <url|path>] [--timeout <ms>] [--c
 | `skills/taco/scripts/check-update.mjs` | 新增探测脚本（§5.3） | 新增 |
 | `skills/taco/VERSION` | 新增版本标记，构建生成（§6.1） | 新增（生成物） |
 | `scripts/sync-skill-version.mjs` | 从 `package.json` 写入 `skills/taco/VERSION` | 新增 |
-| `package.json` | `build` 链中加入 `node scripts/sync-skill-version.mjs` | 修改 |
-| `skills/taco/SKILL.md` | 新增「更新提示」小节；在 `Report format` 末尾补一句提醒规则 | 修改 |
-| `docs/agent-installation.md` | 安装文件清单加入 `VERSION` 与 `scripts/check-update.mjs`；新增「更新提示」小节与 bootstrap 说明 | 修改 |
-| `extensions/taco/policies/taco-agent-policy.md` | 追加一条同等契约（Spec Kit 项目内生效） | 修改 |
+| `package.json` | 新增 `sync:version` 脚本并接入 `build` 链；`build` 末尾（`sync-extension-shell.mjs` 之后）执行同步 | 修改 |
+| `skills/taco/SKILL.md` | 在 `When to use` 之后、`Workflow` 之前新增「检查更新（每次工作会话一次）」小节；在 `Report format` 末尾补一句提醒规则 | 修改 |
+| `docs/agent-installation.md` | 安装文件清单（现有 5 条 bullet，`scripts/**` 已涵盖新脚本）显式加入 `VERSION`；`Verify before reporting success` 清单加入 `VERSION` 与 `check-update.mjs`；`Use the skill` 之前补 bootstrap 说明；新增「更新提示」小节 | 修改 |
+| `extensions/taco/policies/taco-agent-policy.md` | 追加一条同等契约（对新装/干净安装的 Spec Kit 项目生效；已安装项目按 §7 走 `manual-merge`） | 修改 |
 | `README.md`、`README.zh-CN.md` | Quickstart 之后一句话说明「有更新会提示、不会自动升级」 | 修改 |
-| `skills/taco-release/SKILL.md` | 发版步骤 3.1 注明 `VERSION` 由构建生成、需随发版提交 | 修改 |
+| `skills/taco-release/SKILL.md` | 发版步骤 3.1：版本号更新后、`npm run check` 之前执行 `npm run sync:version`，并把 `skills/taco/VERSION` 一并提交 | 修改 |
 | `AGENTS.md` | 仓库规则中注明 `skills/taco/VERSION` 为生成物，勿手改 | 修改 |
-| `tests/version.test.ts` | 断言 `skills/taco/VERSION` 与 `package.json` 一致 | 修改 |
+| `tests/version.test.ts` | 断言已提交的 `skills/taco/VERSION`（`trim()` 后）与 `package.json` 版本一致 | 修改 |
 | `tests/update-check.test.ts` | 新增脚本端到端与契约测试（§8） | 新增 |
-| `specs/012-skill-update-notice/contracts/taco-update-check.schema.json` | 脚本输出契约 | 新增 |
 
-### 6.1 `VERSION` 为何是构建生成物
+### 6.1 `VERSION` 为何是构建生成物，以及它与检查顺序的配合
 
-`skills/taco/templates/` 已是「构建生成的镜像」这一既有惯例（`AGENTS.md` 明确禁止手改镜像、要求重新生成）。沿用同一惯例，把 `VERSION` 交给构建生成，可让版本同步不依赖发版操作者的记性；`npm run check`（含 `npm test` 与 `npm run build`）与 CI 会在版本漂移时失败。
+`skills/taco/templates/` 已是「构建生成的镜像」这一既有惯例（`AGENTS.md` 明确禁止手改镜像、要求重新生成）。沿用同一惯例，把 `VERSION` 交给构建生成，可让版本同步不依赖发版操作者的记性。
+
+但 `npm run check` 的顺序是 `format:check` → `npm test` → `npm run build`（`package.json`），即**测试早于构建**。若只把同步器挂在 `build` 末尾，发版时先改 `package.json` 再跑 `npm run check`，测试会读到上一版本的 `VERSION` 而失败，构建根本不会执行。因此：
+
+- 同步器同时作为独立脚本暴露（`npm run sync:version`），发版流程在改完版本号后、跑 `npm run check` 之前显式执行；
+- `build` 链末尾仍会执行同一同步器，保证任何一次完整构建后的工作树都不留漂移；
+- `tests/version.test.ts` 断言的是**已提交内容**的一致性，二者配合才能既在发版时通过、又能捕获手工改动 `VERSION` 或漏提交的漂移。
 
 内容格式固定：`0.11.0\n`（单行、无前缀）。不写入任何其他字段——脚本只做等值/大小比较，多字段只会制造解析分支。
 
@@ -233,9 +268,13 @@ node scripts/check-update.mjs [--json] [--repo <url|path>] [--timeout <ms>] [--c
 | :--- | :--- | :--- |
 | 旧安装（快照早于本特性） | 不会执行检查，也没有相关文案 | 旧 `SKILL.md` 不含该契约；这是机制自身的 **bootstrap 约束**：用户需要一次手动重装/刷新才能获得更新提示能力。文档必须写明，避免被误解为缺陷 |
 | 脚本存在但 `VERSION` 缺失（拷贝不全） | `ok:false, reason:"installed-version-marker-missing"`，静默 | 不编造版本、不推测「一定有更新」 |
-| `taco-cli` 未安装 | 跳过该项 | 在最终回复中也不提示安装 |
-| `taco-cli` 过旧、`--version` 输出不可解析 | `cli.installed=null`，静默 | 不做字符串猜测 |
-| 网络不可用 / `git` 缺失 / 超时 | `ok:false` + `reason`，静默 | 主线交付不受影响 |
+| `VERSION` 存在但内容不可解析 | `ok:false, reason:"installed-version-unreadable"`，静默 | 与「缺失」区分，便于定位拷贝/构建问题 |
+| `taco-cli` 未安装 | `cli:null`，跳过该项 | 在最终回复中也不提示安装 |
+| `taco-cli` 过旧、`--version` 输出不可解析，或其探测超时/超输出上限 | `cli.installed=null`、`cli.updateAvailable=null`，`ok` 不变，`skill` 结论仍可用 | 不做字符串猜测；只丢失该组件的信息 |
+| 远端可达但某组件无可用 tag（只有预发布等） | 该组件 `latest/null`、不提示 | 属于「无法比较」，不算传输失败 |
+| 网络不可用 / `git` 缺失 / 超时 / 输出超限 | `ok:false` + `reason`，静默 | 主线交付不受影响 |
+| 仅靠 Git 配置走代理的环境 | 探测失败并静默 | §5.2 的 Git 环境隔离（不读取用户 Git 配置）带来的明示代价 |
+| 已安装 Taco Spec Kit 扩展的项目，重跑 `prepare-policy` | 返回 `manual-merge` 并拒绝写入 | `extensions/taco/bin/taco.mjs` 要求既有 managed block 与新策略**完全一致**才允许替换；策略文本变更即触发 fail-safe。既有行为，本期沿用，合并方式见 `extensions/taco/README.md` |
 | 仓库 checkout 内工作（贡献者） | 版本通常等于或领先最近 tag → 静默 | 贡献者环境本身即最新源 |
 
 无破坏性变更：不改动 bundle 格式、shell、CLI 命令面与任何既有文件格式；新增文件与既有安装流程向后兼容。
@@ -246,25 +285,40 @@ node scripts/check-update.mjs [--json] [--repo <url|path>] [--timeout <ms>] [--c
 
 ### 8.1 自动化（Vitest，`tests/update-check.test.ts`）
 
-1. **有更新**：临时目录建本地 git 仓库（`--repo <path>`），打 tag `v0.10.0`、`v0.11.0`、`taco-cli-v0.2.0`；skill `VERSION=0.10.0`，`--cli-bin` 指向输出 `{"binaryVersion":"0.1.4"}` 的桩程序 → 断言 `skill = {0.10.0, 0.11.0, true}`、`cli = {0.1.4, 0.2.0, true}`、`source="git-ls-remote"`、`ok=true`。
-2. **无更新**：同上但 `VERSION=0.11.0` → `skill.updateAvailable=false`。
+测试用「环境替身」与既有先例一致（`tests/skill-pack.test.ts`、`tests/release-scripts.test.ts` 均以 `execFileSync` 跑脚本 + 临时目录/临时仓库）：临时 git 仓库作 `--repo`（本地路径，已验证可用），桩程序放临时目录并通过 `--cli-bin` 或 `PATH` 前置注入。
+
+1. **有更新**：本地仓库打 tag `v0.10.0`、`v0.11.0`、`taco-cli-v0.2.0`；`VERSION=0.10.0`；`--cli-bin` 指向输出 `{"binaryVersion":"0.1.4"}` 的桩 → `skill={0.10.0,0.11.0,true}`、`cli={0.1.4,0.2.0,true}`、`source="git-ls-remote"`、`ok=true`。
+2. **无更新**：`VERSION=0.11.0` → `skill.updateAvailable=false`。
 3. **版本领先**：`VERSION=0.12.0` → `updateAvailable=false`（不得报「降级」）。
-4. **未安装 cli**：`--no-cli` 或 `TACO_CLI_BIN` 指向不存在路径 → `cli=null`，其余不变。
-5. **`VERSION` 缺失**：临时 skill 目录无 `VERSION` → `ok=false`、`reason="installed-version-marker-missing"`、`updateAvailable=null`。
-6. **远端不可达/超时**：`--repo <不存在的路径>`、`--timeout 1` → `ok=false`、`exit code 0`、stdout 仍可解析。
-7. **契约校验**：`--json` 输出对 `contracts/taco-update-check.schema.json` 校验通过（用仓库现有 `ajv`/`yaml` 依赖栈的既有方式，若无现成校验器则以字段断言等价覆盖）。
-8. **`VERSION` 同步**：在 `tests/version.test.ts` 断言 `skills/taco/VERSION.trim() === packageJson.version`。
-9. **禁用开关**：`TACO_UPDATE_CHECK=off` → `reason="disabled"`、无网络请求（测试中以不可达 `--repo` 佐证不触发探测）。
+4. **cli 降级三种形态**：`--no-cli` → `cli=null`；`--cli-bin` 指向不存在的绝对路径 → `cli=null`（信任检查拒绝）；`--cli-bin` 指向输出非 JSON 的桩 → `cli.installed=null`、`cli.updateAvailable=null`，且 **`ok=true` 与 `skill` 结论不受影响**（组件独立性）。
+5. **`VERSION` 异常**：无 `VERSION` → `ok=false, reason="installed-version-marker-missing"`；内容为 `abc` → `ok=false, reason="installed-version-unreadable"`；两者 `updateAvailable=null`，且**不得只报告 cli 更新**。
+6. **远端不可达**：`--repo <不存在的绝对路径>` → `ok=false`、`reason="network-unavailable"`、`exit code 0`、stdout 可解析。
+7. **超时**：PATH 前置 `git` 桩（`sleep 5`）+ `--timeout 200` → 子进程被终止、`reason="timeout"`、脚本总耗时远小于桩睡眠时间（证明硬超时生效），不残留子进程。
+8. **输出超限**：`git` 桩输出 > 64 KiB → `reason="output-limit-exceeded"`，不阻塞。
+9. **禁用开关短路**：`TACO_UPDATE_CHECK=off` + 会写标记文件的 `git` 桩 → `reason="disabled"` 且标记文件不存在（证明**零调用**，而非「调用后失败」）。
+10. **预发布/缺失 tag**：仓库仅 `v1.2.0-rc.1` → `skill.latest=null`、`ok=true`、无提示；仓库无 `taco-cli-v*` → `cli.latest=null`、`cli.updateAvailable=null`、`ok=true`（不得判成网络失败）。
+11. **非默认 `--repo` 不回退 API**：`--repo <本地路径>` + PATH 前置失败的 `git` 桩 → `source=null`、`ok=false`，且 `source` 不得为 `github-releases-api`。
+12. **参数边界**：`--repo -x`、`--repo ftp://host/x`、未知 flag → `exit code 2`。
+13. **Git 调用加固**：PATH 前置记录型 `git` 桩（dump argv + env 到文件）→ 断言 argv 含 `--tags`、`--refs`、仓库参数前有 `--`、含 `-c credential.helper=`；env 含 `GIT_CONFIG_GLOBAL=/dev/null`、`GIT_TERMINAL_PROMPT=0`，且不含继承的 `GIT_CONFIG_*` 用户配置或凭据变量。
+14. **契约字段**：`--json` 键集合恰为 `schema`/`checkedAt`/`ok`/`reason`/`source`/`skill`/`cli`；各字段类型、semver 正则、`null` 语义与 §5.3 表格一致；`skill`/`cli` 子对象键集合精确断言（不新增 JSON Schema 校验依赖）。
+15. **`VERSION` 同步**：`tests/version.test.ts` 断言 `skills/taco/VERSION.trim() === packageJson.version`。
+16. **构建生成**：`node scripts/sync-skill-version.mjs` 对临时目录运行时写入 `"<version>\n"` 且幂等（第二次运行报告 `unchanged`，不重写文件）。
 
 ### 8.2 手工 smoke（必须真实执行，作为交付证据）
 
-- 在本机真实网络下运行 `node skills/taco/scripts/check-update.mjs --json`，确认：`source="git-ls-remote"`，`skill.latest="0.11.0"`，`cli.installed` 与本机 `taco-cli --version` 一致（当前为 `0.1.4`），`cli.latest="0.2.1"`，`cli.updateAvailable=true`。
-- 运行 `TACO_UPDATE_CHECK=off` 与 `--repo /nonexistent` 两个容错场景，确认 `exit code 0` 且主线可继续。
-- 在真实 Taco 打包流程中走一遍：确认提醒只出现在最终回复末尾，且打包/刷新输出未被污染。
+- 真实网络下运行 `node skills/taco/scripts/check-update.mjs --json`：`source="git-ls-remote"`、`skill.latest="0.11.0"`、`cli.installed` 与本机 `taco-cli --version` 一致（当前 `0.1.4`）、`cli.latest="0.2.1"`、`cli.updateAvailable=true`。
+- 容错场景：`TACO_UPDATE_CHECK=off`、`--repo /nonexistent`、`--timeout 200` 均 `exit code 0`，主线可继续。
+- 真实 Taco 打包流程走一遍：确认提醒只出现在最终回复末尾、打包输出未被污染；并确认过程中**没有产生任何写操作或安装命令**（AC-6 的流程证据）。
+- 在安装了 Taco Spec Kit 扩展的项目里跑一次 `prepare-policy --dry-run --json`，确认既有安装按 §7 返回 `manual-merge`（预期行为，用于验证我们对迁移后果的判断）。
 
 ### 8.3 与验收标准的映射
 
-AC-1/AC-2 → §5.4 与 §6 文档改动；AC-3 → 8.1 的第 5、6、9 项；AC-4 → §5.3「副作用」+ 代码评审；AC-5 → 8.1 的 1–4 与 §5.4 文案断言；AC-6 → §5.4 禁止项 + 测试 9；AC-7 → 8.1 全部；AC-8 → 8.1 第 8 项。
+- AC-1 → §5.4 契约文本 + `SKILL.md` 改动评审；AC-2 → §6 文档改动 + 8.2 最后一项。
+- AC-3 → 8.1 第 5、6、7、8、9、12 项。
+- AC-4 → §5.2 的 Git 环境隔离 + §5.5 + 8.1 第 13 项 + 代码结构审查。
+- AC-5 → 8.1 第 1–4、10 项 + §5.4 文案断言。
+- AC-6 → §5.4 禁止项 + 代码结构审查（仅 spawn `git ls-remote`/`taco-cli --version`，无写路径）+ 8.2 的流程证据；**该项无法由单元测试证明**。
+- AC-7 → 8.1 第 1–16 项；AC-8 → 8.1 第 15、16 项。
 
 ---
 
@@ -277,11 +331,14 @@ AC-1/AC-2 → §5.4 与 §6 文档改动；AC-3 → 8.1 的第 5、6、9 项；A
 5. **不提供自动升级能力**：脚本不具备安装/写文件能力；升级始终由用户发起。
 6. **不改动 bundle 格式、shell、`window.taco` API 与 `taco-cli` 命令面**：本特性只新增探测脚本与文案契约。
 7. **不在仓库贡献者环境内做「与 main 比较」的额外提示**：贡献者 checkout 即最新源，tag 比较已足够。
+8. **不新增 Spec Kit 策略 managed block 的跨版本自动替换机制**：`extensions/taco/bin/taco.mjs:986-990` 只在既有 block 与新策略**逐字一致**时视为可替换，否则返回 `manual-merge`——这是既有的 fail-safe 设计（防止覆盖项目自定义）。让「上一版 stock block」可被识别替换需要长期维护一份历史哈希表（现仅有针对 `AGENTS.md` 的 `LEGACY_POLICY_HASHES`），属于独立特性，本期不夹带；既有安装按 `extensions/taco/README.md` 的记录走人工合并。
+9. **不对 `taco-cli` 做沙箱隔离**：本期接受「本机已安装的 CLI 被视为用户已授权执行」这一信任前提（§5.5 明示残余风险）。
 
 ---
 
 ## 10. 待评审的开放问题
 
 1. §9.1：是否接受「本期不覆盖 Spec Kit 扩展更新提示」，还是要求在同一期以「资产存在才提示」的保守方式覆盖？
-2. §5.1 的 `VERSION` 载体与「构建生成」方案是否认可；是否希望改为 SKILL.md frontmatter（会引入非 Agent Skills 规范字段，故未采用）。
-3. §5.4 文案模板的措辞与「未升级」表述是否需要调整。
+2. §9.8：`extensions/taco/policies/taco-agent-policy.md` 的改动会让**已安装扩展的项目**在重跑 `prepare-policy` 时收到 `manual-merge` 拒绝（fail-safe，既有行为）。接受这个后果并仅在新装项目生效，还是要求本特性同时提供策略 managed block 的受控升级（另需历史哈希表与测试）？若两者都不接受，可考虑本期不动扩展策略文件、只改 skill 与安装指南。
+3. §5.1 的 `VERSION` 载体与「构建生成」方案是否认可；是否希望改为 SKILL.md frontmatter（会引入非 Agent Skills 规范字段，故未采用）。
+4. §5.4 文案模板的措辞与「未升级」表述是否需要调整。
