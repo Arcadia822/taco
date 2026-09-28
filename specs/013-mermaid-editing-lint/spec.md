@@ -300,7 +300,7 @@ Markdown fence 的行号需要换算：定位围栏起始行，源码第 1 行�
 
 ### 7.1 校验器（脚本级，可复跑）
 
-- **正确性矩阵**（A1）：18 个合法图 + 4 个非法输入的期望表，逐条断言；任何人可重放。矩阵须覆盖 §2.2 点名的 11 个易漏报族。
+- **正确性矩阵**（A1）：**22 个输入**的期望表（18 个合法图 + 3 个语法无效 + 1 个未知类型），逐条断言 `kind` 与是否报错；未知类型必须断言为 `unknown-type` 而非 `syntax`。任何人可重放，且须覆盖 §2.2 点名的 11 个易漏报族。
 - **位置换算与 clamp**（A2）：构造围栏起始于第 N 行的 `.md`，断言诊断行号落在**围栏体范围内**（不得指向闭合围栏或越界）；已实测反例：悬空箭头会把未 clamp 的映射算到闭合围栏那一行。
 - **字段优先级**：用固定样本锁定 §4.5 的取值顺序，并**分别断言行列的正确值**（不靠 clamp 掩盖偏差）：
   - 悬空箭头 `flowchart TD\n  A[Start] -->` → 第 **2** 行（`loc.first_line=2` ✓、`hash.line=2` ✓、`message` 说 3 ✗）；
@@ -317,11 +317,13 @@ Markdown fence 的行号需要换算：定位围栏起始行，源码第 1 行�
 
 - 四类失败（`syntax`/`unknown-type`/`render`/`runtime`）在两入口的文案与位置断言（A5、A6）；
 - `#d{id}` 计数断言：连续 5 次失败后不增长（A7）；
-- 既有功能回归：`tests/mermaid-docs.test.ts`、`tests/structured-file-viewer.test.ts`、`tests/tiptap-editor.test.ts`、`tests/markdown-reconstruction.test.ts` 全绿（A8）。
+- **A8-a~A8-f 逐项**：主题切换后重新出图（a）、方向切换后重新出图（b）、复制当前源码（c）、行评论锚点（d）、节点评论锚点（e）、双击/按钮进全屏与全屏内缩放及退出后内联状态（f）——每项给出显式断言，或列入 §7.3 手工清单并记录结果。
+- 既有功能回归（**补充**，不代替 A8-a~A8-f）：`tests/mermaid-docs.test.ts`、`tests/structured-file-viewer.test.ts`、`tests/tiptap-editor.test.ts`、`tests/markdown-reconstruction.test.ts` 全绿。
 
 ### 7.3 手工确认
 
 - 在真实浏览器中打开一个含三类问题的 `.taco.html`，逐条核对人侧文案与位置；
+- A8-a~A8-f 逐项手工核对并记录（主题、方向、复制、行评论、节点评论、全屏缩放），记录与改动前的差异；
 - 用 Agent 视角跑一次校验器，确认输出足以定位到「文件:行:列 + 原文」。
 
 ## 8. 影响范围
