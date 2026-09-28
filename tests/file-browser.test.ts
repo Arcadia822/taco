@@ -5,7 +5,7 @@ import { FileBrowser } from '../src/file-browser.ts'
 import { configureApp } from '../src/kernel/app.ts'
 import { capturePristine } from '../src/kernel/save.ts'
 import { extractMermaidThemeFromCode, MermaidRuntime, type MermaidApi } from '../src/mermaid.ts'
-import { parseBundle, type TacoBundle, type TacoTextAnchor } from '../src/model.ts'
+import { fileKind, parseBundle, type TacoBundle, type TacoFile, type TacoTextAnchor } from '../src/model.ts'
 import { setDefaultHighlighter } from '../src/source-editor.ts'
 import { completeHighlighter } from '../src/highlighter-lowlight.ts'
 import { setDefaultRichEditorAdapter } from '../src/rich-editor.ts'
@@ -2261,5 +2261,43 @@ describe('FileBrowser', () => {
     expect(audio.src).toContain('data:audio/mpeg;base64,BBBB')
 
     browser.destroy()
+  })
+
+  it('caps SVG previews at the authored viewBox size instead of stretching to the viewer', () => {
+    const svgBundle: TacoBundle = {
+      format: 'taco/files',
+      version: 1,
+      docId: 'svg-natural-size',
+      title: 'SVG Bundle',
+      root: 'specs/svg',
+      files: [{
+        path: 'specs/svg/badge.svg',
+        mediaType: 'image/svg+xml',
+        content: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 24"><rect width="48" height="24"/></svg>',
+      }],
+    }
+
+    const browser = new FileBrowser(document.getElementById('app')!, svgBundle)
+    const image = document.querySelector<HTMLImageElement>('.media-document-preview.image-preview')!
+    expect(image.src).toMatch(/^data:image\/svg\+xml/)
+    expect(image.style.getPropertyValue('--media-natural-width')).toBe('48px')
+    expect(image.style.getPropertyValue('--media-natural-height')).toBe('24px')
+
+    image.click()
+    const dialogImage = document.querySelector<HTMLImageElement>('dialog.png-preview img')!
+    expect(dialogImage.style.getPropertyValue('--media-natural-width')).toBe('48px')
+    expect(dialogImage.style.getPropertyValue('--media-natural-height')).toBe('24px')
+    document.querySelector('dialog.png-preview')?.remove()
+
+    browser.destroy()
+  })
+
+  it('classifies media by declared MIME type before file extension', () => {
+    const file = (path: string, mediaType: string): TacoFile => ({ path, mediaType, content: '' })
+
+    expect(fileKind(file('specs/a/audio.mp4', 'audio/mp4'))).toBe('audio')
+    expect(fileKind(file('specs/a/clip.mp4', 'video/mp4'))).toBe('video')
+    expect(fileKind(file('specs/a/track.mp3', 'text/plain'))).toBe('audio')
+    expect(fileKind(file('specs/a/notes.bin', 'text/plain'))).toBe('text')
   })
 })

@@ -35,14 +35,66 @@ const pngError = (file: TacoFile): string | undefined => {
   return error
 }
 
-export const openMediaPreview = (src: string, title?: string): void => {
+const svgAttribute = (tag: string, name: string): number | null => {
+  const match = new RegExp(`\\b${name}\\s*=\\s*["']([^"']*)["']`, 'i').exec(tag)
+  if (!match || match[1].includes('%')) return null
+  const value = Number.parseFloat(match[1])
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
+const svgMarkup = (content: string): string | null => {
+  const prefix = 'data:image/svg+xml'
+  if (!content.startsWith(prefix)) return content
+  const separator = content.indexOf(',')
+  if (separator === -1) return null
+  const payload = content.slice(separator + 1)
+  try {
+    return content.slice(prefix.length, separator).includes('base64')
+      ? atob(payload)
+      : decodeURIComponent(payload)
+  } catch { return null }
+}
+
+/**
+ * An SVG carrying only a viewBox has no intrinsic size, so a browser reports a
+ * 150×150 fallback and stretches the image to its container. Read the authored
+ * width/height, else the viewBox, to keep both previews at the original size.
+ */
+export const svgIntrinsicSize = (content: string): { width: number; height: number } | null => {
+  const markup = svgMarkup(content)
+  const tag = markup ? /<svg\b[^>]*>/i.exec(markup)?.[0] : undefined
+  if (!tag) return null
+  const width = svgAttribute(tag, 'width')
+  const height = svgAttribute(tag, 'height')
+  if (width !== null && height !== null) return { width, height }
+  const viewBox = /\bviewBox\s*=\s*["']([^"']*)["']/i.exec(tag)?.[1]
+  if (!viewBox) return null
+  const parts = viewBox.trim().split(/[\s,]+/).map(Number)
+  return parts.length === 4 && parts[2] > 0 && parts[3] > 0 ? { width: parts[2], height: parts[3] } : null
+}
+
+export const mediaSource = (file: TacoFile): string =>
+  file.mediaType === 'image/svg+xml' && !file.content.startsWith('data:')
+    ? `data:image/svg+xml;utf8,${encodeURIComponent(file.content)}`
+    : file.content
+
+/** Caps an image at its authored size while still shrinking inside a smaller container. */
+export const applyNaturalSize = (image: HTMLImageElement, size: { width: number; height: number } | null): void => {
+  if (!size) return
+  image.style.setProperty('--media-natural-width', `${size.width}px`)
+  image.style.setProperty('--media-natural-height', `${size.height}px`)
+}
+
+export const openPngPreview = (file: TacoFile): void => {
+  if (file.mediaType === 'image/png' && pngError(file)) return
   document.querySelector('dialog.png-preview, dialog.media-preview-dialog')?.remove()
   const dialog = document.createElement('dialog')
   dialog.className = 'media-preview-dialog png-preview'
   dialog.dataset.tacoTransient = ''
   const image = document.createElement('img')
-  image.src = src
-  image.alt = title || ''
+  image.src = mediaSource(file)
+  image.alt = file.title || file.path
+  if (file.mediaType === 'image/svg+xml') applyNaturalSize(image, svgIntrinsicSize(file.content))
   dialog.setAttribute('aria-label', image.alt)
   dialog.append(image)
 
@@ -67,10 +119,6 @@ export const openMediaPreview = (src: string, title?: string): void => {
   else dialog.setAttribute('open', '')
 }
 
-export const openPngPreview = (file: TacoFile): void => {
-  if (file.mediaType === 'image/png' && pngError(file)) return
-  openMediaPreview(file.content, file.title || file.path)
-}
 
 export const resolveEmbeddedMarkdownAssets = (
   root: ParentNode,
@@ -127,7 +175,7 @@ export const resolveEmbeddedMarkdownAssets = (
     image.onerror = () => report(`Cannot decode PNG: ${asset.path}; re-export the image and repack`)
     if (image.getAttribute('src') !== asset.content) image.setAttribute('src', asset.content)
     image.style.cursor = 'pointer'
-    image.onclick = () => openMediaPreview(asset.content, asset.title || asset.path)
+    image.onclick = () => openPngPreview(asset)
     previews.set(asset.path, asset)
   }
   if (tools.children.length && root instanceof HTMLElement) root.after(tools)

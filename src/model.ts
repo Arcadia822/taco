@@ -345,9 +345,13 @@ export function fileKind(file: TacoFile): FileKind {
   if (lower.endsWith('.mmd')) return 'mermaid'
   if (mediaType.includes('yaml') || /\.ya?ml$/.test(lower)) return 'yaml'
   if (mediaType.includes('json') || lower.endsWith('.json')) return 'json'
-  if (mediaType.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|ico|bmp|avif)$/i.test(lower)) return 'image'
-  if (mediaType.startsWith('video/') || /\.(mp4|webm|ogv|mov|m4v)$/i.test(lower)) return 'video'
-  if (mediaType.startsWith('audio/') || /\.(mp3|wav|ogg|aac|m4a|weba|flac)$/i.test(lower)) return 'audio'
+  // The declared MIME type wins; the extension only classifies when the type is generic.
+  if (mediaType.startsWith('image/')) return 'image'
+  if (mediaType.startsWith('video/')) return 'video'
+  if (mediaType.startsWith('audio/')) return 'audio'
+  if (/\.(png|jpe?g|gif|webp|svg|ico|bmp|avif)$/i.test(lower)) return 'image'
+  if (/\.(mp4|webm|ogv|mov|m4v)$/i.test(lower)) return 'video'
+  if (/\.(mp3|wav|ogg|aac|m4a|weba|flac)$/i.test(lower)) return 'audio'
   return 'text'
 }
 

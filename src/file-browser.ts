@@ -50,7 +50,7 @@ import { createUnifiedDiff } from './kernel/diff.ts'
 
 import { OutlineController } from './outline-controller.ts'
 
-import { openPngPreview } from './markdown-assets.ts'
+import { applyNaturalSize, mediaSource, openPngPreview, svgIntrinsicSize } from './markdown-assets.ts'
 import { hasCollabSecrets } from './security.ts'
 import { frontmatterTitle, parseFrontmatter } from './frontmatter.ts'
 
@@ -719,12 +719,9 @@ export class FileBrowser {
     if (kind === 'image') {
       const container = el('div', 'media-document-container')
       const image = el('img', 'media-document-preview image-preview')
-      let src = file.content
-      if (file.mediaType === 'image/svg+xml' && !src.startsWith('data:')) {
-        src = `data:image/svg+xml;utf8,${encodeURIComponent(file.content)}`
-      }
-      image.src = src
+      image.src = mediaSource(file)
       image.alt = file.title || fallbackFileTitle(file)
+      if (file.mediaType === 'image/svg+xml') applyNaturalSize(image, svgIntrinsicSize(file.content))
       image.addEventListener('click', () => openPngPreview(file))
       container.append(image)
       this.viewer.append(container)
