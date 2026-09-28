@@ -1,7 +1,6 @@
 import { isSafePath, relativePath, type TacoBundle, type TacoFile } from './model.ts'
 import { decodePng } from '../extensions/taco/bin/png.mjs'
 import { inertImageAttributes } from './security.ts'
-import { createControlButton } from './ui-primitives.ts'
 
 declare const __EMBEDDED_ASSETS__: Record<string, string> | undefined
 
@@ -37,15 +36,31 @@ const pngError = (file: TacoFile): string | undefined => {
 }
 
 export const openMediaPreview = (src: string, title?: string): void => {
+  document.querySelector('dialog.png-preview, dialog.media-preview-dialog')?.remove()
   const dialog = document.createElement('dialog')
-  dialog.className = 'png-preview'
+  dialog.className = 'media-preview-dialog png-preview'
   dialog.dataset.tacoTransient = ''
-  const close = createControlButton('x', 'Close', () => dialog.close(), '', true)
   const image = document.createElement('img')
   image.src = src
   image.alt = title || ''
   dialog.setAttribute('aria-label', image.alt)
-  dialog.append(close, image)
+  dialog.append(image)
+
+  const finish = (): void => {
+    if (typeof dialog.close === 'function') dialog.close()
+    else {
+      dialog.removeAttribute('open')
+      dialog.remove()
+    }
+  }
+
+  dialog.addEventListener('cancel', (event) => {
+    event.preventDefault()
+    finish()
+  })
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) finish()
+  })
   dialog.addEventListener('close', () => dialog.remove(), { once: true })
   document.body.append(dialog)
   if (typeof dialog.showModal === 'function') dialog.showModal()
@@ -111,7 +126,7 @@ export const resolveEmbeddedMarkdownAssets = (
     }
     image.onerror = () => report(`Cannot decode PNG: ${asset.path}; re-export the image and repack`)
     if (image.getAttribute('src') !== asset.content) image.setAttribute('src', asset.content)
-    image.style.cursor = 'zoom-in'
+    image.style.cursor = 'pointer'
     image.onclick = () => openMediaPreview(asset.content, asset.title || asset.path)
     previews.set(asset.path, asset)
   }

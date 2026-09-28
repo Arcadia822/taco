@@ -848,7 +848,8 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 
 .structured-file-viewer { width: min(100%, 980px); min-width: 0; margin: 0 auto; }
 .structured-file-mermaid { width: 100%; height: 100%; display: flex; flex-direction: column; }
-.file-viewer:has(> .structured-file-mermaid) { padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 100%; }
+.file-viewer:has(> .structured-file-mermaid),
+.file-viewer:has(> .media-document-container) { padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 100%; }
 .structured-file-mermaid .structured-file-content,
 .standalone-mermaid-preview { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
 .standalone-mermaid-preview .tiptap-mermaid-container,
@@ -1149,36 +1150,67 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: calc(100vh - 120px);
+  flex: 1;
   width: 100%;
-  padding: 32px 16px;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  padding: 24px;
   box-sizing: border-box;
+  overflow: hidden;
 }
 .media-document-preview {
   display: block;
   max-width: 100%;
+  max-height: 100%;
+  width: auto;
   height: auto;
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, .12), 0 2px 6px -1px rgba(0, 0, 0, .05);
 }
 .media-document-preview.image-preview {
-  cursor: zoom-in;
-  max-height: 85vh;
+  cursor: pointer;
   object-fit: contain;
 }
 .media-document-preview.video-preview {
-  max-width: 900px;
-  max-height: 80vh;
-  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
   background: #000;
 }
 .media-document-preview.audio-preview {
   width: 100%;
   max-width: 540px;
 }
-.png-preview { max-width: 95vw; max-height: 95vh; overflow: auto; border: none; border-radius: 8px; padding: 16px; }
-.png-preview img { display: block; max-width: none; margin-top: 12px; }
-.png-preview::backdrop { background: #0009; }
+.media-preview-dialog,
+.png-preview {
+  width: min(90vw, 1000px);
+  max-height: min(90vh, 900px);
+  padding: 16px;
+  overflow: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, .12), 0 2px 6px -1px rgba(0, 0, 0, .05);
+  cursor: pointer;
+}
+.media-preview-dialog::backdrop,
+.png-preview::backdrop {
+  background: transparent;
+  backdrop-filter: none;
+}
+.media-preview-dialog img,
+.png-preview img {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  max-height: calc(90vh - 48px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  cursor: default;
+}
 
 /* Markdown embedded media centering */
 .taco-editor img, .taco-editor video, .taco-editor audio,
@@ -1188,7 +1220,7 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
   max-width: 100%;
 }
 .taco-editor img, .ProseMirror img {
-  cursor: zoom-in;
+  cursor: pointer;
   border-radius: 4px;
 }
 .taco-editor audio, .ProseMirror audio {
@@ -1199,7 +1231,6 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
   max-width: 800px;
   border-radius: 4px;
 }
-
 /* TACO-4 document properties: GitHub references */
 .document-property-github { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; margin-top: 3px; color: var(--doc-muted); font-size: 11px; line-height: 16px; text-decoration: none; }
 .document-property-github:hover { color: var(--doc-ink); }
