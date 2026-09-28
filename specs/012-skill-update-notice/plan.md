@@ -18,7 +18,7 @@
   - [ ] 环境变量：`TACO_UPDATE_CHECK=off` 立即短路（零 spawn、零请求）；`TACO_CLI_BIN` 等价 `--cli-bin`。
   - [ ] 已安装版本：读取脚本同目录 `../VERSION`（区分「缺失」与「不可解析」两种 reason）；`taco-cli --version` 解析 `binaryVersion`，仅在绝对路径常规可执行文件时执行。
   - [ ] 远端探测：`git ls-remote --tags --refs <repo>` 首选，GitHub Releases API 仅在「`git` 不可用且 `--repo` 未被覆盖」时回退；三段纯数字 tag 匹配，预发布一律忽略；无可用 tag ⇒ 该组件 `latest/updateAvailable=null` 且 `ok` 不变。
-  - [ ] 加固与限额：每次探测独立硬超时（默认 3000 ms）+ 64 KiB 输出上限；`git` 与 `taco-cli` 以独立进程组启动（`detached: true`），超时/超限用 `process.kill(-pid, 'SIGKILL')` 终止整个进程组；`git` 以精简 env（`PATH`/`HOME`/`LANG`）、`GIT_CONFIG_GLOBAL=/dev/null`、`GIT_CONFIG_SYSTEM=/dev/null`、`GIT_TERMINAL_PROMPT=0`、`GIT_ASKPASS`/`SSH_ASKPASS` 不可用、`-c credential.helper=` 运行，**子进程 cwd 固定为 `os.tmpdir()`**（绝不在项目目录内），仓库参数前插入 `--`。
+  - [ ] 加固与限额：每次探测独立硬超时（默认 3000 ms）+ 64 KiB 输出上限；`git` 与 `taco-cli` 以独立进程组启动（`detached: true`），超时/超限用 `process.kill(-pid, 'SIGKILL')` 终止整个进程组；`git` 以精简 env（`PATH`/`HOME`/`LANG`）、`GIT_CONFIG_GLOBAL=/dev/null`、`GIT_CONFIG_SYSTEM=/dev/null`、`GIT_TERMINAL_PROMPT=0`、`GIT_ASKPASS`/`SSH_ASKPASS` 不可用、`-c credential.helper=` 运行，**子进程 cwd 固定在中立目录**（`os.tmpdir()`，绝不在项目目录内），仓库参数前插入 `--`。
   - [ ] 组件独立判定：`skill` 不可读 ⇒ `ok:false` + reason 且完全静默；`cli` 不可读/超时/超限 ⇒ 仅 `cli.installed/updateAvailable=null`，`ok` 与 `skill` 结论不受影响。
   - [ ] 输出：默认一行英文摘要（含被跳过项标注）；`--json` 输出 §5.3 契约对象（键集合与类型精确符合）；检查完成一律 `exit 0`。
   - [ ] 无副作用：零写入、不读项目内容、不外发本地数据、无凭据。
