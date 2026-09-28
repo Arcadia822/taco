@@ -43,7 +43,7 @@ Taco 的 Agent 侧契约明确要求 Agent 写图：
 
 ### 2.2 决定性发现：没有 DOM 的 Mermaid 校验是错的
 
-在**同一份 pinned mermaid 12.0.0**下做 2×2 受控矩阵（21 个用例，其中 18 个合法图、3 个非法图 + 1 个未知类型）：
+在**同一份 pinned mermaid 12.0.0**下做 2×2 受控矩阵（共 22 个输入＝18 个合法图 + 3 个语法无效 + 1 个未知类型）：
 
 | 解析器来源 | DOM | 合法图正确通过 | 漏报（合法图被判无效） | 把非法当合法 |
 | --- | --- | --- | --- | --- |
@@ -94,8 +94,8 @@ mindmap（非法源码） → parse OK · render FAIL TypeError: Cannot read pro
 
 | 错误族 | 触发示例 | 可用字段 | 注意 |
 | --- | --- | --- | --- |
-| jison（flowchart / sequence 等） | `flowchart TD` + 悬空箭头 | `hash.line`、`hash.loc{first_line,last_line,first_column,last_column}`、`hash.token`、`hash.expected[]`；`message` 含 `Parse error on line N:` 与指示线 | **字段互相矛盾**：同一输入 `hash.line=3`、`loc.first_line=2`、`message` 说 line 4，不能盲信 |
-| langium（gitGraph 等） | `gitGraph` + 非法语句 | `name === 'MermaidParseError'`，`result.parserErrors[0].token.{startLine,startColumn,endLine,endColumn,startOffset,endOffset}`；`message` 为 `Parse error on line 3, column 3: …` | 精确可用；`result` 极大且自引用，**绝不可整体序列化或写日志** |
+| jison（flowchart / sequence 等） | `flowchart TD` + 悬空箭头 | `hash.line`、`hash.loc{first_line,last_line,first_column,last_column}`、`hash.token`、`hash.expected[]`；`message` 含 `Parse error on line N:` 与指示线 | **字段互相矛盾，只有 `loc.first_line` 可靠**。实测（3 个样本，含 DOM 抛出式 `parse`）：`loc.first_line` **3/3 正确**；`hash.line` 2/3（未闭合方括号给 1，实为 2）；`message` 2/3（悬空箭头说 line 3，实为 2） |
+| langium（gitGraph / architecture 等） | `gitGraph` + 非法语句；`architecture-beta` + 非法行 | `result.parserErrors[0].token.{startLine,startColumn,endLine,endColumn,startOffset,endOffset}`；`message` 为 `Parsing failed:  Parse error on line 3, column 3: …` | 实测 2/2 精确（gitGraph 3,3；architecture 3,8）。**注意 `error.name` 实测为 `Error`，不是 `MermaidParseError`**——分类必须按结构（`result.parserErrors[0].token` 是否存在）判定，不能按名字。`result` 极大且自引用，**绝不可整体序列化或写日志** |
 | 未识别类型 | 空内容、纯 `%%` 注释、未知图表头 | `name === 'UnknownDiagramError'`，无位置 | 与「语法错误」不是一回事 |
 
 `parse(text, { suppressErrors: true })` 返回 `false`（无效）或 `{ diagramType, config }`（有效），**不抛异常**，也不触碰 DOM——这是 lint 的基元。
@@ -129,14 +129,20 @@ mindmap（非法源码） → parse OK · render FAIL TypeError: Cannot read pro
 
 ### 3.2 验收条件
 
-- **A1** 校验器对 §2.2 矩阵中的 18 个合法图**全部通过**（零误报），对 4 个非法输入**全部报错**（零误收）；该矩阵作为可复跑回归，任何人可重放。
+- **A1** 校验器对 §2.2 矩阵中的 18 个合法图**全部通过**（零误报），对 3 个语法无效输入与 1 个未知类型输入**全部报错**（零误收，其中未知类型的 `kind` 必须是 `unknown-type` 而非 `syntax`）；共 22 个输入作为可复跑回归，任何人可重放。
 - **A2** 对一个含 `.mmd` 与 Markdown fence 的目录，校验器输出的位置指向**宿主文件**的真实行号（fence 需换算到 `.md` 的行号），并给出底层 `message`。
 - **A3** 校验器在无法取得解析器或 DOM 时，输出明确的不可用原因、退出码区别于「有诊断」，且**不**打印通过。
 - **A4** 校验器在无网络环境（断网）下对 Complete shell 场景仍然可用。
 - **A5** `.mmd` 与 Markdown fence 中同一段无效源码，在人侧得到**同类**诊断（类别一致、位置一致、原文一致）。
-- **A6** 运行时不可用时提示原因且不显示为语法错误；恢复后无需重载文档即可重新出图。
+- **A6** 运行时不可用时提示原因（`runtime` 类）且不显示为语法错误；**在编辑或模式切换之后**、无需重载文档即可重新出图（§5.1）。
 - **A7** 连续 5 次渲染失败后 `document.body` 中 `div[id^="d"]` 数量不增长。
-- **A8** 有效图表的主题、方向、复制、行评论、节点评论、全屏缩放行为与改动前一致。
+- **A8** 有效图表的既有操作逐项不回归，且每项都有对应断言或手工条目：
+  - **A8-a** 主题切换后重新出图且源码被按既有规则改写；
+  - **A8-b** 方向切换后重新出图；
+  - **A8-c** 复制按钮复制的是当前源码；
+  - **A8-d** 行评论锚点仍指向正确行；
+  - **A8-e** 节点评论锚点仍指向正确节点；
+  - **A8-f** 双击/按钮进全屏、全屏内缩放与退出后内联状态合理。
 
 ## 4. 方案：Agent 侧 Mermaid 校验
 
@@ -176,7 +182,13 @@ node scripts/lint-mermaid.mjs --harness <out.html>   # 零依赖模式（浏览�
 
 ### 4.3 DOM 策略：jsdom 是硬约束
 
-`jsdom` 解析顺序：`--jsdom <path>` → 从调用目录 `import('jsdom')`。缺失时按 §4.1 的退出码 `2` 失败，并打印确切补救命令（例如 `npm i -D jsdom`），**绝不降级为「无 DOM 的 parse」**——§2.2 已证明那样会产生 12/18 误报。
+`jsdom` 解析顺序（**必须按调用目录解析，不能靠脚本自身位置**——脚本装在 `skills/taco/scripts/`，其 ESM 裸模块解析以脚本文件为基准，调用方项目的 `node_modules` 不会自动进入解析路径）：
+
+1. `--jsdom <path>`：显式指定 jsdom 入口；
+2. 以 `createRequire(new URL('package.json', pathToFileURL(join(process.cwd(), '/'))))` 解析 `jsdom`（即以**调用目录** `process.cwd()` 为基准）；
+3. 兜底：脚本自身位置可解析到的 `jsdom`。
+
+三者都失败时按 §4.1 的退出码 `2` 失败，并打印与**实际生效顺序**一致的确切补救命令（例如在调用目录执行 `npm i -D jsdom`），**绝不降级为「无 DOM 的 parse」**——§2.2 已证明那样会产生 12/18 误报，且非法输入的诊断也会退化成无信息的 `TypeError`（§4.5）。
 
 必须内置的两个测量垫片（否则部分族解析不稳定）：
 
@@ -187,9 +199,15 @@ SVGElement.prototype.getComputedTextLength = function () { return (this.textCont
 
 实现要点：把 jsdom window 上除 `location` 外的可枚举全局注入 `globalThis`（`CSSStyleSheet`、`DOMParser`、`customElements`、`MutationObserver`、`requestAnimationFrame` 等都要在），并以 `window`/`self` 指回该 window。实测该组合下 18/18 正确。
 
+Lite shell 场景：`taco-shell-lite.html` **没有**内嵌载荷（按设计从 CDN 加载，`src/lite-cdn-loader.ts`）。因此对 Lite 交付物，校验器必须显式说明「无离线载荷」并按需使用 `--mermaid`/`--shell` 或 `--harness --payload cdn`，不得静默回退到网络。
+
 ### 4.4 零依赖模式：`--harness`
 
-对没有 Node 侧 `jsdom`、但**有浏览器工具**的 Agent，`--harness <out.html>` 写一个自包含临时页：内嵌同一份 mermaid 载荷（或按 `--payload cdn` 使用 pinned CDN）、内联待校验源码、把诊断 JSON 写入 `<output id="result">`。Agent 用浏览器工具打开该页即可读到与 §4.1 同构的 JSON。
+对没有 Node 侧 `jsdom`、但**有浏览器工具**的 Agent，`--harness <out.html>` 写一个自包含临时页：内嵌同一份 mermaid 载荷（或按 `--payload cdn` 使用 pinned CDN）、内联待校验源码、把诊断 JSON 写入 `<output id="result">`。
+
+**退出码语义必须明确区分**（审查修正）：`--harness` 的 `0` 只表示**harness 已写出**，不表示校验通过。该模式下必须打印「校验未运行 —— 请在浏览器中打开该文件并读取结果」，且**不得**输出任何「通过」字样。页面必须在完成后设置显式标记（如 `window.__lintDone = true` 并把 `{diagnostics, unavailable}` 写入 `output`）；`unavailable` 非空时同样表示「校验未运行」。
+
+SKILL.md 必须给出完整回读步骤：打开文件 → 等待完成标记 → 读取 `output` → 有诊断则修，`unavailable` 非空则报告未运行。测试必须**真的在浏览器里执行**该页面并断言其输出，只比较生成的 HTML 文本不算通过（§7.1）。
 
 这条路径同时是「浏览器即权威」的实现：与接收方渲染环境完全一致，且零依赖。代价是需要浏览器工具（并非所有宿主都提供），因此它不是默认路径，而是缺 jsdom 时的替代。
 
@@ -217,22 +235,25 @@ export interface MermaidDiagnostic {
 }
 ```
 
+`classifyMermaidFailure` 必须**显式接收失败阶段**（`load` / `parse` / `render`），因为同一个异常形状在不同阶段含义不同：
+
+```ts
+classifyMermaidFailure(input: { stage: 'load' | 'parse' | 'render'; error?: unknown; returnedFalse?: boolean; source: string }): MermaidDiagnostic
+```
+
 分型规则（**白名单取值，绝不整体序列化 error**）：
 
-1. `name === 'UnknownDiagramError'` → `unknown-type`，无位置。
-2. `name === 'MermaidParseError'` → `syntax`；取 `result.parserErrors[0].token.{startLine,startColumn,endLine,endColumn}`（langium 1 基，精确）。
-3. 存在 `error.hash`（jison）→ `syntax`；**位置按下列优先级取值**，并把结果 clamp 到所在单元的行范围内（`.mmd` 为 `[1, 行数]`，Markdown 围栏为 `[1, 围栏体行数]`），再加围栏偏移：
-   1. `hash.loc.first_line`（+`first_column`）——实测与 `message` 自洽（`bad bracket`：`loc.first_line=2`，message 也是 line 2；而 `hash.line=1` 是错的）；
-   2. 否则取 `message` 中 `Parse error on line (\d+)`；
-   3. 都没有则无位置，但 `detail` 必须保留原文。
-4. `parse` 返回 `false`（`suppressErrors` 生效，**没有异常对象**）→ 先做廉价预判：空/纯空白/纯注释/无图表头 → `unknown-type`；其余 → `syntax`。此分支 `detail` **缺省**，不得声称保留了不存在的原始异常。
-5. 其余（含 `TypeError`）→ `render`，且**不带位置**；文案必须表达「渲染阶段失败」，不得写成语法错误。
+1. `stage === 'load'` → `runtime`，`detail` 为加载失败原因（载荷缺失、CDN 不可达等），无位置。
+2. `stage === 'parse'` 且异常**结构上**存在 `error.result?.parserErrors?.[0]?.token`（langium 族）→ `syntax`，取 `startLine/startColumn/endLine/endColumn`（已测 2/2 精确）。**不得按 `error.name` 判定**——实测该族在不同调用下 `name` 为 `Error`。
+3. `stage === 'parse'` 且存在 `error.hash`（jison 族）→ `syntax`；位置取 `hash.loc.first_line`（+`first_column`，实测 3/3 正确），缺失时退回 `message` 的 `Parse error on line (\d+)`；两者都缺则无位置但保留 `detail`。取值后 **clamp 到所在单元的行范围**（`.mmd` 为 `[1, 行数]`，Markdown 围栏为 `[1, 围栏体行数]`），再加围栏偏移。
+4. `stage === 'parse'` 且 `name === 'UnknownDiagramError'` → `unknown-type`，无位置。
+5. `stage === 'parse'` 且 `returnedFalse === true`（`suppressErrors` 生效，**没有异常对象**）→ 廉价预判：空/纯空白/纯注释/无图表头 → `unknown-type`；其余 → `syntax`。此分支 `detail` **缺省**，不得声称保留了不存在的原始异常。
+6. `stage === 'parse'` 的**其余非白名单异常** → `runtime`（`parse` 阶段失败意味着校验环境本身不可用，例如缺 DOM 时抛的 `TypeError`），退出码 `2`；**绝不可归为 `render`**。
+7. `stage === 'render'` 的异常 → `render`，无位置；文案必须表达「渲染阶段失败」，不得写成语法错误，也不参与「语法是否有效」的判定（§2.4）。
 
-**优先使用抛出式 `parse(source)` 并捕获**，而不是 `suppressErrors: true`：只有抛出的异常对象才带 `hash`/`result` 与原始 `message`。实测同一段悬空箭头源码，`suppressErrors` 只得到布尔 `false`（无位置、无原文），而抛出式给出完整 `Parse error on line …` 与 `hash`。规则 4 仅覆盖实现差异（CDN/桩返回布尔）的兜底。
+**优先使用抛出式 `parse(source)` 并捕获**，而不是 `suppressErrors: true`：只有抛出的异常对象才带 `hash`/`result` 与原始 `message`。实测同一段悬空箭头源码，`suppressErrors` 只得到布尔 `false`（无位置、无原文），而抛出式给出完整 `Parse error on line …` 与 `hash`。规则 5 仅覆盖实现差异（CDN/桩返回布尔）的兜底。
 
-**无 DOM 还会损坏错误诊断本身**（实测，强化 §4.3）：同一段 `flowchart TD\n  A[Start] -->` 在没有 DOM 时抛的是 `TypeError` 且 `hash`/`loc` 全空，只有装了 DOM 才还原为带行列的解析错误。即没有 DOM 不只是「合法图误报」，而是「非法图的诊断也退化成无信息的 TypeError」。
-
-`render` 类不参与「语法是否有效」的判定（§2.4）。
+**无 DOM 还会损坏错误诊断本身**（实测，强化 §4.3）：同一段 `flowchart TD\n  A[Start] -->` 在没有 DOM 时抛的是 `TypeError` 且 `hash`/`loc` 全空，只有装了 DOM 才还原为带行列的解析错误。即没有 DOM 不只是「合法图误报」，而是「非法图的诊断也退化成无信息的 TypeError」；按规则 6，它必须表现为「校验未运行」而不是任何语法结论。
 
 ### 4.6 位置换算
 
@@ -240,14 +261,27 @@ Markdown fence 的行号需要换算：定位围栏起始行，源码第 1 行�
 
 ## 5. 方案：人侧最小集
 
-只做四件事，不重排交互。
+只做四件事，不重排交互、不新增任何控件。
 
 1. **诊断精确化**：`.mmd`（`src/structured-file-viewer.ts`）与 Markdown 块（`src/tiptap-code-block.ts`）都改为呈现「类别 + 行:列 + 原始 `message`」，并支持复制原文；`render` 类明确标注「无位置信息」。取代 `labels.error` 的单句（§2.7-H1）。
-2. **不互相冒充**：`runtime`（载荷/CDN 不可用）、`render`、`syntax`、`unknown-type` 四种文案独立；`unavailable` 时清除 `is-loading` 假进度并给出原因与重试入口（§2.7-H2/H3）。
+2. **不互相冒充**：`runtime`（载荷/CDN 不可用）、`render`、`syntax`、`unknown-type` 四种文案独立；`unavailable` 时清除 `is-loading` 假进度并给出原因（§2.7-H2）。
 3. **残留清理**：`render` 失败后按 id 精确移除 `#d{id}`；并在成功路径复查一次（§2.7-H5）。
 4. **两入口一致**：Markdown 路径接上同一条诊断回调链（`src/tiptap-code-block.ts` 的 split view 需要透传，当前未接，§2.7-H4）。
 
 顺带优化（同一条因果链，非独立目标）：`parse` 作为 `render` 的前置门——无效源码不再调用 `render()`，从源头消掉大部分失败与泄漏。
+
+### 5.1 运行时不可用的恢复触发点（审查修正：不得新增交互）
+
+现状问题（§2.7-H3）：`src/tiptap-code-block.ts:495-507` 置 `mermaidUnavailable = true` 后，`paint()` 只在 `!isMermaid` 分支复位它（`:526-533`），而渲染门又要求 `!mermaidUnavailable`（`:485-491`），于是该块在本会话内永久退化。
+
+恢复必须靠**已有的**事件触发，不引入重试按钮（按钮属于 §10 的交互改造）：
+
+| 入口 | 触发事件（全部已存在） | 行为 |
+| --- | --- | --- |
+| Markdown 块 | 节点视图 `update()` → `paint()`；内容变更 | `paint()` 依据 `state` 派生可用性而不是读一个单向标志位；`state === 'runtime'` 时允许再次尝试加载 |
+| `.mmd` | 模式切换 / 重新进入 `paintMermaid()`（每次重建 split view，已如此） | 重建即重试 |
+
+验收相应收紧为：**在编辑或模式切换之后**、无需重载文档即可恢复出图（A6）。「一键重试按钮」「失败回落源码」「低频编译」等仍属 §10，另开 Issue。
 
 ## 6. 契约与兼容
 
@@ -268,7 +302,12 @@ Markdown fence 的行号需要换算：定位围栏起始行，源码第 1 行�
 
 - **正确性矩阵**（A1）：18 个合法图 + 4 个非法输入的期望表，逐条断言；任何人可重放。矩阵须覆盖 §2.2 点名的 11 个易漏报族。
 - **位置换算与 clamp**（A2）：构造围栏起始于第 N 行的 `.md`，断言诊断行号落在**围栏体范围内**（不得指向闭合围栏或越界）；已实测反例：悬空箭头会把未 clamp 的映射算到闭合围栏那一行。
-- **字段优先级**：用固定样本锁定 §4.5 的取值顺序（`bad bracket` 用例里 `loc.first_line=2` 正确而 `hash.line=1` 错误，`message` 也是 line 2）。
+- **字段优先级**：用固定样本锁定 §4.5 的取值顺序，并**分别断言行列的正确值**（不靠 clamp 掩盖偏差）：
+  - 悬空箭头 `flowchart TD\n  A[Start] -->` → 第 **2** 行（`loc.first_line=2` ✓、`hash.line=2` ✓、`message` 说 3 ✗）；
+  - 未闭合方括号 `flowchart TD\n  A[Start --> B[End]` → 第 **2** 行（`loc.first_line=2` ✓、`hash.line=1` ✗、`message` 说 2 ✓）；
+  - sequence 缺冒号 `sequenceDiagram\n  Alice->>Bob hello` → 第 **2** 行；
+  - langium 结构判定：gitGraph 非法语句 → 第 3 行第 3 列；`architecture-beta` 非法行 → 第 3 行第 8 列（同时断言 `error.name` 为 `Error` 时仍被正确判为 `syntax`）。
+- **阶段分类**：构造 `parse` 阶段的非白名单异常（例如无 DOM 时的 `TypeError`）→ `kind === 'runtime'` 且退出码 `2`，断言它**不**被归为 `render`。
 - **抛出式优先**：断言同一段源码在抛出式 `parse` 下产出 `detail` 与非空位置；在 `suppressErrors` 布尔路径下 `detail` 缺省但 kind 仍正确。
 - **不可用路径**（A3）：屏蔽 jsdom 时退出码为 2 且不打印通过；屏蔽 shell 载荷时同样。
 - **离线**（A4）：断开网络后对 Complete shell 场景断言仍全通过。
