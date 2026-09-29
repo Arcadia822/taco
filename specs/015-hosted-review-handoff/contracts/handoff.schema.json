@@ -1,0 +1,209 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://taco.local/schemas/015-hosted-review-handoff/handoff.schema.json",
+  "title": "TACO-33 托管人工交接数据契约",
+  "description": "只定义新交接包与交接事件；008 的发布快照、评论锚点与 CheckpointsState 保持权威。此草案不是已上线接口。",
+  "$defs": {
+    "Uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "Sequence": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "description": "十进制字符串，不通过 JavaScript Number 传递持久游标。"
+    },
+    "RelativeFilePath": {
+      "$ref": "../../008-taco-host-contract/contracts/protocol.schema.json#/$defs/SafePath",
+      "description": "上传的 files 与交接的 changedFiles 路径相对于 bundle.root，Agent 仅可拼接一次 root；其他 Checkpoint/评论路径沿用完整 bundle 路径。"
+    },
+    "Author": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "displayName", "verified"],
+      "properties": {
+        "kind": { "enum": ["guest", "user"] },
+        "id": { "type": "string", "minLength": 1 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "verified": { "type": "boolean" }
+      }
+    },
+    "UploadedFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "mediaType", "content"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "存在时沿用 Taco 文件稳定 id；没有 id 的重命名按删除加新增报告。" },
+        "path": { "$ref": "#/$defs/RelativeFilePath" },
+        "mediaType": { "type": "string", "minLength": 1 },
+        "content": { "type": "string", "description": "当前完整 UTF-8 内容；PNG 为经验证的 data:image/png;base64 字符串。" }
+      }
+    },
+    "HandoffUpload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "tacoId", "revisionId", "root", "files", "deletedPaths", "checkpoints"],
+      "properties": {
+        "protocol": { "const": "taco-handoff/1" },
+        "tacoId": { "$ref": "#/$defs/Uuid" },
+        "revisionId": { "$ref": "#/$defs/Uuid" },
+        "root": { "$ref": "../../008-taco-host-contract/contracts/protocol.schema.json#/$defs/SafeRootPath" },
+        "files": {
+          "type": "array",
+          "description": "本评审者当前完整文件集合；原发布路径缺失时必须由 deletedPaths 显式声明删除，或以同一稳定 id 证明重命名；不接受只含改动文件的包。",
+          "items": { "$ref": "#/$defs/UploadedFile" }
+        },
+        "deletedPaths": {
+          "type": "array",
+          "uniqueItems": true,
+          "description": "原发布路径中有意删除的 root 相对路径；不得包含仍在 files 中或已由稳定 id 改名的路径。",
+          "items": { "$ref": "#/$defs/RelativeFilePath" }
+        },
+        "checkpoints": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "../../008-taco-host-contract/contracts/protocol.schema.json#/$defs/CheckpointsState" }
+          ],
+          "description": "当前完整 Checkpoint 状态；null 表示发布快照无 Checkpoints。与发布快照/草稿版本比较后计算差异。"
+        }
+      }
+    },
+    "ChangedFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "changeType", "mediaType", "content", "diff"],
+      "properties": {
+        "path": { "$ref": "#/$defs/RelativeFilePath" },
+        "previousPath": { "$ref": "#/$defs/RelativeFilePath", "description": "同一稳定 id 的重命名才填写；无 id 时分别报告删除和新增。" },
+        "changeType": { "enum": ["added", "modified", "deleted", "renamed"] },
+        "mediaType": { "type": "string", "minLength": 1 },
+        "content": { "type": ["string", "null"], "description": "删除时为 null；新增/修改/改名保留完整正文或 PNG 数据。" },
+        "diff": { "type": ["string", "null"], "description": "统一 diff：changedFiles 以发布版为基线，incrementalFiles 以上次成功交接的完整文件集合为基线；二进制为 null。" }
+      }
+    },
+    "CheckpointChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "from", "to"],
+      "properties": {
+        "path": { "$ref": "../../008-taco-host-contract/contracts/protocol.schema.json#/$defs/SafePath" },
+        "from": { "enum": ["todo", "in_progress", "complete", "freeze"] },
+        "to": { "enum": ["todo", "in_progress", "complete", "freeze"] }
+      }
+    },
+    "CommentMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "author", "body", "createdAt", "deletedAt"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "author": { "$ref": "#/$defs/Author" },
+        "body": { "type": ["string", "null"], "description": "已删除消息为 null，不恢复其原文。" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "deletedAt": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "CommentThread": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "anchor", "isAnchorStale", "messages"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["open", "resolved"] },
+        "anchor": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "../../008-taco-host-contract/contracts/protocol.schema.json#/$defs/Anchor" }
+          ]
+        },
+        "isAnchorStale": { "type": "boolean", "description": "锚点所指文件被删除/改名或范围已失效时为 true；旧评论仍保留。" },
+        "messages": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/CommentMessage" }
+        }
+      }
+    },
+    "HandoffPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root", "changedFiles", "incrementalFiles", "checkpointChanges", "incrementalCheckpointChanges", "checkpoints", "checkpointTemplateChange", "checkpointDocumentAdditions", "checkpointDefinitionChangedSinceLastHandoff", "comments", "commentsThroughSequence"],
+      "properties": {
+        "root": { "$ref": "../../008-taco-host-contract/contracts/protocol.schema.json#/$defs/SafeRootPath" },
+        "changedFiles": { "type": "array", "items": { "$ref": "#/$defs/ChangedFile" } },
+        "incrementalFiles": { "type": "array", "description": "相对该评审者上次成功交接的完整文件集合；恢复发布版的文件仍在此出现并携带完整当前内容。首次交接以发布版为基线。", "items": { "$ref": "#/$defs/ChangedFile" } },
+        "checkpointChanges": { "type": "array", "items": { "$ref": "#/$defs/CheckpointChange" } },
+        "incrementalCheckpointChanges": { "type": "array", "description": "相对上次成功交接的状态差异；首次交接以发布版为基线。", "items": { "$ref": "#/$defs/CheckpointChange" } },
+        "checkpoints": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "../../008-taco-host-contract/contracts/protocol.schema.json#/$defs/CheckpointsState" }
+          ]
+        },
+        "checkpointTemplateChange": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["from", "to"],
+              "properties": { "from": { "type": ["string", "null"] }, "to": { "type": ["string", "null"] } }
+            }
+          ]
+        },
+        "checkpointDocumentAdditions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["checkpointId", "path"],
+            "properties": {
+              "checkpointId": { "type": "string", "minLength": 1 },
+              "path": { "$ref": "../../008-taco-host-contract/contracts/protocol.schema.json#/$defs/SafePath" }
+            }
+          }
+        },
+        "checkpointDefinitionChangedSinceLastHandoff": { "type": "boolean", "description": "全量 checkpoints 的 template、nodes 与 documents 定义与上次成功交接是否不同；恢复发布版也必须为 true。" },
+        "comments": { "type": "array", "items": { "$ref": "#/$defs/CommentThread" } },
+        "commentsThroughSequence": { "$ref": "#/$defs/Sequence" }
+      }
+    },
+    "HandoffRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tacoId", "revisionId", "reviewer", "baseReviewVersion", "reviewVersion", "createdAt", "payload"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "tacoId": { "$ref": "#/$defs/Uuid" },
+        "revisionId": { "$ref": "#/$defs/Uuid" },
+        "reviewer": { "$ref": "#/$defs/Author" },
+        "baseReviewVersion": { "$ref": "#/$defs/Sequence" },
+        "reviewVersion": { "$ref": "#/$defs/Sequence" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "payload": { "$ref": "#/$defs/HandoffPayload" }
+      }
+    },
+    "HandoffEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "sequence", "tacoId", "revisionId", "type", "occurredAt", "actor", "data"],
+      "properties": {
+        "kind": { "const": "event" },
+        "id": { "type": "string", "minLength": 1 },
+        "sequence": { "$ref": "#/$defs/Sequence" },
+        "tacoId": { "$ref": "#/$defs/Uuid" },
+        "revisionId": { "$ref": "#/$defs/Uuid" },
+        "type": { "const": "review.handed_off" },
+        "occurredAt": { "type": "string", "format": "date-time" },
+        "actor": { "$ref": "#/$defs/Author" },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["handoffId"],
+          "properties": { "handoffId": { "$ref": "#/$defs/Uuid" } }
+        }
+      }
+    }
+  }
+}
