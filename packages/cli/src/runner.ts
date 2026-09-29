@@ -425,6 +425,18 @@ export const runCli = async (
         return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
       }
     }
+    const streamOption = options['stream'] ?? options['follow']
+    let mode: 'handoff' | 'stream' = 'handoff'
+    if (streamOption !== undefined) {
+      if (typeof streamOption !== 'boolean' && streamOption !== 'true' && streamOption !== 'false') {
+        const error = makeCliError(
+          'VALIDATION_ERROR',
+          'Invalid --stream: expected boolean flag',
+        )
+        return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+      }
+      mode = streamOption === true || streamOption === 'true' ? 'stream' : 'handoff'
+    }
 
     const listenerIdOption = options['listener-id']
     if (listenerIdOption !== undefined) {
@@ -437,7 +449,6 @@ export const runCli = async (
         return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
       }
     }
-
     const stableListenerId =
       typeof listenerIdOption === 'string' ? listenerIdOption : crypto.randomUUID()
 
@@ -454,6 +465,7 @@ export const runCli = async (
       () => new SseSessionAdapter(),
       {
         initialAfter: typeof afterOption === 'string' ? afterOption : null,
+        mode,
         metadata: {
           listenerId: stableListenerId,
           harness: typeof harness === 'string' ? harness : undefined,
