@@ -8,7 +8,7 @@ This is the machine-facing installation guide for an Agent adding Taco to an env
 
 - The skill directory (`skills/taco/`) is self-sufficient: `SKILL.md` (the agent guide), `taco-shell.html` (the complete offline browser shell), `taco-shell-lite.html` (the connected Lite shell), `references/` (loaded for the bundle contract, Checkpoints, or hosted workflows), `scripts/` (the bundled assembler and the saved-Checkpoint reader), and `templates/` (optional examples).
 - Once installed, the Agent can assemble, present, open, and review `.taco.html` files in any directory. Complete needs no network; Lite loads public CDN editor dependencies and remains editable in plain-text Markdown mode if those libraries fail.
-- `taco-cli` exists only for optional cloud workflows (TacoHub / Tacobin publishing and live review). It is **never** part of the local installation.
+- `taco-cli` exists only for optional hosted workflows (Tacobin publishing, live review event streaming, and handoff retrieval). It is **never** part of the local installation.
 
 ### Choosing a shell for the recipient
 
@@ -63,7 +63,7 @@ This mechanism needs one bootstrap step: a skill snapshot installed before this 
 - A copied install is updated by repeating the copy flow above and re-running the verification list.
 - Do not hand-edit `VERSION`: it is generated from `package.json` at release time by `npm run sync:version`.
 
-Do not install npm packages, download `taco-cli`, or run any build for the default install. Do not modify the target project. If the user's request is explicitly about cloud publishing (TacoHub/Tacobin), see "Install taco-cli" below.
+Do not install npm packages, download `taco-cli`, or run any build for the default install. Do not modify the target project. If the user's request is explicitly about hosted reviews (Tacobin), see "Install taco-cli" below.
 
 ## Use the skill
 
@@ -84,9 +84,9 @@ The skill works on any Spec Kit feature directory without project installation: 
 
 An optional deeper integration ships as a Spec Kit extension (`extensions/taco/`) that installs the two agent commands (`speckit.taco.update` / `speckit.taco.review`), lifecycle hooks, an offline CLI, and a persistent project policy into the target project. Only set this up when the user explicitly asks for project-level Spec Kit integration — see [`extensions/taco/README.md`](../extensions/taco/README.md). That document is also the home of the `prepare-policy` process-routing and migration contract.
 
-## Install taco-cli (cloud workflows only)
+## Install taco-cli (hosted workflows only)
 
-`taco-cli` is required only when interacting with cloud Taco hosts (publishing, streaming live events). Install via **npm** or the **standalone binary**:
+`taco-cli` is required only when interacting with a Taco Host / Tacobin (publishing, streaming live review events, and retrieving handoffs). Install via **npm** or the **standalone binary**:
 
 ### Option A: npm
 
@@ -114,9 +114,9 @@ install -m 0755 taco-cli "$HOME/.local/bin/taco-cli"
 taco-cli help
 ```
 
-The canonical skill's optional cloud workflow lives in `skills/taco/references/publishing.md` and `references/reviewing.md`; read those when using a Host. `taco-cli skills read taco` currently returns the CLI's separately embedded, cloud-oriented guide, not a copy of the repository skill. Use `taco-cli help` for the installed binary's command contract; release-time embedding from the canonical skill has not yet been wired.
+The canonical skill's optional hosted workflow lives in `skills/taco/references/publishing.md` and `references/reviewing.md`; read those when using a Host. `taco-cli skills read taco` currently returns the CLI's separately embedded, cloud-oriented guide, not a copy of the repository skill. Use `taco-cli help` for the installed binary's command contract; release-time embedding from the canonical skill has not yet been wired.
 
-For hosted Tacobin reviews, a publish fixes one immutable baseline. Public visitors may autosave shared edits and comments under unverified, self-reported names; neither action by itself requests Agent continuation. The reviewer must click **Handoff**, and the agent must fetch the immutable payload for its `review.handed_off` reference before applying any changes to canonical files. A live subscriber indicator is presence only, not evidence of receipt or processing. This does not change offline `.taco.html` Handoff, which can carry unsaved in-memory edits.
+For hosted Tacobin reviews, the Host serves its own review shell; the installable Complete and Lite shells contain no Tacobin collaboration runtime or controls. Publishing projects the local Taco's document data into that Host shell after a local dry run (`taco-cli publish <file.taco.html> --host <origin> --dry-run`), without changing the local file or its offline Handoff. A publish fixes one immutable baseline for that Taco. Public visitors may autosave shared edits and comments under unverified, self-reported names; neither action by itself requests Agent continuation, and autosaves or comments do not wake the agent session automatically. The reviewer must click **Handoff** on the Host page, which records a durable `review.handed_off` event. The agent streams or replays events via `taco-cli subscribe` or `taco-cli events`, and fetches the immutable payload (`taco-cli handoff <tacoId> <handoffId>`) before checking baseline/conflicts and applying any changes to canonical files. A live subscriber indicator is self-reported presence only, not evidence of delivery, receipt, or processing. Offline `.taco.html` Handoff remains separate and can still carry unsaved in-memory edits.
 
 ## Credential boundary
 

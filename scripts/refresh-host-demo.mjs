@@ -32,7 +32,6 @@ for (const locale of ['en', 'zh-Hans']) {
   }
 }
 
-await copyFile(shellPath, resolve(root, 'packages/host/assets/taco-shell.html'))
 for (const { path, html } of updates) {
   await writeFile(path, html, 'utf8')
   process.stdout.write(`Refreshed ${path}\n`)

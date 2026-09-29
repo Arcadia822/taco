@@ -81,12 +81,14 @@ export default defineConfig({
   resolve: {
     alias: {
       '@taco/protocol': resolve(projectRoot, 'packages/protocol/src/index.ts'),
+      '@taco/host-browser': resolve(projectRoot, 'packages/host/src/browser/index.ts'),
     },
   },
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __DEFAULT_LOCALE__: JSON.stringify(process.env.TACO_DEFAULT_LOCALE ?? ''),
     __EMBEDDED_ASSETS__: JSON.stringify(embeddedAssets),
+    __HOSTED_BUILD__: JSON.stringify(process.env.TACO_VARIANT === 'host'),
   },
   plugins: [
     {
@@ -94,7 +96,8 @@ export default defineConfig({
       transformIndexHtml: {
         order: 'pre',
         handler(html: string) {
-          const variant = process.env.TACO_VARIANT === 'lite' ? 'lite' : 'complete'
+          const rawVariant = process.env.TACO_VARIANT
+          const variant = rawVariant === 'lite' ? 'lite' : rawVariant === 'host' ? 'host' : 'complete'
           const entrySrc = variant === 'lite' ? '/src/main-lite.ts' : '/src/main-complete.ts'
           let transformed = html
           if (!transformed.includes('name="taco-shell-variant"')) {

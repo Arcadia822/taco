@@ -68,7 +68,16 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
     comments: shared ? [] : anchoredComments(legacy),
   }
 
-  let html = renderCanonicalTacoHtml(bundle)
+  let html: string
+  try {
+    html = renderCanonicalTacoHtml(bundle)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Host review shell asset is unavailable'
+    return new Response(JSON.stringify({ error: { code: 'SERVICE_UNAVAILABLE', message } }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+    })
+  }
   if (shared) {
     const payload = JSON.stringify({ version: 1, tacoId: pasteId }).replace(/</g, '\\u003c')
     if (!html.includes(HEAD_ANCHOR)) throw new Error('Taco shell is missing its document head')

@@ -122,6 +122,7 @@ if (!isLite) {
       __APP_VERSION__: JSON.stringify(pkg.version),
       __DEFAULT_LOCALE__: JSON.stringify(process.env.TACO_DEFAULT_LOCALE ?? ''),
       __EMBEDDED_ASSETS__: JSON.stringify({}), // Also empty in the prior Lite adapter; unused by main.
+      __HOSTED_BUILD__: 'false',
     },
   })
   const chunks = new Map(result.outputFiles.map((file) => [basename(file.path), file.text]))

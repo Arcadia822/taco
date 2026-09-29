@@ -1,4 +1,4 @@
-import type { IconName } from './ui-primitives.ts'
+import type { IconName } from '../../../../src/ui-primitives.ts'
 
 /**
  * A same-origin Host capability is declared by the page that serves the shell, never by the Taco

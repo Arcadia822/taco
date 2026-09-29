@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:asset": "node ../../scripts/build-shells.mjs host",
     "start": "next start",
     "lint": "next lint"
   },
