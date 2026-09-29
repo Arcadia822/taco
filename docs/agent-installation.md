@@ -98,7 +98,7 @@ npx @tacobin/cli help
 
 ### Option B: standalone binary
 
-Download the archive for the target platform from the latest GitHub Release (`https://github.com/Arcadia822/taco/releases/latest`):
+Download the archive for the target platform from the latest `taco-cli-v*` release ([GitHub Releases](https://github.com/Arcadia822/taco/releases?q=taco-cli-v)):
 
 | Platform            | Artifact                       |
 | ------------------- | ------------------------------ |

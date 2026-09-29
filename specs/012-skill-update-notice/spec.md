@@ -53,7 +53,7 @@ Agent 开始 Taco 工作 → 一次轻量更新检查 → 正常完成交付
 | 同一 API 的 `GET /releases?per_page=100` | 200，约 1.0 s，**95.6 KB**（含 assets 等冗余字段），对「只比版本」而言过重 |
 | `GET /releases/latest` | 返回 `taco-cli-v0.2.1`——它是「全仓库最新非预发布 release」，**不是** taco 本体的最新版本，直接用它会产生错误结论 |
 | 未认证 REST 限额 | `x-ratelimit-limit: 60`（每小时/IP）；实测一次请求消耗 1 次，剩余 55/60 |
-| 扩展安装包资产 | 仅 `v0.6.0` 携带 `taco-extension-v0.6.0.zip`，`v0.11.0` 等后续 tag 无资产 |
+| 扩展安装包资产 | 仅 `v0.6.0` 携带 `taco-extension-v0.6.0.zip`，`v0.11.0` 等后续 tag 无资产（注：2026-09-29 起发版 CI 已补齐 `taco-extension-v*.zip` 与 `taco-extension.zip` 自动化打包挂载，后续每个本体 release 均附带扩展资产；此处记录为当时背景） |
 
 最后一行直接决定了一个设计取舍：扩展（Spec Kit extension）不能用「最新 tag」作为升级信号（会长期误报），详见 §9。
 
