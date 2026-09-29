@@ -2,7 +2,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { runCli } from '../src/runner.ts'
 
-const FIXTURE_TACO = resolve(process.cwd(), 'specs/008-taco-host-contract/008-taco-host-contract.taco.html')
+const FIXTURE_TACO = resolve(import.meta.dirname, '../../../specs/008-taco-host-contract/008-taco-host-contract.taco.html')
 
 describe('taco-cli (Phase 1)', () => {
   it('outputs root help JSON on no arguments, help, or --help', async () => {

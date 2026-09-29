@@ -193,12 +193,12 @@ const I18N = {
     section4Eyebrow: '06 / TACOBIN 协作空间',
     section4Title: 'Tacobin：为团队连接 Taco 与 Agent',
     section4Desc:
-      '本地单文件适合自洽存档；Tacobin 分享链接允许任何访问者自报姓名共同编辑并自动保存。评论不会唤醒 Agent；人点击「交接」后，订阅者才收到可补读的交接事件与完整评审引用。监听者名称仅为自报，不代表已送达或已处理。',
+      '本地单文件不含托管协作代码，可离线评审；Tacobin 分享链接使用独立的托管评审界面。持链接者可自报姓名编辑和评论，改动自动保存。评审者确认保存成功后点击「交接」，才产生可补读的 review.handed_off；评论本身不会唤醒 Agent。监听者名称仅为自报，在线不代表意见已送达或处理。',
     section4CliTitle: 'CLI',
     section4CliCmd: 'npm install -g @tacobin/cli',
     section4AgentTitle: 'FOR AGENT',
     section4AgentPrompt:
-      '阅读 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md 并安装 taco-cli，再运行 taco-cli skills read taco 获取内置发布与评审指南。发布 Taco，使用返回的 tacoId 订阅；仅在 review.handed_off 事件出现后，用 handoff 命令读取不可变评审，不把评论事件当成交接。',
+      '阅读 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md 的托管评审说明，安装 taco-cli。先 dry-run 核对公开内容，再发布测试 Taco，保存返回的 URL 和 tacoId；用 tacoId 订阅或补读事件。等我在分享页评论并点击「交接」后，只处理 review.handed_off，用 taco-cli handoff 读取快照、比对源文件、完成修改并向我报告；不要把评论事件当作交接。',
     creditsEyebrow: '07 / SHOUTOUT',
     creditsBackToTop: '回到顶部',
     creditsTitlePrefix: '感谢',
@@ -210,7 +210,7 @@ const I18N = {
     langSwitchAria: '切换语言',
     tracePublish: '发布 Taco，拿到分享地址',
     traceSubscribe: '用 tacoId 订阅这份文档的评审',
-    traceEvent: '人点击交接后，Agent 收到评审引用',
+    traceEvent: '交接事件到达；Agent 拉取完整快照',
     agent: {
       title: 'agent · ~/taco',
       defaultHandoff: [
@@ -306,12 +306,12 @@ const I18N = {
     section4Eyebrow: '06 / TACOBIN SPACE',
     section4Title: 'Tacobin: Collaborative Relay for Teams & Agents',
     section4Desc:
-      'Local single-file Tacos remain self-contained. A Tacobin link lets anyone edit and autosave under a self-reported name. Comments do not trigger Handoff: only a human click records a replayable review event. Listener names are unverified; presence is not a delivery receipt.',
+      'Local Taco files contain no hosted collaboration code and remain reviewable offline. Tacobin serves a separate shared review page. Anyone with the link can edit and comment under a self-reported name; changes autosave. After confirming a successful save, the reviewer clicks Handoff to record a replayable review.handed_off event. A comment alone does not wake an agent, and listener presence is not a delivery receipt.',
     section4CliTitle: 'CLI',
     section4CliCmd: 'npm install -g @tacobin/cli',
     section4AgentTitle: 'FOR AGENT',
     section4AgentPrompt:
-      'Read https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and install taco-cli, then run taco-cli skills read taco. Publish a Taco and subscribe using its tacoId; only review.handed_off marks a completed human review. Fetch its immutable payload with taco-cli handoff before updating local files.',
+      'Read the hosted-review section of https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and install taco-cli. Dry-run and inspect the public payload, publish a test Taco, save its URL and tacoId, then subscribe or replay events. After I comment and click Handoff on the shared page, process only review.handed_off: fetch the snapshot with taco-cli handoff, compare against the canonical files, apply feedback, and report back. Do not treat a comment event as Handoff.',
     creditsEyebrow: '07 / SHOUTOUT',
     creditsBackToTop: 'Back to Top',
     creditsTitlePrefix: 'Thank you,',
@@ -323,7 +323,7 @@ const I18N = {
     pageDotAria: (page: number) => `Scroll to page ${page}`,
     langSwitchAria: 'Switch Language',
     traceSubscribe: 'Subscribe to reviews using its tacoId',
-    traceEvent: 'A human clicks Handoff; the agent receives a review reference',
+    traceEvent: 'Handoff arrives; the agent fetches the full snapshot',
     agent: {
       title: 'agent · ~/taco',
       defaultHandoff: [

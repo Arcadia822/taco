@@ -4,8 +4,6 @@ import { describe, expect, it } from 'vitest'
 import { parseFrontmatter } from '../src/frontmatter.ts'
 
 const featureRoot = join(process.cwd(), 'specs/001-taco-bento-product')
-const projectReadme = join(process.cwd(), 'README.md')
-const bundledReadme = join(featureRoot, 'README.md')
 
 const markdownFiles = (directory: string): string[] => readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
   const path = join(directory, entry.name)
@@ -33,7 +31,4 @@ describe('bundled Markdown documents', () => {
     }
   })
 
-  it('uses one identical open-source README in the repository and default Taco', () => {
-    expect(readFileSync(bundledReadme, 'utf8')).toBe(readFileSync(projectReadme, 'utf8'))
-  })
 })

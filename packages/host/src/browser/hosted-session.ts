@@ -1,4 +1,4 @@
-import { DELETED_COMMENT_BODY } from './comments.ts'
+import { DELETED_COMMENT_BODY } from '../../../../src/comments.ts'
 import {
   HostApiError,
   HostTransportError,
@@ -13,7 +13,7 @@ import {
   type HostSnapshot,
   type HostStateResponse,
 } from './host-client.ts'
-import { isInternalFile, type NavigationManifest, type TacoBundle, type TacoCommentMessage, type TacoCommentThread, type TacoFile } from './model.ts'
+import { isInternalFile, type NavigationManifest, type TacoBundle, type TacoCommentMessage, type TacoCommentThread, type TacoFile } from '../../../../src/model.ts'
 
 /** One Host-served document revision, mapped into the browser's own bundle types. */
 export interface HostedContent {

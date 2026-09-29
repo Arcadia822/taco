@@ -15,12 +15,25 @@ function run(script, args = []) {
 }
 
 process.env.SINGLEFILE = '1'
-await rm(outDir, { recursive: true, force: true })
 
-const variants = [
+const requestedVariant = process.argv[2] ?? process.env.TACO_VARIANT
+const allVariants = [
   { variant: 'complete', outputName: 'Taco_Spec.taco.html' },
   { variant: 'lite', outputName: 'Taco_Spec_Lite.taco.html' },
+  { variant: 'host', outputName: 'Taco_Spec_Host.taco.html' },
 ]
+
+const variants = requestedVariant
+  ? allVariants.filter((v) => v.variant === requestedVariant)
+  : allVariants
+
+if (variants.length === 0) {
+  throw new Error(`Unknown variant "${requestedVariant}"; must be complete, lite, or host`)
+}
+
+if (!requestedVariant) {
+  await rm(outDir, { recursive: true, force: true })
+}
 
 for (const { variant, outputName } of variants) {
   process.env.TACO_VARIANT = variant
@@ -44,11 +57,12 @@ for (const { variant, outputName } of variants) {
   run('scripts/shell-gate.mjs', [targetHtml, variant])
 }
 
-console.log('\n=== Synchronizing Extension and Skill Shells ===')
-run('scripts/sync-extension-shell.mjs', [])
+console.log('\n=== Synchronizing Extension, Skill, and Host Shells ===')
+run('scripts/sync-extension-shell.mjs', requestedVariant ? [requestedVariant] : [])
+if (!requestedVariant || requestedVariant === 'complete') {
+  console.log('\n=== Building Template HTMLs ===')
+  run('scripts/build-template-htmls.mjs', [])
 
-console.log('\n=== Building Template HTMLs ===')
-run('scripts/build-template-htmls.mjs', [])
-
-console.log('\n=== Synchronizing the Skill Version Marker ===')
-run('scripts/sync-skill-version.mjs', [])
+  console.log('\n=== Synchronizing the Skill Version Marker ===')
+  run('scripts/sync-skill-version.mjs', [])
+}

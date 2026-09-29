@@ -90,7 +90,7 @@ Agent 需要遵守：
 
 - 被评审的目录始终是 canonical source。`.taco.html` 只是运输载体：复制 skill 的 `taco-shell.html`，再把 `taco/files` v1 bundle JSON 写入其 `#taco-document` 数据块，并在每次刷新时保留 `docId`、comments、navigation，以及已有的 Checkpoint 图和状态。只有该数据块和转义后的 HTML `<title>` 可写；不要手工修改其余 shell。
 - 当宿主允许本地 `file://` 导航时，用用户的浏览器打开生成的文件，并如实报告 `presented as a clickable file`、`opened`、`opened and verified` 三者中真正发生的一项。headless 加载只是内部证据，不能当作面向用户的可视化展示。
-- 通过任一渠道取回评审结果：浏览器的 **Handoff**，或评审者保存后的 `.taco.html`。Handoff 复制的是自上次保存以来的文本 diff 与 open comment，不要求先保存；保存文件这一渠道则必须先保存。两者都没有收到时，如实说明，不要导入并未真正获得的内容。
+- 通过对应渠道取回评审结果：本地评审通过浏览器的 **Handoff**（复制自上次保存以来的文本 diff 与 open comment，无需先保存）或评审者保存后的 `.taco.html`（必须先保存）；可选的托管评审（Tacobin）中，访客以自报姓名编辑和评论并自动保存，但评论和自动保存不代表评审完成且不会自动唤醒会话，仅在评审者显式点击「交接」后生成 `review.handed_off` 事件并通过 `taco-cli` 获取不可变交接快照。未收到评审输入时如实说明，不要导入并未真正获得的内容。
 - 每次刷新都保留所有已有 bundle 字段，包括存在时的 `checkpoints`；不得编造评论、哈希或验证结论；不得因为某个文件不在 bundle 中就删除 canonical 文件。
 - 启用在线协作的 Taco 可能携带访问凭据。未经用户允许，不要把其内容上传或粘贴到其他服务。
 

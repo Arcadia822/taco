@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import { HostedSession } from '../src/hosted-session.ts'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { HostedSession } from '../packages/host/src/browser/hosted-session.ts'
 import type {
   HostAutosaveResult,
   HostClient,
@@ -8,8 +8,11 @@ import type {
   HostHandoffCommit,
   HostSnapshot,
   HostStateResponse,
-} from '../src/host-client.ts'
+} from '../packages/host/src/browser/host-client.ts'
 import type { TacoBundle } from '../src/model.ts'
+import { FileBrowser } from '../src/file-browser.ts'
+import { attachHostedSession } from '../packages/host/src/browser/index.ts'
+import type { TacoFileApi } from '../src/main-common.ts'
 
 describe('HostedSession contract fixes (Findings 1, 3, 4 and concurrency protections)', () => {
   const sampleSnapshot: HostSnapshot = {
@@ -419,6 +422,71 @@ describe('HostedSession contract fixes (Findings 1, 3, 4 and concurrency protect
       expect(removeEventListenerSpy).toHaveBeenCalledWith('beforeunload', session['onBeforeUnload'])
       addEventListenerSpy.mockRestore()
       removeEventListenerSpy.mockRestore()
+    }
+  })
+})
+
+describe('HostedBrowserController & attachHostedSession', () => {
+  const createSampleBundle = (): TacoBundle => ({
+    format: 'taco/files',
+    version: 1,
+    docId: 'test-doc',
+    title: 'Test Doc',
+    root: 'specs/sample',
+    files: [{ path: 'specs/sample/spec.md', mediaType: 'text/markdown', content: '# Hello\n' }],
+  })
+  beforeEach(() => {
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
+      matches: false,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }))
+  })
+
+
+  it('returns null when document carries no host capability', () => {
+    const root = document.createElement('div')
+    const browser = new FileBrowser(root, createSampleBundle())
+    const api = {} as TacoFileApi
+    const controller = attachHostedSession(browser, api)
+    expect(controller).toBeNull()
+    expect(api.hosted).toBeUndefined()
+    expect(api.handoff).toBeUndefined()
+    browser.destroy()
+  })
+
+  it('initializes host session and wires up api when capability is present in head', () => {
+    const script = document.createElement('script')
+    script.id = 'taco-host-capability'
+    script.type = 'application/taco+host'
+    script.textContent = JSON.stringify({
+      version: 1,
+      tacoId: 'test-taco-id',
+      apiBase: '/v1/tacos/test-taco-id',
+    })
+    document.head.append(script)
+
+    try {
+      const root = document.createElement('div')
+      const browser = new FileBrowser(root, createSampleBundle())
+      const api = {} as TacoFileApi
+      const controller = attachHostedSession(browser, api)
+
+      expect(controller).not.toBeNull()
+      expect(typeof api.hosted).toBe('function')
+      expect(typeof api.handoff).toBe('function')
+      expect(api.hosted?.()).toEqual({ tacoId: 'test-taco-id', apiBase: '/v1/tacos/test-taco-id' })
+      expect(document.getElementById('taco-host-styles')).not.toBeNull()
+      expect(root.querySelector('.host-status-button')).not.toBeNull()
+      expect(root.querySelector('.host-author-button')).not.toBeNull()
+      expect(root.querySelector('.host-listeners-button')).not.toBeNull()
+
+      browser.destroy()
+    } finally {
+      script.remove()
+      document.getElementById('taco-host-styles')?.remove()
     }
   })
 })

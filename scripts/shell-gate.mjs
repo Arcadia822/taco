@@ -8,13 +8,13 @@ import { basename } from 'node:path'
 
 const path = process.argv[2]
 if (!path) {
-  console.error('usage: node scripts/shell-gate.mjs <taco.html> [complete|lite]')
+  console.error('usage: node scripts/shell-gate.mjs <taco.html> [complete|lite|host]')
   process.exit(1)
 }
 
 const expectedVariant = process.argv[3]
-if (expectedVariant && expectedVariant !== 'complete' && expectedVariant !== 'lite') {
-  throw new Error(`Taco shell gate: invalid expected variant "${expectedVariant}"; must be "complete" or "lite"`)
+if (expectedVariant && expectedVariant !== 'complete' && expectedVariant !== 'lite' && expectedVariant !== 'host') {
+  throw new Error(`Taco shell gate: invalid expected variant "${expectedVariant}"; must be "complete", "lite", or "host"`)
 }
 
 const fail = (message) => { throw new Error(`Taco shell gate: ${message}`) }
@@ -24,8 +24,8 @@ const securityMeta = html.match(/<meta\b(?=[^>]*\bname=["']taco-security-version
 if (securityMeta?.match(/\bcontent=["']([^"']+)["']/i)?.[1] !== '1') fail('runtime security marker is missing or outdated')
 
 const variantMeta = html.match(/<meta\b(?=[^>]*\bname=["']taco-shell-variant["'])[^>]*>/i)?.[0]
-const variant = variantMeta?.match(/\bcontent=["'](complete|lite)["']/i)?.[1]
-if (!variant) fail('variant marker <meta name="taco-shell-variant" content="complete|lite"> is missing or invalid')
+const variant = variantMeta?.match(/\bcontent=["'](complete|lite|host)["']/i)?.[1]
+if (!variant) fail('variant marker <meta name="taco-shell-variant" content="complete|lite|host"> is missing or invalid')
 
 if (expectedVariant && variant !== expectedVariant) {
   fail(`variant mismatch: expected ${expectedVariant}, found ${variant}`)
@@ -37,6 +37,9 @@ if (/_Lite\./i.test(base) && variant !== 'lite') {
 }
 if (/Taco_Spec\.taco\.html$/i.test(base) && variant !== 'complete') {
   fail(`shell filename ${base} indicates Complete, but variant marker is ${variant}`)
+}
+if (/_Host\./i.test(base) && variant !== 'host') {
+  fail(`shell filename ${base} indicates Host, but variant marker is ${variant}`)
 }
 const opens = (html.match(/<script[\s>]/g) ?? []).length
 const closes = html.split(close).length - 1
@@ -88,9 +91,22 @@ for (const member of ['securityVersion', 'validate', 'listFiles', 'readFile', 's
 }
 if (!/\.setAttribute\(["']data-taco-transient["'],\s*["']["']\)/.test(html)) fail('runtime style is not marked transient')
 
-if (variant === 'complete') {
-  if (!html.includes('id="taco-asset-mermaid"')) fail('Complete shell is missing embedded offline Mermaid asset')
-} else if (variant === 'lite') {
+if (variant === 'complete' || variant === 'host') {
+  if (!html.includes('id="taco-asset-mermaid"')) fail(`${variant} shell is missing embedded offline Mermaid asset`)
+}
+
+const hostedMarkers = ['taco-host-capability', 'application/taco+host', '/v1/tacos/', 'host-listeners', 'host-status', 'hostHandoff']
+if (variant === 'host') {
+  for (const marker of ['taco-host-capability', '/v1/tacos/', 'host-listeners']) {
+    if (!runtime.includes(marker)) fail(`Host shell is missing hosted runtime marker ${marker}`)
+  }
+} else {
+  for (const marker of hostedMarkers) {
+    if (runtime.includes(marker) || css.includes(marker)) fail(`portable ${variant} shell contains hosted runtime marker ${marker}`)
+  }
+}
+
+if (variant === 'lite') {
   if (!html.includes('id="taco-asset-rich-adapter"')) fail('Lite shell is missing embedded #taco-asset-rich-adapter')
   if (!html.includes('type="importmap"')) fail('Lite shell is missing importmap')
   if (!javascript.includes('./taco-shared.js')) fail('Lite runtime is missing its shared import')

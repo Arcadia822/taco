@@ -75,13 +75,13 @@ TACO-33 原提案希望 review 文件自动向原 agent session 注入 user mess
 
 | 组件 | 设计动作 | 必须保留的边界 |
 | --- | --- | --- |
-| `src/file-browser.ts`、`src/main-common.ts` 与两种 shell | 托管时以可选同源回调对接自动保存状态及「交接」按钮；保留现有 diff、Checkpoint 与评论采集 | 本地/离线仍为复制主按钮及双复制菜单；外站脚本或 bundle 不能指定 Host URL |
+| `src/file-browser.ts`、`src/main-common.ts`、`packages/host/src/browser/` 与专用 Host shell | 本地编辑器保留通用 diff、Checkpoint、评论和复制交接钩子；仅 Host shell 编入自动保存、监听与显式交接逻辑 | Complete/Lite 不携带托管逻辑或 UI；本地/离线主按钮及双复制菜单不变；外站脚本或 bundle 不能指定 Host URL |
 | `packages/host/src/app/t/[id]/route.ts` | 从只读公开页面转为共享可编辑页面，提供姓名输入、自动保存状态和监听者自报标签/Logo | 不执行上传 HTML 脚本；姓名不是可信身份 |
 | `packages/host/src/app/v1/tacos/`、`lib/server-state.ts` | 新增共享 state 自动保存/历史窗口与持久交接事务、事件、监听租约；评论保留锚点与完整历史 | 内存 Map 不再当作已提交事实，跨实例读一致 |
 | `packages/host/src/service.ts`、`schema.sql`、数据库/Blob 适配 | 借鉴事务与收据模式，增加 shared_state、edit_log、history_window、handoff 与 listener_lease；大正文为私有不可变对象 | 发布基线不变；写入不鉴权，但并发、Origin/CSRF、大小仍校验 |
 | `packages/cli/src/runner.ts`、`subscriber.ts` | `subscribe` 可选自报 `--harness`、`--model`、`--model-id`、`--name`；断线回放及 handoffId 引用 | 不扫描 harness 会话，不把自报标签称为已验证，不把评论事件当交接 |
 | `packages/protocol/src/projection.ts` 与契约 | 复用安全路径、bundle/Checkpoint 校验，托管自动保存仅接受白名单 patch | 不在 `.taco.html` 发送 collab/Key，未知字段不静默丢弃 |
-| `skills/taco/references/reviewing.md`、`packages/host/` 官网文案 | 实施阶段将评论与显式 Handoff 的差别告知 Agent 与人 | 本设计阶段只列实施任务，不修改现有 skill/官网 |
+| `skills/taco/references/reviewing.md`、`packages/host/` 官网文案 | 已同步评论与显式 Handoff 的区别，以及本地 shell 与 Host 页面运行时分界 | 不将本地复制交接误写成托管事件，也不把监听在线误写成送达回执 |
 
 存储边界：发布时固定 `publishSnapshotRef`，共享当前状态以 `{tacoId,stateVersion,snapshotRef,updatedAt}` 指向不可变 Blob；编辑日志 `{tacoId,stateVersion,authorId,changedAt,changeRef}` 逐次持久，历史版本窗口 `{tacoId,id,startedAt,closedAt,latestStateVersion,snapshotRef}` 在首次写入后固定十分钟并允许按 id 回读；Handoff `{id,tacoId,stateVersion,eventSequence,payloadRef,payloadHash,commentsThroughSequence,createdAt,authorId}` 冻结当时已保存状态，**不按窗口覆盖**。评论线程/消息/不可变动作日志按 Taco、稳定锚点及自报姓名保存；删除消息保留墓碑，解决又重开保留两次动作及作者、时间。监听短租约 `{tacoId,listenerId,name,harness,model,modelId,lastSeenAt,expiresAt}` 不存机器路径或会话 ID，所有字段均自报。同一 Taco 行锁分配十进制事件 sequence，跨实例用持久日志恢复；CLI 已完整输出的 cursor 才确认，重复按 handoffId 去重。
 
@@ -134,6 +134,30 @@ TACO-33 原提案希望 review 文件自动向原 agent session 注入 user mess
 | `@tacobin/cli` 二进制 | +3–7 KiB | 当前 `dist/main.js` 73,733 B；该构建前未留存同环境旧 binary，增量不可核实 | 只报告可复现的当前字节数，不以不同依赖环境估算旧产物。 |
 | Host `.ts/.tsx/.sql` 源码 | +25–45 KiB | `ba65720` 同口径 177,560 B → 当前 336,546 B（+158,986 B） | 持久化 PostgreSQL/本地 SQLite 双适配器、共享路由及事务/CSRF/配额校验多于规划。服务端打包体积不等于此源码增量。 |
 
-依赖：Host 新增运行依赖 `pg`（生产 PostgreSQL 连接）和开发类型依赖 `@types/pg`；本地 SQLite 使用 Node 内置模块。托管网页自动保存、评论、监听状态与显式交接需要同源网络请求；本地 `.taco.html` 仍可离线打开。若需要缩减 Lite 下载体积，可将仅在 Host 同源能力存在时使用的浏览器协作模块拆到 Host 提供的独立脚本，代价是托管页额外请求及另一份脚本版本/缓存契约；当前保留单文件 shell，避免离线/托管两条运行时出现版本漂移。
+依赖：Host 新增运行依赖 `pg`（生产 PostgreSQL 连接）和开发类型依赖 `@types/pg`；本地 SQLite 使用 Node 内置模块。托管网页自动保存、评论、监听状态与显式交接需要同源网络请求；本地 `.taco.html` 仍可离线打开。第 9 节已按用户裁决把托管协作代码从本地 shell 拆出，采用 Host 专用单文件运行时，避免额外脚本请求和独立缓存版本契约。
 
-实测交互：本地生产 Host + SQLite、CLI publish/subscribe、浏览器文件编辑与全局/锚定评论自动保存、监听者自报展示、页头手动交接、CLI 按引用取回累计/增量 diff 与评论、Checkpoint 状态 `in_progress → complete` 的持久交接，以及 CLI `events --after/--through/--limit` 回放均成功。第二次只新增评论后交接：累计文件改动仍为 `plan.md`，增量文件/Checkpoint 差异均为空，评论历史保留两条消息。根测试 52 文件、562 测试通过，Complete/Lite、CLI、Host 构建通过。独立代码审查的 PostgreSQL 事务、跨次交接路径、上传限额/内存上限、幂等收据和浏览器编辑竞争等问题已修复并补回归测试；生产 PostgreSQL、私有 Blob 及跨 Vercel 实例场景尚未在此环境实测，不能据本地 SQLite 结果宣称已通过。
+上一轮实测交互：本地生产 Host + SQLite、CLI publish/subscribe、浏览器文件编辑与全局/锚定评论自动保存、监听者自报展示、页头手动交接、CLI 按引用取回累计/增量 diff 与评论、Checkpoint 状态 `in_progress → complete` 的持久交接，以及 CLI `events --after/--through/--limit` 回放均成功。第二次只新增评论后交接：累计文件改动仍为 `plan.md`，增量文件/Checkpoint 差异均为空，评论历史保留两条消息。本轮拆分后根测试 52 文件、564 测试通过，Complete/Lite/Host 专用运行时、CLI、Host 构建通过；第 9 节记录了拆分后的浏览器交互。独立代码审查的 PostgreSQL 事务、跨次交接路径、上传限额/内存上限、幂等收据和浏览器编辑竞争等问题已修复并补回归测试；生产 PostgreSQL、私有 Blob 及跨 Vercel 实例场景尚未在此环境实测，不能据本地 SQLite 结果宣称已通过。
+
+## 9. 托管运行时与本地 shell 分离（2026-09-29 修订）
+
+用户裁决：本地 Complete/Lite 版本不得携带、展示或依赖仅托管页面需要的协作功能；确属本地评审能力的评论、Checkpoint 和复制交接保持可用。此前把 `src/host-client.ts`、`src/hosted-session.ts` 和托管按钮一起静态引入单文件 shell，导致 Lite shell 相对实施前基线增加 17,208 B（+9.51%），不符合该边界。
+
+**prepare 估算**（相对上一轮实测，改造前 Complete shell 2,748,414 B、Lite shell 198,240 B、Complete 产物 2,853,949 B、Lite 产物 303,775 B）：将托管交互只编译进 Tacobin 专用 shell，预计本地 Complete/Lite shell 各减少约 12–20 KiB；对应 `.taco.html` 产物各减少约 12–20 KiB。Host 专用 shell 预计约 2.85–2.88 MB（承载现有完整编辑器和协作逻辑）；`skills/taco/` 全目录预计减少约 24–40 KiB，生成模板镜像同步缩减。现有 Host asset 2,853,949 B，预计专用版增量在 ±8 KiB；以构建后字节数为准。本次不引入 npm 依赖，也不增加浏览器网络请求：Tacobin 路由只提供 Host 专用、仍可单次加载的页面；本地 shell 离线不发托管请求。
+
+实现后须并列记录上述估算与实测偏差，验证本地双 shell 的脚本/样式中没有托管 API、监听者、自动保存及托管交接行为，Host 专用产物仍在同源下完成 publish→浏览器编辑/评论/Checkpoint→显式交接→CLI 补读。不以仅移走 HTTP 客户端却留下托管 UI 和翻译字符串作为完成。
+
+**develop 实测**（与第 9 节估算同一口径，`npm run build` 后 `wc -c`，相对拆分前产物）：
+
+| 产物 | prepare 估算 | develop 实测 | 偏差与原因 |
+| --- | ---: | ---: | --- |
+| skill Complete shell | -12–20 KiB | -11,120 B（2,737,294 B，-0.40%） | 比减量下界少 1,168 B：通用浏览器钩子仍须承载本地 Handoff/评论能力。 |
+| Complete `.taco.html` | -12–20 KiB | -11,120 B（2,842,829 B，-0.39%） | 与 shell 同步；本地页面的同源托管代码已由构建剪除。 |
+| skill Lite shell | -12–20 KiB | -10,410 B（187,830 B，-5.25%） | 比减量下界少 1,878 B：通用钩子仍在 Lite 中；原先托管增长已大幅回收。 |
+| Lite `.taco.html` | -12–20 KiB | -10,410 B（293,365 B，-3.43%） | 与 Lite shell 同步；相对 2026-09-28 基线 286,281 B 仍 +7,084 B（+2.47%），超过 ≥1% 告知阈值，属本地评论/Checkpoint/Handoff 通用功能及构建开销。 |
+| Host 专用 `.taco.html` / Host asset | 相对旧 Host asset ±8 KiB | +1,628 B（2,855,577 B，+0.06%） | 多了 Host shell 变体标记与隔离编译入口；无第二个联网脚本请求。 |
+| `skills/taco/` 已跟踪文件 | -24–40 KiB | -65,893 B（14,070,233 B） | Complete/Lite shell 与四份模板镜像同时减量，比原估计多；`du -sk` 当前 18,356 KiB（包含目录分配和非跟踪文件）。 |
+| Host `.ts/.tsx/.sql` 源码 | 原预算已在第 8 节列示，本轮拆分预估无新增 npm 依赖 | 相对上一轮 336,546 B 增加 65,646 B（402,192 B） | 原 `src/` 托管运行时搬入 `packages/host/src/browser/`；源码字节转移不是下载体积。 |
+
+Host 使用编译生成并随部署绑定的 `packages/host/assets/taco-shell.html`；当资产缺失或 shell variant 不是 `host` 时返回 503，不把本地 Complete/Lite 静默作为后备。Vite 为 Host 编译同一编辑器 + 托管模块，为 Complete/Lite 静态剪除托管模块、样式和文案；产物 gate 解压运行时并检查边界。选择这一方案而非同源注入第二个 JavaScript 文件：不增加页面启动请求、注入时序或额外缓存版本合同；代价是 Host 保存自己的完整编辑器单文件资产，不能用 Lite 包替代。`taco-cli publish` 仍只上传文档投影，访客从 Host 独立页面评审。
+
+拆分后浏览器实测：通过 HTTP 打开构建后的 Complete 与 Lite，本地页面的 `meta[name=taco-shell-variant]` 分别为 `complete`/`lite`，`window.taco.hosted` 不存在，未注入 Host capability 或 Host 样式，原有 Handoff/Save 按钮仍在；通过独立 SQLite 的生产 Host 发布 009 评审样例后，`/t/<tacoId>` 的 variant 为 `host`，呈现 Host 保存状态、监听者 `SplitSmoke`，并能编辑 `plan.md` 自动保存至 `stateVersion=2`。点击主按钮（非同名下拉按钮）生成 `review.handed_off` sequence 2，CLI subscriber 实际收到该事件，`taco-cli handoff` 按 id 返回包含该编辑的不可变 `changedFiles` 与 `incrementalFiles`。本地 shell 未在这些交互中触发 Host API。验收仅代表本机 SQLite/浏览器场景，不代表生产 PostgreSQL 或跨实例已实测。

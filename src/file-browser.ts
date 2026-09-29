@@ -9,6 +9,8 @@ import {
   relativePath,
   isInternalFile,
   type TacoBundle,
+  type TacoCommentThread,
+  type NavigationManifest,
   type TacoFile,
 } from './model.ts'
 import { resolveCheckpoints, setDocumentStatus, type DocumentStatus, type ResolvedCheckpoints } from '@taco/protocol'
@@ -45,10 +47,6 @@ import {
 import { BundleDirtyTracker } from './dirty-tracker.ts'
 import type { MermaidRuntime } from './mermaid.ts'
 import { CommentsController } from './comments-controller.ts'
-import { HOST_HARNESS_ICONS, HOST_MODEL_ICONS, readHostCapability } from './host-capability.ts'
-import { HostClient, type HostListener, type HostListenerSnapshot } from './host-client.ts'
-import { HostedSession, type HostedContent, type HostedHandoffOutcome, type HostedStatus } from './hosted-session.ts'
-import { currentAuthorName, setAuthorName } from './identity.ts'
 
 import { LOCALE_CHOICES, copy, resolveLocale, type Locale } from './i18n.ts'
 import { createUnifiedDiff } from './kernel/diff.ts'
@@ -156,18 +154,17 @@ export class FileBrowser {
   private readonly narrowLayout: MediaQueryList
   private copyButton!: HTMLButtonElement
   private copyReviewGroup!: HTMLElement
-  /**
-   * The Host review capability this page was served with. It comes from an inert block the serving
-   * page writes into `<head>`, never from the bundle, so file content can neither enable writes nor
-   * point them at another origin.
-   */
-  private readonly hostCapability = readHostCapability()
-  private host: HostedSession | null = null
-  private hostStatus: HostedStatus | null = null
-  private hostListeners: HostListenerSnapshot | null = null
-  private hostStatusButton!: HTMLButtonElement
-  private hostAuthorButton!: HTMLButtonElement
-  private hostListenersButton!: HTMLButtonElement
+  private workspaceHeaderSpacer!: HTMLElement
+  private structureLocked = false
+  private structureLockedTooltip?: string
+  private primaryHandoffHandler?: () => Promise<void>
+  private primaryHandoffTooltip?: string
+  private pendingWritesCheck?: () => boolean
+  private durableActionsOnlyCheck?: () => boolean
+  private readonly headerExtraControls: HTMLElement[] = []
+  private readonly changeListeners = new Set<(kind: 'content' | 'comments') => void>()
+  private readonly localeListeners = new Set<(locale: Locale) => void>()
+  private readonly destructListeners = new Set<() => void>()
   private readonly systemAppearance = window.matchMedia('(prefers-color-scheme: dark)')
   private themePreference: 'system' | 'light' | 'dark' = 'system'
   /** Embedded in a host page (`?embed`): the host owns theme and language; comments lead. */
@@ -251,6 +248,10 @@ export class FileBrowser {
       : [])
   }
 
+  get currentBundle(): TacoBundle { return this.bundle }
+
+  get currentLocale(): Locale { return this.locale }
+
   getRenderErrors(): Array<{ path: string; message: string }> {
     const current = new Map(this.bundle.files.map((file) => [file.path, file.content]))
     return [...this.markdownMigrationErrors.entries()]
@@ -259,15 +260,16 @@ export class FileBrowser {
   }
 
   constructor(private root: HTMLElement, private bundle: TacoBundle, private readonly options: FileBrowserOptions = {}) {
+    // The Host controller shares this live bundle; adopting remote content mutates it in place.
     this.store = new TacoStore(bundle)
-    const hostParams = new URLSearchParams(location.search)
+    const embedParams = new URLSearchParams(location.search)
     this.locale = resolveLocale(
-      (this.embedded ? hostParams.get('lang') : null) ?? storageGet('taco-locale'),
+      (this.embedded ? embedParams.get('lang') : null) ?? storageGet('taco-locale'),
       __DEFAULT_LOCALE__ ? [__DEFAULT_LOCALE__] : undefined,
     )
     document.documentElement.lang = this.locale
     document.documentElement.classList.toggle('taco-embedded', this.embedded)
-    const savedTheme = (this.embedded ? hostParams.get('theme') : null) ?? storageGet('taco-theme')
+    const savedTheme = (this.embedded ? embedParams.get('theme') : null) ?? storageGet('taco-theme')
     this.themePreference = savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'system'
     this.applyAppearance()
     const highlighter = options.highlighter
@@ -324,18 +326,6 @@ export class FileBrowser {
       : Promise.resolve()
     if (this.selected) this.rememberOfflineSelection(this.selected)
     this.auxiliaryTab = this.embedded || !this.selected || fileKind(this.selected) !== 'markdown' ? 'comments' : 'outline'
-    if (this.hostCapability) {
-      this.host = new HostedSession({
-        client: new HostClient(this.hostCapability),
-        bridge: {
-          bundle: this.bundle,
-          author: () => currentAuthorName() || this.t.guest,
-          onStatus: (status) => this.renderHostStatus(status),
-          adoptContent: (content) => this.adoptHostedContent(content),
-          adoptListeners: (snapshot) => this.renderHostListeners(snapshot),
-        },
-      })
-    }
     this.comments = new CommentsController({
       bundle: this.bundle,
       store: this.store,
@@ -345,7 +335,7 @@ export class FileBrowser {
       getLocale: () => this.locale,
       openComments: () => this.showComments(),
       toast: (message) => this.toast(message),
-      durableActionsOnly: () => Boolean(this.host) && this.host?.currentStatus.readiness !== 'unsupported',
+      durableActionsOnly: () => this.durableActionsOnlyCheck?.() ?? false,
     })
     this.outline = new OutlineController({
       getViewer: () => this.viewer,
@@ -357,13 +347,10 @@ export class FileBrowser {
     this.cleanups.push(this.store.onChange(({ change }) => {
       this.dirtyTracker.note(change)
       if (this.saveButton) this.syncDirtyState()
-      // Comments travel as their own durable actions; everything else rides in the state patch.
-      if (change.kind === 'comments') this.host?.markCommentsChanged()
-      else this.host?.markContentChanged()
+      for (const listener of this.changeListeners) listener(change.kind === 'comments' ? 'comments' : 'content')
     }))
 
     this.build()
-    void this.host?.start()
     window.addEventListener('hashchange', this.handleHashChange)
     this.dirtyTracker.markSaved()
     // An embedding page may present the file as a reviewer's in-progress session (e.g. the Tacobin demo).
@@ -393,7 +380,8 @@ export class FileBrowser {
     this.fileNavigation?.destroy()
     this.fileNavigation = null
     this.comments.destroy()
-    this.host?.destroy()
+    for (const listener of this.destructListeners) listener()
+    this.destructListeners.clear()
 
     this.root.replaceChildren()
     this.root.className = ''
@@ -470,7 +458,7 @@ export class FileBrowser {
     title.size = Math.max(1, Math.min(title.value.length, 56))
     title.spellcheck = false
     title.disabled = !this.canManageStructure
-    title.title = this.canManageStructure ? this.t.documentTitle : this.t.hostSharedField
+    title.title = this.canManageStructure ? this.t.documentTitle : (this.structureLockedTooltip ?? this.t.documentTitle)
     title.setAttribute('aria-label', this.t.documentTitle)
     title.addEventListener('input', () => {
       title.size = Math.max(1, Math.min(title.value.length, 56))
@@ -517,13 +505,13 @@ export class FileBrowser {
     this.categoryBadge.addEventListener('click', () => { void this.promptChangeCategory() })
     this.workspacePath = el('div', 'workspace-path', this.selected ? relativePath(this.bundle, this.selected) : '')
     this.syncWorkspaceHeader()
-    const workspaceHeaderSpacer = el('span', 'workspace-header-spacer')
+    this.workspaceHeaderSpacer = el('span', 'workspace-header-spacer')
 
     this.copyButton = createControlButton('copy', this.t.copyReview, () => { void this.primaryHandoff() }, 'copy-review-main', false, false)
     this.copyButton.classList.remove('control-button-icon')
     this.copyButton.classList.add('control-button-with-label')
     this.copyButton.setAttribute('aria-label', this.t.copyReview)
-    this.copyButton.title = this.host ? this.t.hostHandoffTooltip : this.t.copyReview
+    this.copyButton.title = this.primaryHandoffTooltip ?? this.t.copyReview
     const copyLabel = el('span', 'button-label', this.t.copyReviewLabel)
     this.copyButton.append(copyLabel)
 
@@ -569,13 +557,6 @@ export class FileBrowser {
       this.root.classList.toggle('panel-motion-disabled', event.detail === 0)
     }, { capture: true })
 
-    const hostControls: HTMLElement[] = []
-    if (this.host && this.host.currentStatus.readiness !== 'unsupported') {
-      this.hostStatusButton = createControlButton('check', this.t.hostStatus, () => this.openHostStatusMenu(), 'host-status-button', true)
-      this.hostAuthorButton = createControlButton('user', this.t.hostAuthor, () => { void this.promptHostAuthor() }, 'host-author-button', true)
-      this.hostListenersButton = createControlButton('users', this.t.hostListeners, () => this.openHostListenersMenu(), 'host-listeners-button', true)
-      hostControls.push(this.hostStatusButton, this.hostAuthorButton, this.hostListenersButton)
-    }
 
     workspaceHeader.append(
       collapsedBrandMark,
@@ -585,8 +566,8 @@ export class FileBrowser {
       checkpointPageTitle,
       this.categoryBadge,
       this.workspacePath,
-      ...hostControls,
-      workspaceHeaderSpacer,
+      ...this.headerExtraControls,
+      this.workspaceHeaderSpacer,
 
       this.copyReviewGroup,
       saveGroup,
@@ -630,8 +611,6 @@ export class FileBrowser {
     this.syncAuxiliaryTabs()
 
     this.syncDirtyState()
-    this.syncHostStatusButton()
-    this.syncHostAuthorButton()
   }
 
   private selectFile(file: TacoFile, writeHash = true): void {
@@ -1287,7 +1266,7 @@ export class FileBrowser {
     this.categoryBadge.textContent = groupInfo.groupTitle
     this.categoryBadge.title = this.canManageStructure
       ? `${groupInfo.groupTitle} · ${this.t.changeCategory}`
-      : `${groupInfo.groupTitle} · ${this.t.hostSharedField}`
+      : (this.structureLockedTooltip ? `${groupInfo.groupTitle} · ${this.structureLockedTooltip}` : groupInfo.groupTitle)
     this.categoryBadge.disabled = !this.canManageStructure
     this.categoryBadge.classList.toggle('is-editable', this.canManageStructure)
   }
@@ -1405,199 +1384,29 @@ export class FileBrowser {
     this.copyButton.classList.toggle('is-dirty', handoffDirty)
   }
 
-  /** The Host contract carries file, Checkpoint, and comment writes, but no shared title or grouping. */
   private get canManageStructure(): boolean {
-    return bundleCanWrite(this.bundle) && !this.host
+    return bundleCanWrite(this.bundle) && !this.structureLocked
   }
 
   /**
-   * The header's primary action. When a same-origin Host owns this review, the button hands the
-   * already-saved state off through the Host; everywhere else it keeps copying the review verbatim.
+   * The header's primary action. When a custom handoff handler is registered (e.g. hosted mode),
+   * it executes that; everywhere else it copies the review verbatim.
    */
   private async primaryHandoff(): Promise<void> {
-    const host = this.host
-    if (!host) {
-      await this.copyReviewFull()
+    if (this.primaryHandoffHandler) {
+      await this.primaryHandoffHandler()
       return
     }
-    await host.start()
-    if (host.currentStatus.readiness === 'unsupported') {
-      await this.copyReviewFull()
-      return
-    }
-    if (host.busy) {
-      this.toast(this.t.hostHandoffBusy)
-      return
-    }
-    const outcome = await host.handoff()
-    if (outcome.kind === 'done') this.toast(this.t.hostHandoffDone)
-    else if (outcome.kind === 'no-change') this.toast(this.t.hostHandoffNoChange)
-    else if (outcome.kind === 'conflict') this.toast(this.t.hostHandoffConflict)
-    else if (outcome.kind === 'unsupported') this.toast(this.t.hostHandoffUnsupported)
-    else if (outcome.kind === 'failed') this.toast(this.t.hostHandoffFailed(outcome.detail))
-    else if (outcome.save === 'saving') this.toast(this.t.hostHandoffBusy)
-    else if (outcome.save === 'error') this.toast(this.t.hostSaveErrorNotice)
-    else this.toast(this.t.hostHandoffBlocked)
+    await this.copyReviewFull()
   }
 
-  private renderHostStatus(status: HostedStatus): void {
-    const wasConflict = this.hostStatus?.save === 'conflict'
-    this.hostStatus = status
-    if (status.readiness === 'unsupported') {
-      // No Host baseline after all: behave exactly like the plain reader page.
-      this.bundle.access = 'reader'
-      this.build()
-      return
-    }
-    if (status.save === 'conflict' && !wasConflict) this.toast(this.t.hostConflictNotice)
-    this.syncHostStatusButton()
-  }
-
-  private hostStatusLabel(status: HostedStatus): string {
-    if (status.readiness === 'loading') return this.t.hostConnecting
-    if (status.readiness === 'failed') return this.t.saveFailed
-    if (status.save === 'conflict') return this.t.hostConflict
-    if (status.save === 'error') return this.t.saveFailed
-    if (status.comments === 'error') return this.t.hostCommentsError
-    if (status.save === 'saving') return this.t.hostSaving
-    if (status.comments === 'pending') return this.t.hostCommentsPending
-    if (status.save === 'dirty') return this.t.unsaved
-    return this.t.hostSaved
-  }
-
-  private syncHostStatusButton(): void {
-    const button = this.hostStatusButton
-    const status = this.hostStatus
-    if (!button || !status) return
-    const label = this.hostStatusLabel(status)
-    const troubled = status.readiness === 'failed'
-      || status.save === 'error' || status.save === 'conflict' || status.comments === 'error'
-    const busy = status.readiness === 'loading' || status.save === 'saving' || status.comments === 'pending'
-    const labelNode = button.querySelector('.button-label')
-    if (labelNode) labelNode.textContent = label
-    button.title = label
-    button.setAttribute('aria-label', `${this.t.hostStatus}: ${label}`)
-    button.classList.toggle('is-trouble', troubled)
-    setButtonIcon(button, troubled ? 'alert' : busy ? 'save' : 'check')
-  }
-
-  private syncHostAuthorButton(): void {
-    const button = this.hostAuthorButton
-    if (!button) return
-    const name = currentAuthorName() || this.t.hostAuthorUnset
-    const labelNode = button.querySelector('.button-label')
-    if (labelNode) labelNode.textContent = name
-    button.title = `${this.t.hostAuthor}: ${name}. ${this.t.hostAuthorHint}`
-    button.setAttribute('aria-label', `${this.t.hostAuthor}: ${name}`)
-  }
-
-  private async promptHostAuthor(): Promise<void> {
-    const next = await showPromptDialog({
-      title: this.t.hostAuthor,
-      placeholder: this.t.hostAuthorUnset,
-      initialValue: currentAuthorName(),
-      confirmLabel: this.t.save,
-      cancelLabel: this.t.cancel,
-    })
-    if (next === null) return
-    if (next) setAuthorName(next)
-    this.syncHostAuthorButton()
-  }
-
-  private openHostStatusMenu(): void {
-    const host = this.host
-    const status = this.hostStatus
-    const button = this.hostStatusButton
-    if (!host || !status || !button) return
-    if (status.save === 'conflict') {
-      // Never offer an overwrite: the other reviewer's saved work would be discarded silently.
-      const menu = this.openPopover(button, 'host-status-menu')
-      menu.append(this.menuButton(this.t.hostLoadLatest, () => {
-        menu.remove()
-        void host.discardLocalDraft()
-      }, { icon: 'chevron-down' }))
-      return
-    }
-    if (status.readiness === 'failed' || status.save === 'error' || status.comments === 'error') {
-      const menu = this.openPopover(button, 'host-status-menu')
-      menu.append(this.menuButton(this.t.hostRetry, () => {
-        menu.remove()
-        host.retry()
-      }, { icon: 'save' }))
-      return
-    }
-    this.toast(`${this.hostStatusLabel(status)}${status.detail ? ` · ${status.detail}` : ''}`)
-  }
-
-  private async openHostListenersMenu(): Promise<void> {
-    const host = this.host
-    const button = this.hostListenersButton
-    if (!host || !button) return
-    const menu = this.openPopover(button, 'host-listeners-menu')
-    menu.setAttribute('role', 'group')
-    menu.setAttribute('aria-live', 'polite')
-    this.fillListenersMenu(menu)
-    await host.refreshListeners()
-  }
-
-  private fillListenersMenu(menu: HTMLElement): void {
-    menu.replaceChildren()
-    const snapshot = this.hostListeners
-    menu.append(el('h3', 'host-listeners-heading', this.t.hostListeners))
-    if (!snapshot || snapshot.listeners.length === 0) {
-      menu.append(el('p', 'host-listeners-empty', this.t.hostListenersNone))
-    } else {
-      for (const listener of snapshot.listeners) menu.append(this.buildListenerRow(listener))
-      menu.append(el('p', 'host-listeners-time', this.t.hostListenersObservedAt(this.formatListenerTime(snapshot.observedAt))))
-    }
-    menu.append(el('p', 'host-listeners-note', this.t.hostListenerNote))
-  }
-
-  /** Every field here is self-reported, so the row states provenance instead of implying identity. */
-  private buildListenerRow(listener: HostListener): HTMLElement {
-    const harnessIcon = svgIcon(HOST_HARNESS_ICONS[listener.harness ?? ''] ?? 'monitor')
-    const modelIcon = svgIcon(HOST_MODEL_ICONS[listener.model ?? ''] ?? 'monitor')
-    const meta = el('span', 'host-listener-meta')
-    const modelSlot = el('span', 'host-listener-model')
-    modelSlot.setAttribute('aria-hidden', 'true')
-    modelSlot.append(modelIcon)
-    const modelName = listener.modelId || listener.model
-    if (modelName) meta.append(el('span', 'host-listener-model-name', modelName))
-    meta.append(modelSlot)
-    meta.append(el('span', 'host-listener-seen', this.t.hostListenerLastSeen(this.formatListenerTime(listener.lastSeenAt))))
-    const row = sidebarRow('div', {
-      className: 'host-listener-row',
-      leading: harnessIcon,
-      label: listener.name || this.t.hostListenerAnonymous,
-      labelClass: 'host-listener-name',
-      trailing: meta,
-    })
-    row.title = listener.harness ? `${listener.harness}${listener.model ? ` · ${listener.model}` : ''}` : this.t.hostListenerAnonymous
-    return row
-  }
-
-  private formatListenerTime(value: string): string {
-    const date = new Date(value)
-    if (Number.isNaN(date.valueOf())) return value
-    return new Intl.DateTimeFormat(this.locale, { dateStyle: 'short', timeStyle: 'short' }).format(date)
-  }
-
-  private renderHostListeners(snapshot: HostListenerSnapshot): void {
-    this.hostListeners = snapshot
-    const open = document.querySelector<HTMLElement>('.host-listeners-menu')
-    if (open) this.fillListenersMenu(open)
-    const button = this.hostListenersButton
-    if (!button) return
-    const count = snapshot.listeners.length
-    const labelNode = button.querySelector('.button-label')
-    if (labelNode) labelNode.textContent = count > 0 ? `${this.t.hostListeners} ${count}` : this.t.hostListeners
-  }
-
-  /**
-   * Adopt the Host's saved revision. The bundle object keeps its identity, so the running review
-   * simply repaints against the new content instead of being rebuilt from scratch.
-   */
-  private adoptHostedContent(content: HostedContent): void {
+  adoptBundleContent(content: {
+    title?: string
+    files: TacoFile[]
+    navigation?: NavigationManifest
+    checkpoints?: unknown
+    comments: TacoCommentThread[]
+  }): void {
     const previousPath = this.selected?.path ?? this.selectedPlaceholder
     this.bundle.title = content.title || this.bundle.title
     this.bundle.files = content.files
@@ -1618,32 +1427,81 @@ export class FileBrowser {
     this.fileNavigation?.refresh(this.selected)
   }
 
-  /** Same-origin Host capability for this page, exposed to the runtime API; null when offline. */
-  hostedInfo(): { tacoId: string; apiBase: string } | null {
-    return this.hostCapability ? { ...this.hostCapability } : null
+  rebuild(): void {
+    this.build()
   }
 
-  /** Handoff through the Host runtime API: the callback an embedding Host page can rely on. */
-  async handoffViaHost(): Promise<HostedHandoffOutcome> {
-    const host = this.host
-    if (!host) return { kind: 'unsupported' }
-    await host.start()
-    if (host.currentStatus.readiness === 'unsupported') return { kind: 'unsupported' }
-    return host.handoff()
+  setStructureLocked(locked: boolean, tooltip?: string): void {
+    this.structureLocked = locked
+    this.structureLockedTooltip = tooltip
+    if (this.fileNavigation) {
+      this.fileNavigation.refresh(this.selected)
+    }
   }
+
+  setPrimaryHandoffHandler(handler: (() => Promise<void>) | null, tooltip?: string): void {
+    this.primaryHandoffHandler = handler ?? undefined
+    this.primaryHandoffTooltip = tooltip
+    if (this.copyButton) {
+      this.copyButton.title = tooltip ?? this.t.copyReview
+    }
+  }
+
+  setCopyButtonTitle(title: string): void {
+    this.primaryHandoffTooltip = title
+    if (this.copyButton) {
+      this.copyButton.title = title
+    }
+  }
+
+  setPendingWritesCheck(check: (() => boolean) | null): void {
+    this.pendingWritesCheck = check ?? undefined
+  }
+
+  setDurableCommentsOnlyCheck(check: (() => boolean) | null): void {
+    this.durableActionsOnlyCheck = check ?? undefined
+  }
+
+  addHeaderControl(control: HTMLElement): () => void {
+    this.headerExtraControls.push(control)
+    if (this.workspaceHeaderSpacer?.parentElement) {
+      this.workspaceHeaderSpacer.parentElement.insertBefore(control, this.workspaceHeaderSpacer)
+    }
+    return () => {
+      const idx = this.headerExtraControls.indexOf(control)
+      if (idx !== -1) this.headerExtraControls.splice(idx, 1)
+      control.remove()
+    }
+  }
+
+  onDocumentChange(listener: (kind: 'content' | 'comments') => void): () => void {
+    this.changeListeners.add(listener)
+    return () => { this.changeListeners.delete(listener) }
+  }
+
+  onLocaleChange(listener: (locale: Locale) => void): () => void {
+    this.localeListeners.add(listener)
+    return () => { this.localeListeners.delete(listener) }
+  }
+
+  onDestruct(listener: () => void): () => void {
+    this.destructListeners.add(listener)
+    return () => { this.destructListeners.delete(listener) }
+  }
+
   startDocumentComment(): void {
     this.comments.startDocumentComment()
   }
 
   private readonly handleBeforeUnload = (event: BeforeUnloadEvent): void => {
-    if (this.host?.hasPendingWrites() || this.dirtyTracker.isDirty()) {
+    if (this.pendingWritesCheck?.() || this.dirtyTracker.isDirty()) {
       event.preventDefault()
       event.returnValue = ''
     }
   }
 
 
-  private openPopover(anchor: HTMLElement, className: string): HTMLElement {
+  openPopover(anchor: HTMLElement, className: string): HTMLElement {
     document.querySelector('.topbar-popover')?.remove()
     const popover = el('div', `topbar-popover ${className}`)
     popover.setAttribute('role', 'menu')
@@ -1665,7 +1523,7 @@ export class FileBrowser {
     return popover
   }
 
-  private menuButton(
+  menuButton(
     label: string,
     action: () => void | Promise<void>,
     options: { active?: boolean; icon?: Parameters<typeof svgIcon>[0]; leading?: Element; menuitem?: boolean } = {},
@@ -1706,6 +1564,7 @@ export class FileBrowser {
         storageSet('taco-locale', locale)
         document.documentElement.lang = locale
         this.build()
+        for (const listener of this.localeListeners) listener(locale)
         menu.remove()
       }, { active: locale === this.locale, leading: badge })
       menu.append(button)
@@ -1726,7 +1585,7 @@ export class FileBrowser {
     )
   }
 
-  private async copyReviewFull(): Promise<void> {
+  async copyReviewFull(): Promise<void> {
     const changedFiles = this.getModifiedReviewFiles()
     const comments = (this.bundle.comments ?? []).filter((c) => c.status === 'open').map((c) => {
       // A whole-document comment quotes nothing, so it is reported by scope instead of by position.
@@ -1918,7 +1777,7 @@ export class FileBrowser {
     })
   }
 
-  private toast(message: string): void {
+  toast(message: string): void {
     document.querySelector('.taco-toast')?.remove()
     const toast = el('div', 'taco-toast', message)
     toast.setAttribute('role', 'status')
@@ -1927,10 +1786,8 @@ export class FileBrowser {
     setTimeout(() => toast.remove(), 2360)
   }
   private async handleCreateFile(targetGroupId: string | null): Promise<void> {
-    // A hosted review has no durable write path for the navigation manifest, so it offers no
-    // grouping choice: a new file lands in its category-derived group instead of a group the Host
-    // would not be able to keep.
-    const groups = this.host ? [] : getAvailableGroups(this.bundle, checkpointCopy(this.locale).checkpoint)
+    // When structure is locked, there is no grouping choice: a new file lands in its category-derived group.
+    const groups = this.structureLocked ? [] : getAvailableGroups(this.bundle, checkpointCopy(this.locale).checkpoint)
     const result = await showNewFileDialog({
       title: this.t.addFile,
       typeLabel: this.t.newFileType,

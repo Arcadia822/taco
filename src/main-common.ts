@@ -3,7 +3,8 @@ import './styles.css'
 import { capturePristine, canWriteInPlace, openedFileName, saveFile, titleForFileName, type SaveResult } from './kernel/save.ts'
 import { configureApp } from './kernel/app.ts'
 import { FileBrowser, type FileBrowserOptions } from './file-browser.ts'
-import type { HostedHandoffOutcome } from './hosted-session.ts'
+import type { HostedHandoffOutcome } from '../packages/host/src/browser/hosted-session.ts'
+import { attachHostedSession } from '../packages/host/src/browser/index.ts'
 import { fileByPath, fileKind, isInternalFile, isMediaFileKind, parseBundle, relativePath, type TacoBundle, type TacoFile } from './model.ts'
 import { credentialFreeFile, TACO_SECURITY_VERSION } from './security.ts'
 import { validateDocument, type DocumentValidation } from './validation.ts'
@@ -156,8 +157,6 @@ export function bootCommon(bundle: TacoBundle, options: FileBrowserOptions = {},
           comments: doc.comments ?? [],
         }
       },
-      hosted: () => browser.hostedInfo(),
-      handoff: () => browser.handoffViaHost(),
     }
   }
 
@@ -167,6 +166,9 @@ export function bootCommon(bundle: TacoBundle, options: FileBrowserOptions = {},
     const browser = new FileBrowser(root!, next, options)
     current = { bundle: next, browser }
     expose()
+    if (__HOSTED_BUILD__) {
+      attachHostedSession(browser, window.taco)
+    }
     return browser
   }
 
