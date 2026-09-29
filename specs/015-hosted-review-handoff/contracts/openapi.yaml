@@ -1,0 +1,304 @@
+openapi: 3.1.0
+info:
+  title: TACO-33 托管评审人工交接 HTTP 增量契约
+  version: 0.1.0-draft
+  description: >-
+    仅定义人工交接相对 008 Host 契约新增或改变的接口，不声明现有 Next.js 路由已经实现。
+    发布、评论、上传基础接口见 ../../008-taco-host-contract/contracts/openapi.yaml；
+    本文件中的 handoff 上传 purpose 是对该目标契约的扩展。所有发布与交接内容默认公开。
+servers:
+  - url: https://api.taco.local
+    description: 生产环境必须使用 HTTPS；实际部署 origin 由 CLI 指定
+  - url: http://localhost:32167
+    description: 本地回环开发环境
+paths:
+  /v1/tacos:
+    post:
+      operationId: publishWithListenerCapability
+      summary: 对 008 的 publish 增补仅供 CLI 使用的监听凭据请求标头
+      description: >-
+        CLI 在提交前生成 256-bit 随机 token，本地保存并用相同 Idempotency-Key 与相同 token 重试；
+        服务器只存其摘要。完整发布请求体及其他响应仍由 008 publishTaco 定义，
+        本增量只声明标头及 201 JSON 不返回任何凭据；浏览器公开 URL 不含 token。
+      parameters:
+        - name: X-Taco-Listener-Token
+          in: header
+          required: true
+          description: 发布 CLI 生成的随机 capability；严禁回显到响应、stdout 或日志
+          schema: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+      responses:
+        '201':
+          description: 成功发布；不颁发或回显 listener token
+          content:
+            application/json:
+              schema:
+                $ref: '../../008-taco-host-contract/contracts/openapi.yaml#/components/schemas/PublishResponse'
+  /v1/uploads:
+    post:
+      operationId: prepareHandoffUpload
+      summary: 为当前评审者的完整交接包预留私有上传
+      description: >-
+        复用 008 的上传预留、同一幂等键续签与大小/摘要校验机制，新增 purpose=handoff；
+        这一步只预留上传，不生成交接事件。PUT 至返回的短期 Blob URL 时绝不发送 Host 凭据，
+        不跟随重定向。既有 publish/update 上传流程不变。
+      security:
+        - guestSession: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [purpose, tacoId, revisionId, payloadBytes, payloadHash]
+              properties:
+                purpose:
+                  const: handoff
+                tacoId:
+                  type: string
+                  format: uuid
+                revisionId:
+                  type: string
+                  format: uuid
+                payloadBytes:
+                  type: integer
+                  minimum: 1
+                  maximum: 67108864
+                payloadHash:
+                  type: string
+                  pattern: '^sha256:[0-9a-f]{64}$'
+      responses:
+        '200':
+          description: 已登记的同键上传预留或已提交结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadReservation'
+        '201':
+          description: 新预留
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadReservation'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { description: 交接包超过 Host 上限；不得静默截断 }
+  /v1/tacos/{id}/handoffs:
+    post:
+      operationId: commitHandoff
+      summary: 人明确完成当前 revision 的评审并原子提交交接
+      description: >-
+        服务端从私有上传预留读取并校验完整包，以本评审者上次成功交接的完整
+        文件集合、Checkpoint 定义和状态及评论高水位判定是否有新增变化，
+        与发布 revision 的累计 diff 分开计算；恢复发布原状仍是新增变化。
+        对当前 guest、revision、baseReviewVersion 做并发检查；同一事务保存不可变
+        payload 引用、交接记录、幂等收据与 review.handed_off 事件。
+        首次无编辑/评论的明确交接仍可产生事件；其后无变化则不产生第二个事件。
+        评论 POST 从不调用本接口。
+      security:
+        - guestSession: []
+      parameters:
+        - $ref: '#/components/parameters/TacoId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [revisionId, baseReviewVersion, uploadId]
+              properties:
+                revisionId:
+                  type: string
+                  format: uuid
+                baseReviewVersion:
+                  type: string
+                  pattern: '^(0|[1-9][0-9]*)$'
+                  description: 当前评审者该 revision 的乐观并发版本
+                uploadId:
+                  type: string
+                  format: uuid
+                  description: 与本次 guest、Taco、revision 及幂等键绑定的已上传完整包
+      responses:
+        '201':
+          description: 交接持久提交后产生一个事件；仅表示 Host 已保存，不表示 Agent 已处理
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoffCommit'
+        '200':
+          description: 同键重放返回原响应；无新变化的再次点击返回 changed=false、event=null
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HandoffCommit'
+        '400': { description: 参数或上传包错误；不得写入部分交接 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Taco 或 revision 不存在，或不属于当前 Taco }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '410': { description: Taco 已删除或到期 }
+        '413': { description: 内容超限 }
+        '422': { description: 上传包结构、路径、媒介或 Checkpoint 不合法 }
+  /v1/tacos/{id}/handoffs/{handoffId}:
+    get:
+      operationId: getHandoff
+      summary: 根据持久事件引用读取不可变的完整交接
+      description: >-
+        交接内容与 Taco 的公开策略一致；返回服务器提交时冻结的评论历史和文件正文，
+        不拼接后续评论，不从最新草稿重算。大响应采用流式 JSON，读失败不返回假完整对象。
+      parameters:
+        - $ref: '#/components/parameters/TacoId'
+        - name: handoffId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: 完整不可变交接
+          content:
+            application/json:
+              schema:
+                $ref: './handoff.schema.json#/$defs/HandoffRecord'
+        '404': { description: 交接不存在或不属于当前 Taco }
+        '410': { description: Taco 已删除或到期 }
+  /v1/tacos/{id}/listeners:
+    get:
+      operationId: listHandoffListeners
+      summary: 列出当前 Taco 的活跃 CLI 订阅租约
+      description: >-
+        presence 是有界延迟的在线提示，不能充当交接送达回执；仅展示短期公开别名、
+        是否经 owner 凭据验证、最后活跃时间和过期时间，不暴露本地 session 路径或密钥。
+        默认方案仅把验证过的 CLI 列为 Agent；匿名公开订阅不冒充 Agent。
+      parameters:
+        - $ref: '#/components/parameters/TacoId'
+      responses:
+        '200':
+          description: 当前未过期的租约列表；零监听返回空数组
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [listeners, observedAt]
+                properties:
+                  observedAt: { type: string, format: date-time }
+                  listeners:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [listenerId, displayAlias, verified, lastSeenAt, expiresAt]
+                      properties:
+                        listenerId: { type: string, format: uuid, description: 公开临时租约标识，不是本地 session ID }
+                        displayAlias: { type: string, maxLength: 64 }
+                        verified: { type: boolean }
+                        lastSeenAt: { type: string, format: date-time }
+                        expiresAt: { type: string, format: date-time }
+        '404': { description: Taco 不存在 }
+  /v1/tacos/{id}/subscribe:
+    get:
+      operationId: subscribeWithPresence
+      summary: 订阅持久事件并登记经过验证的 CLI 监听租约
+      description: >-
+        沿用现有 SSE ready/event/checkpoint 和 after 游标语义；带有效发布者
+        Authorization Bearer 凭据且登记 listenerId 的 CLI 可作为已验证 Agent
+        出现在 listeners。无凭据公开订阅继续收到事件，但不进入已验证列表；
+        无效凭据报 401，不退化成匿名。每 30 秒续租，90 秒未续租过期；
+        网络断线、跨实例重连以已输出游标恢复。评论事件不会变成交接事件。
+      security:
+        - {}
+        - listenerCapability: []
+      parameters:
+        - $ref: '#/components/parameters/TacoId'
+        - name: after
+          in: query
+          required: false
+          schema: { type: string, pattern: '^(0|[1-9][0-9]*)$' }
+        - name: X-Listener-Id
+          in: header
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: SSE 持久事件流；含 review.handed_off 引用事件
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Taco 不存在 }
+        '410': { description: Taco 或游标不可读取，须明确报告历史缺口 }
+components:
+  securitySchemes:
+    listenerCapability:
+      type: http
+      scheme: bearer
+      description: 与已发布 Taco 及 Host origin 绑定；只影响已验证 presence，事件依旧可匿名读取
+    guestSession:
+      type: apiKey
+      in: cookie
+      name: taco_guest
+      description: 同源 HttpOnly guest cookie；生产环境 Secure、SameSite；另校验 Origin 与 CSRF
+  parameters:
+    TacoId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+    CsrfToken:
+      name: X-Taco-CSRF
+      in: header
+      required: true
+      schema: { type: string, minLength: 1 }
+  schemas:
+    UploadReservation:
+      description: 与 008 的 pending/committed 两种响应保持同一结构；handoff 有独立 64 MiB 上限
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [uploadId, status, method, uploadUrl, headers, expiresAt, maxBytes]
+          properties:
+            uploadId: { type: string, format: uuid }
+            status: { const: pending }
+            method: { const: PUT }
+            uploadUrl: { type: string, format: uri, pattern: '^https://' }
+            headers:
+              type: object
+              additionalProperties: false
+              required: [Content-Type]
+              properties:
+                Content-Type: { const: application/json }
+            expiresAt: { type: string, format: date-time }
+            maxBytes: { type: integer, minimum: 1, maximum: 67108864 }
+        - $ref: '../../008-taco-host-contract/contracts/openapi.yaml#/components/schemas/UploadPrepareCommittedResponse'
+    HandoffCommit:
+      type: object
+      additionalProperties: false
+      required: [changed, handoffId, event, reviewVersion]
+      properties:
+        changed: { type: boolean }
+        handoffId: { type: [string, 'null'], format: uuid }
+        reviewVersion: { type: string, pattern: '^(0|[1-9][0-9]*)$' }
+        event:
+          oneOf:
+            - type: 'null'
+            - $ref: './handoff.schema.json#/$defs/HandoffEvent'
+  responses:
+    Unauthorized:
+      description: 缺失或无效的 guest 会话
+    Forbidden:
+      description: CSRF/Origin 校验失败或当前会话无权提交草稿
+    Conflict:
+      description: 并发版本不匹配、空间关闭或同键不同正文；未提交交接事件
