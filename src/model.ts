@@ -57,7 +57,11 @@ export interface TacoCommentMessage {
 
 export interface TacoCommentThread {
   id: string
-  anchor: TacoTextAnchor
+  /**
+   * Null for a whole-document discussion. The file format still requires an anchored thread; a null
+   * anchor only ever arrives from the Host's durable review threads.
+   */
+  anchor: TacoTextAnchor | null
   status: 'open' | 'resolved'
   messages: TacoCommentMessage[]
   createdAt: string
@@ -183,8 +187,9 @@ export function parseBundle(json: string): ParseResult {
       return { ok: false, err: 'shape', detail: 'comments must contain valid local comment threads' }
     }
     for (const thread of raw.comments) {
-      if (!seen.has(thread.anchor.path)) {
-        return { ok: false, err: 'shape', detail: `comment references a missing file: ${thread.anchor.path}` }
+      const anchorPath = thread.anchor?.path
+      if (anchorPath && !seen.has(anchorPath)) {
+        return { ok: false, err: 'shape', detail: `comment references a missing file: ${anchorPath}` }
       }
     }
   }
@@ -278,30 +283,36 @@ export const ensureFileIds = (bundle: TacoBundle): void => {
 }
 
 const isCommentThread = (value: unknown): value is TacoCommentThread => {
-  if (!isRecord(value) || !isRecord(value.anchor) || !isRecord(value.anchor.position) || !isRecord(value.anchor.quote)) return false
-  const { anchor } = value
-  const position = anchor.position as Record<string, unknown>
-  const quote = anchor.quote as Record<string, unknown>
-  const validPosition = Number.isInteger(position.start)
-    && Number.isInteger(position.end)
-    && Number(position.start) >= 0
-    && Number(position.end) > Number(position.start)
-  const validQuote = typeof quote.exact === 'string'
-    && quote.exact.length > 0
-    && typeof quote.prefix === 'string'
-    && typeof quote.suffix === 'string'
-  const block = anchor.block
-  const validBlock = block === undefined || (isRecord(block)
-    && typeof block.id === 'string'
-    && block.id.length > 0
-    && block.type === 'codeBlock'
-    && typeof block.language === 'string')
+  if (!isRecord(value)) return false
+  const anchor = value.anchor
+  let validAnchor = false
+  if (anchor === null) {
+    validAnchor = true
+  } else if (isRecord(anchor) && isRecord(anchor.position) && isRecord(anchor.quote)) {
+    const position = anchor.position as Record<string, unknown>
+    const quote = anchor.quote as Record<string, unknown>
+    const validPosition = Number.isInteger(position.start)
+      && Number.isInteger(position.end)
+      && Number(position.start) >= 0
+      && Number(position.end) > Number(position.start)
+    const validQuote = typeof quote.exact === 'string'
+      && quote.exact.length > 0
+      && typeof quote.prefix === 'string'
+      && typeof quote.suffix === 'string'
+    const block = anchor.block
+    const validBlock = block === undefined || (isRecord(block)
+      && typeof block.id === 'string'
+      && block.id.length > 0
+      && block.type === 'codeBlock'
+      && typeof block.language === 'string')
+    validAnchor = typeof anchor.path === 'string'
+      && validPosition
+      && validQuote
+      && validBlock
+  }
   return typeof value.id === 'string'
     && value.id.length > 0
-    && typeof anchor.path === 'string'
-    && validPosition
-    && validQuote
-    && validBlock
+    && validAnchor
     && (value.status === 'open' || value.status === 'resolved')
     && isTimestamp(value.createdAt)
     && isTimestamp(value.updatedAt)

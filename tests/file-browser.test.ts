@@ -525,8 +525,8 @@ describe('FileBrowser', () => {
     comment.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
 
     expect(commentableBundle.comments).toHaveLength(1)
-    expect(commentableBundle.comments?.[0].anchor.path).toBe(path)
-    expect(commentableBundle.comments?.[0].anchor.quote.exact).toBe(quote)
+    expect(commentableBundle.comments?.[0].anchor!.path).toBe(path)
+    expect(commentableBundle.comments?.[0].anchor!.quote.exact).toBe(quote)
     expect(Array.from(document.querySelectorAll('.source-comment-highlight')).map((node) => node.textContent).join('')).toBe(quote)
 
     const quoteButton = document.querySelector<HTMLButtonElement>('.comment-quote-button')!
@@ -686,7 +686,7 @@ describe('FileBrowser', () => {
     const commentInput = document.querySelector<HTMLTextAreaElement>('.comment-composer .comment-input')!
     commentInput.value = 'Clarify this flow.'
     commentInput.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
-    expect(mermaidBundle.comments?.[0].anchor.block).toMatchObject({ type: 'codeBlock', language: 'mermaid' })
+    expect(mermaidBundle.comments?.[0].anchor!.block).toMatchObject({ type: 'codeBlock', language: 'mermaid' })
     expect(document.querySelector('.comment-thread .comment-quote')?.textContent).toBe('Mermaid 图表')
     expect(document.querySelector('.comment-thread')?.textContent).not.toContain('Brief --> Plan')
     expect(codeBlock.classList.contains('has-comment')).toBe(true)
@@ -724,7 +724,7 @@ describe('FileBrowser', () => {
     lineCommentInput.value = 'Comment on Brief to Plan edge'
     lineCommentInput.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     const expectedLine = floatingSource.value.slice(0, lineStart).split('\n').length
-    expect(mermaidBundle.comments?.some((c) => c.anchor.block?.lineNumber === expectedLine)).toBe(true)
+    expect(mermaidBundle.comments?.some((c) => c.anchor?.block?.lineNumber === expectedLine)).toBe(true)
     expect(document.querySelector('.mermaid-zoom-dialog[open]')).not.toBeNull()
     const zoomedDiagram = document.querySelector<HTMLElement>('.mermaid-zoom-canvas .taco-mermaid-render')!
     const zoomIn = document.querySelector<HTMLButtonElement>('.mermaid-zoom-in')!
@@ -1395,7 +1395,7 @@ describe('FileBrowser', () => {
       .find((button) => button.textContent?.trim() === 'docs')!.click()
 
     expect(file.path).toBe(originalPath)
-    expect(bundle.comments[0].anchor.path).toBe(originalPath)
+    expect(bundle.comments[0].anchor!.path).toBe(originalPath)
     expect(bundle.navigation.groups.find(({ id }) => id === 'category-docs')?.paths).toContain('plan.md')
     expect(document.querySelector('[data-stage="category-docs"] .file-row[data-path$="plan.md"]')).not.toBeNull()
     expect(parseBundle(JSON.stringify(bundle)).ok).toBe(true)
@@ -1780,6 +1780,59 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.comment-count')?.textContent).toBe('1')
     expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(true)
   })
+  it('creates a whole-document comment with null anchor via the global comment composer', async () => {
+    localStorage.setItem('taco-locale', 'zh-Hans')
+    const editableBundle = structuredClone(testBundle)
+    const browser = new FileBrowser(document.getElementById('app')!, editableBundle)
+    try {
+      const toggle = document.querySelector<HTMLButtonElement>('.comment-toggle')!
+      toggle.click()
+      const addGlobalBtn = document.querySelector<HTMLButtonElement>('.comment-global-add')!
+      expect(addGlobalBtn).not.toBeNull()
+      expect(document.querySelector('.comment-global-heading')?.textContent).toBe('全局评论')
+      addGlobalBtn.click()
+
+      expect(document.querySelector('.comment-composer')).not.toBeNull()
+      expect(document.querySelector('.comment-thread-scope')?.textContent).toBe('全局评论')
+      const input = document.querySelector<HTMLTextAreaElement>('.comment-composer .comment-input')!
+      input.value = '整体文档结构清晰。'
+      input.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+
+      expect(editableBundle.comments).toHaveLength(1)
+      expect(editableBundle.comments?.[0]).toMatchObject({
+        status: 'open',
+        anchor: null,
+        messages: [{ body: '整体文档结构清晰。' }],
+      })
+      expect(document.querySelector('.comment-global-group .comment-thread')).not.toBeNull()
+      expect(document.querySelector('.comment-thread-scope')?.textContent).toBe('全局评论')
+      expect(document.querySelector('.comment-count')?.textContent).toBe('1')
+    } finally {
+      browser.destroy()
+    }
+  })
+
+  it('guards beforeunload when there are unsaved edits and removes guard when destroyed', () => {
+    const editableBundle = structuredClone(testBundle)
+    const browser = new FileBrowser(document.getElementById('app')!, editableBundle)
+    const removeSpy = vi.spyOn(window, 'removeEventListener')
+    try {
+      const cleanEvent = new Event('beforeunload', { cancelable: true }) as BeforeUnloadEvent
+      browser['handleBeforeUnload'](cleanEvent)
+      expect(cleanEvent.defaultPrevented).toBe(false)
+
+      editableBundle.files[0].content = '# Changed content'
+      browser['store'].changed({ kind: 'file', fileId: editableBundle.files[0].id! })
+      const dirtyEvent = new Event('beforeunload', { cancelable: true }) as BeforeUnloadEvent
+      browser['handleBeforeUnload'](dirtyEvent)
+      expect(dirtyEvent.defaultPrevented).toBe(true)
+    } finally {
+      browser.destroy()
+      expect(removeSpy).toHaveBeenCalledWith('beforeunload', browser['handleBeforeUnload'])
+      removeSpy.mockRestore()
+    }
+  })
+
 
   it('collects a missing comment author in an application dialog without losing the pending submission', async () => {
     sessionStorage.clear()

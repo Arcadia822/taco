@@ -25,10 +25,7 @@ import { CredentialStore, normalizeHostOrigin, resolveApiKey } from '../src/cred
 import { runCli } from '../src/runner.ts'
 import { TacoSubscriber } from '../src/subscriber.ts'
 
-const FIXTURE_TACO = resolve(
-  process.cwd(),
-  'specs/008-taco-host-contract/008-taco-host-contract.taco.html',
-)
+const FIXTURE_TACO = resolve(process.cwd(), 'specs/008-taco-host-contract/008-taco-host-contract.taco.html')
 
 class MockMemoryCredentialStore implements CredentialStore {
   private store: Record<string, string> = {}

@@ -53,10 +53,64 @@ export class TacoClient {
     return (await res.json()) as PublishResult
   }
 
-  async getEvents(tacoId: string, options?: { after?: string }): Promise<unknown> {
-    const url = `${this.hostUrl}/v1/tacos/${tacoId}/events${options?.after ? `?after=${options.after}` : ''}`
+  async getEvents(tacoId: string, options?: { after?: string; through?: string; limit?: number }): Promise<unknown> {
+    const params = new URLSearchParams()
+    if (options?.after !== undefined) params.set('after', options.after)
+    if (options?.through !== undefined) params.set('through', options.through)
+    if (options?.limit !== undefined) params.set('limit', String(options.limit))
+    const query = params.size ? `?${params}` : ''
+    const res = await fetch(`${this.hostUrl}/v1/tacos/${tacoId}/events${query}`)
+    if (!res.ok) {
+      let errorBody:
+        | { error?: { code?: string; message?: string; details?: Record<string, unknown> } }
+        | undefined
+      try {
+        errorBody = (await res.json()) as {
+          error?: { code?: string; message?: string; details?: Record<string, unknown> }
+        }
+      } catch {}
+      const msg = errorBody?.error?.message || `Fetch events failed: ${res.status}`
+      const code =
+        errorBody?.error?.code || (res.status === 410 ? 'CURSOR_EXPIRED' : 'LOCAL_IO_ERROR')
+      const err = new Error(msg) as Error & {
+        statusCode?: number
+        code?: string
+        errorDetails?: unknown
+      }
+      err.statusCode = res.status
+      err.code = code
+      err.errorDetails = errorBody
+      throw err
+    }
+    return res.json()
+  }
+
+  async getHandoff(tacoId: string, handoffId: string): Promise<unknown> {
+    const url = `${this.hostUrl}/v1/tacos/${tacoId}/handoffs/${handoffId}`
     const res = await fetch(url)
-    if (!res.ok) throw new Error(`Fetch events failed: ${res.status}`)
+    if (!res.ok) {
+      let errorBody:
+        | { error?: { code?: string; message?: string; details?: Record<string, unknown> } }
+        | undefined
+      try {
+        errorBody = (await res.json()) as {
+          error?: { code?: string; message?: string; details?: Record<string, unknown> }
+        }
+      } catch {}
+      const msg = errorBody?.error?.message || `Fetch handoff failed: ${res.status}`
+      const code =
+        errorBody?.error?.code ||
+        (res.status === 410 ? 'CURSOR_EXPIRED' : res.status === 404 ? 'NOT_FOUND' : 'LOCAL_IO_ERROR')
+      const err = new Error(msg) as Error & {
+        statusCode?: number
+        code?: string
+        errorDetails?: unknown
+      }
+      err.statusCode = res.status
+      err.code = code
+      err.errorDetails = errorBody
+      throw err
+    }
     return res.json()
   }
 }

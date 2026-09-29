@@ -120,14 +120,17 @@ export function validateDocument(bundle: TacoBundle, renderErrors: readonly Rend
   }
 
   for (const thread of bundle.comments ?? []) {
-    const file = filesByPath.get(thread.anchor.path)
+    const anchor = thread.anchor
+    // A whole-document comment anchors no file, so it has nothing to resolve against.
+    if (!anchor) continue
+    const file = filesByPath.get(anchor.path)
     if (!file) {
-      push('comment-anchor-missing-file', 'error', `comment ${thread.id} anchors a file that is not in the bundle`, thread.anchor.path)
+      push('comment-anchor-missing-file', 'error', `comment ${thread.id} anchors a file that is not in the bundle`, anchor.path)
       continue
     }
     if (file.mediaType === 'image/png') continue
-    if (!resolveAnchorRange(file.content, thread.anchor)) {
-      push('comment-anchor-stale', 'warning', `comment ${thread.id} quotes text that is no longer in the file: "${thread.anchor.quote.exact.slice(0, 40)}"`, file.path)
+    if (!resolveAnchorRange(file.content, anchor)) {
+      push('comment-anchor-stale', 'warning', `comment ${thread.id} quotes text that is no longer in the file: "${anchor.quote.exact.slice(0, 40)}"`, file.path)
     }
   }
 

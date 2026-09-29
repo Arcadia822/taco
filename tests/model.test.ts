@@ -171,14 +171,32 @@ describe('file-first Taco bundle', () => {
       updatedAt: '2026-08-10T00:00:00.000Z',
     }]
     expect(parseBundle(JSON.stringify(commented))).toMatchObject({ ok: true })
-    commented.comments[0].anchor.block = { id: 'block-code', type: 'codeBlock', language: 'typescript' }
+    commented.comments[0].anchor!.block = { id: 'block-code', type: 'codeBlock', language: 'typescript' }
     expect(parseBundle(JSON.stringify(commented))).toMatchObject({ ok: true })
-    commented.comments[0].anchor.block.type = 'paragraph' as 'codeBlock'
+    commented.comments[0].anchor!.block!.type = 'paragraph' as 'codeBlock'
     expect(parseBundle(JSON.stringify(commented))).toMatchObject({ ok: false, err: 'shape' })
-    commented.comments[0].anchor.block.type = 'codeBlock'
-    commented.comments[0].anchor.path = 'specs/001-test/missing.md'
+    commented.comments[0].anchor!.block!.type = 'codeBlock'
+    commented.comments[0].anchor!.path = 'specs/001-test/missing.md'
     expect(parseBundle(JSON.stringify(commented))).toMatchObject({ ok: false, err: 'shape' })
   })
+  it('accepts null-anchored whole-document comment threads when reopening a saved copy', () => {
+    const commented = bundle()
+    commented.comments = [{
+      id: 'thread-global',
+      anchor: null,
+      status: 'open',
+      messages: [{ id: 'message-1', author: 'Reviewer', body: 'Overall impression.', createdAt: '2026-08-10T00:00:00.000Z' }],
+      createdAt: '2026-08-10T00:00:00.000Z',
+      updatedAt: '2026-08-10T00:00:00.000Z',
+    }]
+    const parsed = parseBundle(JSON.stringify(commented))
+    expect(parsed).toMatchObject({ ok: true })
+    if (parsed.ok) {
+      expect(parsed.bundle.comments?.[0].anchor).toBeNull()
+      expect(parsed.bundle.comments?.[0].messages[0].body).toBe('Overall impression.')
+    }
+  })
+
 
   it('accepts optional message timestamps, rejects malformed ones, and normalizes tombstones', () => {
     const commented = bundle()

@@ -1,14 +1,11 @@
 import { randomUUID } from 'node:crypto'
-import { NextRequest, NextResponse } from 'next/server'
+import { type NextRequest, NextResponse } from 'next/server'
+import { validateDocumentSnapshot } from '@taco/protocol'
+import { ConflictError, DatabaseNotConfiguredError, getDatabase } from '@/lib/db'
 import { getStorageAdapter } from '@/lib/storage-adapter'
 
 export const dynamic = 'force-dynamic'
 
-/**
- * Pure Pastebin Creation Endpoint:
- * - Directly uploads JSON data to Vercel Blob (no S3, no auth, no user needed)
- * - Returns public Taco URL
- */
 export async function POST(req: NextRequest) {
   let body: unknown
   try {
@@ -17,18 +14,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: { code: 'BAD_REQUEST', message: 'Invalid JSON body' } }, { status: 400 })
   }
 
-  const payload = body as {
-    protocol?: string
-    snapshot?: {
-      format?: string
-      title?: string
-      docId?: string
-      root?: string
-      files?: unknown[]
-    }
+  if (!body || typeof body !== 'object') {
+    return NextResponse.json({ error: { code: 'BAD_REQUEST', message: 'Body must be an object' } }, { status: 400 })
   }
 
-  if (payload.protocol !== 'taco-host/1' || !payload.snapshot || payload.snapshot.format !== 'taco/files') {
+  const payload = body as {
+    id?: string
+    tacoId?: string
+    protocol?: string
+    snapshot?: unknown
+  }
+
+  if (payload.protocol !== 'taco-host/1' || !payload.snapshot) {
     return NextResponse.json(
       {
         error: {
@@ -40,27 +37,59 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const rawBytes = new TextEncoder().encode(JSON.stringify(body))
-  const pasteId = randomUUID()
-  const storageKey = `pastes/${pasteId}.json`
+  const validated = validateDocumentSnapshot(payload.snapshot)
+  if (!validated.ok) {
+    return NextResponse.json(
+      {
+        error: {
+          code: 'UNPROCESSABLE_ENTITY',
+          message: validated.err,
+        },
+      },
+      { status: 422 },
+    )
+  }
 
-  const storage = getStorageAdapter()
-  const blobUrl = await storage.putObject(storageKey, rawBytes, 'application/json')
+  const snapshot = validated.snapshot
+  const tacoId = payload.id || payload.tacoId || randomUUID()
+  const title = snapshot.title || 'Untitled Taco'
 
-  const origin = req.nextUrl.origin
-  const title = payload.snapshot.title || 'Untitled Taco Paste'
+  try {
+    const db = getDatabase()
+    await db.publishTaco(tacoId, title, snapshot)
 
-  return NextResponse.json(
-    {
-      command: 'publish',
-      host: origin,
-      id: pasteId,
-      tacoId: pasteId,
-      title,
-      blobUrl,
-      url: `${origin}/t/${pasteId}`,
-      createdAt: new Date().toISOString(),
-    },
-    { status: 201 },
-  )
+    // Also write to storage adapter if configured for legacy direct URL access
+    try {
+      const storage = getStorageAdapter()
+      const rawBytes = new TextEncoder().encode(JSON.stringify(body))
+      await storage.putObject(`pastes/${tacoId}.json`, rawBytes, 'application/json')
+    } catch {
+      // Storage adapter write is non-authoritative
+    }
+
+    const origin = req.nextUrl.origin
+    const nowIso = new Date().toISOString()
+
+    return NextResponse.json(
+      {
+        command: 'publish',
+        host: origin,
+        id: tacoId,
+        tacoId,
+        title,
+        url: `${origin}/t/${tacoId}`,
+        createdAt: nowIso,
+      },
+      { status: 201 },
+    )
+  } catch (err) {
+    if (err instanceof ConflictError) {
+      return NextResponse.json({ error: { code: 'CONFLICT', message: err.message } }, { status: 409 })
+    }
+    if (err instanceof DatabaseNotConfiguredError) {
+      return NextResponse.json({ error: { code: 'SERVICE_UNAVAILABLE', message: err.message } }, { status: 503 })
+    }
+    const message = err instanceof Error ? err.message : 'Internal Server Error'
+    return NextResponse.json({ error: { code: 'INTERNAL_ERROR', message } }, { status: 500 })
+  }
 }

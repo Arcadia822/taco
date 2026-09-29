@@ -116,6 +116,8 @@ taco-cli help
 
 The canonical skill's optional cloud workflow lives in `skills/taco/references/publishing.md` and `references/reviewing.md`; read those when using a Host. `taco-cli skills read taco` currently returns the CLI's separately embedded, cloud-oriented guide, not a copy of the repository skill. Use `taco-cli help` for the installed binary's command contract; release-time embedding from the canonical skill has not yet been wired.
 
+For hosted Tacobin reviews, a publish fixes one immutable baseline. Public visitors may autosave shared edits and comments under unverified, self-reported names; neither action by itself requests Agent continuation. The reviewer must click **Handoff**, and the agent must fetch the immutable payload for its `review.handed_off` reference before applying any changes to canonical files. A live subscriber indicator is presence only, not evidence of receipt or processing. This does not change offline `.taco.html` Handoff, which can carry unsaved in-memory edits.
+
 ## Credential boundary
 
 A collaboration-enabled Taco may contain relay configuration or access credentials in its embedded state. Treat the complete file as potentially credential-bearing: local inspection and local Agent reasoning are allowed, but never upload, paste, attach, log, or ticket the content to an external model or service without explicit user authorization. Revocation or key reset is an explicit user action.

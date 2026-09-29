@@ -33,11 +33,46 @@ taco-cli publish specs/feature.taco.html --dry-run
 # Publish to a remote Host by supplying its origin (the default Host is localhost)
 taco-cli publish specs/feature.taco.html --host https://tacobin.arcadia-han.com
 
-# Stream review events from that Host
-taco-cli subscribe <tacoId> --host https://tacobin.arcadia-han.com
+# Stream review events from that Host (with optional self-reported presence metadata)
+taco-cli subscribe <tacoId> \
+  --host https://tacobin.arcadia-han.com \
+  --harness codex \
+  --model gpt \
+  --model-id gpt-5 \
+  --name "Review Assistant"
+
+# Page persistent event history (exits with code 6 if cursor expired)
+taco-cli events <tacoId> --after 42 --host https://tacobin.arcadia-han.com
+
+# Fetch full immutable handoff content when a review.handed_off event is received
+taco-cli handoff <tacoId> <handoffId> --host https://tacobin.arcadia-han.com
 
 # Inspect the CLI-embedded guide (currently separate from the repository skill)
 taco-cli skills read taco
 ```
+
+## Commands & Options
+
+### `taco-cli subscribe <tacoId>`
+Streams realtime review events (SSE) as NDJSON lines (`ready`, `event`, `checkpoint`).
+
+- `--host <origin>`: Target Host origin (default: `http://localhost:32167` or `TACO_HOST_URL`).
+- `--after <seq>`: Exclusive sequence string cursor to resume or replay from.
+- `--harness <name>`: Optional self-reported harness (`codex`, `claude-code`, `cursor`, `gemini-cli`, `other`). Strictly validated.
+- `--model <family>`: Optional self-reported model family (`gpt`, `claude`, `gemini`, `other`). Strictly validated.
+- `--model-id <id>`: Optional detailed model identifier string (1–128 characters).
+- `--name <name>`: Optional self-reported presence display name (1–64 characters).
+- `--listener-id <uuid>`: Optional listener UUID; generated once per subscribe process and kept stable across reconnects.
+
+### `taco-cli events <tacoId>`
+Pages persistent event history from the Host.
+
+- `--host <origin>`: Target Host origin.
+- `--after <seq>`: Exclusive sequence cursor string. If the cursor is expired or Taco is gone (HTTP 410), exits with exit code 6 (`CURSOR_EXPIRED`) for explicit gap reporting.
+
+### `taco-cli handoff <tacoId> <handoffId>`
+Fetches the full immutable `HandoffRecord` JSON containing cumulative diffs, incremental diffs, checkpoints state, and review comments.
+
+- `--host <origin>`: Target Host origin.
 
 The CLI's embedded guide is currently cloud-oriented and is not yet generated from `skills/taco/`. It does not replace installation of that complete directory for offline review. Do not treat the two copies as synchronized until the release build actually embeds the canonical skill.

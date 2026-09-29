@@ -193,12 +193,12 @@ const I18N = {
     section4Eyebrow: '06 / TACOBIN 协作空间',
     section4Title: 'Tacobin：为团队连接 Taco 与 Agent',
     section4Desc:
-      '本地单文件适合自洽存档；当需要团队多人在线评审、生成可分享链接，或让终端 Agent 实时订阅评审事件流时，使用 taco-cli 一键推送到 Tacobin 空间。',
+      '本地单文件适合自洽存档；Tacobin 分享链接允许任何访问者自报姓名共同编辑并自动保存。评论不会唤醒 Agent；人点击「交接」后，订阅者才收到可补读的交接事件与完整评审引用。监听者名称仅为自报，不代表已送达或已处理。',
     section4CliTitle: 'CLI',
     section4CliCmd: 'npm install -g @tacobin/cli',
     section4AgentTitle: 'FOR AGENT',
     section4AgentPrompt:
-      '阅读 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md 并安装 taco-cli，再运行 taco-cli skills read taco 获取内置发布与评审指南。将当前 Taco 发布到 Tacobin，使用返回的 tacoId 运行 subscribe 监听评审事件。',
+      '阅读 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md 并安装 taco-cli，再运行 taco-cli skills read taco 获取内置发布与评审指南。发布 Taco，使用返回的 tacoId 订阅；仅在 review.handed_off 事件出现后，用 handoff 命令读取不可变评审，不把评论事件当成交接。',
     creditsEyebrow: '07 / SHOUTOUT',
     creditsBackToTop: '回到顶部',
     creditsTitlePrefix: '感谢',
@@ -210,8 +210,7 @@ const I18N = {
     langSwitchAria: '切换语言',
     tracePublish: '发布 Taco，拿到分享地址',
     traceSubscribe: '用 tacoId 订阅这份文档的评审',
-    traceEvent: '有人评论，事件回到 Agent 的终端',
-    traceComment: '请补充失败分支',
+    traceEvent: '人点击交接后，Agent 收到评审引用',
     agent: {
       title: 'agent · ~/taco',
       defaultHandoff: [
@@ -307,12 +306,12 @@ const I18N = {
     section4Eyebrow: '06 / TACOBIN SPACE',
     section4Title: 'Tacobin: Collaborative Relay for Teams & Agents',
     section4Desc:
-      'While single-file Tacos excel at self-contained local governance, Tacobin provides cloud sharing, web reviews, and live event streaming back to your terminal agent via taco-cli.',
+      'Local single-file Tacos remain self-contained. A Tacobin link lets anyone edit and autosave under a self-reported name. Comments do not trigger Handoff: only a human click records a replayable review event. Listener names are unverified; presence is not a delivery receipt.',
     section4CliTitle: 'CLI',
     section4CliCmd: 'npm install -g @tacobin/cli',
     section4AgentTitle: 'FOR AGENT',
     section4AgentPrompt:
-      'Read https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and install taco-cli, then run taco-cli skills read taco for its publishing and review guide. Publish the current Taco to Tacobin; use the returned tacoId with subscribe to stream review events.',
+      'Read https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and install taco-cli, then run taco-cli skills read taco. Publish a Taco and subscribe using its tacoId; only review.handed_off marks a completed human review. Fetch its immutable payload with taco-cli handoff before updating local files.',
     creditsEyebrow: '07 / SHOUTOUT',
     creditsBackToTop: 'Back to Top',
     creditsTitlePrefix: 'Thank you,',
@@ -324,8 +323,7 @@ const I18N = {
     pageDotAria: (page: number) => `Scroll to page ${page}`,
     langSwitchAria: 'Switch Language',
     traceSubscribe: 'Subscribe to reviews using its tacoId',
-    traceEvent: 'A review comment lands in the agent terminal',
-    traceComment: 'Please cover the failure path',
+    traceEvent: 'A human clicks Handoff; the agent receives a review reference',
     agent: {
       title: 'agent · ~/taco',
       defaultHandoff: [
@@ -1256,7 +1254,8 @@ export default function HomePage() {
                 </div>
                 <div className="workflow-terminal__step">
                   <div className="workflow-terminal__agent"><span>AGENT / 03</span>{t.traceEvent}</div>
-                  <div className="workflow-terminal__log"><span>event</span><code>{JSON.stringify({ kind: 'event', type: 'comment.created', data: { body: t.traceComment } })}</code></div>
+                  <div className="workflow-terminal__log"><span>event</span><code>{JSON.stringify({ kind: 'event', type: 'review.handed_off', tacoId: TRACE_TACO_ID, data: { handoffId: '63e82d37-a037-46f9-90d8-c752500169ed' } })}</code></div>
+                  <div className="workflow-terminal__command"><span>$</span><code>taco-cli handoff {TRACE_TACO_ID} 63e82d37-a037-46f9-90d8-c752500169ed</code></div>
                 </div>
               </div>
             </div>

@@ -116,6 +116,24 @@ TACO-33 原提案希望 review 文件自动向原 agent session 注入 user mess
 
 本次 Taco 评审已替代上一轮的 D1/D2：**不引入监听凭据**，Harness/Model/Name 全部由调用方自报并明确未验证；**不设计 idle session 自动唤醒**，支持等待子进程的 harness 可自行消费 CLI 输出，其他 harness 的独立插件另议。本设计不再留下上述两项待决策点。其他评审批注决定：任意访客可用自报姓名写入、正文自动保存、十分钟固定历史窗口、页头仅写「交接」、提交只读取上次 publish 到最新已保存状态的差异且不要求 Agent 理解 revisionId。
 
-本轮独立审查先发现五项可执行缺口：全局评论不接收 `anchor:null`、历史窗口无法读取正文、删除最后一份文件后快照不合法、评论解决/重开动作历史丢失、交接改名未强制携带稳定 id 与旧路径。已逐项修订 OpenAPI、Schema、正文与验收路径；独立审查者复核原文结论：“前述五项缺口均已闭合（全局评论 null 锚点、按窗口读取历史快照、删除唯一文件返回 422、评论动作历史、交接改名必须带 id/旧路径）。自动保存 CAS、交接高水位和不可变快照、十分钟冷却、自报监听信息及不向 Agent 暴露 revisionId 的边界一致；未发现仍满足可复现且由本次修订引入的阻断问题，结论通过。”只读审查未运行测试或构建。收到的四处六条评审批注来自用户消息；本地 `.taco.html` 没有这些线程的已保存记录或 thread id，不能伪造锚点/作者时间或声称线程已解决。源文件按评审批注更新；若后续收到含评论的已保存 Taco，再保留并合并真实线程。本轮设计仍为 Draft，等待人工评审批准。
+上一轮独立设计审查发现五项可执行缺口：全局评论不接收 `anchor:null`、历史窗口无法读取正文、删除最后一份文件后快照不合法、评论解决/重开动作历史丢失、交接改名未强制携带稳定 id 与旧路径。已逐项修订 OpenAPI、Schema、正文与验收路径；独立审查者复核原文结论：“前述五项缺口均已闭合（全局评论 null 锚点、按窗口读取历史快照、删除唯一文件返回 422、评论动作历史、交接改名必须带 id/旧路径）。自动保存 CAS、交接高水位和不可变快照、十分钟冷却、自报监听信息及不向 Agent 暴露 revisionId 的边界一致；未发现仍满足可复现且由本次修订引入的阻断问题，结论通过。”该审查只针对设计，未运行实现代码。收到的四处六条评审批注来自用户消息；本地 `.taco.html` 没有这些线程的已保存记录或 thread id，不能伪造锚点/作者时间或声称线程已解决。设计源文件按评审批注更新；若后续收到含评论的已保存 Taco，再保留并合并真实线程。设计仍为 Draft，等待人工评审批准。
 
-交付文件：`spec.md`、`contracts/openapi.yaml`、`contracts/handoff.schema.json`、中文 `.taco.html`；Draft PR [#85](https://github.com/Arcadia822/taco/pull/85) 关联 Linear [TACO-33](https://linear.app/castrel/issue/TACO-33) 与 GitHub [#72](https://github.com/Arcadia822/taco/issues/72)。本轮只改设计，不实现功能、不合并。
+上一轮设计交付：`spec.md`、`contracts/openapi.yaml`、`contracts/handoff.schema.json`、中文 `.taco.html`；Draft PR [#85](https://github.com/Arcadia822/taco/pull/85) 关联 Linear [TACO-33](https://linear.app/castrel/issue/TACO-33) 与 GitHub [#72](https://github.com/Arcadia822/taco/issues/72)。本轮在同一 PR 开发并保留 Draft 状态，不合并、不将设计标记为已批准。
+
+## 8. 实施阶段体积与依赖实测（develop）
+
+2026-09-29 以 `npm run build` 生成的 Complete/Lite、`packages/cli` 的 `npm run build`、Host 的 `next build` 和 `wc -c` 实测。前一阶段第 2 节的预算保留，以下与之并列；构建基线为 `AGENTS.md` 2026-09-28 的四个 shell 字节数。`skills/taco/` 与 Host 源码的基线采用实施前设计提交 `ba65720` 跟踪文件大小总和，同口径测当前文件。
+
+| 产物 | prepare 估算增量 | develop 实测增量/当前大小 | 偏差与原因 |
+| --- | ---: | ---: | --- |
+| Complete shell（`skills/taco/taco-shell.html`） | +3–6 KiB | +18,408 B（2,748,414 B，+0.67%） | 浏览器托管自动保存、监听状态、评论动作及并发保护需要共享运行时代码；高于仅有回调的预算。 |
+| Complete `.taco.html`（`dist-single/Taco_Spec.taco.html`） | +3–6 KiB | +18,694 B（2,853,949 B，+0.66%） | 同一内嵌运行时代码，附加构建包装开销。 |
+| Lite shell（`skills/taco/taco-shell-lite.html`） | +3–6 KiB | +17,208 B（198,240 B，+9.51%） | 同上，Lite 基数较小；超过 ≥1% 的主动告知阈值。 |
+| Lite `.taco.html`（`dist-single/Taco_Spec_Lite.taco.html`） | +3–6 KiB | +17,494 B（303,775 B，+6.11%） | 同上，超过 ≥1% 的主动告知阈值。 |
+| `skills/taco/` 全目录 | 非 shell 文档 +1–3 KiB | 跟踪文件基线 14,056,129 B → 当前 14,136,126 B（+79,997 B）；`du -sk` 当前 18,368 KiB | shell 及多个生成模板镜像同步增加，目录增量不能只按正文说明计算。 |
+| `@tacobin/cli` 二进制 | +3–7 KiB | 当前 `dist/main.js` 73,733 B；该构建前未留存同环境旧 binary，增量不可核实 | 只报告可复现的当前字节数，不以不同依赖环境估算旧产物。 |
+| Host `.ts/.tsx/.sql` 源码 | +25–45 KiB | `ba65720` 同口径 177,560 B → 当前 336,546 B（+158,986 B） | 持久化 PostgreSQL/本地 SQLite 双适配器、共享路由及事务/CSRF/配额校验多于规划。服务端打包体积不等于此源码增量。 |
+
+依赖：Host 新增运行依赖 `pg`（生产 PostgreSQL 连接）和开发类型依赖 `@types/pg`；本地 SQLite 使用 Node 内置模块。托管网页自动保存、评论、监听状态与显式交接需要同源网络请求；本地 `.taco.html` 仍可离线打开。若需要缩减 Lite 下载体积，可将仅在 Host 同源能力存在时使用的浏览器协作模块拆到 Host 提供的独立脚本，代价是托管页额外请求及另一份脚本版本/缓存契约；当前保留单文件 shell，避免离线/托管两条运行时出现版本漂移。
+
+实测交互：本地生产 Host + SQLite、CLI publish/subscribe、浏览器文件编辑与全局/锚定评论自动保存、监听者自报展示、页头手动交接、CLI 按引用取回累计/增量 diff 与评论、Checkpoint 状态 `in_progress → complete` 的持久交接，以及 CLI `events --after/--through/--limit` 回放均成功。第二次只新增评论后交接：累计文件改动仍为 `plan.md`，增量文件/Checkpoint 差异均为空，评论历史保留两条消息。根测试 52 文件、562 测试通过，Complete/Lite、CLI、Host 构建通过。独立代码审查的 PostgreSQL 事务、跨次交接路径、上传限额/内存上限、幂等收据和浏览器编辑竞争等问题已修复并补回归测试；生产 PostgreSQL、私有 Blob 及跨 Vercel 实例场景尚未在此环境实测，不能据本地 SQLite 结果宣称已通过。

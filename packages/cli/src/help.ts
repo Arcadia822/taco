@@ -144,6 +144,10 @@ export const ROOT_HELP: CommandHelpOutput = {
     },
     { name: 'subscribe', summary: 'Stream realtime events via Server-Sent Events' },
     { name: 'events', summary: 'Page the persistent event log' },
+    {
+      name: 'handoff',
+      summary: 'Retrieve full immutable handoff content by tacoId and handoffId',
+    },
     { name: 'skills list', summary: 'List offline Agent guides embedded in this binary' },
     { name: 'skills read', summary: 'Read embedded installation, publishing, and review guidance' },
   ],
@@ -289,6 +293,41 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
         default: DEFAULT_HOST,
         description: 'Target Host origin',
       },
+      {
+        name: '--harness',
+        type: 'string',
+        required: false,
+        default: null,
+        description: 'Self-reported harness name: codex, claude-code, cursor, gemini-cli, other',
+      },
+      {
+        name: '--model',
+        type: 'string',
+        required: false,
+        default: null,
+        description: 'Self-reported model family name: gpt, claude, gemini, other',
+      },
+      {
+        name: '--model-id',
+        type: 'string',
+        required: false,
+        default: null,
+        description: 'Detailed model identifier (1-128 characters)',
+      },
+      {
+        name: '--name',
+        type: 'string',
+        required: false,
+        default: null,
+        description: 'Self-reported display name for presence (1-64 characters)',
+      },
+      {
+        name: '--listener-id',
+        type: 'uuid',
+        required: false,
+        default: null,
+        description: 'Optional stable listener UUID (auto-generated if omitted)',
+      },
     ],
     environment: GLOBAL_ENV,
     output: {
@@ -312,6 +351,11 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
         exitCode: 5,
         recovery: 'The Host stayed unreachable past the reconnect window; retry later',
       },
+      {
+        code: 'VALIDATION_ERROR',
+        exitCode: 2,
+        recovery: 'Check parameter syntax, e.g. valid enum for --harness/--model or string length',
+      },
     ],
     examples: [
       {
@@ -321,6 +365,11 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
       {
         invocation: 'taco-cli subscribe <tacoId> --after 42',
         purpose: 'Replay events after 42 then stream live',
+      },
+      {
+        invocation:
+          'taco-cli subscribe <tacoId> --harness codex --model gpt --model-id gpt-5 --name "Agent"',
+        purpose: 'Stream events while self-reporting harness, model, and display name',
       },
     ],
   },
@@ -341,6 +390,20 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
         description: 'Exclusive cursor sequence string to page after',
       },
       {
+        name: '--through',
+        type: 'sequence',
+        required: false,
+        default: null,
+        description: 'Inclusive upper sequence bound for stable pagination',
+      },
+      {
+        name: '--limit',
+        type: 'integer',
+        required: false,
+        default: 100,
+        description: 'Maximum events per page, from 1 to 500',
+      },
+      {
         name: '--host',
         type: 'origin',
         required: false,
@@ -356,6 +419,16 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
     },
     errors: [
       {
+        code: 'CURSOR_EXPIRED',
+        exitCode: 6,
+        recovery: 'Resume from the earliest sequence the Host still retains',
+      },
+      {
+        code: 'VALIDATION_ERROR',
+        exitCode: 2,
+        recovery: 'Check parameter syntax, e.g. --after cursor must be a non-negative integer string',
+      },
+      {
         code: 'LOCAL_IO_ERROR',
         exitCode: 1,
         recovery: 'Read the Host response message; confirm the Taco UUID',
@@ -365,6 +438,54 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
       {
         invocation: 'taco-cli events <tacoId>',
         purpose: 'Read every recorded event for the Taco',
+      },
+    ],
+  },
+  handoff: {
+    schema: CLI_SCHEMA_HELP,
+    binaryVersion: CLI_BINARY_VERSION,
+    command: ['handoff'],
+    summary: 'Retrieve full immutable handoff content by tacoId and handoffId',
+    positionals: [
+      { name: 'tacoId', type: 'uuid', required: true, description: 'Target Taco UUID' },
+      { name: 'handoffId', type: 'uuid', required: true, description: 'Target Handoff UUID' },
+    ],
+    options: [
+      {
+        name: '--host',
+        type: 'origin',
+        required: false,
+        default: DEFAULT_HOST,
+        description: 'Target Host origin',
+      },
+    ],
+    environment: GLOBAL_ENV,
+    output: {
+      stdout: 'JSON object containing full immutable HandoffRecord',
+      stderr: 'ErrorResponse JSON on failure',
+      streaming: false,
+    },
+    errors: [
+      {
+        code: 'VALIDATION_ERROR',
+        exitCode: 2,
+        recovery: 'Provide valid tacoId and handoffId arguments',
+      },
+      {
+        code: 'CURSOR_EXPIRED',
+        exitCode: 6,
+        recovery: 'The Taco or handoff has expired or was deleted',
+      },
+      {
+        code: 'LOCAL_IO_ERROR',
+        exitCode: 1,
+        recovery: 'Check Host connectivity or error response',
+      },
+    ],
+    examples: [
+      {
+        invocation: 'taco-cli handoff <tacoId> <handoffId>',
+        purpose: 'Fetch immutable handoff snapshot containing file diffs, checkpoints, and comments',
       },
     ],
   },
