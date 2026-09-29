@@ -2,10 +2,10 @@ name: Nightly Auto Release
 
 on:
   schedule:
-    # 每天 UTC 12:23（即北京时间 20:23）排期。GitHub 的 schedule 是尽力而为的：
-    # 整点（:00）负载最高，实测本仓库连续四天在 12:00 排期后延迟 3h22m–4h09m 才触发，
-    # 故避开整点并预留漂移余量；需要准时发版请用 workflow_dispatch。
-    - cron: '23 12 * * *'
+    # 每 4 小时排期一轮（UTC 00:23 / 04:23 / 08:23 / 12:23 / 16:23 / 20:23，即北京时间 +8h）。
+    # GitHub 的 schedule 是尽力而为的：整点（:00）负载最高，实测本仓库连续四天在 12:00
+    # 排期后延迟 3h22m–4h09m 才触发，故避开整点并预留漂移余量；需要准时发版请用 workflow_dispatch。
+    - cron: '23 */4 * * *'
   # 支持在 GitHub Actions 页面手动点击触发进行测试或立即执行
   workflow_dispatch:
     inputs:
