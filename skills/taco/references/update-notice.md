@@ -32,7 +32,7 @@ Do not upgrade on your own; wait for an explicit request, then give the command 
 
 - Installed with `npx skills`: `npx skills@latest update taco`
 - Installed by copying the skill directory (or you are unsure): re-run the installation steps in `docs/agent-installation.md` (preferring `npx skills@latest add arcadia822/taco --skill=taco`), then re-verify the file list it lists.
-- `taco-cli`: `npm install -g @tacobin/cli`, or the standalone archive from the latest GitHub Release.
-- Taco Spec Kit extension: re-run the install for the release that publishes `taco-extension-<version>.zip`; expect `prepare-policy` to report `manual-merge` when the project's policy block changed locally.
+- `taco-cli`: `npm install -g @tacobin/cli`, or the standalone archive from the latest `taco-cli-v*` GitHub Release.
+- Taco Spec Kit extension: re-run the install using `specify extension add taco --force --from https://github.com/Arcadia822/taco/releases/latest/download/taco-extension.zip` (or the versioned `taco-extension-v<version>.zip` asset); expect `prepare-policy` to report `manual-merge` when the project's policy block changed locally.
 
 Never edit a version marker, package manifest, or another project's files to make a check pass.

@@ -27,7 +27,7 @@ concurrency:
 jobs:
   trigger-deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -67,3 +67,23 @@ jobs:
 
           echo "Triggered Vercel build $job_id for $GITHUB_REF_NAME ($GITHUB_SHA)." >> "$GITHUB_STEP_SUMMARY"
           echo "Watch it at https://vercel.com/castrel-ai/tacobin/deployments" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify the production deployment
+        env:
+          PRODUCTION_URL: https://tacobin.arcadia-han.com
+        run: |
+          echo "Polling $PRODUCTION_URL/deploy.json for tag $GITHUB_REF_NAME ..."
+          deadline=$((SECONDS + 900))
+          while :; do
+            body="$(curl --silent --show-error --max-time 20 "$PRODUCTION_URL/deploy.json" 2>/dev/null || true)"
+            served="$(printf '%s' "$body" | jq -r '.tag // empty' 2>/dev/null || true)"
+            if [ "$served" = "$GITHUB_REF_NAME" ]; then
+              echo "Production serves $served; Vercel build successfully completed." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::Production still reports '${served:-nothing}' instead of $GITHUB_REF_NAME after 15 minutes. Check https://vercel.com/castrel-ai/tacobin/deployments"
+              exit 1
+            fi
+            sleep 20
+          done

@@ -1,11 +1,12 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 const checkChangesScript = resolve('.github/workflows/scripts/check-changes.mjs')
 const releaseNotesScript = resolve('.github/workflows/scripts/generate-release-notes.mjs')
+const packageExtensionScript = resolve('scripts/package-extension.mjs')
 
 const fixtures: string[] = []
 
@@ -133,5 +134,69 @@ describe('generate-release-notes.mjs changelog update', () => {
     expect(manifest).not.toContain("version: '0.8.0'")
 
     expect(readFileSync(join(dir, 'notes.md'), 'utf8')).toContain('## [1.1.0]')
+  })
+})
+
+describe('package-extension.mjs', () => {
+  it('packages the extension into flat versioned and stable archives honoring .extensionignore', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'taco-pkg-ext-'))
+    fixtures.push(dir)
+    const extDir = join(dir, 'extensions/taco')
+    const outDir = join(dir, 'dist-extension')
+    mkdirSync(join(extDir, 'templates/spec'), { recursive: true })
+    mkdirSync(join(extDir, 'tests'), { recursive: true })
+
+    writeFileSync(
+      join(extDir, 'extension.yml'),
+      "schema_version: '1.0'\n\nextension:\n  id: 'taco'\n  version: '1.2.3'\n"
+    )
+    writeFileSync(join(extDir, 'README.md'), '# Taco Spec Kit extension\n')
+    writeFileSync(join(extDir, '.extensionignore'), 'tests/\n*.log\n')
+    writeFileSync(join(extDir, 'templates/spec/template.md'), '# Spec template\n')
+    writeFileSync(join(extDir, 'tests/ignored.test.ts'), '// should be excluded\n')
+    writeFileSync(join(extDir, 'debug.log'), 'test log\n')
+
+    node(dir, [
+      packageExtensionScript,
+      '--version', '1.2.3',
+      '--source', extDir,
+      '--out-dir', outDir
+    ])
+
+    const versionedZip = join(outDir, 'taco-extension-v1.2.3.zip')
+    const stableZip = join(outDir, 'taco-extension.zip')
+    expect(existsSync(versionedZip)).toBe(true)
+    expect(existsSync(stableZip)).toBe(true)
+
+    const entries = execFileSync('unzip', ['-Z1', versionedZip], { encoding: 'utf8' })
+      .split('\n')
+      .map((e) => e.trim())
+      .filter(Boolean)
+
+    expect(entries).toContain('extension.yml')
+    expect(entries).toContain('README.md')
+    expect(entries).toContain('templates/spec/template.md')
+    expect(entries.some((e) => e.startsWith('tests/'))).toBe(false)
+    expect(entries.includes('debug.log')).toBe(false)
+    expect(entries.some((e) => e.startsWith('extensions/'))).toBe(false)
+  })
+
+  it('refuses to package when the manifest version does not match the target version', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'taco-pkg-ext-fail-'))
+    fixtures.push(dir)
+    const extDir = join(dir, 'extensions/taco')
+    mkdirSync(extDir, { recursive: true })
+    writeFileSync(
+      join(extDir, 'extension.yml'),
+      "schema_version: '1.0'\n\nextension:\n  id: 'taco'\n  version: '1.0.0'\n"
+    )
+
+    expect(() => {
+      node(dir, [
+        packageExtensionScript,
+        '--version', '1.2.3',
+        '--source', extDir
+      ])
+    }).toThrow(/extension\.yml declares 1\.0\.0, but the release is 1\.2\.3/)
   })
 })

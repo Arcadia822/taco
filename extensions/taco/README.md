@@ -36,7 +36,7 @@ Install the published extension archive into the exact initialized Spec Kit proj
 
 ```bash
 specify extension add taco --from \
-  https://github.com/Arcadia822/taco/releases/download/v0.6.0/taco-extension-v0.6.0.zip
+  https://github.com/Arcadia822/taco/releases/latest/download/taco-extension.zip
 node .specify/extensions/taco/bin/taco.mjs prepare-template \
   --project-root "$PWD" \
   --json
@@ -46,7 +46,7 @@ node .specify/extensions/taco/bin/taco.mjs prepare-policy \
 specify extension list
 ```
 
-Release tags identify the complete source repository. Install the release's attached `taco-extension-<version>.zip` asset, which contains `extension.yml` at its root; GitHub's automatically generated source archives are not extension packages. The example above pins `v0.6.0`, the release that currently publishes an extension archive. A release is only installable if its assets are listed on the release page, so check that page rather than assuming an archive exists for every tag — the manifest version in the source tree can run ahead of the newest published archive.
+Release tags identify the complete source repository. Install the release's attached `taco-extension.zip` (or versioned `taco-extension-v<version>.zip`) asset, which contains `extension.yml` at its root; GitHub's automatically generated source archives are not extension packages. Every core release publishes both the stable `taco-extension.zip` and the version-pinned archive.
 
 The installing Agent must run `prepare-policy` to install the complete [`policies/taco-agent-policy.md`](policies/taco-agent-policy.md) into project-owned process documentation. `AGENTS.md` retains unrelated instructions and receives only one imperative reference requiring the Agent to read the workflow before any Spec Kit or Taco work. Plugin installation is incomplete until that routing is present: the installed policy is authoritative only once the project's process document carries the managed block and `AGENTS.md` points at that document.
 

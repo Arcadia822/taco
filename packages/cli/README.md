@@ -19,7 +19,7 @@ npx @tacobin/cli help
 
 ### Via Standalone Binary
 
-You can also download precompiled standalone binaries directly from [GitHub Releases](https://github.com/Arcadia822/taco/releases) (macOS Apple Silicon/Intel, Linux arm64/x64).
+You can also download precompiled standalone binaries directly from [GitHub Releases (`taco-cli-v*`)](https://github.com/Arcadia822/taco/releases?q=taco-cli-v) (macOS Apple Silicon/Intel, Linux arm64/x64).
 
 ## Quick Start
 

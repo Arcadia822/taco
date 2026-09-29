@@ -2,8 +2,10 @@ name: Nightly Auto Release
 
 on:
   schedule:
-    # 每天 UTC 12:00（即北京时间 20:00）自动执行
-    - cron: '0 12 * * *'
+    # 每天 UTC 12:23（即北京时间 20:23）排期。GitHub 的 schedule 是尽力而为的：
+    # 整点（:00）负载最高，实测本仓库连续四天在 12:00 排期后延迟 3h22m–4h09m 才触发，
+    # 故避开整点并预留漂移余量；需要准时发版请用 workflow_dispatch。
+    - cron: '23 12 * * *'
   # 支持在 GitHub Actions 页面手动点击触发进行测试或立即执行
   workflow_dispatch:
     inputs:
@@ -99,7 +101,13 @@ jobs:
           NEW_VER=$(jq -r '.components[] | select(.name=="tacobin") | .recommendedVersion' /tmp/report.json)
           echo "Releasing tacobin v$NEW_VER ..."
           npm version "$NEW_VER" --workspace=packages/host --no-git-tag-version
-          git commit -am "chore(release): tacobin-v$NEW_VER"
+          # 部署标记：被 tag 的提交必须带上它，deploy-tacobin.yml 才能用线上 /deploy.json
+          # 断言这次部署真的生效（静态文件不经构建改写，因此字节即证据）
+          node -e 'const { writeFileSync } = require("node:fs")
+          const [tag, version] = process.argv.slice(1)
+          writeFileSync("packages/host/public/deploy.json", JSON.stringify({ tag, version }, null, 2) + "\n")' "tacobin-v$NEW_VER" "$NEW_VER"
+          git add packages/host package-lock.json
+          git commit -m "chore(release): tacobin-v$NEW_VER"
           git tag -a "tacobin-v$NEW_VER" -m "tacobin-v$NEW_VER"
           git push origin main
           git push origin "tacobin-v$NEW_VER"
@@ -132,19 +140,27 @@ jobs:
           # 3. 执行完整验证与构建（包含测试与产物重新构建同步）
           NODE_OPTIONS="${NODE_OPTIONS:-} --no-experimental-webstorage" npm run check
 
-          # 4. 提交变更与打 Tag
+          # 4. 打包 Spec Kit 扩展：版本化资产供更新检查匹配，稳定名资产供官网安装命令使用
+          #    （scripts/package-extension.mjs 会拒绝版本号未同步的 extension.yml）
+          node scripts/package-extension.mjs --version "$NEW_VER"
+
+          # 5. 提交变更与打 Tag
           git add package.json package-lock.json extensions/ dist-single/ skills/taco/
           git commit -m "chore(release): taco v$NEW_VER"
           git tag -a "v$NEW_VER" -m "Taco v$NEW_VER"
 
-          # 5. 推送到远程仓库
+          # 6. 推送到远程仓库
           git push origin main
           git push origin "v$NEW_VER"
 
-          # 6. 发布 GitHub Release
+          # 7. 发布 GitHub Release；--latest 让 releases/latest/download/taco-extension.zip
+          #    永远指向本体发布，而不是最近一次 taco-cli 发布（release-cli.yml 侧已设 make_latest: false）
           gh release create "v$NEW_VER" \
             --repo "$GITHUB_REPOSITORY" \
+            --latest \
             --title "Taco v$NEW_VER" \
-            --notes-file /tmp/release-notes.md
+            --notes-file /tmp/release-notes.md \
+            "dist-extension/taco-extension-v$NEW_VER.zip" \
+            "dist-extension/taco-extension.zip"
 
-          echo "✅ Published Taco v$NEW_VER GitHub Release" >> "$GITHUB_STEP_SUMMARY"
+          echo "✅ Published Taco v$NEW_VER GitHub Release (with the Spec Kit extension archive)" >> "$GITHUB_STEP_SUMMARY"
