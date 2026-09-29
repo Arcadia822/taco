@@ -3,6 +3,7 @@ import './styles.css'
 import { capturePristine, canWriteInPlace, openedFileName, saveFile, titleForFileName, type SaveResult } from './kernel/save.ts'
 import { configureApp } from './kernel/app.ts'
 import { FileBrowser, type FileBrowserOptions } from './file-browser.ts'
+import type { HostedHandoffOutcome } from './hosted-session.ts'
 import { fileByPath, fileKind, isInternalFile, isMediaFileKind, parseBundle, relativePath, type TacoBundle, type TacoFile } from './model.ts'
 import { credentialFreeFile, TACO_SECURITY_VERSION } from './security.ts'
 import { validateDocument, type DocumentValidation } from './validation.ts'
@@ -38,6 +39,13 @@ export interface TacoFileApi {
     comments: NonNullable<TacoBundle['comments']>
   }
   fileHash?: (content: string, mediaType?: string) => string
+  /**
+   * Same-origin Host review capability, present only when the serving page declared one. Bundles can
+   * never set it, and it never addresses another origin.
+   */
+  hosted?: () => { tacoId: string; apiBase: string } | null
+  /** Handoff through the Host. Only a Host page gets this; offline copies keep the copy action. */
+  handoff?: () => Promise<HostedHandoffOutcome>
 }
 
 
@@ -148,6 +156,8 @@ export function bootCommon(bundle: TacoBundle, options: FileBrowserOptions = {},
           comments: doc.comments ?? [],
         }
       },
+      hosted: () => browser.hostedInfo(),
+      handoff: () => browser.handoffViaHost(),
     }
   }
 

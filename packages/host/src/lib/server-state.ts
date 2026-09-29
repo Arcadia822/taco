@@ -1,4 +1,7 @@
-import { randomUUID } from 'node:crypto'
+import type { DocumentSnapshot } from '@taco/protocol'
+import { getDatabase, type SharedStateResult, type StoredEvent } from './db'
+
+export { sha256Hex } from './db'
 
 export interface TacoPaste {
   id: string
@@ -18,28 +21,20 @@ export interface TacoCommentEvent {
   occurredAt: string
 }
 
-class PastebinState {
-  pastes = new Map<string, TacoPaste>() // key: paste UUID
-  events = new Map<string, TacoCommentEvent[]>() // key: paste UUID
-  subscribers = new Map<string, Set<(ev: TacoCommentEvent) => void>>()
+type EventListener = (ev: StoredEvent) => void
+
+class ServerRuntimeState {
+  subscribers = new Map<string, Set<EventListener>>()
 }
 
-const globalForState = globalThis as unknown as { __tacoPastebinState?: PastebinState }
-export const state = globalForState.__tacoPastebinState || (globalForState.__tacoPastebinState = new PastebinState())
+const globalForState = globalThis as unknown as { __tacoServerRuntimeState?: ServerRuntimeState }
+const runtimeState = globalForState.__tacoServerRuntimeState || (globalForState.__tacoServerRuntimeState = new ServerRuntimeState())
 
-export async function sha256Hex(data: Uint8Array | string): Promise<string> {
-  const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data
-  const hashBuf = await crypto.subtle.digest('SHA-256', bytes)
-  return Array.from(new Uint8Array(hashBuf))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-}
-
-export function subscribeToPasteEvents(tacoId: string, listener: (ev: TacoCommentEvent) => void): () => void {
-  let listeners = state.subscribers.get(tacoId)
+export function subscribeToTacoEvents(tacoId: string, listener: EventListener): () => void {
+  let listeners = runtimeState.subscribers.get(tacoId)
   if (!listeners) {
     listeners = new Set()
-    state.subscribers.set(tacoId, listeners)
+    runtimeState.subscribers.set(tacoId, listeners)
   }
   listeners.add(listener)
   return () => {
@@ -47,11 +42,64 @@ export function subscribeToPasteEvents(tacoId: string, listener: (ev: TacoCommen
   }
 }
 
-export function broadcastPasteEvent(ev: TacoCommentEvent) {
-  const listeners = state.subscribers.get(ev.tacoId)
+export function broadcastTacoEvent(ev: StoredEvent): void {
+  const listeners = runtimeState.subscribers.get(ev.tacoId)
   if (listeners) {
     for (const fn of listeners) {
-      fn(ev)
+      try {
+        fn(ev)
+      } catch {
+        // Ignore subscriber drop
+      }
     }
   }
+}
+export function subscribeToPasteEvents(tacoId: string, listener: (ev: TacoCommentEvent) => void): () => void {
+  return subscribeToTacoEvents(tacoId, (stored) => {
+    const data = stored.data && typeof stored.data === 'object' ? stored.data : undefined
+    const body = data && 'body' in data && typeof data.body === 'string' ? data.body : ''
+    let author = 'Anonymous'
+    if (typeof stored.actor === 'string') {
+      author = stored.actor
+    } else if (stored.actor && typeof stored.actor === 'object' && 'displayName' in stored.actor) {
+      const name = stored.actor.displayName
+      if (typeof name === 'string') author = name
+    }
+    listener({
+      id: stored.id,
+      sequence: Number(stored.sequence),
+      tacoId: stored.tacoId,
+      body,
+      author,
+      occurredAt: stored.occurredAt,
+    })
+  })
+}
+
+export function broadcastPasteEvent(ev: TacoCommentEvent): void {
+  broadcastTacoEvent({
+    id: ev.id,
+    sequence: String(ev.sequence),
+    tacoId: ev.tacoId,
+    type: 'comment.created',
+    occurredAt: ev.occurredAt,
+    actor: { kind: 'guest', id: ev.author, displayName: ev.author, verified: false },
+    data: { body: ev.body },
+  })
+}
+
+export async function getSharedReviewState(tacoId: string): Promise<SharedStateResult | null> {
+  try {
+    const db = getDatabase()
+    return await db.getSharedState(tacoId)
+  } catch {
+    return null
+  }
+}
+
+// Export dummy state for any legacy direct field access
+export const state = {
+  pastes: new Map<string, TacoPaste>(),
+  events: new Map<string, TacoCommentEvent[]>(),
+  subscribers: runtimeState.subscribers,
 }

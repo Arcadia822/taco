@@ -21,6 +21,12 @@ export interface CommentsControllerOptions {
   getLocale: () => Locale
   openComments: () => void
   toast: (message: string) => void
+  /**
+   * A hosted review persists comment actions through the frozen action set (create, reply, resolve,
+   * reopen, delete message). Editing a message and deleting a whole thread have no durable action, so
+   * offering them while a Host owns the review would promise a save that cannot happen.
+   */
+  durableActionsOnly?: () => boolean
 }
 
 interface HighlightTarget {
@@ -56,6 +62,7 @@ export class CommentsController {
   private commentList: HTMLElement | null = null
   private commentToggle: HTMLButtonElement | null = null
   private pendingAnchor: TacoTextAnchor | null = null
+  private pendingGlobal = false
   private selectionButton: HTMLButtonElement | null = null
   private selectionButtonEvents: AbortController | null = null
   private principal: CommentPrincipal | null = null
@@ -91,6 +98,15 @@ export class CommentsController {
     this.pendingAnchor = null
     this.removeSelectionButton()
   }
+  startDocumentComment(): void {
+    if (!bundleCanWrite(this.options.bundle)) return
+    this.pendingGlobal = true
+    this.pendingAnchor = null
+    this.removeSelectionButton()
+    this.options.openComments()
+    this.paint()
+  }
+
 
   destroy(): void {
     cancelAnimationFrame(this.layoutFrame)
@@ -114,7 +130,9 @@ export class CommentsController {
     this.commentList.append(lane)
     const path = this.options.getSelected()?.path
     const threads = path ? commentsForPath(this.options.bundle.comments, path) : []
-    const openCount = threads
+    // Whole-document discussions belong to the Taco, not to one file, so they always stay visible.
+    const globalThreads = (this.options.bundle.comments ?? []).filter((thread) => !thread.anchor)
+    const openCount = [...threads, ...globalThreads]
       .filter((thread) => thread.status === 'open')
       .reduce((count, thread) => count + thread.messages.filter((message) => !isDeletedMessage(message)).length, 0)
     this.commentToggle.querySelector('.comment-count')?.remove()
@@ -123,9 +141,12 @@ export class CommentsController {
     this.placement = resolveCommentPlacement(threads, this.anchorProbe())
     const pendingAnchor = this.pendingAnchor?.path === path ? this.pendingAnchor : null
     if (pendingAnchor) lane.append(this.buildNewCommentComposer(pendingAnchor))
-    if (!threads.length && !pendingAnchor) lane.append(this.buildEmptyCommentBanner())
+    if (!threads.length && !globalThreads.length && !pendingAnchor && !this.pendingGlobal) lane.append(this.buildEmptyCommentBanner())
     for (const { thread } of this.placement.placed) lane.append(this.buildCommentThread(thread))
     if (this.placement.stale.length) lane.append(this.buildStaleCommentGroup(this.placement.stale))
+    if (globalThreads.length || this.pendingGlobal || bundleCanWrite(this.options.bundle)) {
+      lane.append(this.buildGlobalCommentGroup(globalThreads))
+    }
     this.observeLayout()
     this.scheduleLayout()
     this.draftRestore = null
@@ -218,7 +239,7 @@ export class CommentsController {
     }
     const entry = this.currentPlacement().placed.find((candidate) => {
       if (candidate.thread.status !== 'open') return false
-      if (candidate.thread.anchor.block && !inSource) return this.findCommentBlock(candidate.thread.anchor)?.contains(target) ?? false
+      if (candidate.anchor.block && !inSource) return this.findCommentBlock(candidate.anchor)?.contains(target) ?? false
       if (!candidate.range) return false
       if (inSource) return source.input.selectionStart >= candidate.range.start && source.input.selectionStart < candidate.range.end
       const range = domRange(article!, candidate.range.start, candidate.range.end)
@@ -256,10 +277,10 @@ export class CommentsController {
     const article = editorHost?.querySelector<HTMLElement>('.tiptap')
     if (!article || !editorHost) return
     for (const entry of open) {
-      if (entry.thread.anchor.block) this.findCommentBlock(entry.thread.anchor)?.classList.add('has-comment')
+      if (entry.anchor.block) this.findCommentBlock(entry.anchor)?.classList.add('has-comment')
     }
     const ranges = open
-      .filter((entry) => entry.range && !entry.thread.anchor.block)
+      .filter((entry) => entry.range && !entry.anchor.block)
       .map((entry) => domRange(article, entry.range!.start, entry.range!.end))
       .filter((range): range is Range => Boolean(range))
     const highlights = cssHighlights()
@@ -332,7 +353,13 @@ export class CommentsController {
     const list = this.commentList
     if (!list) return
     // A form that already held focus keeps it; otherwise a newly opened composer takes focus.
-    const key = drafts.focus ?? (list.querySelector('.comment-composer') ? 'composer' : null)
+    const key = drafts.focus ?? (
+      list.querySelector('.comment-global-group .comment-composer')
+        ? 'composer:global'
+        : list.querySelector('.comment-composer')
+          ? 'composer'
+          : null
+    )
     if (!key) return
     // Draft keys carry user-authored thread and message ids, so match them as data rather than in a selector.
     const input = Array.from(list.querySelectorAll<HTMLTextAreaElement>('textarea[data-draft-key]'))
@@ -385,7 +412,7 @@ export class CommentsController {
     }
     for (const entry of this.currentPlacement().placed) {
       const card = cards.get(entry.thread.id)
-      if (card) add(card, entry.thread.anchor, entry.range)
+      if (card) add(card, entry.anchor, entry.range)
     }
     const composer = lane.querySelector<HTMLElement>(':scope > .comment-composer')
     if (composer && this.pendingAnchor) {
@@ -423,21 +450,31 @@ export class CommentsController {
     return banner
   }
 
-  private buildNewCommentComposer(anchor: TacoTextAnchor): HTMLElement {
+  private buildNewCommentComposer(anchor: TacoTextAnchor | null): HTMLElement {
     const composer = el('section', 'comment-composer')
-    composer.append(el('div', 'comment-composer-label', this.t.addComment), this.buildQuote(anchor))
+    if (anchor) {
+      composer.append(el('div', 'comment-composer-label', this.t.addComment), this.buildQuote(anchor))
+    } else {
+      composer.append(el('div', 'comment-composer-label', this.t.addComment), el('p', 'comment-thread-scope', this.t.documentComment))
+    }
     const form = el('form', 'comment-form')
     const textarea = el('textarea', 'comment-input') as HTMLTextAreaElement
-    textarea.dataset.draftKey = 'composer'
-    textarea.value = this.draftRestore?.values.get('composer') ?? ''
+    const draftKey = anchor ? 'composer' : 'composer:global'
+    textarea.dataset.draftKey = draftKey
+    textarea.value = this.draftRestore?.values.get(draftKey) ?? ''
     textarea.placeholder = this.t.commentPlaceholder
     textarea.setAttribute('aria-label', this.t.commentPlaceholder)
     const actions = el('div', 'comment-form-actions')
     const cancel = el('button', 'comment-action', this.t.cancel) as HTMLButtonElement
     cancel.type = 'button'
     cancel.addEventListener('click', () => {
-      this.pendingAnchor = null
-      this.removeSelectionButton()
+      if (anchor) {
+        this.pendingAnchor = null
+        this.removeSelectionButton()
+      } else {
+        this.pendingGlobal = false
+      }
+      this.dropDraftForm(draftKey)
       this.paint()
     })
     const submit = el('button', 'comment-submit', this.t.addComment) as HTMLButtonElement
@@ -458,12 +495,16 @@ export class CommentsController {
   private buildCommentThread(thread: TacoCommentThread, stale = false): HTMLElement {
     const card = el('article', `comment-thread${thread.status === 'resolved' ? ' is-resolved' : ''}${stale ? ' is-stale' : ''}`)
     card.dataset.threadId = thread.id
-    card.addEventListener('pointerenter', () => this.previewCommentThread(thread))
-    card.addEventListener('pointerleave', () => this.clearCommentPreview())
-    const quote = this.buildQuote(thread.anchor, true) as HTMLButtonElement
-    quote.type = 'button'
-    quote.addEventListener('click', () => this.activateCommentThread(thread))
-    card.append(quote)
+    if (thread.anchor) {
+      card.addEventListener('pointerenter', () => this.previewCommentThread(thread))
+      card.addEventListener('pointerleave', () => this.clearCommentPreview())
+      const quote = this.buildQuote(thread.anchor, true) as HTMLButtonElement
+      quote.type = 'button'
+      quote.addEventListener('click', () => this.activateCommentThread(thread))
+      card.append(quote)
+    } else {
+      card.append(el('p', 'comment-thread-scope', this.t.documentComment))
+    }
     if (stale) card.append(el('p', 'comment-stale-badge', this.t.positionLost))
     for (const message of sortCommentMessages(thread.messages)) card.append(this.buildCommentMessage(thread, message))
     if (!bundleCanWrite(this.options.bundle)) return card
@@ -474,10 +515,13 @@ export class CommentsController {
     const resolve = el('button', 'comment-action', thread.status === 'open' ? this.t.resolve : this.t.reopen) as HTMLButtonElement
     resolve.type = 'button'
     resolve.addEventListener('click', () => this.toggleThreadStatus(thread))
-    const remove = el('button', 'comment-action comment-delete', this.t.deleteThread) as HTMLButtonElement
-    remove.type = 'button'
-    remove.addEventListener('click', () => this.deleteThread(thread))
-    actions.append(reply, resolve, remove)
+    actions.append(reply, resolve)
+    if (!this.options.durableActionsOnly?.()) {
+      const remove = el('button', 'comment-action comment-delete', this.t.deleteThread) as HTMLButtonElement
+      remove.type = 'button'
+      remove.addEventListener('click', () => this.deleteThread(thread))
+      actions.append(remove)
+    }
     card.append(actions)
     const draft = this.draftRestore?.values.get(`reply:${thread.id}`)
     if (draft !== undefined) this.openReplyComposer(card, thread, draft, false)
@@ -490,6 +534,28 @@ export class CommentsController {
     group.setAttribute('aria-label', this.t.positionLost)
     group.append(el('h3', 'comment-stale-heading', this.t.positionLost))
     for (const thread of threads) group.append(this.buildCommentThread(thread, true))
+    return group
+  }
+
+  private buildGlobalCommentGroup(threads: TacoCommentThread[]): HTMLElement {
+    const group = el('section', 'comment-global-group')
+    group.setAttribute('role', 'group')
+    group.setAttribute('aria-label', this.t.documentComment)
+    const header = el('div', 'comment-global-header')
+    header.append(el('h3', 'comment-global-heading', this.t.documentComment))
+    if (bundleCanWrite(this.options.bundle) && !this.pendingGlobal) {
+      const addBtn = el('button', 'comment-action comment-global-add', this.t.addComment) as HTMLButtonElement
+      addBtn.type = 'button'
+      addBtn.addEventListener('click', () => {
+        this.startDocumentComment()
+      })
+      header.append(addBtn)
+    }
+    group.append(header)
+    if (this.pendingGlobal) {
+      group.append(this.buildNewCommentComposer(null))
+    }
+    for (const thread of threads) group.append(this.buildCommentThread(thread))
     return group
   }
 
@@ -550,7 +616,7 @@ export class CommentsController {
     if (!writable) return node
     const actions = el('div', 'comment-message-actions')
     const principal = this.getPrincipal()
-    if (canEditMessage(message, principal.id, writable)) {
+    if (!this.options.durableActionsOnly?.() && canEditMessage(message, principal.id, writable)) {
       const edit = el('button', 'comment-action', this.t.editMessage) as HTMLButtonElement
       edit.type = 'button'
       edit.setAttribute('aria-label', this.t.editMessageBy(message.author))
@@ -631,7 +697,7 @@ export class CommentsController {
       }
       if (body === current.body) { restore(); return }
       const timestamp = new Date().toISOString()
-      this.options.store.commit({ kind: 'comments', path: thread.anchor.path }, () => {
+      this.options.store.commit({ kind: 'comments', path: thread.anchor?.path }, () => {
         editCommentMessage(thread, message.id, body, timestamp)
       })
       // A saved edit is no longer a draft: drop its live form before the rebuild restores it.
@@ -646,7 +712,7 @@ export class CommentsController {
     if (!canDeleteMessage(message, bundleCanWrite(this.options.bundle))) return
     if (typeof window.confirm === 'function' && !window.confirm(this.t.deleteMessageConfirm)) return
     const timestamp = new Date().toISOString()
-    this.options.store.commit({ kind: 'comments', path: thread.anchor.path }, () => {
+    this.options.store.commit({ kind: 'comments', path: thread.anchor?.path }, () => {
       deleteCommentMessage(thread, message.id, timestamp)
     })
     this.paint()
@@ -682,22 +748,24 @@ export class CommentsController {
     return names[language] ?? `${language.charAt(0).toLocaleUpperCase()}${language.slice(1)}`
   }
 
-  private addCommentThread(anchor: TacoTextAnchor, body: string): void {
+  private addCommentThread(anchor: TacoTextAnchor | null, body: string): void {
     if (!bundleCanWrite(this.options.bundle)) return
     requireAuthorName({ title: this.t.yourName, hint: this.t.nameHint, cancel: this.t.cancel, confirm: this.t.addComment }, (author) => {
       if (!bundleCanWrite(this.options.bundle)) return
       const timestamp = new Date().toISOString()
       const thread: TacoCommentThread = {
         id: localId('thread'),
-        anchor: structuredClone(anchor),
+        anchor: anchor ? structuredClone(anchor) : null,
         status: 'open',
         messages: [{ id: localId('message'), author, authorId: this.getPrincipal().id, body, createdAt: timestamp }],
         createdAt: timestamp,
         updatedAt: timestamp,
       }
-      this.options.store.commit({ kind: 'comments', path: anchor.path }, () => { (this.options.bundle.comments ??= []).push(thread) })
+      this.options.store.commit({ kind: 'comments', path: anchor?.path }, () => { (this.options.bundle.comments ??= []).push(thread) })
       this.pendingAnchor = null
+      this.pendingGlobal = false
       this.removeSelectionButton()
+      this.dropDraftForm(anchor ? 'composer' : 'composer:global')
       this.paint()
       this.refreshHighlights()
     })
@@ -723,7 +791,7 @@ export class CommentsController {
       requireAuthorName({ title: this.t.yourName, hint: this.t.nameHint, cancel: this.t.cancel, confirm: this.t.reply }, (author) => {
         if (!bundleCanWrite(this.options.bundle)) return
         const timestamp = new Date().toISOString()
-        this.options.store.commit({ kind: 'comments', path: thread.anchor.path }, () => {
+        this.options.store.commit({ kind: 'comments', path: thread.anchor?.path }, () => {
           thread.messages.push({ id: localId('message'), author, authorId: this.getPrincipal().id, body, createdAt: timestamp })
           thread.updatedAt = timestamp
         })
@@ -738,7 +806,7 @@ export class CommentsController {
 
   private toggleThreadStatus(thread: TacoCommentThread): void {
     if (!bundleCanWrite(this.options.bundle)) return
-    this.options.store.commit({ kind: 'comments', path: thread.anchor.path }, () => {
+    this.options.store.commit({ kind: 'comments', path: thread.anchor?.path }, () => {
       thread.status = thread.status === 'open' ? 'resolved' : 'open'
       thread.updatedAt = new Date().toISOString()
     })
@@ -752,7 +820,7 @@ export class CommentsController {
     const comments = this.options.bundle.comments ?? []
     const index = comments.findIndex((candidate) => candidate.id === thread.id)
     if (index === -1) return
-    this.options.store.commit({ kind: 'comments', path: thread.anchor.path }, () => { comments.splice(index, 1) })
+    this.options.store.commit({ kind: 'comments', path: thread.anchor?.path }, () => { comments.splice(index, 1) })
     this.paint()
     this.refreshHighlights()
   }
@@ -814,29 +882,32 @@ export class CommentsController {
 
   private activateCommentThread(thread: TacoCommentThread): void {
     const viewer = this.options.getViewer()
-    if (thread.anchor.block) {
-      const block = this.findCommentBlock(thread.anchor)
+    const anchor = thread.anchor
+    // A whole-document thread has nothing to scroll to; only anchored cards reach the reader.
+    if (!anchor) return
+    if (anchor.block) {
+      const block = this.findCommentBlock(anchor)
       if (!block) { this.options.toast(this.t.unresolvedAnchor); return }
       viewer.querySelector('.tiptap-code-block.is-active-comment')?.classList.remove('is-active-comment')
       block.classList.add('is-active-comment')
       const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
       block.scrollIntoView?.({ behavior, block: 'center' })
-      if (thread.anchor.block.nodeId) {
-        const node = block.querySelector<SVGElement>(`[data-node-id="${CSS.escape(thread.anchor.block.nodeId)}"]`)
+      if (anchor.block.nodeId) {
+        const node = block.querySelector<SVGElement>(`[data-node-id="${CSS.escape(anchor.block.nodeId)}"]`)
         if (node) {
           block.querySelectorAll('.interactive-mermaid-node.is-node-active').forEach((n) => n.classList.remove('is-node-active'))
           node.classList.add('is-node-active')
         }
       }
-      if (thread.anchor.block.lineNumber) {
+      if (anchor.block.lineNumber) {
         const toggle = block.querySelector<HTMLButtonElement>('.tiptap-code-block-panel')
         if (toggle?.getAttribute('aria-pressed') !== 'true') toggle?.click()
         const input = block.querySelector<HTMLTextAreaElement>('.mermaid-floating-code-panel textarea')
         if (input) {
           const lines = input.value.split('\n')
-          const start = lines.slice(0, thread.anchor.block.lineNumber - 1).reduce((sum, line) => sum + line.length + 1, 0)
+          const start = lines.slice(0, anchor.block.lineNumber - 1).reduce((sum, line) => sum + line.length + 1, 0)
           input.focus()
-          input.setSelectionRange(start, start + (lines[thread.anchor.block.lineNumber - 1]?.length ?? 0))
+          input.setSelectionRange(start, start + (lines[anchor.block.lineNumber - 1]?.length ?? 0))
         }
       }
       return

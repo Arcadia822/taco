@@ -5,12 +5,26 @@ export interface SubscribeFrameHandler {
 }
 
 export interface WebSocketSessionAdapter {
-  connect(url: string): Promise<void>
+  connect(url: string, headers?: Record<string, string>): Promise<void>
   send(data: string): void
   close(): void
   onMessage(cb: (msg: string) => void): void
   onClose(cb: (code: number, reason: string) => void): void
   onError(cb: (err: Error) => void): void
+}
+
+export interface SubscribeMetadata {
+  listenerId?: string
+  harness?: string
+  model?: string
+  modelId?: string
+  name?: string
+}
+
+export interface TacoSubscriberOptions {
+  initialAfter?: string | null
+  maxReconnectTimeMs?: number
+  metadata?: SubscribeMetadata
 }
 
 /**
@@ -20,17 +34,20 @@ export interface WebSocketSessionAdapter {
 export class TacoSubscriber {
   private lastConfirmedCursor: string | null = null
   private running = true
+  private readonly listenerId: string
+  private readonly metadata?: SubscribeMetadata
 
   constructor(
     private readonly hostUrl: string,
     private readonly tacoId: string,
     private readonly handler: SubscribeFrameHandler,
     private readonly adapterFactory: () => WebSocketSessionAdapter,
-    private readonly options?: { initialAfter?: string | null; maxReconnectTimeMs?: number },
+    private readonly options?: TacoSubscriberOptions,
   ) {
     this.lastConfirmedCursor = options?.initialAfter ?? null
+    this.metadata = options?.metadata
+    this.listenerId = options?.metadata?.listenerId || crypto.randomUUID()
   }
-
   async start(): Promise<{ exitCode: number }> {
     let reconnectAttempts = 0
     const startReconnectTime = Date.now()
@@ -45,6 +62,29 @@ export class TacoSubscriber {
         // If runOneConnection returned without code, was closed for restart (1012)
         reconnectAttempts = 0
       } catch (err) {
+        const errObj = err as Error & { statusCode?: number; code?: string }
+        if (errObj.code === 'CURSOR_EXPIRED' || errObj.statusCode === 410) {
+          this.handler.onError({
+            code: 'CURSOR_EXPIRED',
+            message: errObj.message || 'Cursor has expired and cannot be replayed',
+          })
+          return { exitCode: 6 }
+        }
+        if (errObj.code === 'NOT_FOUND' || errObj.statusCode === 404) {
+          this.handler.onError({
+            code: 'NOT_FOUND',
+            message: errObj.message || 'Taco not found',
+          })
+          return { exitCode: 2 }
+        }
+        if (errObj.code === 'VALIDATION_ERROR' || errObj.statusCode === 400) {
+          this.handler.onError({
+            code: 'VALIDATION_ERROR',
+            message: errObj.message || 'Validation error',
+          })
+          return { exitCode: 2 }
+        }
+
         reconnectAttempts += 1
         this.handler.onDiagnostic({
           code: 'DISCONNECTED',
@@ -62,7 +102,9 @@ export class TacoSubscriber {
 
         // Exponential backoff with jitter
         const delay = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 10000)
-        await new Promise((r) => setTimeout(r, delay))
+        const { promise: delayPromise, resolve: resolveDelay } = Promise.withResolvers<void>()
+        setTimeout(resolveDelay, delay)
+        await delayPromise
       }
     }
 
@@ -81,24 +123,39 @@ export class TacoSubscriber {
       this.hostUrl.replace(/^http/, 'ws') + `/v1/tacos/${this.tacoId}/subscribe${resumeQuery}`
     const socket = this.adapterFactory()
 
+    const headers: Record<string, string> = {
+      'X-Listener-Id': this.listenerId,
+    }
+    if (this.metadata?.harness) {
+      headers['X-Taco-Harness'] = this.metadata.harness
+    }
+    if (this.metadata?.model) {
+      headers['X-Taco-Model'] = this.metadata.model
+    }
+    if (this.metadata?.modelId) {
+      headers['X-Taco-Model-Id'] = this.metadata.modelId
+    }
+    if (this.metadata?.name) {
+      headers['X-Taco-Listener-Name'] = this.metadata.name
+    }
+
     socket.onMessage((text) => {
       try {
         const frame = JSON.parse(text) as {
           kind: string
           cursor?: string
           sequence?: string
-          error?: { code: string }
+          mode?: string
+          error?: { code: string; message?: string }
         }
-        if (frame.kind === 'ready' && frame.cursor) {
-          this.lastConfirmedCursor = frame.cursor
-        } else if (frame.kind === 'event' && frame.sequence) {
-          this.lastConfirmedCursor = frame.sequence
-        } else if (frame.kind === 'checkpoint' && frame.cursor) {
-          this.lastConfirmedCursor = frame.cursor
-        } else if (frame.kind === 'error') {
+        if (frame.kind === 'error') {
           // Settle first: closing the transport reports a client-initiated close synchronously,
           // and that must not be mistaken for a dropped connection worth reconnecting.
           if (frame.error?.code === 'CURSOR_EXPIRED') {
+            this.handler.onError({
+              code: 'CURSOR_EXPIRED',
+              message: frame.error.message || 'Cursor has expired and cannot be replayed',
+            })
             resolve(6)
             socket.close()
             return
@@ -109,9 +166,29 @@ export class TacoSubscriber {
             return
           }
         }
+
+        // Emit frame to output handler first; only advance confirmed cursor after successful emission
         this.handler.onFrame(text)
-      } catch {
-        this.handler.onFrame(text)
+
+        if (frame.kind === 'ready') {
+          // Ready cursor not skipping replay:
+          // In live mode (or when no cursor has been confirmed and mode is not replay),
+          // ready frame cursor indicates starting watermark.
+          // In replay mode, ready cursor must NOT advance lastConfirmedCursor past unreceived replay events!
+          if (frame.mode === 'live' || (!this.lastConfirmedCursor && frame.mode !== 'replay')) {
+            if (frame.cursor) {
+              this.lastConfirmedCursor = frame.cursor
+            }
+          }
+        } else if (frame.kind === 'event' && frame.sequence) {
+          this.lastConfirmedCursor = frame.sequence
+        } else if (frame.kind === 'checkpoint' && frame.cursor) {
+          this.lastConfirmedCursor = frame.cursor
+        }
+      } catch (err) {
+        // A malformed frame or failed output must not be treated as delivered.
+        reject(err as Error)
+        socket.close()
       }
     })
 
@@ -131,11 +208,21 @@ export class TacoSubscriber {
     })
 
     socket.onError((err) => {
+      const errObj = err as Error & { statusCode?: number; code?: string }
+      if (errObj.code === 'CURSOR_EXPIRED' || errObj.statusCode === 410) {
+        this.handler.onError({
+          code: 'CURSOR_EXPIRED',
+          message: errObj.message || 'Cursor has expired and cannot be replayed',
+        })
+        resolve(6)
+        socket.close()
+        return
+      }
       reject(err)
     })
 
     socket
-      .connect(wsUrl)
+      .connect(wsUrl, headers)
       .then(() => {
         // Send subscribe frame within 10s
         socket.send(
@@ -146,8 +233,34 @@ export class TacoSubscriber {
           }),
         )
       })
-      .catch(reject)
-
+      .catch((err) => {
+        const errObj = err as Error & { statusCode?: number; code?: string }
+        if (errObj.code === 'CURSOR_EXPIRED' || errObj.statusCode === 410) {
+          this.handler.onError({
+            code: 'CURSOR_EXPIRED',
+            message: errObj.message || 'Cursor has expired and cannot be replayed',
+          })
+          resolve(6)
+          return
+        }
+        if (errObj.code === 'NOT_FOUND' || errObj.statusCode === 404) {
+          this.handler.onError({
+            code: 'NOT_FOUND',
+            message: errObj.message || 'Taco not found',
+          })
+          resolve(2)
+          return
+        }
+        if (errObj.code === 'VALIDATION_ERROR' || errObj.statusCode === 400) {
+          this.handler.onError({
+            code: 'VALIDATION_ERROR',
+            message: errObj.message || 'Validation error',
+          })
+          resolve(2)
+          return
+        }
+        reject(err)
+      })
     return promise
   }
 

@@ -1,4 +1,4 @@
-import type { CheckpointsState } from './checkpoints.ts'
+import type { CheckpointsState, DocumentStatus } from './checkpoints.ts'
 
 export const FORMAT = 'taco/files'
 export const FORMAT_VERSION = 1
@@ -116,4 +116,112 @@ export interface StagedUploadContent {
   protocol: 'taco-host/1'
   snapshot: DocumentSnapshot
   importedComments?: ImportedCommentThread[]
+}
+
+type ChangedDocumentStatus = DocumentStatus | null
+
+export interface FilePatch {
+  id?: string
+  path: string
+  previousPath?: string
+  changeType: 'added' | 'modified' | 'deleted' | 'renamed'
+  mediaType?: string
+  content?: string | null
+  uploadId?: string
+}
+
+export interface AutoSavePatch {
+  protocol: 'taco-state/1'
+  expectedStateVersion: string
+  author: string
+  fileChanges: FilePatch[]
+  checkpoints?: CheckpointsState | null
+}
+
+export interface ChangedFile {
+  id?: string
+  path: string
+  previousPath?: string
+  changeType: 'added' | 'modified' | 'deleted' | 'renamed'
+  mediaType: string
+  content: string | null
+  diff: string | null
+}
+
+export interface CheckpointChange {
+  path: string
+  from: ChangedDocumentStatus
+  to: ChangedDocumentStatus
+}
+
+export interface CheckpointDefinitionDelta {
+  from: CheckpointsState | null
+  to: CheckpointsState | null
+}
+
+export interface CommentMessage {
+  id: string
+  author: string
+  body: string | null
+  createdAt: string
+  deletedAt: string | null
+}
+
+export interface CommentAction {
+  sequence: string
+  type: 'create' | 'reply' | 'resolve' | 'reopen' | 'delete'
+  author: string
+  occurredAt: string
+  messageId?: string
+}
+
+export interface CommentThread {
+  id: string
+  status: 'open' | 'resolved'
+  anchor: TextAnchor | null
+  isAnchorStale: boolean
+  createdAt: string
+  updatedAt: string
+  messages: CommentMessage[]
+  actions: CommentAction[]
+}
+
+export interface HandoffPayload {
+  root: string
+  changedFiles: ChangedFile[]
+  incrementalFiles: ChangedFile[]
+  checkpointChanges: CheckpointChange[]
+  incrementalCheckpointChanges: CheckpointChange[]
+  checkpoints: CheckpointsState | null
+  checkpointDefinitionDelta: CheckpointDefinitionDelta
+  incrementalCheckpointDefinitionDelta: CheckpointDefinitionDelta
+  comments: CommentThread[]
+  commentsThroughSequence: string
+}
+
+export interface HandoffRecord {
+  id: string
+  tacoId: string
+  author: string
+  createdAt: string
+  payload: HandoffPayload
+}
+
+export interface HandoffEvent {
+  kind: 'event'
+  id: string
+  sequence: string
+  tacoId: string
+  type: 'review.handed_off'
+  occurredAt: string
+  actor: string
+  data: {
+    handoffId: string
+  }
+}
+
+export interface HandoffCommit {
+  changed: boolean
+  handoffId: string | null
+  event: HandoffEvent | null
 }

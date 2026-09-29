@@ -93,7 +93,8 @@ export const resolveTextAnchor = (text: string, anchor: TacoTextAnchor): { start
 
 /**
  * Threads anchored in `path`, in storage order. Display order comes from `resolveCommentPlacement`,
- * which sorts by the anchored position in the current document rather than by recency.
+ * which sorts by the anchored position in the current document rather than by recency. Threads
+ * without an anchor are whole-document discussions and belong to no single path.
  */
 export const commentsForPath = (threads: TacoCommentThread[] | undefined, path: string): TacoCommentThread[] =>
-  (threads ?? []).filter((thread) => thread.anchor.path === path)
+  (threads ?? []).filter((thread) => thread.anchor?.path === path)

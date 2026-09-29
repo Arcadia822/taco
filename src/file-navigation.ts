@@ -52,6 +52,11 @@ export interface FileNavigationOptions {
   folderOpenState: Map<string, boolean>
   scrollTop: number
   editable?: boolean
+  /**
+   * Group menus rewrite the navigation manifest. A hosted review has no durable write path for it,
+   * so the Host page turns group management off while keeping file actions.
+   */
+  canManageGroups?: boolean
   onSelect: (file: TacoFile) => void
   onSelectCheckpoint?: () => void
   onSelectPlaceholder?: (path: string) => void
@@ -264,7 +269,7 @@ export class FileNavigation {
       summary.append(head, spacer)
       if (this.options.editable && (this.options.onUpdateNavigation || this.options.onCreateFile)) {
         const actions = el('span', 'group-actions')
-        if (this.options.onUpdateNavigation && this.options.bundle.navigation?.groups.some(({ id }) => id === group.id) && !group.id.startsWith('category-')) {
+        if (this.options.onUpdateNavigation && (this.options.canManageGroups ?? true) && this.options.bundle.navigation?.groups.some(({ id }) => id === group.id) && !group.id.startsWith('category-')) {
           const menuBtn = createControlButton(
             'more-horizontal',
             this.options.labels.actions,

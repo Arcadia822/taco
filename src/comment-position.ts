@@ -10,6 +10,11 @@ export interface CommentRange {
 /** Live position of one comment thread inside the document currently being read. */
 export interface PlacedCommentThread {
   thread: TacoCommentThread
+  /**
+   * The thread's anchor, already known to exist: whole-document threads carry none and are kept out
+   * of this list, so every placed entry can be resolved against the document without re-checking.
+   */
+  anchor: TacoTextAnchor
   /** Ordering key: start offset of the anchored text in the current document. */
   offset: number
   /**
@@ -33,8 +38,9 @@ export interface CommentAnchorProbe {
   blockRange: (anchor: TacoTextAnchor) => CommentRange | null
 }
 
+/** Unanchored threads never reach the document order, so a missing anchor sorts first, not crashes. */
 const byStoredPosition = (left: TacoCommentThread, right: TacoCommentThread): number =>
-  left.anchor.position.start - right.anchor.position.start
+  (left.anchor?.position.start ?? 0) - (right.anchor?.position.start ?? 0)
   || left.createdAt.localeCompare(right.createdAt)
   || left.id.localeCompare(right.id)
 
@@ -51,13 +57,15 @@ export const resolveCommentPlacement = (
   const stale: TacoCommentThread[] = []
   const readable = probe.text !== null
   for (const thread of threads) {
-    const { anchor } = thread
+    const anchor = thread.anchor
+    // Whole-document threads carry no anchor, so they belong to the global group, not to a position.
+    if (!anchor) continue
     const range = readable
       ? (anchor.block ? probe.blockRange(anchor) : resolveTextAnchor(probe.text ?? '', anchor))
       : null
-    if (range) placed.push({ thread, offset: range.start, range })
+    if (range) placed.push({ thread, anchor, offset: range.start, range })
     // Unreadable text is not a lost anchor: keep the stored position until the document is rendered.
-    else if (!readable) placed.push({ thread, offset: anchor.position.start, range: null })
+    else if (!readable) placed.push({ thread, anchor, offset: anchor.position.start, range: null })
     else stale.push(thread)
   }
   return {
