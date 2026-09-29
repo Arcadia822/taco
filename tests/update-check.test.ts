@@ -6,6 +6,13 @@ import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 const script = resolve('skills/taco/scripts/check-update.mjs')
+const installedSkillVersion = readFileSync(resolve('skills/taco/VERSION'), 'utf8').trim()
+const [major, minor] = installedSkillVersion.split('.').map(Number)
+const nextSkillVersion = `${major}.${minor + 1}.0`
+const prevSkillVersion = `${major}.${Math.max(0, minor - 1)}.0`
+const installedSkillTag = `v${installedSkillVersion}`
+const nextSkillTag = `v${nextSkillVersion}`
+const prevSkillTag = `v${prevSkillVersion}`
 
 interface Component {
   installed: string | null
@@ -196,7 +203,7 @@ const pathWithoutGit = () => tempDir('taco-update-nogit-')
 
 describe('taco update check', () => {
   it('reports an available skill update and a newer taco-cli from the git channel', async () => {
-    const repo = localRepo(['v0.10.0', 'v0.11.0', 'taco-cli-v0.2.0', 'tacobin-v0.3.0'])
+    const repo = localRepo([prevSkillTag, installedSkillTag, 'taco-cli-v0.2.0', 'tacobin-v0.3.0'])
     const payload = await runJson(['--json', '--repo', repo, '--cli-bin', cliStub('{"binaryVersion":"0.1.4"}')], {}, tempDir('taco-update-cwd-'))
 
     expect(payload).toMatchObject({
@@ -205,31 +212,31 @@ describe('taco update check', () => {
       reason: null,
       source: 'git-ls-remote',
       cached: false,
-      skill: { installed: '0.11.0', latest: '0.11.0', updateAvailable: false },
+      skill: { installed: installedSkillVersion, latest: installedSkillVersion, updateAvailable: false },
       cli: { installed: '0.1.4', latest: '0.2.0', updateAvailable: true },
       extension: null,
     })
   })
 
   it('reads the installed version from the skill directory that holds the script', async () => {
-    const repo = localRepo(['v0.11.0'])
+    const repo = localRepo([installedSkillTag])
     const payload = await runJson(['--json', '--repo', repo, '--no-cli'], {}, tempDir('taco-update-cwd-'))
-    expect(payload.skill).toEqual({ installed: '0.11.0', latest: '0.11.0', updateAvailable: false })
+    expect(payload.skill).toEqual({ installed: installedSkillVersion, latest: installedSkillVersion, updateAvailable: false })
 
-    const older = skillDir('0.10.0\n')
+    const older = skillDir(`${prevSkillVersion}\n`)
     const result = spawnSync(process.execPath, [older, '--json', '--repo', repo, '--no-cli'], {
       encoding: 'utf8',
       env: { ...process.env, TACO_UPDATE_CACHE_DIR: tempDir('taco-update-cache-') },
     })
     expect((JSON.parse(result.stdout) as Payload).skill).toEqual({
-      installed: '0.10.0',
-      latest: '0.11.0',
+      installed: prevSkillVersion,
+      latest: installedSkillVersion,
       updateAvailable: true,
     })
   })
 
   it('hides the skill component and stays silent when the version marker is missing or unreadable', async () => {
-    const repo = localRepo(['v0.11.0'])
+    const repo = localRepo([installedSkillTag])
     const missing = spawnSync(process.execPath, [skillDir(null), '--json', '--repo', repo, '--no-cli'], { encoding: 'utf8' })
     expect(JSON.parse(missing.stdout)).toMatchObject({ ok: false, reason: 'installed-version-marker-missing', cli: null })
 
@@ -240,12 +247,12 @@ describe('taco update check', () => {
   it('never treats an older remote version as an update', async () => {
     const repo = localRepo(['v0.9.0'])
     const payload = await runJson(['--json', '--repo', repo, '--no-cli'], {}, tempDir('taco-update-cwd-'))
-    expect(payload.skill).toEqual({ installed: '0.11.0', latest: '0.9.0', updateAvailable: false })
+    expect(payload.skill).toEqual({ installed: installedSkillVersion, latest: '0.9.0', updateAvailable: false })
   })
 
   it('runs git with an isolated environment, no inherited config and a neutral cwd', async () => {
-    const shim = gitShim({ stdout: 'abc123def\trefs/tags/v0.11.0' })
-    const repo = localRepo(['v0.11.0'])
+    const shim = gitShim({ stdout: `abc123def\trefs/tags/${installedSkillTag}` })
+    const repo = localRepo([installedSkillTag])
     const cwd = tempDir('taco-update-cwd-')
     await runJson(['--json', '--repo', repo, '--no-cli'], { PATH: `${shim.dir}:${process.env.PATH ?? ''}` }, cwd)
 
@@ -260,7 +267,7 @@ describe('taco update check', () => {
   })
 
   it('does not read a hostile .git/config from the working directory', async () => {
-    const repo = localRepo(['v0.11.0'])
+    const repo = localRepo([installedSkillTag])
     const cwd = tempDir('taco-update-hostile-')
     git(cwd, ['init', '-q'])
     git(cwd, ['config', 'http.extraheader', 'authorization: Bearer secret'])
@@ -268,16 +275,16 @@ describe('taco update check', () => {
 
     const payload = await runJson(['--json', '--repo', repo, '--no-cli'], {}, cwd)
     expect(payload.source).toBe('git-ls-remote')
-    expect(payload.skill.latest).toBe('0.11.0')
+    expect(payload.skill.latest).toBe(installedSkillVersion)
   })
 
   it('falls back to the tags API when git is unavailable, and only then', async () => {
-    const fixture = await apiFixture({ tags: [['v0.11.0', 'v0.10.0', 'taco-cli-v0.2.1']] })
+    const fixture = await apiFixture({ tags: [[installedSkillTag, prevSkillTag, 'taco-cli-v0.2.1']] })
     const payload = await runJson(['--json', '--api-base', fixture.apiBase, '--cli-bin', cliStub('{"binaryVersion":"0.1.4"}')], {
       PATH: pathWithoutGit(),
     })
     expect(payload).toMatchObject({ ok: true, source: 'github-tags-api', cached: false })
-    expect(payload.skill).toEqual({ installed: '0.11.0', latest: '0.11.0', updateAvailable: false })
+    expect(payload.skill).toEqual({ installed: installedSkillVersion, latest: installedSkillVersion, updateAvailable: false })
     expect(payload.cli).toEqual({ installed: '0.1.4', latest: '0.2.1', updateAvailable: true })
 
     const tagRequests = fixture.requests.filter((entry) => entry.url.includes('/tags'))
@@ -294,12 +301,12 @@ describe('taco update check', () => {
     const payload = await runJson(['--json', '--repo', '/nonexistent-taco-repo', '--api-base', fixture.apiBase, '--no-cli'])
     expect(payload).toMatchObject({ ok: false, source: null })
     expect(fixture.requests).toHaveLength(0)
-    expect(payload.skill.installed).toBe('0.11.0')
+    expect(payload.skill.installed).toBe(installedSkillVersion)
     expect(payload.skill.latest).toBeNull()
   })
 
   it('degrades the taco-cli component alone when it is absent or unreadable', async () => {
-    const repo = localRepo(['v0.11.0', 'taco-cli-v0.2.1'])
+    const repo = localRepo([installedSkillTag, 'taco-cli-v0.2.1'])
 
     const disabled = await runJson(['--json', '--repo', repo, '--no-cli'], {}, tempDir('taco-update-cwd-'))
     expect(disabled.cli).toBeNull()
@@ -316,17 +323,17 @@ describe('taco update check', () => {
   })
 
   it('kills a hanging taco-cli and keeps the skill answer usable', async () => {
-    const repo = localRepo(['v0.11.0', 'v0.10.0'])
+    const repo = localRepo([installedSkillTag, prevSkillTag])
     const started = Date.now()
     const payload = await runJson(['--json', '--repo', repo, '--cli-bin', cliSleep(5), '--timeout', '300'], {}, tempDir('taco-update-cwd-'))
     expect(Date.now() - started).toBeLessThan(3000)
     expect(payload.cli).toEqual({ installed: null, latest: null, updateAvailable: null })
-    expect(payload.skill).toEqual({ installed: '0.11.0', latest: '0.11.0', updateAvailable: false })
+    expect(payload.skill).toEqual({ installed: installedSkillVersion, latest: installedSkillVersion, updateAvailable: false })
     expect(payload.ok).toBe(true)
   })
 
   it('drops a taco-cli that floods stdout', async () => {
-    const repo = localRepo(['v0.11.0', 'taco-cli-v0.2.1'])
+    const repo = localRepo([installedSkillTag, 'taco-cli-v0.2.1'])
     const payload = await runJson(['--json', '--repo', repo, '--cli-bin', cliFlood()], {}, tempDir('taco-update-cwd-'))
     expect(payload.cli?.installed).toBeNull()
     expect(payload.ok).toBe(true)
@@ -386,9 +393,9 @@ describe('taco update check', () => {
 
   it('builds the second page from the validated base and stops after two requests', async () => {
     const filler = Array.from({ length: 100 }, (_, index) => `taco-cli-v0.9.${index}`)
-    const fixture = await apiFixture({ tags: [filler, ['v0.11.0']] })
+    const fixture = await apiFixture({ tags: [filler, [installedSkillTag]] })
     const payload = await runJson(['--json', '--api-base', fixture.apiBase, '--no-cli', '--no-cache'], { PATH: pathWithoutGit() })
-    expect(payload.skill.latest).toBe('0.11.0')
+    expect(payload.skill.latest).toBe(installedSkillVersion)
     expect(fixture.requests.filter((entry) => entry.url.includes('/tags'))).toHaveLength(2)
     expect(fixture.requests.every((entry) => entry.url.startsWith('/repos/Arcadia822/taco/'))).toBe(true)
   })
@@ -397,7 +404,7 @@ describe('taco update check', () => {
     const repo = localRepo(['v1.2.0-rc.1', 'release-1', 'v1.2'])
     const gitPayload = await runJson(['--json', '--repo', repo, '--no-cli'], {}, tempDir('taco-update-cwd-'))
     expect(gitPayload).toMatchObject({ ok: true, source: 'git-ls-remote' })
-    expect(gitPayload.skill).toEqual({ installed: '0.11.0', latest: null, updateAvailable: null })
+    expect(gitPayload.skill).toEqual({ installed: installedSkillVersion, latest: null, updateAvailable: null })
 
     const fixture = await apiFixture({ tags: [['v1.2.0-rc.1', 'v1.2']] })
     const apiPayload = await runJson(['--json', '--api-base', fixture.apiBase, '--no-cli', '--no-cache'], { PATH: pathWithoutGit() })
@@ -410,22 +417,22 @@ describe('taco update check', () => {
     const cwd = tempDir('taco-update-project-')
     write(join(cwd, '.specify/extensions/taco/extension.yml'), "extension:\n  id: 'taco'\n  version: '0.6.0'\n")
     const releases = [
-      { tag_name: 'v0.11.0', assets: [] },
+      { tag_name: installedSkillTag, assets: [] },
       { tag_name: 'v0.6.0', assets: [{ name: 'taco-extension-v0.6.0.zip' }] },
     ]
-    const fixture = await apiFixture({ tags: [['v0.11.0']], releases })
+    const fixture = await apiFixture({ tags: [[installedSkillTag]], releases })
     const payload = await runJson(['--json', '--api-base', fixture.apiBase, '--no-cli', '--no-cache'], { PATH: pathWithoutGit() }, cwd)
     expect(payload.extension).toEqual({ installed: '0.6.0', latest: '0.6.0', updateAvailable: false })
     expect(fixture.requests.some((entry) => entry.url.includes('/releases'))).toBe(true)
 
     const newer = await apiFixture({
-      tags: [['v0.12.0']],
-      releases: [{ tag_name: 'v0.12.0', assets: [{ name: 'taco-extension-v0.12.0.zip' }] }],
+      tags: [[nextSkillTag]],
+      releases: [{ tag_name: nextSkillTag, assets: [{ name: `taco-extension-${nextSkillTag}.zip` }] }],
     })
     const updated = await runJson(['--json', '--api-base', newer.apiBase, '--no-cli', '--no-cache'], { PATH: pathWithoutGit() }, cwd)
-    expect(updated.extension).toEqual({ installed: '0.6.0', latest: '0.12.0', updateAvailable: true })
+    expect(updated.extension).toEqual({ installed: '0.6.0', latest: nextSkillVersion, updateAvailable: true })
 
-    const plain = await apiFixture({ tags: [['v0.12.0']] })
+    const plain = await apiFixture({ tags: [[nextSkillTag]] })
     const withoutExtension = await runJson(['--json', '--api-base', plain.apiBase, '--no-cli', '--no-cache'], { PATH: pathWithoutGit() }, tempDir('taco-update-plain-'))
     expect(withoutExtension.extension).toBeNull()
     expect(plain.requests.some((entry) => entry.url.includes('/releases'))).toBe(false)
@@ -437,18 +444,18 @@ describe('taco update check', () => {
     const padding = Array.from({ length: 1500 }, (_, index) => ({ name: `padding-${index}-${'p'.repeat(100)}` }))
 
     const roomy = await apiFixture({
-      tags: [['v0.11.0']],
+      tags: [[installedSkillTag]],
       roundTrip: (url) =>
         url.includes('/releases')
-          ? { status: 200, body: JSON.stringify([{ tag_name: 'v0.12.0', assets: [...padding, { name: 'taco-extension-v0.12.0.zip' }] }]) }
+          ? { status: 200, body: JSON.stringify([{ tag_name: nextSkillTag, assets: [...padding, { name: `taco-extension-${nextSkillTag}.zip` }] }]) }
           : null,
     })
     const payload = await runJson(['--json', '--api-base', roomy.apiBase, '--no-cli', '--no-cache'], { PATH: pathWithoutGit() }, cwd)
-    expect(payload.extension).toEqual({ installed: '0.6.0', latest: '0.12.0', updateAvailable: true })
+    expect(payload.extension).toEqual({ installed: '0.6.0', latest: nextSkillVersion, updateAvailable: true })
     expect(payload.ok).toBe(true)
 
     const oversized = await apiFixture({
-      tags: [['v0.11.0']],
+      tags: [[installedSkillTag]],
       roundTrip: (url) => (url.includes('/releases') ? { status: 200, body: 'x'.repeat(2 * 1024 * 1024) } : null),
     })
     const dropped = await runJson(['--json', '--api-base', oversized.apiBase, '--no-cli', '--no-cache'], { PATH: pathWithoutGit() }, cwd)
@@ -457,7 +464,7 @@ describe('taco update check', () => {
   })
 
   it('reuses a fresh cache without any request and refreshes an expired one', async () => {
-    const repo = localRepo(['v0.11.0', 'v0.10.0'])
+    const repo = localRepo([installedSkillTag, prevSkillTag])
     const cacheDir = tempDir('taco-update-cache-')
     const first = await runJson(['--json', '--repo', repo, '--no-cli'], { TACO_UPDATE_CACHE_DIR: cacheDir }, tempDir('taco-update-cwd-'))
     expect(first.cached).toBe(false)
@@ -476,14 +483,14 @@ describe('taco update check', () => {
     writeFileSync(cachePath, JSON.stringify(poisoned))
     const refreshed = await runJson(['--json', '--repo', repo, '--no-cli'], { TACO_UPDATE_CACHE_DIR: cacheDir }, tempDir('taco-update-cwd-'))
     expect(refreshed.cached).toBe(false)
-    expect(refreshed.skill.latest).toBe('0.11.0')
+    expect(refreshed.skill.latest).toBe(installedSkillVersion)
 
     writeFileSync(cachePath, '{ not json')
-    expect((await runJson(['--json', '--repo', repo, '--no-cli'], { TACO_UPDATE_CACHE_DIR: cacheDir }, tempDir('taco-update-cwd-'))).skill.latest).toBe('0.11.0')
+    expect((await runJson(['--json', '--repo', repo, '--no-cli'], { TACO_UPDATE_CACHE_DIR: cacheDir }, tempDir('taco-update-cwd-'))).skill.latest).toBe(installedSkillVersion)
   })
 
   it('never reuses a cached comparison for a different probe target', async () => {
-    const first = localRepo(['v0.11.0'])
+    const first = localRepo([installedSkillTag])
     const second = localRepo(['v0.10.0', 'taco-cli-v0.9.9'])
     const cacheDir = tempDir('taco-update-cache-')
     const warm = await runJson(['--json', '--repo', first, '--no-cli'], { TACO_UPDATE_CACHE_DIR: cacheDir }, tempDir('taco-update-cwd-'))
@@ -506,7 +513,7 @@ describe('taco update check', () => {
 
     // No --repo override: the extension walk must run, and the linked directory
     // must not count as an installed extension (so no releases request follows).
-    const fixture = await apiFixture({ tags: [['v0.11.0']], releases: [{ tag_name: 'v0.12.0', assets: [{ name: 'taco-extension-v0.12.0.zip' }] }] })
+    const fixture = await apiFixture({ tags: [[installedSkillTag]], releases: [{ tag_name: nextSkillTag, assets: [{ name: `taco-extension-${nextSkillTag}.zip` }] }] })
     const payload = await runJson(['--json', '--api-base', fixture.apiBase, '--no-cli', '--no-cache'], { PATH: pathWithoutGit() }, project)
     expect(payload.extension).toBeNull()
     expect(fixture.requests.some((entry) => entry.url.includes('/releases'))).toBe(false)
@@ -526,7 +533,7 @@ describe('taco update check', () => {
   })
 
   it('discards a cache whose payload is not version-shaped', async () => {
-    const repo = localRepo(['v0.11.0'])
+    const repo = localRepo([installedSkillTag])
     const cacheDir = tempDir('taco-update-cache-')
     await runJson(['--json', '--repo', repo, '--no-cli'], { TACO_UPDATE_CACHE_DIR: cacheDir }, tempDir('taco-update-cwd-'))
 
@@ -536,7 +543,7 @@ describe('taco update check', () => {
     writeFileSync(cachePath, JSON.stringify(tampered))
     const afterBadVersion = await runJson(['--json', '--repo', repo, '--no-cli'], { TACO_UPDATE_CACHE_DIR: cacheDir }, tempDir('taco-update-cwd-'))
     expect(afterBadVersion.cached).toBe(false)
-    expect(afterBadVersion.skill.latest).toBe('0.11.0')
+    expect(afterBadVersion.skill.latest).toBe(installedSkillVersion)
 
     await runJson(['--json', '--repo', repo, '--no-cli'], { TACO_UPDATE_CACHE_DIR: cacheDir }, tempDir('taco-update-cwd-'))
     const badSource = JSON.parse(readFileSync(cachePath, 'utf8')) as Record<string, unknown>
@@ -560,7 +567,7 @@ describe('taco update check', () => {
   })
 
   it('honours --no-cache and TACO_UPDATE_CACHE_TTL=0, and survives an unwritable cache', async () => {
-    const repo = localRepo(['v0.11.0'])
+    const repo = localRepo([installedSkillTag])
     const cacheDir = tempDir('taco-update-cache-')
     await runJson(['--json', '--repo', repo, '--no-cli'], { TACO_UPDATE_CACHE_DIR: cacheDir }, tempDir('taco-update-cwd-'))
     expect((await runJson(['--json', '--repo', repo, '--no-cli', '--no-cache'], { TACO_UPDATE_CACHE_DIR: cacheDir }, tempDir('taco-update-cwd-'))).cached).toBe(false)
@@ -572,7 +579,7 @@ describe('taco update check', () => {
     write(join(blocked, 'file'), 'not a directory')
     const payload = await runJson(['--json', '--repo', repo, '--no-cli'], { TACO_UPDATE_CACHE_DIR: join(blocked, 'file', 'nested') }, tempDir('taco-update-cwd-'))
     expect(payload.ok).toBe(true)
-    expect(payload.skill.latest).toBe('0.11.0')
+    expect(payload.skill.latest).toBe(installedSkillVersion)
   })
 
   it('short-circuits when disabled: no subprocess, no request, no write', async () => {
@@ -609,7 +616,7 @@ describe('taco update check', () => {
   })
 
   it('emits exactly the documented JSON contract', async () => {
-    const repo = localRepo(['v0.11.0', 'taco-cli-v0.2.1'])
+    const repo = localRepo([installedSkillTag, 'taco-cli-v0.2.1'])
     const payload = await runJson(['--json', '--repo', repo, '--cli-bin', cliStub('{"binaryVersion":"0.1.4"}')], {}, tempDir('taco-update-cwd-'))
     expect(Object.keys(payload).sort()).toEqual(['cached', 'checkedAt', 'cli', 'extension', 'ok', 'reason', 'schema', 'skill', 'source'])
     expect(Object.keys(payload.skill).sort()).toEqual(['installed', 'latest', 'updateAvailable'])
