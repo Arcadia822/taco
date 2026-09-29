@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.12.0](https://github.com/Arcadia822/taco/compare/v0.11.0...v0.12.0) (2026-09-29)
+
+### Features
+
+* **release**: package the Spec Kit extension archive and harden the release pipeline (#83) ([16c8639](https://github.com/Arcadia822/taco/commit/16c86391f085bbd6741e9b6aa7920bb3ad6f8468))
+* **skill**: lint Mermaid diagrams before delivery ([8f3de5c](https://github.com/Arcadia822/taco/commit/8f3de5cd736d00af48734403215cbb67a1c14889))
+* **skill**: check for taco, taco-cli and extension updates per work session ([d13a7db](https://github.com/Arcadia822/taco/commit/d13a7db1c8d91b4504111bdd222055a071e14994))
+* **skill**: write the Taco block directly and place it by a cascade (TACO-9) ([d60f5dc](https://github.com/Arcadia822/taco/commit/d60f5dce7c750dc97b1fb2694857d0b20e02f7fd))
+* **security**: support markdown multimedia rendering (close #38) (#74) ([f259af6](https://github.com/Arcadia822/taco/commit/f259af6293e62145c84dc8e948674cba75972c4a))
+* **checkpoint**: support optional instruction for checkpoint document and right panel instruction tab (#73) ([f74a8cc](https://github.com/Arcadia822/taco/commit/f74a8cc15c5238ab9d15e1f991bf61df4fdc1bc1))
+* take bundle serialization and validation off the agent ([80a4899](https://github.com/Arcadia822/taco/commit/80a48992d61f6ad89abc78b169cd081e474fbeba))
+
+### Bug Fixes
+
+* **mermaid**: restore label text paint and close review findings ([a46ae7b](https://github.com/Arcadia822/taco/commit/a46ae7b2e0c0ac5542425c4456f8ae5b46863d4b))
+* **editor**: keep emphasis that wraps a code span from breaking the document (#81) ([ad751a1](https://github.com/Arcadia822/taco/commit/ad751a18c5fdbd8506b05ecd5f19535591bfb16e))
+* **cli**: sync binaryVersion with package.json automatically (#70) ([881ac7e](https://github.com/Arcadia822/taco/commit/881ac7e84c982fafa94873af8f7ff84ae569c34b))
+
+### Chores & Maintenance
+
+* chore: **release**: tacobin-v0.5.0 ([4229cfe](https://github.com/Arcadia822/taco/commit/4229cfe011c7a3a80b2414759651856f5993f80a))
+* chore: **release**: taco-cli v0.3.0 ([861099a](https://github.com/Arcadia822/taco/commit/861099a1125886276e45fd82124f43f21ad25722))
+* chore: **release**: tacobin-v0.4.0 ([b19bcb2](https://github.com/Arcadia822/taco/commit/b19bcb28a0d87579b2c46d88f8e1d111ae736081))
+* build: **shells**: regenerate shells and template mirrors after the rebase ([0fe4cf7](https://github.com/Arcadia822/taco/commit/0fe4cf72337f7e0089e3f8b9e00b89f9ff5cb8e6))
+* docs: **specs**: refresh TACO-19 taco with the final measured sizes ([2797f79](https://github.com/Arcadia822/taco/commit/2797f790cdb15fad868f9dd377af406d7275475b))
+* test: **mermaid**: make the theme-position and fence edge cases catch their defects ([0bdfe14](https://github.com/Arcadia822/taco/commit/0bdfe14ce09a2235e803662d99b8dbf1f5b1157b))
+* docs: **specs**: refresh TACO-19 taco with measured sizes and the label-paint fix ([cea308d](https://github.com/Arcadia822/taco/commit/cea308df5342f9e72f932792653bf046b059ff2b))
+* docs: **specs**: freeze TACO-19 design and make mermaid lint zero-dependency ([251c7b5](https://github.com/Arcadia822/taco/commit/251c7b57a1937ba44b012d491547381173dd6365))
+* docs: **specs**: refresh TACO-19 taco with size budget ([a555242](https://github.com/Arcadia822/taco/commit/a5552429130d2ad0f2adb5148ca57483e47a1666))
+* docs: **agents**: require size estimates in prepare and measurements in develop ([faa9e25](https://github.com/Arcadia822/taco/commit/faa9e2537f2cae044a14766afc1f4cef00e0e038))
+* docs: **specs**: generate re-aimed TACO-19 review taco ([c0612c6](https://github.com/Arcadia822/taco/commit/c0612c6d55df3352f4284e95fd4c785d3953af51))
+* docs: **specs**: align verification section with 22-case matrix and A8 checklist ([827290d](https://github.com/Arcadia822/taco/commit/827290d30c3f1e7ecad078db98ebf7563bdbc94b))
+* docs: **specs**: resolve first re-aim review findings for TACO-19 ([7908bd5](https://github.com/Arcadia822/taco/commit/7908bd5d0e3827d2c41e98a4dc6e24d44ddf444a))
+* docs: **specs**: re-aim TACO-19 design at agent-side mermaid lint as 013 ([7f30eb6](https://github.com/Arcadia822/taco/commit/7f30eb64d953158cbb2d3c0aa7b38471f9cb4a66))
+* docs: **specs**: retract incorrect mermaid parse conclusion and re-aim TACO-19 target ([07dd2cc](https://github.com/Arcadia822/taco/commit/07dd2ccbe8a3501424f344333bcbb7bd20de8080))
+* docs: **specs**: generate TACO-19 review taco ([6ef5642](https://github.com/Arcadia822/taco/commit/6ef5642300cc01b3d6d95285db6d3dbd345dec79))
+* docs: **specs**: resolve second-review findings for TACO-19 design ([3763b5b](https://github.com/Arcadia822/taco/commit/3763b5b0503c00158d776b4b1c7d1f932eaaf93c))
+* docs: **specs**: apply independent review fixes to TACO-19 design ([98ec1e0](https://github.com/Arcadia822/taco/commit/98ec1e000e1149bc2cb5e3d7f87e310958ed196f))
+* docs: **specs**: resolve TACO-19 design decisions D1/D2 ([85a87a2](https://github.com/Arcadia822/taco/commit/85a87a2e0f3227777317b1d933688b5eaf101c5c))
+* docs: **specs**: add TACO-19 mermaid editing lint design draft ([ed60f72](https://github.com/Arcadia822/taco/commit/ed60f724daf5db5aab7666e1f3395fc91b25e1e6))
+* chore: **release**: tacobin-v0.3.1 ([4c5b677](https://github.com/Arcadia822/taco/commit/4c5b677123e89b7ad68e6daeb18ee0a87268f893))
+* chore: **release**: taco-cli v0.2.1 ([ffcb4c6](https://github.com/Arcadia822/taco/commit/ffcb4c6f4d0ebaf0100f19b2c75a6ac16b36d20a))
+* chore: **host**: optimize website SEO and meta for Taco and Taco Page (#57) (#71) ([6e2766a](https://github.com/Arcadia822/taco/commit/6e2766aec9bd3727364266d4fd1526bedd412694))
+
 ## [0.11.0](https://github.com/Arcadia822/taco/compare/v0.10.0...v0.11.0) (2026-09-26)
 
 ### Features
