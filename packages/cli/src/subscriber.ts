@@ -21,10 +21,13 @@ export interface SubscribeMetadata {
   name?: string
 }
 
+export type SubscribeMode = 'handoff' | 'stream'
+
 export interface TacoSubscriberOptions {
   initialAfter?: string | null
   maxReconnectTimeMs?: number
   metadata?: SubscribeMetadata
+  mode?: SubscribeMode
 }
 
 /**
@@ -36,17 +39,19 @@ export class TacoSubscriber {
   private running = true
   private readonly listenerId: string
   private readonly metadata?: SubscribeMetadata
+  private readonly mode: SubscribeMode
 
   constructor(
     private readonly hostUrl: string,
     private readonly tacoId: string,
     private readonly handler: SubscribeFrameHandler,
     private readonly adapterFactory: () => WebSocketSessionAdapter,
-    private readonly options?: TacoSubscriberOptions,
+    options?: TacoSubscriberOptions,
   ) {
     this.lastConfirmedCursor = options?.initialAfter ?? null
     this.metadata = options?.metadata
     this.listenerId = options?.metadata?.listenerId || crypto.randomUUID()
+    this.mode = options?.mode ?? 'handoff'
   }
   async start(): Promise<{ exitCode: number }> {
     let reconnectAttempts = 0
@@ -167,7 +172,34 @@ export class TacoSubscriber {
           }
         }
 
-        // Emit frame to output handler first; only advance confirmed cursor after successful emission
+        if (this.mode === 'handoff') {
+          // In default handoff mode:
+          // 1. Ready frame is emitted to signal connection & cursor
+          // 2. comment/file/non-handoff events are filtered out
+          // 3. review.handed_off event is emitted, then connection closes cleanly with code 0
+          if (frame.kind === 'ready') {
+            this.handler.onFrame(text)
+            if (frame.mode === 'live' || (!this.lastConfirmedCursor && frame.mode !== 'replay')) {
+              if (frame.cursor) {
+                this.lastConfirmedCursor = frame.cursor
+              }
+            }
+          } else if (frame.kind === 'event') {
+            const eventObj = frame as { kind: string; sequence?: string; type?: string; data?: unknown }
+            if (eventObj.sequence) {
+              this.lastConfirmedCursor = eventObj.sequence
+            }
+            if (eventObj.type === 'review.handed_off') {
+              this.handler.onFrame(text)
+              resolve(0)
+              socket.close()
+              return
+            }
+          }
+          return
+        }
+
+        // Stream mode: emit every frame
         this.handler.onFrame(text)
 
         if (frame.kind === 'ready') {

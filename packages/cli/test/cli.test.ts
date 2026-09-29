@@ -333,11 +333,11 @@ describe('taco-cli (Phase 1)', () => {
       const res = await runCli([
         'subscribe',
         '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001',
+        '--stream',
         '--host',
         'https://host.example',
       ])
       expect(res.exitCode).toBe(4)
-
       const outputLines = stdoutChunks.join('').split('\n').filter(Boolean)
       expect(outputLines.length).toBe(2)
       const readyObj = JSON.parse(outputLines[0])
@@ -666,23 +666,42 @@ describe('taco-cli (Phase 1)', () => {
     }
 
     try {
-      const res = await runCli([
+      // Default mode: exits 0 immediately upon receiving review.handed_off and filters out comment.created
+      const resDefault = await runCli([
         'subscribe',
         '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001',
         '--host',
         'https://host.example',
       ])
-      expect(res.exitCode).toBe(4)
+      expect(resDefault.exitCode).toBe(0)
 
-      const outputLines = stdoutChunks.join('').split('\n').filter(Boolean)
-      const frames = outputLines.map((l) => JSON.parse(l))
+      const defaultLines = stdoutChunks.join('').split('\n').filter(Boolean)
+      const defaultFrames = defaultLines.map((l) => JSON.parse(l))
+      expect(defaultFrames.length).toBe(2)
+      expect(defaultFrames[0].kind).toBe('ready')
+      expect(defaultFrames[1].kind).toBe('event')
+      expect(defaultFrames[1].type).toBe('review.handed_off')
+      expect(defaultFrames[1].data.handoffId).toBe('99999999-4cad-43d2-a5f6-4f56bcb0a001')
 
-      expect(frames[0].kind).toBe('ready')
-      expect(frames[1].kind).toBe('event')
-      expect(frames[1].type).toBe('comment.created')
-      expect(frames[2].kind).toBe('event')
-      expect(frames[2].type).toBe('review.handed_off')
-      expect(frames[2].data.handoffId).toBe('99999999-4cad-43d2-a5f6-4f56bcb0a001')
+      // Stream mode (--stream): outputs every frame and keeps streaming until closed
+      stdoutChunks.length = 0
+      const resStream = await runCli([
+        'subscribe',
+        '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001',
+        '--stream',
+        '--host',
+        'https://host.example',
+      ])
+      expect(resStream.exitCode).toBe(4)
+
+      const streamLines = stdoutChunks.join('').split('\n').filter(Boolean)
+      const streamFrames = streamLines.map((l) => JSON.parse(l))
+      expect(streamFrames[0].kind).toBe('ready')
+      expect(streamFrames[1].kind).toBe('event')
+      expect(streamFrames[1].type).toBe('comment.created')
+      expect(streamFrames[2].kind).toBe('event')
+      expect(streamFrames[2].type).toBe('review.handed_off')
+      expect(streamFrames[2].data.handoffId).toBe('99999999-4cad-43d2-a5f6-4f56bcb0a001')
     } finally {
       process.stdout.write = originalWrite
       globalThis.fetch = originalFetch

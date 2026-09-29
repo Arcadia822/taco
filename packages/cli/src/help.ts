@@ -274,11 +274,19 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
     schema: CLI_SCHEMA_HELP,
     binaryVersion: CLI_BINARY_VERSION,
     command: ['subscribe'],
-    summary: 'Subscribe to the persistent realtime events stream over Server-Sent Events',
+    summary:
+      'Subscribe to Taco review events over Server-Sent Events (default: waits for handoff then exits)',
     positionals: [
       { name: 'tacoId', type: 'uuid', required: true, description: 'Target Taco UUID' },
     ],
     options: [
+      {
+        name: '--stream',
+        type: 'boolean',
+        required: false,
+        default: false,
+        description: 'Stream all realtime events continuously (comment, file, handoff) without exiting on handoff (alias: --follow)',
+      },
       {
         name: '--after',
         type: 'sequence',
@@ -331,7 +339,7 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
     ],
     environment: GLOBAL_ENV,
     output: {
-      stdout: 'NDJSON stream of ready and event frames',
+      stdout: 'NDJSON ready frame followed by review.handed_off frame (or full stream if --stream is given)',
       stderr: 'ErrorResponse or diagnostic frames',
       streaming: true,
     },
@@ -360,16 +368,20 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
     examples: [
       {
         invocation: 'taco-cli subscribe <tacoId>',
-        purpose: 'Stream new events from the live watermark',
+        purpose: 'Wait for the reviewer to click Handoff, output the handoff event, and exit cleanly with code 0',
+      },
+      {
+        invocation: 'taco-cli subscribe <tacoId> --stream',
+        purpose: 'Continuously stream all events (comments, status, handoff) without exiting',
       },
       {
         invocation: 'taco-cli subscribe <tacoId> --after 42',
-        purpose: 'Replay events after 42 then stream live',
+        purpose: 'Wait for handoff occurring after sequence 42 then exit',
       },
       {
         invocation:
           'taco-cli subscribe <tacoId> --harness codex --model gpt --model-id gpt-5 --name "Agent"',
-        purpose: 'Stream events while self-reporting harness, model, and display name',
+        purpose: 'Wait for handoff while self-reporting harness, model, and display name',
       },
     ],
   },
