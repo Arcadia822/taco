@@ -79,6 +79,7 @@ Agent 只复制 skill 的 shell、把文档写入其数据块，目录中的其�
 - 保留真实目录结构，浏览、搜索和编辑 canonical Markdown 与其他文本文件。独立 JSON/YAML 文件提供语法高亮源码编辑器；Mermaid 图表支持编辑源码与预览。
 - 通过锚定评论线程评审规格，可原位编辑自己的消息，也可将单条消息删除为保留回复的占位记录；随后保存更新后的 Taco，或把修改写回原始目录。
 - 可选用检查点追踪文档进度。重命名或删除必需文件后，原要求路径仍显示为「未创建」，不会被悄悄改写。
+- Taco 与 Tacobin 页头只显示含扩展名的文件名，或国际化的检查点页面名。正文仍可编辑文档标题。保存按钮保存本地 Taco 文件；Tacobin 的共享改动独立自动保存。
 - 收件环境可能离线时选择自包含的 Complete；联网评审可选择更小的 Lite。Lite 的 CDN 编辑器不可用时仍可编辑 Markdown 源码。
 - 可选地（需显式请求）集成 Spec Kit，持续更新每个 feature 的 Taco，并通过冲突检测安全导入人类修改与评论。
 
@@ -91,6 +92,7 @@ Agent 需要遵守：
 - 被评审的目录始终是 canonical source。`.taco.html` 只是运输载体：复制 skill 的 `taco-shell.html`，再把 `taco/files` v1 bundle JSON 写入其 `#taco-document` 数据块，并在每次刷新时保留 `docId`、comments、navigation，以及已有的 Checkpoint 图和状态。只有该数据块和转义后的 HTML `<title>` 可写；不要手工修改其余 shell。
 - 当宿主允许本地 `file://` 导航时，用用户的浏览器打开生成的文件，并如实报告 `presented as a clickable file`、`opened`、`opened and verified` 三者中真正发生的一项。headless 加载只是内部证据，不能当作面向用户的可视化展示。
 - 通过对应渠道取回评审结果：本地评审通过浏览器的 **Handoff**（复制自上次保存以来的文本 diff 与 open comment，无需先保存）或评审者保存后的 `.taco.html`（必须先保存）；可选的托管评审（Tacobin）中，访客以自报姓名编辑和评论并自动保存，但评论和自动保存不代表评审完成且不会自动唤醒会话，仅在评审者显式点击「交接」后生成 `review.handed_off` 事件并通过 `taco-cli` 获取不可变交接快照。未收到评审输入时如实说明，不要导入并未真正获得的内容。
+- 托管评审期间保持 Agent 订阅在线。交接需要活跃监听者，否则页面展示安装与订阅命令。`taco-cli subscribe` 默认等待 `review.handed_off` 后以退出码 0 结束，`--stream` 持续接收全部事件。点击人类与 Agent 重叠头像打开监听名单；在线不等于意见已送达。
 - 每次刷新都保留所有已有 bundle 字段，包括存在时的 `checkpoints`；不得编造评论、哈希或验证结论；不得因为某个文件不在 bundle 中就删除 canonical 文件。
 - 启用在线协作的 Taco 可能携带访问凭据。未经用户允许，不要把其内容上传或粘贴到其他服务。
 
@@ -132,7 +134,7 @@ vite.config.ts                        默认 bundle 注入与构建配置
 
 ## 文档路由与侧栏导航
 
-没有 `navigation` 清单时，一级目录自动形成分类，根目录文件进入未分配区；文件名与 Spec Kit 路径没有特殊路由。清单可显式为虚拟文件分组并指定可选的入口文档，分类变化既不改写文件路径，也不会同步移动磁盘文件。清单未列出的文件仍归入未分配区。评审者可通过文档头部的 Category 控件分配文件，在侧栏管理普通分组和设置入口文档；不支持拖拽移动。从未分配区新建文件时默认保持未分配。
+没有 `navigation` 清单时，一级目录自动形成分类，根目录文件进入未分配区；文件名与 Spec Kit 路径没有特殊路由。清单可显式为虚拟文件分组并指定入口文档，不改写文件路径或移动磁盘文件。清单未列出的文件仍归入未分配区。新建文件时可选择分类，已有文件通过清单分组；侧栏用于管理普通分组与入口文档。Header 没有 Category 切换，不支持拖拽移动。从未分配区新建文件时默认保持未分配。
 
 分类是 Taco 自身的能力，而不是文档属性：没有任何 frontmatter 键会决定文件路由，已废弃的 `taco_scope` 属性也不再被读取。Taco 会用类似 Obsidian 的属性编辑器展示开头的 YAML frontmatter，同时保留 canonical Markdown。新 spec 把标题写入 YAML，正文从 H2 开始，不再用 H1 重复标题。详细约定见 `AGENTS.md`。
 

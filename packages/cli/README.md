@@ -33,13 +33,16 @@ taco-cli publish specs/feature.taco.html --dry-run
 # Publish to a remote Host by supplying its origin (the default Host is localhost)
 taco-cli publish specs/feature.taco.html --host https://tacobin.arcadia-han.com
 
-# Stream review events from that Host (with optional self-reported presence metadata)
+# Wait for Handoff, then exit with code 0 (metadata is self-reported)
 taco-cli subscribe <tacoId> \
   --host https://tacobin.arcadia-han.com \
   --harness codex \
   --model gpt \
   --model-id gpt-5 \
   --name "Review Assistant"
+
+# Continuously stream all events instead of exiting after Handoff
+taco-cli subscribe <tacoId> --host https://tacobin.arcadia-han.com --stream
 
 # Page persistent event history (exits with code 6 if cursor expired)
 taco-cli events <tacoId> --after 42 --host https://tacobin.arcadia-han.com
@@ -54,15 +57,19 @@ taco-cli skills read taco
 ## Commands & Options
 
 ### `taco-cli subscribe <tacoId>`
-Streams realtime review events (SSE) as NDJSON lines (`ready`, `event`, `checkpoint`).
+Waits for `review.handed_off` over SSE, emits NDJSON, and exits with code 0 after Handoff. Comments and autosaves keep the listener online but do not finish the review. The Host page requires an active listener to hand off; otherwise it shows installation and subscription commands. Use `--stream` (or `--follow`) to keep receiving all `ready`, `event`, and `checkpoint` frames.
 
 - `--host <origin>`: Target Host origin (default: `http://localhost:32167` or `TACO_HOST_URL`).
 - `--after <seq>`: Exclusive sequence string cursor to resume or replay from.
-- `--harness <name>`: Optional self-reported harness (`codex`, `claude-code`, `cursor`, `gemini-cli`, `other`). Strictly validated.
+- `--harness <name>`: Optional self-reported runtime (`codex`, `claude-code`, `github-copilot`, `cursor`, `agy`, `pi`, `omp`, `openclaw`, `hermes`, `opencode`, `gemini-cli`, `other`). The UI labels it `runtime` / `运行时`; the flag remains `--harness`. Strictly validated.
 - `--model <family>`: Optional self-reported model family (`gpt`, `claude`, `gemini`, `other`). Strictly validated.
 - `--model-id <id>`: Optional detailed model identifier string (1–128 characters).
 - `--name <name>`: Optional self-reported presence display name (1–64 characters).
 - `--listener-id <uuid>`: Optional listener UUID; generated once per subscribe process and kept stable across reconnects.
+- `--session <title>`: Optional readable session name (1–256 characters), shown in listener details.
+- `--stream` / `--follow`: Continuously emit all events without exiting after Handoff.
+
+Fetch each immutable Handoff before applying feedback, then subscribe again with `--after <confirmed sequence>` for the next review round. Clicking the Header avatar stack opens the complete listener menu; online presence does not prove receipt or processing. Header Save writes a local Taco copy independently of Host autosave.
 
 ### `taco-cli events <tacoId>`
 Pages persistent event history from the Host.

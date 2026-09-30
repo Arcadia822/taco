@@ -8,6 +8,10 @@
 * **host**: Restore local Taco saving and label listener details `runtime` / `运行时`.
 * **ui**: Use the default button variant for the handoff dropdown arrow so its gray background does not turn primary green on hover.
 
+### Documentation
+
+* **review**: Align the skill, embedded CLI guide, bilingual README, installation guides, website and current specifications with the simplified header, local Save, active-listener Handoff and default subscription exit behavior.
+
 ## [0.12.0](https://github.com/Arcadia822/taco/compare/v0.11.0...v0.12.0) (2026-09-29)
 
 ### Features

@@ -15,9 +15,9 @@ title: "Implementation Audit: Taco File Browser"
 - [x] Search covers paths and content.
 - [x] The sidebar collapse control lives in the left panel Header.
 - [x] The Castrel-style shell composes the file/workspace/comments panels before each panel's Header and Content; the right comments sidebar starts closed.
-- [x] A collapsed file sidebar can be reopened from the workspace Header; Header actions are ghost buttons.
-- [x] The workspace Header shows the root-relative file path and a reusable 24px-tall WYSIWYG/Markdown text segmented control for Markdown files; the document has no duplicate filename row.
-- [x] The Header offers Bento's nine built-in shell languages, Share, a Save split button with Spec Kit unpack, and a globe language control, with no help.
+- [x] A collapsed file sidebar can be reopened from the workspace Header; Header controls use compact ghost and split-button actions.
+- [x] The workspace Header shows only the selected file's basename with extension (or localized Checkpoints / 检查点); the document body displays the editable file title and icon.
+- [x] The Header offers a gray Handoff split button (arrow hover background stays gray), a green Save split button with Spec Kit unpack, theme and globe language controls, and panel toggles; no bundle title input, template input, Header Category switch, breadcrumbs, or help entry.
 - [x] Outline metadata, local/file state, and the search trigger do not occupy persistent chrome.
 - [x] Save serializes the canonical file bundle, not the rendered Markdown.
 - [x] The public Agent API is file-oriented and read-only.

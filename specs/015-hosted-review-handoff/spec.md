@@ -51,10 +51,10 @@ TACO-33 原提案希望 review 文件自动向原 agent session 注入 user mess
 ### 3.2 交互与责任边界
 
 1. CLI publish 返回分享 URL 和 `tacoId`；一个 Taco 仅有一次 Agent publish，不设计多个 Agent 对同一 Taco 再 publish。Host 固定一份不可变发布基线；Agent `taco-cli subscribe <tacoId>` 收到 ready，页头显示此 Taco 活跃连接的自报信息。列表仅代表连接在线，不认证其为原 Agent，也不保证进程已读。
-2. 任何拿到 URL 的人都可自报姓名作为 `authorId` 修改**同一个共享的最新文档**、Checkpoint 状态/模板/节点及创建、回复、解决评论，无账号或 guest 会话鉴权；姓名相同者无法区分、可冒用，界面明确标记“自报身份”。编辑以短暂 debounce（例如 1 秒）增量自动保存成功后向所有人可见；“保存中/失败/有冲突”明确提示，刷新前有未保存改动须警告。评论独立实时持久化；任何写入都不自动交接。
+2. 任何拿到 URL 的人都可自报姓名作为 `authorId` 修改**同一个共享的最新文档**、Checkpoint 状态及创建、回复、解决评论，无账号或 guest 会话鉴权；姓名相同者无法区分、可冒用。模板名称与节点定义保留在存储协议中，Header 不提供编辑入口。编辑以短暂 debounce（例如 1 秒）增量自动保存成功后向所有人可见；“保存中/失败/有冲突”明确提示，刷新前有未保存改动须警告。评论独立实时持久化；任何写入都不自动交接。页头 Save 保存本地 Taco，独立于 Host 自动保存。
 3. 托管页头主按钮文案仅为「交接」。点击时如本页有待 debounce 的脏内容或正在保存的请求，则等待**原定的自动保存**成功后再提交；失败/冲突则阻止交接并保留本地改动，绝不由交接请求代存正文。其他页面的未保存输入不可观测，界面只承诺交接时 Host 已保存的状态。Host 基于同一已保存状态版本和评论高水位冻结**发布基线→最新状态**的差异，写不可变 Handoff 及持久事件；它不创建/推进可见历史版本、不重置 publish 基线。重复点击处理中禁用，同一 Idempotency-Key 重试返回同一结果。
 4. 两项现有“复制完整评审”和“复制不含数据的检查提示”仍在下拉，内容和失败提示保持现行语义；本地 `file://` 和没有可信 Host 能力的普通 Taco 主按钮仍执行原复制动作。不能用 CSS 选择器或 Host 注入脚本假装完成核心动作：浏览器运行时提供可选的、明确受同源 `/t/{id}` 启用的交接回调，Host 集成执行网络请求。不可由上传的 bundle 字段指定任意目标 URL，也不能在无 Host 时静默假成功。
-5. 订阅 stdout 继续只有 `ready`/`event`/`checkpoint` 帧；`review.handed_off` 帧只含 handoffId 与 tacoId，Agent 按 Host+tacoId+handoffId 拉完整文件正文/统一 diff、Checkpoint 状态/定义差异及全部评论，无需 revisionId。零监听者仍能交接并以持久 events/`--after` 补读；“Host 已保存”不等于 Agent 已处理。Agent 检查冲突后自行应用到 canonical 文件，托管内容不可直接当可信指令或自动覆盖。
+5. 订阅 stdout 使用 `ready`/`event`/`checkpoint` 帧；默认只等待 `review.handed_off`，收到后输出并以退出码 0 结束，`--stream` 持续接收全部事件。交接帧含 handoffId 与 tacoId，Agent 拉完整快照再检查冲突、应用反馈。Host 页面交接前刷新监听列表；零监听者展示安装引导，不生成交接事件，查询失败阻止提交。已持久化事件可通过 events/`--after` 补读；“Host 已保存”不等于 Agent 已处理，托管内容不可直接当可信指令或自动覆盖。
 
 ### 3.3 快照一致性、评论与完成时机
 
@@ -227,3 +227,13 @@ develop 实测（字节，§14 基线）：Complete 2,832,705（−2,084 B，−
 箭头错误传入组件 `primary=true`，常态灰色被自定义 `.copy-review-more` 覆盖，但 hover 命中绿色 `.control-button-primary:hover`。移除错误参数，沿用组件默认按钮 hover，不新增 hover 特例。prepare：以 §14 最终字节为基线，Complete／Lite／Host 成品与 skill 双 shell 各预计 −32 至 +32 B，skill 全目录含镜像预计 −256 至 +256 B。无新增依赖或联网行为；技能无需新增操作说明，官网演示随构建更新。
 
 develop：Complete 成品 2,832,705 B（0 B）、Lite 292,934 B（−3 B）、Host 2,866,481 B（0 B）、skill Complete 2,727,170 B（0 B）、skill Lite 187,399 B（−3 B）、skill 目录 14,023,069 B（−3 B），均在估算内，压缩使删除参数几乎无字节变化。无依赖／请求变化，无增大阈值触发。构建与三变体 gate 通过；真实浏览器 Complete／Lite／Host 箭头 hover=true，背景均保持 rgb(238,238,238)，与主交接按钮相同，primary 标记消失，下拉菜单可打开。Host 截图显示交接灰色、保存绿色；官网演示镜像已生成，实际监听从 sequence 2 恢复。
+
+## 16. 交付文档一致性检查
+
+prepare：同步中英文 README、默认产品规格、Checkpoint 规格、安装指南、skill 与官网的最终 Header／分类入口／保存／监听交接语义。shell runtime 预计 0 B；内嵌默认文档的 Complete／Lite／Host 成品预计各 −4 至 +8 KiB，skill 目录文档预计 +0 至 +2 KiB，CLI 内嵌指南预计 +0.5 至 +2 KiB，官网单页文案预计 +0.5 至 +2 KiB。无依赖／联网行为变化。历史 changelog 保持原记录，§11 标为被 §14 取代。
+
+develop 实测（以 §15 最终产物为基线）：Complete 2,835,634 B、Lite 295,863 B、Host 2,869,410 B，各 +2,929 B，均在 −4 至 +8 KiB 估算内，增量来自内嵌默认规格文档；skill Complete 2,727,170 B、Lite 187,399 B，runtime shell 均 0 B，符合估算；skill 全目录 14,023,367 B（+298 B，估算 +0 至 +2 KiB）；CLI dist/main.js 78,302 B（+1,147 B，估算 +0.5 至 +2 KiB），内嵌指南源码同为 +1,147 B。官网 page.tsx 61,551 B（+290 B，估算 +0.5 至 +2 KiB），比估算下界少 222 B，因为替换既有说明而非追加；页面资源压缩体积未单独测量。没有新增依赖或联网行为。本轮单个 shell／成品均未达到 1% 或 32 KiB 增长阈值。
+
+累计相对仓库 2026-09-28 基线，Lite skill shell +6,367 B（3.52%）、Lite 成品 +9,582 B（3.35%），超过 1% 告知阈值；前者来自此前共享交接／评论／Checkpoint 能力，后者还包含本轮内嵌规范文档增长。可选缩减方案是单独精简通用本地交互或默认内嵌文档，本轮保持功能与文档完整。
+
+验证：根构建、Complete／Lite／Host gate、CLI 构建、文档格式检查通过；实际运行 CLI skills read 返回更新的 reviewing 指南。skill 结构校验 valid:true、errors:[]，保留既有 SKILL.md 33,313 字符超过建议 20,000 的 advisory warning。真实官网中英文正文完整显示，既有指令栏横向滚动可读取完整内容，复制按钮返回 Copied；未改变指令栏布局。README 镜像字节一致，默认产品／Checkpoint 规格同步最终 Header；历史记录保留，旧 Header 设计明确由 §14 取代。无额外测试或全仓通过声明。

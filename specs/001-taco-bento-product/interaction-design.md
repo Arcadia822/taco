@@ -9,7 +9,7 @@ Taco v0.3 is a small local knowledge base containing one Spec Kit feature direct
 
 ```text
 ┌──────────────────┬───────────────────────────────────────────────────────┐
-│ Taco          ‹  │ Taco title · file path                  Share Save    │
+│ Taco          ‹  │ filename.ext           [Handoff▾] [Save▾] ☼ 🌐 [💬]   │
 ├──────────────────┼───────────────────────────────────┬───────────────────┤
 │ files            │ editable Tiptap document         │ [Outline] Comments│
 │ folders          │                                   │ document-local    │
@@ -26,15 +26,16 @@ There is no generated Overview page and no dashboard. Opening a Taco prefers the
 - Taco first splits the shell into a collapsible file sidebar and a document workspace. The workspace then splits the area beneath its 40px Header into an editable document and a persistent document-local auxiliary area.
 - The file sidebar and the workspace each have their own Header. The outline/comments area has a compact row of tabs rather than a global sidebar Header or a close button.
 - The left Header contains a precise 24×24px Taco mark and the collapse control. Once collapsed, its reopen icon moves into the workspace Header.
-- The workspace Header contains an inline-editable bundle title, followed by the root-relative path of the selected file. Editing the title immediately updates the document and browser title and marks the Taco dirty. The normalized title and the persisted `.taco.html` filename stem are an invariant: after a title change, saving requires a matching new filename rather than overwriting a differently named handle, and a copy gets a matching `-copy` title and filename. To its right are the comments shortcut, the share menu, a Castrel v2-style primary Save split button, and the globe language switcher. The split-button menu offers Save, Save a copy, and Save & unpack to folder. There is no help and no Markdown mode toggle.
-- The outline and comments reuse the shared 24px segmented control component. Selecting the Header comments shortcut activates the Comments tab; it does not open or close another global panel.
+- Taco Complete, Lite, and Host share the same workspace Header. The Header displays only the selected file's basename including its extension (or the localized Checkpoints / 检查点 label in Checkpoints view). There is no inline bundle title input, no template name input, no Header Category switch, and no breadcrumb navigation. Persisted bundle title, template, navigation manifests, and protocol properties remain fully preserved in storage. The normalized title and the persisted `.taco.html` filename stem remain an invariant: after a title change, saving requires a matching new filename rather than overwriting a differently named handle, and a copy gets a matching `-copy` title and filename. To the right are the gray Handoff split button, the green Save split button, theme switch, language switcher, and the left/right panel entries (sidebar collapse/expand and comments/outline panel toggle).
+- The gray Handoff split button features a default-variant arrow whose hover background stays gray (matching the main Handoff button). The green Save split button offers Save, Save a copy…, and Save & unpack to folder…. On narrow viewports (≤560px), Handoff and Save collapse to icon-only primary buttons while preserving their full accessible names and dropdown menus. There is no help and no Markdown mode toggle.
+- The outline and comments reuse the shared 24px segmented control component. Selecting the Header comments shortcut toggles the Comments / Outline auxiliary panel.
 
-This follows Castrel's AppShell composition: the outer split first, then the workspace-local composition. Header controls use compact 24px ghost icon buttons.
+This follows Castrel's AppShell composition: the outer split first, then the workspace-local composition. Header controls use compact 24px ghost and split-button controls.
 
 ## 3. Category Navigation
 
 - With no manifest, first-level directories form Categories; root files start Unassigned. An explicit manifest groups virtual files without rewriting their paths.
-- The Category control in the document header assigns a file to a group; drag-and-drop movement and Category CRUD controls are not supported.
+- Category classification occurs through the file tree / manifest and the new-file creation dialog. Existing files have no Header Category switch or move control, and drag-and-drop file movement is not supported.
 - The first visible Markdown file opens by default unless a valid `navigation.entry` selects another document. Filenames and frontmatter have no routing privilege.
 - Group titles use secondary text without a leading icon slot; a right chevron appears on hover or keyboard focus.
 - Nested directories remain navigable with open/closed folder icons.
@@ -47,7 +48,7 @@ This follows Castrel's AppShell composition: the outer split first, then the wor
 ## 4. Markdown Editor
 
 - Markdown opens directly in Tiptap with the official Markdown extension and stays directly editable. There is no raw/source mode.
-- The Markdown viewer has no separate filename title row. The selected root-relative path in the workspace Header provides that context.
+- The Markdown viewer displays an editable file title above the body along with its file-type icon. The workspace Header shows only the selected file basename.
 - The editor has no persistent formatting toolbar; editing happens directly in the document surface.
 - Each Tiptap top-level node gets a stable `data-taco-block-id`. Updates serialize both the canonical Markdown and each block's HTML; the latter is collaboration transport/cache state, not a parallel product domain model.
 - H1–H3 populate an untitled, ghost-style outline in the right auxiliary area.
@@ -118,6 +119,7 @@ Search has no persistent Header button; it is a keyboard tool.
 - `>1080px`: file tree + document + persistent document-local outline/comments area.
 - `821–1080px`: the same workspace composition, but with a narrower file sidebar.
 - `≤820px`: the file tree becomes a drawer that is closed by default; the document-local auxiliary area stays available.
+- `≤560px`: the workspace Header maintains a single-row layout; Handoff and Save main buttons display as icon-only while retaining accessible labels and dropdown menus, the file name truncates with ellipsis, and repeated brand marks in collapsed state are suppressed.
 
 ## 9. Header Tool Items
 
