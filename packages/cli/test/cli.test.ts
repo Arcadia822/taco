@@ -203,7 +203,16 @@ describe('taco-cli (Phase 1)', () => {
     ])
     expect(resLongName.exitCode).toBe(2)
     expect(JSON.parse(resLongName.stderr!).error.message).toContain('Invalid --name')
-
+    // Invalid --session (> 256 chars)
+    const longSession = 's'.repeat(257)
+    const resLongSession = await runCli([
+      'subscribe',
+      '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001',
+      '--session',
+      longSession,
+    ])
+    expect(resLongSession.exitCode).toBe(2)
+    expect(JSON.parse(resLongSession.stderr!).error.message).toContain('Invalid --session')
     // Invalid --after (non-numeric)
     const resBadAfter = await runCli([
       'subscribe',
@@ -271,10 +280,11 @@ describe('taco-cli (Phase 1)', () => {
         'claude-3-7-sonnet',
         '--name',
         'ReviewerAgent',
+        '--session',
+        '中文会话测试',
         '--host',
         'https://host.example',
       ])
-
       expect(res.exitCode).toBe(4)
       expect(callCount).toBeGreaterThanOrEqual(2)
 
@@ -287,7 +297,7 @@ describe('taco-cli (Phase 1)', () => {
       expect(recordedHeaders[0].get('X-Taco-Model')).toBe('claude')
       expect(recordedHeaders[0].get('X-Taco-Model-Id')).toBe('claude-3-7-sonnet')
       expect(recordedHeaders[0].get('X-Taco-Listener-Name')).toBe('ReviewerAgent')
-
+      expect(recordedHeaders[0].get('X-Taco-Session')).toBe(encodeURIComponent('中文会话测试'))
       // Stable listener ID across reconnect!
       const secondListenerId = recordedHeaders[1].get('X-Listener-Id')
       expect(secondListenerId).toBe(firstListenerId)

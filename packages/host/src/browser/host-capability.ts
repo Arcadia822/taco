@@ -1,5 +1,3 @@
-import type { IconName } from '../../../../src/ui-primitives.ts'
-
 /**
  * A same-origin Host capability is declared by the page that serves the shell, never by the Taco
  * bundle. `packages/host/src/app/t/[id]/route.ts` writes one inert block into the document `<head>`;
@@ -72,23 +70,3 @@ export function readHostCapability(doc: Document = document, loc: Location = loc
   return { tacoId, apiBase }
 }
 
-/**
- * Self-reported harness names allowed by the frozen contract, mapped to built-in icons. Unlisted or
- * unknown values resolve to the generic `monitor` icon: the shell never downloads a logo and never
- * presents a self-reported value as verified.
- */
-export const HOST_HARNESS_ICONS: Record<string, IconName> = {
-  codex: 'terminal',
-  'claude-code': 'file-code',
-  cursor: 'edit',
-  'gemini-cli': 'globe',
-  other: 'monitor',
-}
-
-/** Self-reported model family names allowed by the frozen contract, mapped to built-in icons. */
-export const HOST_MODEL_ICONS: Record<string, IconName> = {
-  gpt: 'bot',
-  claude: 'file-text',
-  gemini: 'globe',
-  other: 'monitor',
-}

@@ -353,7 +353,20 @@ export const runCli = async (
     }
 
     // Validate metadata flags
-    const validHarnesses = ['codex', 'claude-code', 'cursor', 'gemini-cli', 'other'] as const
+    const validHarnesses = [
+      'codex',
+      'claude-code',
+      'github-copilot',
+      'cursor',
+      'agy',
+      'pi',
+      'omp',
+      'openclaw',
+      'hermes',
+      'opencode',
+      'gemini-cli',
+      'other',
+    ] as const
     const validModels = ['gpt', 'claude', 'gemini', 'other'] as const
 
     const harness = options['harness']
@@ -410,6 +423,26 @@ export const runCli = async (
         const error = makeCliError(
           'VALIDATION_ERROR',
           'Invalid --name: must be a non-empty string with maximum 64 characters (leading/trailing whitespace trimmed)',
+        )
+        return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+      }
+    }
+
+    const rawSession = options['session']
+    let sessionTitle: string | undefined = undefined
+    if (rawSession !== undefined) {
+      if (typeof rawSession !== 'string') {
+        const error = makeCliError(
+          'VALIDATION_ERROR',
+          'Invalid --session: must be a non-empty string with maximum 256 characters',
+        )
+        return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+      }
+      sessionTitle = rawSession.trim()
+      if (sessionTitle.length < 1 || sessionTitle.length > 256) {
+        const error = makeCliError(
+          'VALIDATION_ERROR',
+          'Invalid --session: must be a non-empty string with maximum 256 characters (leading/trailing whitespace trimmed)',
         )
         return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
       }
@@ -472,6 +505,7 @@ export const runCli = async (
           model: typeof model === 'string' ? model : undefined,
           modelId: typeof modelId === 'string' ? modelId : undefined,
           name: name !== undefined ? name : undefined,
+          sessionTitle: sessionTitle !== undefined ? sessionTitle : undefined,
         },
       },
     )

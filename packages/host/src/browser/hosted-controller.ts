@@ -1,5 +1,4 @@
 import {
-  HOST_HARNESS_ICONS,
   readHostCapability,
   type HostCapability,
 } from './host-capability.ts'
@@ -15,11 +14,12 @@ import {
 } from './hosted-session.ts'
 import { hostCopy, type HostCopy } from './hosted-i18n.ts'
 import { HOSTED_STYLES } from './hosted-styles.ts'
+import { harnessLogo } from './harness-logos.ts'
 import {
   createControlButton,
   el,
   setButtonIcon,
-  showPromptDialog,
+  sidebarRow,
   svgIcon,
 } from '../../../../src/ui-primitives.ts'
 import { currentAuthorName, setAuthorName } from '../../../../src/identity.ts'
@@ -55,13 +55,10 @@ export class HostedBrowserController {
 
     // Structure locked in hosted review mode
     browser.setStructureLocked(true, this.t.hostSharedField)
-    browser.setPrimaryHandoffHandler(async () => this.primaryHandoff(), this.t.hostHandoffTooltip, 'bot-handoff')
+    browser.setPrimaryHandoffHandler(async () => this.primaryHandoff(), this.t.hostHandoffTooltip, 'bot-handoff', this.t.hostHandoffCommand)
     browser.setCopyReviewMenuCustomizer((menu, defaultItems) => this.customizeHandoffMenu(menu, defaultItems))
     browser.setDurableCommentsOnlyCheck(() => this.session.currentStatus.readiness !== 'unsupported')
     browser.setPendingWritesCheck(() => this.session.hasPendingWrites())
-    if (typeof document !== 'undefined') {
-      document.querySelector('.file-workspace')?.classList.add('is-hosted')
-    }
     const unsubDoc = browser.onDocumentChange((kind) => {
       if (kind === 'comments') this.session.markCommentsChanged()
       else this.session.markContentChanged()
@@ -98,7 +95,7 @@ export class HostedBrowserController {
 
   private mountHeaderControls(): void {
     // Only mount presence button (icon-only, ghost style, positioned right before Handoff group)
-    this.presenceButton = createControlButton('users', this.t.hostPresence, () => { void this.openPresenceMenu() }, 'host-presence-button control-button-icon', false, true)
+    this.presenceButton = createControlButton('users', this.t.hostPresence, () => { void this.openPresenceMenu() }, 'host-presence-button')
 
     this.removeControls.push(this.browser.addHeaderControl(this.presenceButton, 'right'))
 
@@ -107,13 +104,14 @@ export class HostedBrowserController {
 
   private handleLocaleChange(): void {
     this.browser.setStructureLocked(true, this.t.hostSharedField)
-    this.browser.setPrimaryHandoffHandler(async () => this.primaryHandoff(), this.t.hostHandoffTooltip, 'bot-handoff')
+    this.browser.setPrimaryHandoffHandler(async () => this.primaryHandoff(), this.t.hostHandoffTooltip, 'bot-handoff', this.t.hostHandoffCommand)
     this.syncPresenceButton()
   }
 
   private renderStatus(status: HostedStatus): void {
     if (this.destroyed) return
     const wasConflict = this.status?.save === 'conflict'
+    const wasError = this.status?.save === 'error'
     this.status = status
     if (status.readiness === 'unsupported') {
       // No Host baseline after all: behave exactly like the plain reader page.
@@ -127,7 +125,7 @@ export class HostedBrowserController {
     if (status.save === 'conflict' && !wasConflict) {
       this.browser.toast(this.t.hostConflictNotice)
     }
-    if (status.save === 'error' && this.status?.save !== 'error') {
+    if (status.save === 'error' && !wasError) {
       this.browser.toast(this.t.hostSaveErrorNotice)
     }
   }
@@ -139,9 +137,15 @@ export class HostedBrowserController {
     if (!button) return
     const count = this.listeners?.listeners.length ?? 0
     const name = currentAuthorName() || this.t.guest
-    button.title = `${this.t.hostPresence}: ${name}${count > 0 ? ` · ${count} agent(s)` : ''}`
+    button.title = `${this.t.hostPresence}: ${name}${count > 0 ? ` · ${count} ${this.t.hostActiveAgents}` : ''}`
     button.setAttribute('aria-label', button.title)
     setButtonIcon(button, count > 0 ? 'users' : 'user')
+    button.querySelector('.host-listener-badge')?.remove()
+    if (count > 0) {
+      const badge = el('span', 'host-listener-badge', String(count))
+      badge.setAttribute('aria-hidden', 'true')
+      button.append(badge)
+    }
   }
 
   private hashColor(name: string): string {
@@ -172,19 +176,43 @@ export class HostedBrowserController {
     menu.append(...defaultItems)
   }
 
-  private async promptAuthor(): Promise<void> {
-    const next = await showPromptDialog({
-      title: this.t.hostAuthor,
-      placeholder: this.t.hostAuthorUnset,
-      initialValue: currentAuthorName(),
-      confirmLabel: this.t.save,
-      cancelLabel: this.t.cancel,
-    })
-    if (next === null) return
-    setAuthorName(next)
-    this.syncPresenceButton()
-    const openMenu = document.querySelector<HTMLElement>('.host-presence-menu')
-    if (openMenu) this.fillPresenceMenu(openMenu)
+  private editAuthor(row: HTMLElement): void {
+    const name = row.querySelector<HTMLElement>('.host-member-name')
+    if (!name || name.isContentEditable) return
+    const previous = currentAuthorName()
+    name.contentEditable = 'plaintext-only'
+    name.setAttribute('role', 'textbox')
+    name.setAttribute('aria-label', this.t.hostEditName)
+    name.textContent = previous
+    let finished = false
+    const finish = (commit: boolean): void => {
+      if (finished) return
+      finished = true
+      if (commit) setAuthorName((name.textContent ?? '').trim().slice(0, 64))
+      name.contentEditable = 'false'
+      name.removeEventListener('blur', onBlur)
+      name.removeEventListener('keydown', onKey)
+      this.syncPresenceButton()
+      const menu = row.closest<HTMLElement>('.host-presence-menu')
+      if (menu) this.fillPresenceMenu(menu)
+    }
+    const onBlur = (): void => finish(true)
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.isComposing) return
+      if (event.key === 'Enter' || event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        finish(event.key === 'Enter')
+      }
+    }
+    name.addEventListener('blur', onBlur)
+    name.addEventListener('keydown', onKey)
+    name.focus()
+    const selection = window.getSelection()
+    const range = document.createRange()
+    range.selectNodeContents(name)
+    selection?.removeAllRanges()
+    selection?.addRange(range)
   }
   private async openPresenceMenu(): Promise<void> {
     const button = this.presenceButton
@@ -204,21 +232,23 @@ export class HostedBrowserController {
     const humanSection = el('div', 'host-presence-section')
     humanSection.append(el('h3', 'host-presence-heading', this.t.hostActiveHumans))
 
-    const humanRow = el('div', 'host-member-row host-member-human')
     const avatar = el('span', 'host-avatar', currentName.charAt(0) || 'U')
     avatar.style.backgroundColor = this.hashColor(currentName)
-    const nameSpan = el('span', 'host-member-name', currentName)
 
     const editBtn = el('button', 'host-edit-name-btn') as HTMLButtonElement
     editBtn.type = 'button'
     editBtn.title = this.t.hostEditName
+    editBtn.setAttribute('aria-label', this.t.hostEditName)
     editBtn.append(svgIcon('edit'))
     editBtn.addEventListener('click', (e) => {
       e.stopPropagation()
-      void this.promptAuthor()
+      this.editAuthor(humanRow)
     })
 
-    humanRow.append(avatar, nameSpan, editBtn)
+    const humanRow = sidebarRow('div', {
+      className: 'host-member-row host-member-human', leading: avatar,
+      label: currentName, labelClass: 'host-member-name', trailing: editBtn,
+    })
     humanSection.append(humanRow)
     menu.append(humanSection)
 
@@ -238,21 +268,14 @@ export class HostedBrowserController {
       }
     }
     menu.append(agentSection)
-    menu.append(el('p', 'host-presence-note', this.t.hostListenerNote))
   }
 
   private buildAgentRow(listener: HostListener): HTMLElement {
-    const row = el('div', 'host-member-row host-member-agent')
+    const logo = harnessLogo(listener.harness)
 
-    const harnessIconName = HOST_HARNESS_ICONS[listener.harness ?? ''] ?? 'bot'
-    const iconWrapper = el('span', 'host-agent-icon')
-    iconWrapper.append(svgIcon(harnessIconName))
-
-    const name = el('span', 'host-member-name', listener.name || this.t.hostListenerAnonymous)
-
-    // Info trigger with hover card
     const infoTrigger = el('button', 'host-info-trigger') as HTMLButtonElement
     infoTrigger.type = 'button'
+    infoTrigger.setAttribute('aria-label', this.t.hostListenerDetails)
     infoTrigger.append(svgIcon('info'))
 
     const card = el('div', 'host-info-card')
@@ -265,11 +288,15 @@ export class HostedBrowserController {
 
     addCardRow(this.t.hostHarnessLabel, listener.harness)
     addCardRow(this.t.hostModelLabel, listener.modelId || listener.model)
-    addCardRow('Name', listener.name)
-    addCardRow(this.t.hostStartedListening, this.formatListenerTime(listener.lastSeenAt))
+    addCardRow(this.t.hostNameLabel, listener.name)
+    addCardRow(this.t.hostSessionTitle, listener.sessionTitle)
+    if (listener.connectedAt) addCardRow(this.t.hostStartedListening, this.formatListenerTime(listener.connectedAt))
 
     infoTrigger.append(card)
-    row.append(iconWrapper, name, infoTrigger)
+    const row = sidebarRow('div', {
+      className: 'host-member-row host-member-agent', leading: logo,
+      label: listener.name || this.t.hostListenerAnonymous, labelClass: 'host-member-name', trailing: infoTrigger,
+    })
     return row
   }
 
@@ -286,7 +313,7 @@ export class HostedBrowserController {
   private renderListeners(snapshot: HostListenerSnapshot): void {
     this.listeners = snapshot
     const open = document.querySelector<HTMLElement>('.host-presence-menu')
-    if (open) this.fillPresenceMenu(open)
+    if (open && !open.querySelector('[contenteditable="plaintext-only"]')) this.fillPresenceMenu(open)
     this.syncPresenceButton()
   }
 

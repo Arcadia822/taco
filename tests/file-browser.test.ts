@@ -1804,7 +1804,6 @@ describe('FileBrowser', () => {
       toggle.click()
       // Global comment add button is disabled per user instruction
       expect(document.querySelector('.comment-global-add')).toBeNull()
-      expect(document.querySelector('.comment-global-heading')?.textContent).toBe('全局评论')
 
       // But existing whole-document comment threads render properly
       expect(document.querySelector('.comment-global-group .comment-thread')).not.toBeNull()

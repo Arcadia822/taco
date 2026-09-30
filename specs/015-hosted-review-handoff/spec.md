@@ -161,3 +161,21 @@ TACO-33 原提案希望 review 文件自动向原 agent session 注入 user mess
 Host 使用编译生成并随部署绑定的 `packages/host/assets/taco-shell.html`；当资产缺失或 shell variant 不是 `host` 时返回 503，不把本地 Complete/Lite 静默作为后备。Vite 为 Host 编译同一编辑器 + 托管模块，为 Complete/Lite 静态剪除托管模块、样式和文案；产物 gate 解压运行时并检查边界。选择这一方案而非同源注入第二个 JavaScript 文件：不增加页面启动请求、注入时序或额外缓存版本合同；代价是 Host 保存自己的完整编辑器单文件资产，不能用 Lite 包替代。`taco-cli publish` 仍只上传文档投影，访客从 Host 独立页面评审。
 
 拆分后浏览器实测：通过 HTTP 打开构建后的 Complete 与 Lite，本地页面的 `meta[name=taco-shell-variant]` 分别为 `complete`/`lite`，`window.taco.hosted` 不存在，未注入 Host capability 或 Host 样式，原有 Handoff/Save 按钮仍在；通过独立 SQLite 的生产 Host 发布 009 评审样例后，`/t/<tacoId>` 的 variant 为 `host`，呈现 Host 保存状态、监听者 `SplitSmoke`，并能编辑 `plan.md` 自动保存至 `stateVersion=2`。点击主按钮（非同名下拉按钮）生成 `review.handed_off` sequence 2，CLI subscriber 实际收到该事件，`taco-cli handoff` 按 id 返回包含该编辑的不可变 `changedFiles` 与 `incrementalFiles`。本地 shell 未在这些交互中触发 Host API。验收仅代表本机 SQLite/浏览器场景，不代表生产 PostgreSQL 或跨实例已实测。
+
+## 10. Presence 与交接按钮修订（2026-09-30）
+
+Header 扩展控件持久保存左右位置，主交接动作持久保存图标与文案；语言切换和重建仍呈现机器人箭头与「交接」。Presence 使用 ghost 按钮，非零监听数显示角标；删除菜单底部自报信息说明。姓名使用行内编辑，Enter/失焦提交，Escape 取消，行结构复用 Sidebar。属性标签跟随页面语言；Session 标题可选，由 CLI `--session` 上报，缺失时不显示。Harness Logo 随 Host 打包，无运行时外部下载。全局评论不显示标题，保留已有线程。
+
+**prepare 估算**：相对本轮开始实测，Complete 产物 2,834,449 B、Lite 产物 294,615 B、Host 产物 2,848,557 B、skill Complete shell 2,728,914 B、skill Lite shell 189,080 B。Host 产物预计 +4–12 KiB；本地两种 shell/产物预计各 +0–1 KiB；skill 目录生成镜像预计合计 +0–6 KiB，文档约 +0–1 KiB；CLI 打包产物预计 +0.3–1 KiB。无新增 npm 依赖或联网行为，监听元数据沿用同源 SSE 和 listeners API。
+
+**develop 实测**：`npm run build` 与 CLI `npm run build`；同口径比较本轮开始基线。
+
+| 产物 | prepare 估算增量 | develop 实测大小 / 增量 | 偏差 |
+| --- | ---: | ---: | --- |
+| Complete 产物 / skill Complete shell | 各 0–1 KiB | 2,834,537 B / 2,729,002 B；各 +88 B | 在预算内；仅通用 header 配置持久化 |
+| Lite 产物 / skill Lite shell | 各 0–1 KiB | 294,660 B / 189,125 B；各 +45 B | 在预算内；不含 Host Logo |
+| Host `.taco.html` | 4–12 KiB | 2,865,905 B；+17,348 B（+0.61%） | 比上限多 5,060 B，完整上游 Logo 向量尤其 Hermes 比预估大；没有新增外部请求 |
+| CLI `dist/main.js` | 0.3–1 KiB | 77,155 B；+1,378 B | 比上限多 354 B，包含 Session 编码校验、Harness 枚举与 help |
+| skill 目录 | 镜像 0–6 KiB、文档 0–1 KiB | 全目录 14,032,092 B → 14,032,895 B；+803 B | 生成镜像和监听指南同步，无新依赖 |
+
+验证：CLI 37 项、HostedSession/租约 22 项测试通过；已有全局评论保留和 Header 重建用例通过。实际 Host 页面检查 spacer 右侧 ghost 控件和在线计数角标；中英文切换后主按钮与菜单首项图标/文案一致；姓名 Enter 提交、Escape 取消、失焦提交；中文 Session 经 CLI→SSE→SQLite→listeners→悬浮卡片保持原文。`connectedAt` 为初始连接时间，心跳更新 `lastSeenAt` 不改变它。新增字段采用 PostgreSQL/SQLite 加列迁移；本轮仅 SQLite 实际运行，PostgreSQL 未做服务实测。未重跑已知无关 Mermaid/Tiptap/image 失败的整仓测试，不宣称全仓测试通过。

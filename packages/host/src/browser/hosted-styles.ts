@@ -1,8 +1,9 @@
 export const HOSTED_STYLES = `/* Hosted review: the Host owns a shared saved state, so its controls sit with the document header. */
-.host-presence-button { flex-shrink: 0; }
+.host-presence-button { position: relative; flex-shrink: 0; }
+.host-listener-badge { position: absolute; top: -3px; right: -3px; display: grid; place-items: center; min-width: 12px; height: 12px; padding: 0 2px; border-radius: 6px; background: var(--ink); color: var(--surface); font-size: 9px; line-height: 1; pointer-events: none; }
 
 /* In hosted mode, the save button is disabled/hidden in favor of autosave status */
-.file-workspace.is-hosted .save-group { display: none !important; }
+.file-workspace:has(.host-presence-button) .save-group { display: none; }
 
 /* Presence Popover - aligned with .topbar-popover standards */
 .host-presence-menu {
@@ -26,46 +27,22 @@ export const HOSTED_STYLES = `/* Hosted review: the Host owns a shared saved sta
   background: var(--line);
   margin: 4px 2px;
 }
-.host-presence-empty, .host-presence-note {
+.host-presence-empty {
   margin: 2px 8px;
   color: var(--muted);
   font-size: 11px;
   line-height: 1.4;
 }
 
-/* Single-row user & agent items - perfectly aligned with .sidebar-row and .popover-action standards */
-.host-member-row {
-  display: grid;
-  grid-template-columns: var(--sidebar-icon-size, 16px) minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: var(--chrome-gap, 8px);
-  width: 100%;
-  height: var(--chrome-size, 24px);
-  min-height: var(--chrome-size, 24px);
-  padding: 0 var(--sidebar-row-padding, 8px);
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 400;
-  text-align: left;
-  transition: background-color 120ms ease, color 120ms ease;
-}
+.host-member-row { font-size: 12px; }
 .host-member-row:hover { background: var(--surface-2); }
-.host-member-row .sidebar-row-icon {
-  display: grid;
-  place-items: center;
-  width: var(--sidebar-icon-size, 16px);
-  height: var(--sidebar-icon-size, 16px);
-  min-width: var(--sidebar-icon-size, 16px);
-}
 .host-member-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.host-member-name[contenteditable="plaintext-only"] { outline: 1px solid var(--line); border-radius: 3px; cursor: text; min-width: 40px; }
 
 /* Avatar for humans - exactly matching icon size (16x16) */
 .host-avatar {
@@ -83,16 +60,7 @@ export const HOSTED_STYLES = `/* Hosted review: the Host owns a shared saved sta
   user-select: none;
 }
 
-/* Agent item icons */
-.host-agent-icon {
-  display: grid;
-  place-items: center;
-  width: var(--sidebar-icon-size, 16px);
-  height: var(--sidebar-icon-size, 16px);
-  min-width: var(--sidebar-icon-size, 16px);
-  color: var(--muted);
-}
-.host-agent-icon .ui-icon { width: 14px; height: 14px; }
+.host-harness-logo { width: var(--sidebar-icon-size); height: var(--sidebar-icon-size); object-fit: contain; }
 
 /* Info icon with hover card */
 .host-info-trigger {
@@ -133,7 +101,7 @@ export const HOSTED_STYLES = `/* Hosted review: the Host owns a shared saved sta
 }
 .host-info-card-row { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; line-height: 1.4; }
 .host-info-card-label { color: var(--muted); flex-shrink: 0; }
-.host-info-card-value { color: var(--ink); font-weight: 500; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.host-info-card-value { color: var(--ink); font-weight: 500; text-align: right; overflow-wrap: anywhere; white-space: normal; }
 
 /* Edit Name inline button */
 .host-edit-name-btn {
