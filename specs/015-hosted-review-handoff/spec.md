@@ -179,3 +179,17 @@ Header 扩展控件持久保存左右位置，主交接动作持久保存图标�
 | skill 目录 | 镜像 0–6 KiB、文档 0–1 KiB | 全目录 14,032,092 B → 14,032,895 B；+803 B | 生成镜像和监听指南同步，无新依赖 |
 
 验证：CLI 37 项、HostedSession/租约 22 项测试通过；已有全局评论保留和 Header 重建用例通过。实际 Host 页面检查 spacer 右侧 ghost 控件和在线计数角标；中英文切换后主按钮与菜单首项图标/文案一致；姓名 Enter 提交、Escape 取消、失焦提交；中文 Session 经 CLI→SSE→SQLite→listeners→悬浮卡片保持原文。`connectedAt` 为初始连接时间，心跳更新 `lastSeenAt` 不改变它。新增字段采用 PostgreSQL/SQLite 加列迁移；本轮仅 SQLite 实际运行，PostgreSQL 未做服务实测。未重跑已知无关 Mermaid/Tiptap/image 失败的整仓测试，不宣称全仓测试通过。
+
+## 11. 交接反馈与固定面包屑（2026-09-30）
+
+交接刷新 Host 内容时保留 Checkpoints 页面和布局。Header 固定三级：Taco 标题 → Category → 文件 Title（无 Title 时用相对路径与文件名）；Checkpoints 页面为 Taco 标题 → 国际化 Checkpoints → 配置名称。Taco 标题保持行内编辑，普通文件 Category 保持可切换；Checkpoint 所属分组继续由配置决定。
+
+托管 Taco 标题和普通 Category 编辑通过现有 CAS autosave 保存：`taco-state/1` patch 增加可选 `title` 与 `navigation`，`navigation: null` 清除显式清单，省略字段保留当前值。支持仅元数据的 patch；保存期间的新编辑保留为 dirty 并在下一次保存提交。两种数据库适配器使用同一快照校验，发布基线保持不可变。
+
+交接前刷新监听者列表；没有 Agent 时显示安装引导 modal，不生成交接事件。安装命令与官网使用共享常量。成功提示只显示「已交接给名称」或「已交接给 N 个监听者」，提交前保存监听目标避免成功后订阅退出丢失名称。
+
+prepare 估算：Complete 产物基线 2,834,537 B、Lite 294,660 B、Host 2,865,905 B、skill Complete shell 2,729,002 B、skill Lite 189,125 B。通用面包屑和页面保持预计使本地 shell/产物各 +0.5–2 KiB，Host 产物 +1–4 KiB，skill 目录镜像合计 +3–12 KiB，新增文档 +0–1 KiB。无新增 npm 依赖或外部联网行为；监听查询沿用现有同源 API。
+
+develop 实测（同一构建口径，字节）：Complete 2,834,789（+252 B，+0.009%，估算 +0.5–2 KiB）；Lite 294,966（+306 B，+0.104%，估算 +0.5–2 KiB）；Host 2,868,737（+2,832 B，+0.099%，估算 +1–4 KiB）；skill Complete shell 2,729,254（+252 B）；skill Lite 189,431（+306 B）；skill 全目录 14,035,187（+2,292 B，估算 +3–12 KiB）。本地与 skill 增量低于估算，原因是压缩抵消新增布局与 DOM 文本；Host 落在估算区间，包含安装引导与元数据保存。无新增依赖、无新增外部请求，均未触发 1%／32 KiB 告知阈值。镜像和模板由构建生成。
+
+验证：Host/HostedSession 26 项回归通过；导航路径修正后定向回归 23 项通过（其余跳过）。构建通过。真实浏览器验证零监听者 modal、不生成交接事件、单人名称提示、两人计数提示、默认订阅交接后退出码 0、Checkpoints 页面保持、文件标题即时更新、Taco 标题／普通 Category 保存并刷新保留、英文 Checkpoints 标签、390px 双行 Header 与安装命令无横向裁切。SQLite 实测；PostgreSQL 同步实现但未连接服务实测。编辑必须在 Host 初始加载完成后进行，加载期间编辑沿用既有冲突保护。本轮未重跑已知无关整仓失败，不宣称全仓通过。

@@ -44,6 +44,8 @@ export interface HostAutoSavePatch {
   author: string
   fileChanges: HostFilePatch[]
   checkpoints?: unknown
+  title?: string
+  navigation?: unknown
 }
 
 export interface HostAutosaveResult {

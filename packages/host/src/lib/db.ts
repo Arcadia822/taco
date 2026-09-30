@@ -899,6 +899,22 @@ export class PostgresDbAdapter implements TacoDb {
         }
       }
 
+      // Apply title if present
+      if (patch.title !== undefined) {
+        if (typeof patch.title !== 'string' || patch.title.trim().length === 0) {
+          throw new ValidationError('Invalid title: must be non-empty string')
+        }
+        nextSnapshot.title = patch.title
+      }
+
+      // Apply navigation if present
+      if (patch.navigation !== undefined) {
+        if (patch.navigation === null) {
+          delete nextSnapshot.navigation
+        } else {
+          nextSnapshot.navigation = patch.navigation
+        }
+      }
       // Validate resulting snapshot
       const snapVal = validateDocumentSnapshot(nextSnapshot)
       if (!snapVal.ok) {
@@ -2261,6 +2277,19 @@ export class SqliteDbAdapter implements TacoDb {
             throw new ValidationError(`Invalid checkpoints at ${cpVal.path}: ${cpVal.err}`)
           }
           nextSnapshot.checkpoints = patch.checkpoints
+        }
+      }
+      if (patch.title !== undefined) {
+        if (typeof patch.title !== 'string' || patch.title.trim().length === 0) {
+          throw new ValidationError('Invalid title: must be non-empty string')
+        }
+        nextSnapshot.title = patch.title
+      }
+      if (patch.navigation !== undefined) {
+        if (patch.navigation === null) {
+          delete nextSnapshot.navigation
+        } else {
+          nextSnapshot.navigation = patch.navigation
         }
       }
       const snapVal = validateDocumentSnapshot(nextSnapshot)

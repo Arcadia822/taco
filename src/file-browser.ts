@@ -156,7 +156,6 @@ export class FileBrowser {
   private copyReviewGroup!: HTMLElement
   private workspaceHeaderSpacer!: HTMLElement
   private structureLocked = false
-  private structureLockedTooltip?: string
   private primaryHandoffHandler?: () => Promise<void>
   private primaryHandoffTooltip?: string
   private primaryHandoffIcon?: Parameters<typeof svgIcon>[0]
@@ -401,6 +400,7 @@ export class FileBrowser {
     this.root.className = 'taco-shell panel-motion-disabled'
     this.root.classList.toggle('sidebar-closed', this.sidebarClosed)
     this.root.classList.toggle('is-readonly', !bundleCanWrite(this.bundle))
+    this.root.classList.toggle('is-checkpoint-view', this.checkpointView)
 
     const layout = el('div', 'panel-layout')
 
@@ -460,8 +460,8 @@ export class FileBrowser {
     title.value = this.bundle.title
     title.size = Math.max(1, Math.min(title.value.length, 56))
     title.spellcheck = false
-    title.disabled = !this.canManageStructure
-    title.title = this.canManageStructure ? this.t.documentTitle : (this.structureLockedTooltip ?? this.t.documentTitle)
+    title.disabled = !bundleCanWrite(this.bundle)
+    title.title = this.t.documentTitle
     title.setAttribute('aria-label', this.t.documentTitle)
     title.addEventListener('input', () => {
       title.size = Math.max(1, Math.min(title.value.length, 56))
@@ -472,8 +472,7 @@ export class FileBrowser {
       title.value = this.bundle.title
     })
     const checkpointLabels = checkpointCopy(this.locale)
-    const checkpointPageTitle = el('label', 'checkpoint-page-title')
-    checkpointPageTitle.append(el('span', '', `${checkpointLabels.checkpoints}:`))
+    const checkpointPageTitle = el('span', 'checkpoint-page-title', checkpointLabels.checkpoints)
     this.checkpointTemplateInput = el('input', 'checkpoint-template-name') as HTMLInputElement
     this.checkpointTemplateInput.type = 'text'
     this.checkpointTemplateInput.value = resolveCheckpoints(this.bundle).state?.template ?? ''
@@ -502,11 +501,22 @@ export class FileBrowser {
         this.checkpointTemplateInput.blur()
       }
     })
-    checkpointPageTitle.append(this.checkpointTemplateInput)
+    const breadcrumbs = el('nav', 'workspace-breadcrumbs')
+    breadcrumbs.setAttribute('aria-label', this.t.documentTitle)
+    const separator = (): HTMLElement => {
+      const arrow = el('span', 'workspace-breadcrumb-separator', '→')
+      arrow.setAttribute('aria-hidden', 'true')
+      return arrow
+    }
     this.categoryBadge = el('button', 'workspace-category-badge') as HTMLButtonElement
     this.categoryBadge.type = 'button'
     this.categoryBadge.addEventListener('click', () => { void this.promptChangeCategory() })
     this.workspacePath = el('div', 'workspace-path', this.selected ? relativePath(this.bundle, this.selected) : '')
+    const secondLevel = el('span', 'workspace-breadcrumb-level workspace-breadcrumb-category')
+    secondLevel.append(this.categoryBadge, checkpointPageTitle)
+    const thirdLevel = el('span', 'workspace-breadcrumb-level workspace-breadcrumb-document')
+    thirdLevel.append(this.workspacePath, this.checkpointTemplateInput)
+    breadcrumbs.append(title, separator(), secondLevel, separator(), thirdLevel)
     this.syncWorkspaceHeader()
     this.workspaceHeaderSpacer = el('span', 'workspace-header-spacer')
 
@@ -561,10 +571,7 @@ export class FileBrowser {
       collapsedBrandMark,
       collapsedBrandName,
       leftHeaderToggle,
-      title,
-      checkpointPageTitle,
-      this.categoryBadge,
-      this.workspacePath,
+      breadcrumbs,
       ...this.headerExtraControls.filter(({ position }) => position === 'left').map(({ control }) => control),
       this.workspaceHeaderSpacer,
       ...this.headerExtraControls.filter(({ position }) => position === 'right').map(({ control }) => control),
@@ -1242,7 +1249,11 @@ export class FileBrowser {
   private syncWorkspaceHeader(): void {
     const result = resolveCheckpoints(this.bundle)
     const path = this.selected?.path ?? this.selectedPlaceholder
-    this.workspacePath.textContent = path ? path.slice(this.bundle.root.length + 1) : ''
+    const fileTitle = this.selected
+      ? (frontmatterTitle(this.selected.content) || this.selected.title?.trim())
+      : undefined
+    this.workspacePath.textContent = fileTitle || (path ? path.slice(this.bundle.root.length + 1) : '')
+    this.workspacePath.title = path ? path.slice(this.bundle.root.length + 1) : ''
     if (this.checkpointView || !path) {
       this.categoryBadge.style.display = 'none'
       return
@@ -1263,15 +1274,15 @@ export class FileBrowser {
     if (!this.selected) return
     const groupInfo = getFileCurrentGroup(this.bundle, this.selected, this.t.ungrouped)
     this.categoryBadge.textContent = groupInfo.groupTitle
-    this.categoryBadge.title = this.canManageStructure
+    this.categoryBadge.title = bundleCanWrite(this.bundle)
       ? `${groupInfo.groupTitle} · ${this.t.changeCategory}`
-      : (this.structureLockedTooltip ? `${groupInfo.groupTitle} · ${this.structureLockedTooltip}` : groupInfo.groupTitle)
-    this.categoryBadge.disabled = !this.canManageStructure
-    this.categoryBadge.classList.toggle('is-editable', this.canManageStructure)
+      : groupInfo.groupTitle
+    this.categoryBadge.disabled = !bundleCanWrite(this.bundle)
+    this.categoryBadge.classList.toggle('is-editable', bundleCanWrite(this.bundle))
   }
 
   private promptChangeCategory(): void {
-    if (!this.selected || !this.canManageStructure || resolveFileCategory(this.bundle, this.selected).source === 'checkpoint') return
+    if (!this.selected || !bundleCanWrite(this.bundle) || resolveFileCategory(this.bundle, this.selected).source === 'checkpoint') return
     const groupInfo = getFileCurrentGroup(this.bundle, this.selected, this.t.ungrouped)
 
     openGroupSelectorPopover({
@@ -1361,6 +1372,7 @@ export class FileBrowser {
     })
     if (previousNavigation !== navigationSignature(this.bundle, canonical)) this.fileNavigation?.refresh(this.selected)
     if (previousTitle !== canonical.title && this.selected?.path === path) {
+      this.syncWorkspaceHeader()
       const title = this.viewer.querySelector<HTMLElement>('.document-inline-title-text')
       if (title && document.activeElement !== title) title.textContent = canonical.title?.trim() || fallbackFileTitle(canonical)
     }
@@ -1407,6 +1419,7 @@ export class FileBrowser {
     comments: TacoCommentThread[]
   }): void {
     const previousPath = this.selected?.path ?? this.selectedPlaceholder
+    const wasCheckpointView = this.checkpointView
     this.bundle.title = content.title || this.bundle.title
     this.bundle.files = content.files
     ensureFileIds(this.bundle)
@@ -1416,9 +1429,9 @@ export class FileBrowser {
     else this.bundle.checkpoints = content.checkpoints
     this.bundle.comments = content.comments
     document.title = `${this.bundle.title} — Taco`
-    this.selected = (previousPath ? fileByPath(this.bundle, previousPath) : null) ?? defaultFile(this.bundle)
+    this.checkpointView = wasCheckpointView && content.checkpoints !== undefined
+    this.selected = this.checkpointView ? null : ((previousPath ? fileByPath(this.bundle, previousPath) : null) ?? defaultFile(this.bundle))
     this.selectedPlaceholder = null
-    this.checkpointView = false
     this.cachedResolvedCheckpoints = null
     this.dirtyTracker.markSaved()
     this.captureCheckpointBaseline()
@@ -1430,9 +1443,8 @@ export class FileBrowser {
     this.build()
   }
 
-  setStructureLocked(locked: boolean, tooltip?: string): void {
+  setStructureLocked(locked: boolean): void {
     this.structureLocked = locked
-    this.structureLockedTooltip = tooltip
     if (this.fileNavigation) {
       this.fileNavigation.refresh(this.selected)
     }

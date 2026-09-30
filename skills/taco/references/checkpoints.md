@@ -8,7 +8,7 @@ Creating or renaming a file does not add it to `nodes[].documents`; Checkpoint m
 
 Sidebar Rename and Delete apply to Checkpoint-owned files too. They do not rewrite `nodes[].documents`: renaming leaves the old required path as an uncreated placeholder and makes the renamed file an ordinary file unless another node references its new path; deleting leaves the required path uncreated. Both remove the old path's status record so the missing requirement returns to `todo`. The entry and navigation group paths follow a rename or are cleared on deletion.
 
-The Checkpoints page keeps the same Handoff and Save controls as document pages. A status or template edit can be handed off without saving, or persisted by saving the Taco; the page and category menus follow the selected UI language.
+The Checkpoints header uses the same three breadcrumb levels as documents: editable Taco title → localized Checkpoints label → editable configuration name. Hosted content refresh and Handoff preserve the current Checkpoints page. Local Handoff can carry unsaved status/template edits; hosted Handoff waits for autosave and uses saved Host state. Page and category menus follow the selected UI language.
 
 Statuses are `todo`, `in_progress`, `complete`, and `freeze`. On an actual status change, write or replace that path's status record with `updatedAt` in valid RFC3339 **UTC** (`new Date().toISOString()`, e.g. `2026-09-23T09:00:00.000Z`). `freeze` is a label, not a content lock or an approval; **do not calculate or verify a content/definition hash for Checkpoint state**. Do not modify the document's frontmatter to store status. Preserve unknown bundle fields and any invalid `checkpoints` value verbatim on refresh rather than silently dropping status data.
 

@@ -424,6 +424,41 @@ describe('HostedSession contract fixes (Findings 1, 3, 4 and concurrency protect
       removeEventListenerSpy.mockRestore()
     }
   })
+
+  it('preserves metadata edits made while an autosave is in flight', async () => {
+    const client = createMockClient()
+    const bundle: TacoBundle = {
+      format: 'taco/files', version: 1, docId: sampleSnapshot.docId,
+      title: sampleSnapshot.title, root: sampleSnapshot.root,
+      files: sampleSnapshot.files.map((file) => ({ ...file })), comments: [],
+    }
+    const writes: Array<{ title?: string; navigation?: unknown }> = []
+    const session = new HostedSession({
+      client: client as unknown as HostClient,
+      bridge: { bundle, author: () => 'Alice', onStatus: () => {}, adoptContent: () => {}, adoptListeners: () => {} },
+    })
+    client.autosave.mockImplementation(async (...args: unknown[]) => {
+      writes.push(structuredClone(args[0]) as { title?: string; navigation?: unknown })
+      if (writes.length === 1) {
+        bundle.title = 'Second title'
+        delete bundle.navigation
+        session.markContentChanged()
+      }
+      return { stateVersion: String(writes.length + 1), savedAt: new Date().toISOString(), historyWindowId: 'win' }
+    })
+    try {
+      await session.start()
+      bundle.title = 'First title'
+      bundle.navigation = { version: 1, groups: [{ id: 'review', title: 'Review', paths: ['spec.md'] }] }
+      session.markContentChanged()
+      await session.flush()
+      expect(session.currentStatus.save).toBe('dirty')
+      await session.flush()
+      expect(writes[0]).toMatchObject({ title: 'First title', navigation: { groups: [{ title: 'Review', paths: ['specs/sample/spec.md'] }] } })
+      expect(writes[1]).toMatchObject({ title: 'Second title', navigation: null })
+      expect(session.currentStatus.save).toBe('saved')
+    } finally { session.destroy() }
+  })
 })
 
 describe('HostedBrowserController & attachHostedSession', () => {
@@ -495,6 +530,119 @@ describe('HostedBrowserController & attachHostedSession', () => {
       const firstAction = document.querySelector<HTMLButtonElement>('.copy-review-menu button')!
       expect(primary.textContent).toBe(firstAction.textContent)
       expect(primary.querySelector('svg')?.innerHTML).toBe(firstAction.querySelector('svg')?.innerHTML)
+      browser.destroy()
+    } finally {
+      script.remove()
+      document.getElementById('taco-host-styles')?.remove()
+    }
+  })
+
+  it('blocks handoff and opens no-listeners install modal when zero listeners are connected', async () => {
+    const script = document.createElement('script')
+    script.id = 'taco-host-capability'
+    script.type = 'application/taco+host'
+    script.textContent = JSON.stringify({
+      version: 1,
+      tacoId: 'test-taco-id',
+      apiBase: '/v1/tacos/test-taco-id',
+    })
+    document.head.append(script)
+
+    try {
+      const root = document.createElement('div')
+      const browser = new FileBrowser(root, createSampleBundle())
+      const api = {} as TacoFileApi
+      const controller = attachHostedSession(browser, api)!
+      expect(controller).not.toBeNull()
+
+      // Mock refreshListeners returning empty listeners list
+      vi.spyOn(controller.session, 'start').mockResolvedValue(undefined)
+      vi.spyOn(controller.session, 'refreshListeners').mockImplementation(async () => {
+        controller.listeners = { observedAt: new Date().toISOString(), listeners: [] }
+        return controller.listeners
+      })
+      const handoffSpy = vi.spyOn(controller.session, 'handoff')
+
+      await controller.primaryHandoff()
+
+      // handoff should NOT be called
+      expect(handoffSpy).not.toHaveBeenCalled()
+
+      // dialog should be rendered with install commands
+      const dialog = document.querySelector<HTMLDialogElement>('.host-no-listeners-dialog')
+      expect(dialog).not.toBeNull()
+      const codeElements = Array.from(dialog?.querySelectorAll('code') ?? []).map((c) => c.textContent)
+      expect(codeElements).toContain('npx skills@latest add arcadia822/taco --skill=taco')
+      expect(codeElements).toContain('npm install -g @tacobin/cli')
+      expect(codeElements).toContain(`taco-cli subscribe test-taco-id --host ${location.origin}`)
+
+      dialog?.remove()
+      vi.spyOn(controller.session, 'refreshListeners').mockResolvedValue(null)
+      await controller.primaryHandoff()
+      expect(document.querySelector('.host-no-listeners-dialog')).toBeNull()
+      expect(handoffSpy).not.toHaveBeenCalled()
+      browser.destroy()
+    } finally {
+      script.remove()
+      document.getElementById('taco-host-styles')?.remove()
+    }
+  })
+
+  it('displays personalized listener toast on successful handoff with 1 listener and multiple listeners', async () => {
+    const script = document.createElement('script')
+    script.id = 'taco-host-capability'
+    script.type = 'application/taco+host'
+    script.textContent = JSON.stringify({
+      version: 1,
+      tacoId: 'test-taco-id',
+      apiBase: '/v1/tacos/test-taco-id',
+    })
+    document.head.append(script)
+
+    try {
+      const root = document.createElement('div')
+      const browser = new FileBrowser(root, createSampleBundle())
+      const api = {} as TacoFileApi
+      const controller = attachHostedSession(browser, api)!
+      const toastSpy = vi.spyOn(browser, 'toast').mockImplementation(() => {})
+
+      vi.spyOn(controller.session, 'start').mockResolvedValue(undefined)
+
+      // Case 1: 1 listener with name
+      vi.spyOn(controller.session, 'refreshListeners').mockImplementation(async () => {
+        controller.listeners = {
+          observedAt: new Date().toISOString(),
+          listeners: [
+            { listenerId: 'l1', name: 'Claude Code', lastSeenAt: new Date().toISOString(), expiresAt: new Date().toISOString() },
+          ],
+        }
+        return controller.listeners
+      })
+      vi.spyOn(controller.session, 'handoff').mockImplementation(async () => {
+        controller.listeners = { observedAt: new Date().toISOString(), listeners: [] }
+        return { kind: 'done', handoffId: 'h1' }
+      })
+
+      await controller.primaryHandoff()
+      const expectedSingleToast = browser.currentLocale === 'zh-Hans' ? '已交接给Claude Code' : 'Handed off to Claude Code'
+      expect(toastSpy).toHaveBeenCalledWith(expectedSingleToast)
+
+      // Case 2: multiple listeners
+      vi.spyOn(controller.session, 'refreshListeners').mockImplementation(async () => {
+        controller.listeners = {
+          observedAt: new Date().toISOString(),
+          listeners: [
+            { listenerId: 'l1', name: 'Claude Code', lastSeenAt: new Date().toISOString(), expiresAt: new Date().toISOString() },
+            { listenerId: 'l2', name: 'Codex', lastSeenAt: new Date().toISOString(), expiresAt: new Date().toISOString() },
+          ],
+        }
+        return controller.listeners
+      })
+
+      await controller.primaryHandoff()
+      const expectedMultiToast = browser.currentLocale === 'zh-Hans' ? '已交接给2个监听者' : 'Handed off to 2 listeners'
+      expect(toastSpy).toHaveBeenCalledWith(expectedMultiToast)
+
       browser.destroy()
     } finally {
       script.remove()

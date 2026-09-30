@@ -72,11 +72,15 @@
         "expectedStateVersion": { "$ref": "#/$defs/Sequence" },
         "author": { "$ref": "#/$defs/Name" },
         "fileChanges": { "type": "array", "items": { "$ref": "#/$defs/FilePatch" } },
-        "checkpoints": { "$ref": "#/$defs/CheckpointsOrNull", "description": "存在该字段表示替换共享 Checkpoint 图与状态；null 表示明确移除，缺失表示不修改。" }
+        "checkpoints": { "$ref": "#/$defs/CheckpointsOrNull", "description": "存在该字段表示替换共享 Checkpoint 图与状态；null 表示明确移除，缺失表示不修改。" },
+        "title": { "type": "string", "minLength": 1, "description": "替换共享 Taco 标题；缺失表示不修改。" },
+        "navigation": { "type": ["object", "null"], "description": "替换经过快照校验的 navigation 清单；null 移除，缺失表示不修改。" }
       },
       "anyOf": [
         { "properties": { "fileChanges": { "minItems": 1 } } },
-        { "required": ["checkpoints"] }
+        { "required": ["checkpoints"] },
+        { "required": ["title"] },
+        { "required": ["navigation"] }
       ]
     },
     "ChangedFile": {

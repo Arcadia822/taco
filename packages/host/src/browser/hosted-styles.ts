@@ -120,4 +120,65 @@ export const HOSTED_STYLES = `/* Hosted review: the Host owns a shared saved sta
 .host-edit-name-btn .ui-icon { width: 12px; height: 12px; }
 
 /* Menu separator */
-.topbar-popover-divider { height: 1px; background: var(--line); margin: 4px 2px; }`
+.topbar-popover-divider { height: 1px; background: var(--line); margin: 4px 2px; }
+
+/* No listeners modal install guide */
+.host-no-listeners-dialog {
+  width: min(520px, calc(100vw - 32px));
+  user-select: auto;
+}
+.host-no-listeners-dialog .confirmation-dialog-body { grid-template-columns: minmax(0, 1fr); }
+.host-install-guide {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  user-select: text;
+}
+.host-install-step {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+.host-install-step-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.host-install-code-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface-2, var(--canvas, #f6f8fa));
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.host-install-code-row code {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+  user-select: text;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.host-install-copy-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.host-install-copy-btn:hover {
+  background: var(--surface-hover, var(--line-light, #eee));
+}
+`
