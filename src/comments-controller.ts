@@ -541,11 +541,6 @@ export class CommentsController {
     const group = el('section', 'comment-global-group')
     group.setAttribute('role', 'group')
     group.setAttribute('aria-label', this.t.documentComment)
-    const header = el('div', 'comment-global-header')
-    header.append(el('h3', 'comment-global-heading', this.t.documentComment))
-    // Global comment creation is temporarily disabled per user instruction.
-    // Existing whole-document comments (if any) are still displayed below.
-    group.append(header)
     if (this.pendingGlobal) {
       group.append(this.buildNewCommentComposer(null))
     }

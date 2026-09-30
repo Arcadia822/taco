@@ -306,7 +306,7 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
         type: 'string',
         required: false,
         default: null,
-        description: 'Self-reported harness name: codex, claude-code, cursor, gemini-cli, other',
+        description: 'Self-reported harness name: codex, claude-code, github-copilot, cursor, agy, pi, omp, openclaw, hermes, opencode, gemini-cli, other',
       },
       {
         name: '--model',
@@ -328,6 +328,13 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
         required: false,
         default: null,
         description: 'Self-reported display name for presence (1-64 characters)',
+      },
+      {
+        name: '--session',
+        type: 'string',
+        required: false,
+        default: null,
+        description: 'Self-reported session title for presence (1-256 characters)',
       },
       {
         name: '--listener-id',

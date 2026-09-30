@@ -408,9 +408,11 @@ describe('TACO-33 Host Backend Persistence & Logic', () => {
     await db.upsertListenerLease(tacoId, {
       listenerId: activeId,
       name: 'Agent Listener',
-      harness: 'codex',
+      sessionTitle: '中文会话',
+      harness: 'omp',
       model: 'gpt',
       modelId: 'gpt-5',
+      connectedAt: now.toISOString(),
       lastSeenAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + 60000).toISOString(),
     })
@@ -426,8 +428,27 @@ describe('TACO-33 Host Backend Persistence & Logic', () => {
     const listeners = await db.listListeners(tacoId)
     expect(listeners.length).toBe(1)
     expect(listeners[0].listenerId).toBe(activeId)
-    expect(listeners[0].harness).toBe('codex')
+    expect(listeners[0].harness).toBe('omp')
+    expect(listeners[0].sessionTitle).toBe('中文会话')
+    expect(listeners[0].connectedAt).toBe(now.toISOString())
 
+    // Heartbeat update with later lastSeenAt preserves original connectedAt
+    const later = new Date(now.getTime() + 30000)
+    await db.upsertListenerLease(tacoId, {
+      listenerId: activeId,
+      name: 'Agent Listener',
+      sessionTitle: '中文会话',
+      harness: 'omp',
+      model: 'gpt',
+      modelId: 'gpt-5',
+      lastSeenAt: later.toISOString(),
+      expiresAt: new Date(later.getTime() + 60000).toISOString(),
+    })
+
+    const listenersAfterHeartbeat = await db.listListeners(tacoId)
+    expect(listenersAfterHeartbeat.length).toBe(1)
+    expect(listenersAfterHeartbeat[0].connectedAt).toBe(now.toISOString())
+    expect(listenersAfterHeartbeat[0].lastSeenAt).toBe(later.toISOString())
     try {
       unlinkSync(testDbPath)
     } catch {}

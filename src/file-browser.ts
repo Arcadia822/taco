@@ -159,10 +159,12 @@ export class FileBrowser {
   private structureLockedTooltip?: string
   private primaryHandoffHandler?: () => Promise<void>
   private primaryHandoffTooltip?: string
+  private primaryHandoffIcon?: Parameters<typeof svgIcon>[0]
+  private primaryHandoffLabel?: string
   private copyReviewMenuCustomizer?: ((menu: HTMLElement, defaultItems: HTMLElement[]) => void)
   private pendingWritesCheck?: () => boolean
   private durableActionsOnlyCheck?: () => boolean
-  private readonly headerExtraControls: HTMLElement[] = []
+  private readonly headerExtraControls: Array<{ control: HTMLElement; position: 'left' | 'right' }> = []
   private readonly changeListeners = new Set<(kind: 'content' | 'comments') => void>()
   private readonly localeListeners = new Set<(locale: Locale) => void>()
   private readonly destructListeners = new Set<() => void>()
@@ -508,13 +510,9 @@ export class FileBrowser {
     this.syncWorkspaceHeader()
     this.workspaceHeaderSpacer = el('span', 'workspace-header-spacer')
 
-    this.copyButton = createControlButton('copy', this.t.copyReview, () => { void this.primaryHandoff() }, 'copy-review-main', false, false)
-    this.copyButton.classList.remove('control-button-icon')
-    this.copyButton.classList.add('control-button-with-label')
-    this.copyButton.setAttribute('aria-label', this.t.copyReview)
+    this.copyButton = createControlButton(this.primaryHandoffIcon ?? 'copy', this.primaryHandoffLabel ?? this.t.copyReview, () => { void this.primaryHandoff() }, 'copy-review-main', true)
     this.copyButton.title = this.primaryHandoffTooltip ?? this.t.copyReview
-    const copyLabel = el('span', 'button-label', this.t.copyReviewLabel)
-    this.copyButton.append(copyLabel)
+    this.copyButton.querySelector('.button-label')!.textContent = this.primaryHandoffLabel ?? this.t.copyReviewLabel
 
     const copyMore = createControlButton('chevron-down', this.t.copyReview, () => this.openCopyReviewMenu(copyMore), 'copy-review-more', false, true)
     copyMore.setAttribute('aria-label', this.t.copyReview)
@@ -567,9 +565,9 @@ export class FileBrowser {
       checkpointPageTitle,
       this.categoryBadge,
       this.workspacePath,
-      ...this.headerExtraControls,
+      ...this.headerExtraControls.filter(({ position }) => position === 'left').map(({ control }) => control),
       this.workspaceHeaderSpacer,
-
+      ...this.headerExtraControls.filter(({ position }) => position === 'right').map(({ control }) => control),
       this.copyReviewGroup,
       saveGroup,
       theme,
@@ -1440,14 +1438,16 @@ export class FileBrowser {
     }
   }
 
-  setPrimaryHandoffHandler(handler: (() => Promise<void>) | null, tooltip?: string, icon?: Parameters<typeof svgIcon>[0]): void {
+  setPrimaryHandoffHandler(handler: (() => Promise<void>) | null, tooltip?: string, icon?: Parameters<typeof svgIcon>[0], label?: string): void {
     this.primaryHandoffHandler = handler ?? undefined
     this.primaryHandoffTooltip = tooltip
+    this.primaryHandoffIcon = handler ? icon : undefined
+    this.primaryHandoffLabel = handler ? label : undefined
     if (this.copyButton) {
       this.copyButton.title = tooltip ?? this.t.copyReview
-      if (icon) {
-        setButtonIcon(this.copyButton, icon)
-      }
+      this.copyButton.setAttribute('aria-label', this.primaryHandoffLabel ?? this.t.copyReview)
+      setButtonIcon(this.copyButton, this.primaryHandoffIcon ?? 'copy')
+      this.copyButton.querySelector('.button-label')!.textContent = this.primaryHandoffLabel ?? this.t.copyReviewLabel
     }
   }
   setCopyReviewMenuCustomizer(customizer: ((menu: HTMLElement, defaultItems: HTMLElement[]) => void) | null): void {
@@ -1470,7 +1470,8 @@ export class FileBrowser {
   }
 
   addHeaderControl(control: HTMLElement, position: 'left' | 'right' = 'right'): () => void {
-    this.headerExtraControls.push(control)
+    const entry = { control, position }
+    this.headerExtraControls.push(entry)
     if (this.workspaceHeaderSpacer?.parentElement) {
       if (position === 'left') {
         this.workspaceHeaderSpacer.parentElement.insertBefore(control, this.workspaceHeaderSpacer)
@@ -1480,7 +1481,7 @@ export class FileBrowser {
       }
     }
     return () => {
-      const idx = this.headerExtraControls.indexOf(control)
+      const idx = this.headerExtraControls.indexOf(entry)
       if (idx !== -1) this.headerExtraControls.splice(idx, 1)
       control.remove()
     }

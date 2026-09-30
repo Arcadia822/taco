@@ -479,8 +479,22 @@ describe('HostedBrowserController & attachHostedSession', () => {
       expect(typeof api.handoff).toBe('function')
       expect(api.hosted?.()).toEqual({ tacoId: 'test-taco-id', apiBase: '/v1/tacos/test-taco-id' })
       expect(document.getElementById('taco-host-styles')).not.toBeNull()
-      expect(root.querySelector('.host-status-button')).not.toBeNull()
       expect(root.querySelector('.host-presence-button')).not.toBeNull()
+      const handoff = vi.fn(async () => {})
+      browser.setPrimaryHandoffHandler(handoff, 'Submit review', 'bot-handoff', browser.currentLocale === 'zh-Hans' ? '交接' : 'Handoff')
+      browser.rebuild()
+      const presence = root.querySelector('.host-presence-button')!
+      const spacer = root.querySelector('.workspace-header-spacer')!
+      expect(spacer.compareDocumentPosition(presence) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(presence.classList.contains('control-button-primary')).toBe(false)
+      const primary = root.querySelector<HTMLButtonElement>('.copy-review-main')!
+      primary.click()
+      expect(handoff).toHaveBeenCalledOnce()
+      const menuToggle = root.querySelector<HTMLButtonElement>('.copy-review-more')!
+      menuToggle.click()
+      const firstAction = document.querySelector<HTMLButtonElement>('.copy-review-menu button')!
+      expect(primary.textContent).toBe(firstAction.textContent)
+      expect(primary.querySelector('svg')?.innerHTML).toBe(firstAction.querySelector('svg')?.innerHTML)
       browser.destroy()
     } finally {
       script.remove()

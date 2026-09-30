@@ -86,9 +86,11 @@ export interface HostCommentMutation {
 export interface HostListener {
   listenerId: string
   name?: string
+  sessionTitle?: string
   harness?: string
   model?: string
   modelId?: string
+  connectedAt?: string
   lastSeenAt: string
   expiresAt: string
 }

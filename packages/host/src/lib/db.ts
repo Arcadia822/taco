@@ -79,9 +79,11 @@ export interface HistoryVersionDetail extends HistoryVersionSummary {
 export interface ListenerRecord {
   listenerId: string
   name?: string
+  sessionTitle?: string
   harness?: string
   model?: string
   modelId?: string
+  connectedAt?: string
   lastSeenAt: string
   expiresAt: string
 }
@@ -260,9 +262,11 @@ CREATE TABLE IF NOT EXISTS listener_leases (
   taco_id UUID NOT NULL REFERENCES tacos(id) ON DELETE RESTRICT,
   listener_id UUID NOT NULL,
   name TEXT NULL,
+  session_title TEXT NULL,
   harness TEXT NULL,
   model TEXT NULL,
   model_id TEXT NULL,
+  connected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (taco_id, listener_id)
@@ -404,9 +408,11 @@ CREATE TABLE IF NOT EXISTS listener_leases (
   taco_id TEXT NOT NULL REFERENCES tacos(id),
   listener_id TEXT NOT NULL,
   name TEXT NULL,
+  session_title TEXT NULL,
   harness TEXT NULL,
   model TEXT NULL,
   model_id TEXT NULL,
+  connected_at TEXT NULL,
   last_seen_at TEXT NOT NULL,
   expires_at TEXT NOT NULL,
   PRIMARY KEY (taco_id, listener_id)
@@ -605,6 +611,8 @@ export class PostgresDbAdapter implements TacoDb {
     try {
       await client.query(PG_SCHEMA)
       await client.query('ALTER TABLE mutation_receipts ADD COLUMN IF NOT EXISTS request_hash TEXT;')
+      await client.query('ALTER TABLE listener_leases ADD COLUMN IF NOT EXISTS session_title TEXT;')
+      await client.query('ALTER TABLE listener_leases ADD COLUMN IF NOT EXISTS connected_at TIMESTAMPTZ DEFAULT NOW();')
       this.schemaInitialized = true
     } finally {
       client.release()
@@ -1651,7 +1659,7 @@ export class PostgresDbAdapter implements TacoDb {
   async listListeners(tacoId: string): Promise<ListenerRecord[]> {
     await this.ensureSchema()
     const res = await this.pool.query(
-      `SELECT listener_id, name, harness, model, model_id, last_seen_at, expires_at
+      `SELECT listener_id, name, session_title, harness, model, model_id, connected_at, last_seen_at, expires_at
        FROM listener_leases
        WHERE taco_id = $1 AND expires_at > NOW()`,
       [tacoId],
@@ -1659,9 +1667,11 @@ export class PostgresDbAdapter implements TacoDb {
     return res.rows.map((r) => ({
       listenerId: r.listener_id,
       ...(r.name ? { name: r.name } : {}),
+      ...(r.session_title ? { sessionTitle: r.session_title } : {}),
       ...(r.harness ? { harness: r.harness } : {}),
       ...(r.model ? { model: r.model } : {}),
       ...(r.model_id ? { modelId: r.model_id } : {}),
+      ...(r.connected_at ? { connectedAt: new Date(r.connected_at).toISOString() } : {}),
       lastSeenAt: new Date(r.last_seen_at).toISOString(),
       expiresAt: new Date(r.expires_at).toISOString(),
     }))
@@ -1670,22 +1680,29 @@ export class PostgresDbAdapter implements TacoDb {
   async upsertListenerLease(tacoId: string, listener: ListenerRecord): Promise<void> {
     await this.ensureSchema()
     await this.pool.query(
-      `INSERT INTO listener_leases (taco_id, listener_id, name, harness, model, model_id, last_seen_at, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO listener_leases (taco_id, listener_id, name, session_title, harness, model, model_id, connected_at, last_seen_at, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        ON CONFLICT (taco_id, listener_id) DO UPDATE SET
          name = EXCLUDED.name,
+         session_title = EXCLUDED.session_title,
          harness = EXCLUDED.harness,
          model = EXCLUDED.model,
          model_id = EXCLUDED.model_id,
+         connected_at = CASE
+           WHEN listener_leases.expires_at > NOW() THEN listener_leases.connected_at
+           ELSE EXCLUDED.connected_at
+         END,
          last_seen_at = EXCLUDED.last_seen_at,
          expires_at = EXCLUDED.expires_at`,
       [
         tacoId,
         listener.listenerId,
         listener.name || null,
+        listener.sessionTitle || null,
         listener.harness || null,
         listener.model || null,
         listener.modelId || null,
+        listener.connectedAt || listener.lastSeenAt,
         listener.lastSeenAt,
         listener.expiresAt,
       ],
@@ -1963,9 +1980,11 @@ interface SqliteHandoffRow {
 interface SqliteListenerRow {
   listener_id: string
   name: string | null
+  session_title: string | null
   harness: string | null
   model: string | null
   model_id: string | null
+  connected_at: string | null
   last_seen_at: string
   expires_at: string
 }
@@ -2012,6 +2031,12 @@ export class SqliteDbAdapter implements TacoDb {
     this.db.exec(SQLITE_SCHEMA)
     try {
       this.db.exec('ALTER TABLE mutation_receipts ADD COLUMN request_hash TEXT;')
+    } catch {}
+    try {
+      this.db.exec('ALTER TABLE listener_leases ADD COLUMN session_title TEXT;')
+    } catch {}
+    try {
+      this.db.exec('ALTER TABLE listener_leases ADD COLUMN connected_at TEXT;')
     } catch {}
     this.schemaInitialized = true
   }
@@ -2869,13 +2894,15 @@ export class SqliteDbAdapter implements TacoDb {
   async listListeners(tacoId: string): Promise<ListenerRecord[]> {
     this.ensureSchema()
     const nowIso = new Date().toISOString()
-    const rows = this.db.prepare('SELECT listener_id, name, harness, model, model_id, last_seen_at, expires_at FROM listener_leases WHERE taco_id = ? AND expires_at > ?').all(tacoId, nowIso) as unknown as SqliteListenerRow[]
+    const rows = this.db.prepare('SELECT listener_id, name, session_title, harness, model, model_id, connected_at, last_seen_at, expires_at FROM listener_leases WHERE taco_id = ? AND expires_at > ?').all(tacoId, nowIso) as unknown as SqliteListenerRow[]
     return rows.map((r) => ({
       listenerId: r.listener_id,
       ...(r.name ? { name: r.name } : {}),
+      ...(r.session_title ? { sessionTitle: r.session_title } : {}),
       ...(r.harness ? { harness: r.harness } : {}),
       ...(r.model ? { model: r.model } : {}),
       ...(r.model_id ? { modelId: r.model_id } : {}),
+      ...(r.connected_at ? { connectedAt: r.connected_at } : {}),
       lastSeenAt: r.last_seen_at,
       expiresAt: r.expires_at,
     }))
@@ -2883,15 +2910,21 @@ export class SqliteDbAdapter implements TacoDb {
 
   async upsertListenerLease(tacoId: string, listener: ListenerRecord): Promise<void> {
     this.ensureSchema()
+    const nowIso = new Date().toISOString()
     this.db
       .prepare(
-        `INSERT INTO listener_leases (taco_id, listener_id, name, harness, model, model_id, last_seen_at, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO listener_leases (taco_id, listener_id, name, session_title, harness, model, model_id, connected_at, last_seen_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(taco_id, listener_id) DO UPDATE SET
            name = excluded.name,
+           session_title = excluded.session_title,
            harness = excluded.harness,
            model = excluded.model,
            model_id = excluded.model_id,
+           connected_at = CASE
+             WHEN listener_leases.expires_at > ? THEN listener_leases.connected_at
+             ELSE excluded.connected_at
+           END,
            last_seen_at = excluded.last_seen_at,
            expires_at = excluded.expires_at`,
       )
@@ -2899,11 +2932,14 @@ export class SqliteDbAdapter implements TacoDb {
         tacoId,
         listener.listenerId,
         listener.name || null,
+        listener.sessionTitle || null,
         listener.harness || null,
         listener.model || null,
         listener.modelId || null,
+        listener.connectedAt || listener.lastSeenAt,
         listener.lastSeenAt,
         listener.expiresAt,
+        nowIso,
       )
   }
 

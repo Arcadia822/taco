@@ -7,7 +7,20 @@ export const dynamic = 'force-dynamic'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const SEQUENCE_PATTERN = /^(0|[1-9][0-9]*)$/
-const HARNESS_NAMES = new Set(['codex', 'claude-code', 'cursor', 'gemini-cli', 'other'])
+const HARNESS_NAMES = new Set([
+  'codex',
+  'claude-code',
+  'github-copilot',
+  'cursor',
+  'agy',
+  'pi',
+  'omp',
+  'openclaw',
+  'hermes',
+  'opencode',
+  'gemini-cli',
+  'other',
+])
 const MODEL_NAMES = new Set(['gpt', 'claude', 'gemini', 'other'])
 
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -55,6 +68,24 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     }
   }
 
+  const rawSession = req.headers.get('x-taco-session')?.trim()
+  let sessionTitle: string | undefined = undefined
+  if (rawSession !== undefined && rawSession !== null && rawSession !== '') {
+    try {
+      sessionTitle = decodeURIComponent(rawSession).trim()
+    } catch {
+      return NextResponse.json(
+        { error: { code: 'BAD_REQUEST', message: 'Invalid X-Taco-Session: malformed percent-encoding' } },
+        { status: 400 },
+      )
+    }
+    if (sessionTitle.length < 1 || sessionTitle.length > 256) {
+      return NextResponse.json(
+        { error: { code: 'BAD_REQUEST', message: 'X-Taco-Session must be between 1 and 256 characters' } },
+        { status: 400 },
+      )
+    }
+  }
   const afterParam = req.nextUrl.searchParams.get('after')?.trim()
   if (afterParam !== undefined && afterParam !== null && afterParam !== '') {
     if (!SEQUENCE_PATTERN.test(afterParam)) {
@@ -101,9 +132,11 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     await db.upsertListenerLease(tacoId, {
       listenerId,
       name: listenerName || undefined,
+      sessionTitle: sessionTitle || undefined,
       harness: harness || undefined,
       model: model || undefined,
       modelId: modelId || undefined,
+      connectedAt: now.toISOString(),
       lastSeenAt: now.toISOString(),
       expiresAt,
     })
@@ -227,6 +260,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
             await db.upsertListenerLease(tacoId, {
               listenerId,
               name: listenerName || undefined,
+              sessionTitle: sessionTitle || undefined,
               harness: harness || undefined,
               model: model || undefined,
               modelId: modelId || undefined,

@@ -19,6 +19,7 @@ export interface SubscribeMetadata {
   model?: string
   modelId?: string
   name?: string
+  sessionTitle?: string
 }
 
 export type SubscribeMode = 'handoff' | 'stream'
@@ -142,6 +143,9 @@ export class TacoSubscriber {
     }
     if (this.metadata?.name) {
       headers['X-Taco-Listener-Name'] = this.metadata.name
+    }
+    if (this.metadata?.sessionTitle) {
+      headers['X-Taco-Session'] = encodeURIComponent(this.metadata.sessionTitle)
     }
 
     socket.onMessage((text) => {

@@ -311,9 +311,11 @@ paths:
                       properties:
                         listenerId: { type: string, format: uuid, description: 临时连接标识，不是会话 id }
                         name: { type: string, minLength: 1, maxLength: 64, description: 自报称呼；缺失时显示匿名监听者 }
+                        sessionTitle: { type: string, minLength: 1, maxLength: 256, description: 自报会话标题，用于多会话区分 }
                         harness: { $ref: '#/components/schemas/HarnessName' }
                         model: { $ref: '#/components/schemas/ModelName' }
                         modelId: { type: string, minLength: 1, maxLength: 128, description: 详细模型 id，不作为 Logo 枚举键 }
+                        connectedAt: { type: string, format: date-time, description: 租约初次建立连接时间，续租不改变 }
                         lastSeenAt: { type: string, format: date-time }
                         expiresAt: { type: string, format: date-time }
         '404': { description: Taco 不存在 }
@@ -352,6 +354,11 @@ paths:
           in: header
           required: false
           schema: { type: string, minLength: 1, maxLength: 64 }
+        - name: X-Taco-Session
+          in: header
+          required: false
+          description: 自报会话标题，支持百分号编码（percent-encoded UTF-8），服务端解码并校验 1-256 字符
+          schema: { type: string, minLength: 1, maxLength: 256 }
       responses:
         '200':
           description: SSE 持久事件流；包含 review.handed_off 引用事件
@@ -382,7 +389,7 @@ components:
   schemas:
     HarnessName:
       type: string
-      enum: [codex, claude-code, cursor, gemini-cli, other]
+      enum: [codex, claude-code, github-copilot, cursor, agy, pi, omp, openclaw, hermes, opencode, gemini-cli, other]
       description: CLI/Harness 可自报的枚举名称，决定本地 Harness 图标
     ModelName:
       type: string

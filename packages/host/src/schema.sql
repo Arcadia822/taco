@@ -137,9 +137,11 @@ CREATE TABLE IF NOT EXISTS listener_leases (
   taco_id UUID NOT NULL REFERENCES tacos(id) ON DELETE RESTRICT,
   listener_id UUID NOT NULL,
   name TEXT NULL,
+  session_title TEXT NULL,
   harness TEXT NULL,
   model TEXT NULL,
   model_id TEXT NULL,
+  connected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   expires_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (taco_id, listener_id)
