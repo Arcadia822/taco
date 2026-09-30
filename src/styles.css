@@ -69,33 +69,6 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .brand-bubble-primary { fill: var(--brand-bubble-primary); }
 .brand-bubble-secondary { fill: var(--brand-bubble-secondary); }
 .brand-bubble-tertiary { fill: var(--brand-bubble-tertiary); }
-.bundle-title {
-  field-sizing: content; min-width: 0; width: auto; max-width: min(42vw, 480px); flex: 0 1 auto; padding: 3px 5px; overflow: hidden;
-  border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--ink);
-  font-size: 12px; font-weight: 560; text-overflow: ellipsis; white-space: nowrap;
-}
-.bundle-title:focus { border-color: var(--accent); background: var(--surface); outline: 0; }
-.workspace-breadcrumbs { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; font-size: 12px; }
-.workspace-breadcrumb-level { display: flex; align-items: center; min-width: 0; }
-.workspace-breadcrumb-category { flex: 0 1 auto; }
-.workspace-breadcrumb-document { flex: 0 1 auto; }
-.workspace-breadcrumb-separator { color: var(--muted); flex: 0 0 auto; }
-.workspace-breadcrumbs .bundle-title { max-width: min(24vw, 260px); }
-.workspace-category-badge {
-  display: inline-flex; align-items: center; justify-content: center; height: 22px; padding: 0 5px;
-  border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--muted);
-  font: 500 12px/1 var(--sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; cursor: default;
-  transition: background-color 140ms ease, color 140ms ease;
-}
-.workspace-category-badge.is-editable {
-  cursor: pointer; color: var(--ink);
-}
-.workspace-category-badge.is-editable:hover {
-  background: var(--surface-2); color: var(--ink);
-}
-.workspace-category-badge.is-editable:active {
-  transform: scale(0.96);
-}
 .workspace-path { min-width: 0; max-width: min(28vw, 360px); overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .control-button {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: auto; min-width: var(--chrome-size); height: var(--chrome-size); min-height: var(--chrome-size);
@@ -1055,7 +1028,6 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .bundle-title:hover { background: var(--surface-2); }
   .control-button:hover { background: var(--surface-2); color: var(--ink); }
   .control-button-primary:hover { background: color-mix(in srgb, var(--accent) 90%, #000); color: #fff; }
   .stage-summary:hover, .folder-row:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); color: var(--ink); }
@@ -1119,14 +1091,13 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 }
 
 @media (max-width: 560px) {
-  .taco-shell { --mobile-header-height: calc(76px + env(safe-area-inset-top)); }
-  .workspace-header { flex-wrap: wrap; align-content: center; row-gap: 4px; flex-basis: var(--mobile-header-height); }
-  .workspace-breadcrumbs { order: -1; flex: 1 0 100%; gap: 4px; }
-  .workspace-breadcrumbs .bundle-title { max-width: 30vw; }
-  .workspace-breadcrumb-category { max-width: 27vw; flex-shrink: 0; }
-  .workspace-breadcrumb-document { max-width: 32vw; flex: 1 1 auto; overflow: hidden; }
-  .workspace-breadcrumb-document .workspace-path, .workspace-breadcrumb-document .checkpoint-template-name { max-width: 100%; }
   .taco-shell { --right-panel: 100vw; }
+  .workspace-header { gap: 4px; }
+  .workspace-header .collapsed-brand-mark { display: none; }
+  .workspace-header-spacer { min-width: 0; }
+  .workspace-header .workspace-path, .workspace-header .checkpoint-page-title { overflow: hidden; text-overflow: ellipsis; }
+  .workspace-header .copy-review-main, .workspace-header .save-button { width: var(--chrome-size); min-width: var(--chrome-size); padding: 0; }
+  .workspace-header .copy-review-main .button-label, .workspace-header .save-button .button-label { display: none; }
 }
 
 @media (pointer: coarse) {
@@ -1298,14 +1269,9 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .checkpoint-status-button:hover, .checkpoint-document-status:hover { background: var(--surface-2); }
 .checkpoint-file-select .file-name { flex: 0 1 auto; }
 .checkpoint-file-row .file-attribute { color: var(--muted); }
-.workspace-category-badge.is-checkpoint { color: var(--ink); }
-.checkpoint-page-title { display: none; min-width: 0; color: var(--muted); white-space: nowrap; }
-.checkpoint-template-name { display: none; field-sizing: content; min-width: 32px; max-width: min(28vw, 300px); padding: 3px 5px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--ink); font: inherit; text-overflow: ellipsis; }
-.checkpoint-template-name:not(:disabled):hover, .checkpoint-template-name:not(:disabled):focus-visible { border-color: var(--line-strong); background: var(--surface); }
-.checkpoint-template-name:disabled { opacity: 1; cursor: default; }
-.is-checkpoint-view .workspace-path, .is-checkpoint-view .workspace-category-badge,
-  .is-checkpoint-view .comment-toggle { display: none; }
-.is-checkpoint-view .checkpoint-page-title, .is-checkpoint-view .checkpoint-template-name { display: block; }
+.checkpoint-page-title { display: none; min-width: 0; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.is-checkpoint-view .workspace-path, .is-checkpoint-view .comment-toggle { display: none; }
+.is-checkpoint-view .checkpoint-page-title { display: block; }
 .is-checkpoint-view .workspace-body { grid-template-columns: minmax(0, 1fr) 0; }
 .is-checkpoint-view .comment-panel { display: none; }
 .is-checkpoint-view .file-viewer { overflow: auto; padding: 0; scrollbar-width: thin; overscroll-behavior: contain; }

@@ -7,8 +7,6 @@ export const HOSTED_STYLES = `/* Hosted review: the Host owns a shared saved sta
 .host-presence-agent .host-harness-logo { width: 16px; height: 16px; }
 .host-presence-overflow { font-size: 9px; font-weight: 600; }
 
-/* In hosted mode, the save button is disabled/hidden in favor of autosave status */
-.file-workspace:has(.host-presence-button) .save-group { display: none; }
 
 /* Presence Popover - aligned with .topbar-popover standards */
 .host-presence-menu {
