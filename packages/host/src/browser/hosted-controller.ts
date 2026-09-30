@@ -22,7 +22,6 @@ import {
 import {
   createControlButton,
   el,
-  setButtonIcon,
   sidebarRow,
   svgIcon,
 } from '../../../../src/ui-primitives.ts'
@@ -143,13 +142,19 @@ export class HostedBrowserController {
     const name = currentAuthorName() || this.t.guest
     button.title = `${this.t.hostPresence}: ${name}${count > 0 ? ` · ${count} ${this.t.hostActiveAgents}` : ''}`
     button.setAttribute('aria-label', button.title)
-    setButtonIcon(button, count > 0 ? 'users' : 'user')
-    button.querySelector('.host-listener-badge')?.remove()
-    if (count > 0) {
-      const badge = el('span', 'host-listener-badge', String(count))
-      badge.setAttribute('aria-hidden', 'true')
-      button.append(badge)
+    const stack = el('span', 'host-avatar-stack')
+    stack.setAttribute('aria-hidden', 'true')
+    const human = el('span', 'host-avatar host-presence-avatar', name.charAt(0) || 'U')
+    human.style.backgroundColor = this.hashColor(name)
+    stack.append(human)
+    const listeners = this.listeners?.listeners ?? []
+    for (const listener of listeners.slice(0, 3)) {
+      const avatar = el('span', 'host-presence-avatar host-presence-agent')
+      avatar.append(harnessLogo(listener.harness))
+      stack.append(avatar)
     }
+    if (count > 3) stack.append(el('span', 'host-presence-avatar host-presence-overflow', `+${count - 3}`))
+    button.replaceChildren(stack)
   }
 
   private hashColor(name: string): string {

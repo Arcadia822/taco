@@ -193,3 +193,13 @@ prepare 估算：Complete 产物基线 2,834,537 B、Lite 294,660 B、Host 2,865
 develop 实测（同一构建口径，字节）：Complete 2,834,789（+252 B，+0.009%，估算 +0.5–2 KiB）；Lite 294,966（+306 B，+0.104%，估算 +0.5–2 KiB）；Host 2,868,737（+2,832 B，+0.099%，估算 +1–4 KiB）；skill Complete shell 2,729,254（+252 B）；skill Lite 189,431（+306 B）；skill 全目录 14,035,187（+2,292 B，估算 +3–12 KiB）。本地与 skill 增量低于估算，原因是压缩抵消新增布局与 DOM 文本；Host 落在估算区间，包含安装引导与元数据保存。无新增依赖、无新增外部请求，均未触发 1%／32 KiB 告知阈值。镜像和模板由构建生成。
 
 验证：Host/HostedSession 26 项回归通过；导航路径修正后定向回归 23 项通过（其余跳过）。构建通过。真实浏览器验证零监听者 modal、不生成交接事件、单人名称提示、两人计数提示、默认订阅交接后退出码 0、Checkpoints 页面保持、文件标题即时更新、Taco 标题／普通 Category 保存并刷新保留、英文 Checkpoints 标签、390px 双行 Header 与安装命令无横向裁切。SQLite 实测；PostgreSQL 同步实现但未连接服务实测。编辑必须在 Host 初始加载完成后进行，加载期间编辑沿用既有冲突保护。本轮未重跑已知无关整仓失败，不宣称全仓通过。
+
+## 12. 重叠头像入口（2026-09-30）
+
+监听菜单入口显示当前用户的彩色首字母 avatar 与 Agent 的 Harness avatar，圆形头像横向重叠；多个 Agent 同样叠放，最多显示三名 Agent，超出的数量用叠放的 `+N` 表示，完整名单保留在原菜单。没有 Agent 时仅显示人类头像。点击、键盘操作、语言切换与姓名修改沿用现有菜单逻辑。
+
+prepare：Host 成品基线 2,868,737 B，估计 +0.3–1 KiB；Complete 2,834,789 B、Lite 294,966 B、skill Complete 2,729,254 B、skill Lite 189,431 B 预计 +0 B；skill 全目录 14,035,187 B 预计文档 +0–300 B。无新增依赖、网络行为或发布包内容种类。
+
+develop 实测：Host 2,868,893 B（+156 B，+0.0054%，估算 +0.3–1 KiB）；Complete 2,834,789 B（+0 B）；Lite 294,963 B（−3 B）；skill Complete 2,729,254 B（+0 B）、Lite 189,428 B（−3 B）；skill 全目录 14,035,396 B（+209 B，估算 +0–300 B 文档）。Host 低于估算，压缩与移除原图标／角标代码抵消增量；Lite 的 −3 B 为生成压缩差异。无新增依赖／请求，无阈值触发。
+
+验证：构建与三变体 gate 通过，HostedSession 10 项通过。真实浏览器＋实际 SSE：单名 Agent 时显示人类与 omp 圆形重叠头像，点击正常展开菜单；五名 Agent 时显示三枚 Harness avatar 与 `+2`，完整五名仍在菜单，Header 未挤压或裁切 Handoff。临时四名测试监听已停止，保留 omp Review Agent。Skill presence 说明同步；官网没有需要更新的独立文字，Host 专用资产由构建同步。

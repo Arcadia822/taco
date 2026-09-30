@@ -1,6 +1,11 @@
 export const HOSTED_STYLES = `/* Hosted review: the Host owns a shared saved state, so its controls sit with the document header. */
-.host-presence-button { position: relative; flex-shrink: 0; }
-.host-listener-badge { position: absolute; top: -3px; right: -3px; display: grid; place-items: center; min-width: 12px; height: 12px; padding: 0 2px; border-radius: 6px; background: var(--ink); color: var(--surface); font-size: 9px; line-height: 1; pointer-events: none; }
+.control-button.host-presence-button { position: relative; flex-shrink: 0; width: auto; padding: 0 4px; }
+.host-avatar-stack { display: flex; align-items: center; isolation: isolate; pointer-events: none; }
+.host-avatar-stack .host-presence-avatar { display: grid; place-items: center; box-sizing: border-box; width: 24px; height: 24px; min-width: 24px; border: 2px solid var(--paper); border-radius: 50%; }
+.host-presence-avatar + .host-presence-avatar { margin-left: -8px; }
+.host-presence-agent, .host-presence-overflow { background: var(--surface); color: var(--ink); }
+.host-presence-agent .host-harness-logo { width: 16px; height: 16px; }
+.host-presence-overflow { font-size: 9px; font-weight: 600; }
 
 /* In hosted mode, the save button is disabled/hidden in favor of autosave status */
 .file-workspace:has(.host-presence-button) .save-group { display: none; }
