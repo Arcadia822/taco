@@ -1,6 +1,5 @@
 import {
   HOST_HARNESS_ICONS,
-  HOST_MODEL_ICONS,
   readHostCapability,
   type HostCapability,
 } from './host-capability.ts'
@@ -21,7 +20,6 @@ import {
   el,
   setButtonIcon,
   showPromptDialog,
-  sidebarRow,
   svgIcon,
 } from '../../../../src/ui-primitives.ts'
 import { currentAuthorName, setAuthorName } from '../../../../src/identity.ts'
@@ -34,8 +32,7 @@ export class HostedBrowserController {
   private status: HostedStatus | null = null
   private listeners: HostListenerSnapshot | null = null
   private statusButton: HTMLButtonElement | null = null
-  private authorButton: HTMLButtonElement | null = null
-  private listenersButton: HTMLButtonElement | null = null
+  private presenceButton: HTMLButtonElement | null = null
   private readonly removeControls: Array<() => void> = []
   private destroyed = false
 
@@ -60,9 +57,12 @@ export class HostedBrowserController {
     // Structure locked in hosted review mode
     browser.setStructureLocked(true, this.t.hostSharedField)
     browser.setPrimaryHandoffHandler(async () => this.primaryHandoff(), this.t.hostHandoffTooltip)
+    browser.setCopyReviewMenuCustomizer((menu, defaultItems) => this.customizeHandoffMenu(menu, defaultItems))
     browser.setDurableCommentsOnlyCheck(() => this.session.currentStatus.readiness !== 'unsupported')
     browser.setPendingWritesCheck(() => this.session.hasPendingWrites())
-
+    if (typeof document !== 'undefined') {
+      document.querySelector('.file-workspace')?.classList.add('is-hosted')
+    }
     const unsubDoc = browser.onDocumentChange((kind) => {
       if (kind === 'comments') this.session.markCommentsChanged()
       else this.session.markContentChanged()
@@ -98,15 +98,13 @@ export class HostedBrowserController {
   }
 
   private mountHeaderControls(): void {
-    this.statusButton = createControlButton('check', this.t.hostStatus, () => this.openStatusMenu(), 'host-status-button', true)
-    this.authorButton = createControlButton('user', this.t.hostAuthor, () => { void this.promptAuthor() }, 'host-author-button', true)
-    this.listenersButton = createControlButton('users', this.t.hostListeners, () => { void this.openListenersMenu() }, 'host-listeners-button', true)
+    this.statusButton = createControlButton('check', this.t.hostStatus, () => this.openStatusMenu(), 'host-status-button', true, false)
+    this.presenceButton = createControlButton('users', this.t.hostPresence, () => { void this.openPresenceMenu() }, 'host-presence-button', true, false)
 
     this.removeControls.push(this.browser.addHeaderControl(this.statusButton))
-    this.removeControls.push(this.browser.addHeaderControl(this.authorButton))
-    this.removeControls.push(this.browser.addHeaderControl(this.listenersButton))
+    this.removeControls.push(this.browser.addHeaderControl(this.presenceButton))
 
-    this.syncAuthorButton()
+    this.syncPresenceButton()
     this.syncStatusButton()
   }
 
@@ -114,8 +112,7 @@ export class HostedBrowserController {
     this.browser.setStructureLocked(true, this.t.hostSharedField)
     this.browser.setCopyButtonTitle(this.t.hostHandoffTooltip)
     this.syncStatusButton()
-    this.syncAuthorButton()
-    if (this.listeners) this.renderListeners(this.listeners)
+    this.syncPresenceButton()
   }
 
   private renderStatus(status: HostedStatus): void {
@@ -165,14 +162,45 @@ export class HostedBrowserController {
     setButtonIcon(button, troubled ? 'alert' : busy ? 'save' : 'check')
   }
 
-  private syncAuthorButton(): void {
-    const button = this.authorButton
+  private syncPresenceButton(): void {
+    const button = this.presenceButton
     if (!button) return
-    const name = currentAuthorName() || this.t.hostAuthorUnset
+    const count = this.listeners?.listeners.length ?? 0
+    const name = currentAuthorName() || this.t.guest
+    const label = count > 0 ? `${name} (${count})` : name
     const labelNode = button.querySelector('.button-label')
-    if (labelNode) labelNode.textContent = name
-    button.title = `${this.t.hostAuthor}: ${name}. ${this.t.hostAuthorHint}`
-    button.setAttribute('aria-label', `${this.t.hostAuthor}: ${name}`)
+    if (labelNode) labelNode.textContent = label
+    button.title = `${this.t.hostPresence}: ${name}${count > 0 ? ` · ${count} agent(s)` : ''}`
+    button.setAttribute('aria-label', button.title)
+    setButtonIcon(button, count > 0 ? 'users' : 'user')
+  }
+
+  private hashColor(name: string): string {
+    let hash = 0
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
+    const hue = Math.abs(hash % 360)
+    return `hsl(${hue}, 65%, 45%)`
+  }
+
+  private customizeHandoffMenu(menu: HTMLElement, defaultItems: HTMLElement[]): void {
+    // 1. Tacobin handoff action with robot + right arrow icon
+    const handoffBtn = this.browser.menuButton(
+      this.t.hostHandoffCommand,
+      () => {
+        menu.remove()
+        void this.primaryHandoff()
+      },
+      { icon: 'bot-handoff', menuitem: false },
+    )
+    handoffBtn.classList.add('is-primary-handoff')
+    menu.append(handoffBtn)
+
+    // Divider separating Tacobin action from legacy/manual actions
+    const divider = el('div', 'topbar-popover-divider')
+    menu.append(divider)
+
+    // Default items (Manual handoff + inspect prompt)
+    menu.append(...defaultItems)
   }
 
   private async promptAuthor(): Promise<void> {
@@ -185,9 +213,10 @@ export class HostedBrowserController {
     })
     if (next === null) return
     setAuthorName(next)
-    this.syncAuthorButton()
+    this.syncPresenceButton()
+    const openMenu = document.querySelector<HTMLElement>('.host-presence-menu')
+    if (openMenu) this.fillPresenceMenu(openMenu)
   }
-
   private openStatusMenu(): void {
     const status = this.status
     const button = this.statusButton
@@ -211,27 +240,95 @@ export class HostedBrowserController {
     this.browser.toast(`${this.statusLabel(status)}${status.detail ? ` · ${status.detail}` : ''}`)
   }
 
-  private async openListenersMenu(): Promise<void> {
-    const button = this.listenersButton
+  private async openPresenceMenu(): Promise<void> {
+    const button = this.presenceButton
     if (!button) return
-    const menu = this.browser.openPopover(button, 'host-listeners-menu')
+    const menu = this.browser.openPopover(button, 'host-presence-menu')
     menu.setAttribute('role', 'group')
     menu.setAttribute('aria-live', 'polite')
-    this.fillListenersMenu(menu)
+    this.fillPresenceMenu(menu)
     await this.session.refreshListeners()
   }
 
-  private fillListenersMenu(menu: HTMLElement): void {
+  private fillPresenceMenu(menu: HTMLElement): void {
     menu.replaceChildren()
+    const currentName = currentAuthorName() || this.t.guest
+
+    // Section 1: Active Reviewers (Human)
+    const humanSection = el('div', 'host-presence-section')
+    humanSection.append(el('h3', 'host-presence-heading', this.t.hostActiveHumans))
+
+    const humanRow = el('div', 'host-member-row host-member-human')
+    const humanMain = el('div', 'host-member-main')
+    const avatar = el('span', 'host-avatar', currentName.charAt(0) || 'U')
+    avatar.style.backgroundColor = this.hashColor(currentName)
+    const nameSpan = el('span', 'host-member-name', currentName)
+    humanMain.append(avatar, nameSpan)
+
+    const editBtn = el('button', 'host-edit-name-btn') as HTMLButtonElement
+    editBtn.type = 'button'
+    editBtn.title = this.t.hostEditName
+    editBtn.append(svgIcon('edit'))
+    editBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      void this.promptAuthor()
+    })
+
+    humanRow.append(humanMain, editBtn)
+    humanSection.append(humanRow)
+    menu.append(humanSection)
+
+    // Divider
+    menu.append(el('div', 'host-presence-divider'))
+
+    // Section 2: Listening Agents
+    const agentSection = el('div', 'host-presence-section')
+    agentSection.append(el('h3', 'host-presence-heading', this.t.hostActiveAgents))
+
     const snapshot = this.listeners
-    menu.append(el('h3', 'host-listeners-heading', this.t.hostListeners))
     if (!snapshot || snapshot.listeners.length === 0) {
-      menu.append(el('p', 'host-listeners-empty', this.t.hostListenersNone))
+      agentSection.append(el('p', 'host-presence-empty', this.t.hostListenersNone))
     } else {
-      for (const listener of snapshot.listeners) menu.append(this.buildListenerRow(listener))
-      menu.append(el('p', 'host-listeners-time', this.t.hostListenersObservedAt(this.formatListenerTime(snapshot.observedAt))))
+      for (const listener of snapshot.listeners) {
+        agentSection.append(this.buildAgentRow(listener))
+      }
     }
-    menu.append(el('p', 'host-listeners-note', this.t.hostListenerNote))
+    menu.append(agentSection)
+    menu.append(el('p', 'host-presence-note', this.t.hostListenerNote))
+  }
+
+  private buildAgentRow(listener: HostListener): HTMLElement {
+    const row = el('div', 'host-member-row host-member-agent')
+    const main = el('div', 'host-member-main')
+
+    const harnessIconName = HOST_HARNESS_ICONS[listener.harness ?? ''] ?? 'bot'
+    const iconWrapper = el('span', 'host-agent-icon')
+    iconWrapper.append(svgIcon(harnessIconName))
+
+    const name = el('span', 'host-member-name', listener.name || this.t.hostListenerAnonymous)
+    main.append(iconWrapper, name)
+
+    // Info trigger with hover card
+    const infoTrigger = el('button', 'host-info-trigger') as HTMLButtonElement
+    infoTrigger.type = 'button'
+    infoTrigger.append(svgIcon('info'))
+
+    const card = el('div', 'host-info-card')
+    const addCardRow = (label: string, value: string | undefined) => {
+      if (!value) return
+      const r = el('div', 'host-info-card-row')
+      r.append(el('span', 'host-info-card-label', label), el('span', 'host-info-card-value', value))
+      card.append(r)
+    }
+
+    addCardRow(this.t.hostHarnessLabel, listener.harness)
+    addCardRow(this.t.hostModelLabel, listener.modelId || listener.model)
+    addCardRow('Name', listener.name)
+    addCardRow(this.t.hostStartedListening, this.formatListenerTime(listener.lastSeenAt))
+
+    infoTrigger.append(card)
+    row.append(main, infoTrigger)
+    return row
   }
 
   private formatListenerTime(iso: string): string {
@@ -244,38 +341,11 @@ export class HostedBrowserController {
       hour12: false,
     })
   }
-
-  private buildListenerRow(listener: HostListener): HTMLElement {
-    const harnessIcon = svgIcon(HOST_HARNESS_ICONS[listener.harness ?? ''] ?? 'monitor')
-    const modelIcon = svgIcon(HOST_MODEL_ICONS[listener.model ?? ''] ?? 'monitor')
-    const meta = el('span', 'host-listener-meta')
-    const modelSlot = el('span', 'host-listener-model')
-    modelSlot.setAttribute('aria-hidden', 'true')
-    modelSlot.append(modelIcon)
-    const modelName = listener.modelId || listener.model
-    if (modelName) meta.append(el('span', 'host-listener-model-name', modelName))
-    meta.append(modelSlot)
-    meta.append(el('span', 'host-listener-seen', this.t.hostListenerLastSeen(this.formatListenerTime(listener.lastSeenAt))))
-    const row = sidebarRow('div', {
-      className: 'host-listener-row',
-      leading: harnessIcon,
-      label: listener.name || this.t.hostListenerAnonymous,
-      labelClass: 'host-listener-name',
-      trailing: meta,
-    })
-    row.title = listener.harness ? `${listener.harness}${listener.model ? ` · ${listener.model}` : ''}` : this.t.hostListenerAnonymous
-    return row
-  }
-
   private renderListeners(snapshot: HostListenerSnapshot): void {
     this.listeners = snapshot
-    const open = document.querySelector<HTMLElement>('.host-listeners-menu')
-    if (open) this.fillListenersMenu(open)
-    const button = this.listenersButton
-    if (!button) return
-    const count = snapshot.listeners.length
-    const labelNode = button.querySelector('.button-label')
-    if (labelNode) labelNode.textContent = count > 0 ? `${this.t.hostListeners} ${count}` : this.t.hostListeners
+    const open = document.querySelector<HTMLElement>('.host-presence-menu')
+    if (open) this.fillPresenceMenu(open)
+    this.syncPresenceButton()
   }
 
   async primaryHandoff(): Promise<void> {
@@ -313,8 +383,7 @@ export class HostedBrowserController {
     for (const remove of this.removeControls) remove()
     this.removeControls.length = 0
     this.statusButton = null
-    this.authorButton = null
-    this.listenersButton = null
+    this.presenceButton = null
   }
 
   destroy(): void {

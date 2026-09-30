@@ -1780,32 +1780,36 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.comment-count')?.textContent).toBe('1')
     expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(true)
   })
-  it('creates a whole-document comment with null anchor via the global comment composer', async () => {
+  it('renders existing whole-document comments while global add is disabled', async () => {
     localStorage.setItem('taco-locale', 'zh-Hans')
     const editableBundle = structuredClone(testBundle)
+    editableBundle.comments = [
+      {
+        id: 'global-1',
+        anchor: null,
+        status: 'open',
+        createdAt: '2026-09-30T00:00:00Z',
+        updatedAt: '2026-09-30T00:00:00Z',
+        messages: [{
+          id: 'msg-1',
+          author: 'Alice',
+          body: '整体文档结构清晰。',
+          createdAt: '2026-09-30T00:00:00Z',
+        }],
+      },
+    ]
     const browser = new FileBrowser(document.getElementById('app')!, editableBundle)
     try {
       const toggle = document.querySelector<HTMLButtonElement>('.comment-toggle')!
       toggle.click()
-      const addGlobalBtn = document.querySelector<HTMLButtonElement>('.comment-global-add')!
-      expect(addGlobalBtn).not.toBeNull()
+      // Global comment add button is disabled per user instruction
+      expect(document.querySelector('.comment-global-add')).toBeNull()
       expect(document.querySelector('.comment-global-heading')?.textContent).toBe('全局评论')
-      addGlobalBtn.click()
 
-      expect(document.querySelector('.comment-composer')).not.toBeNull()
-      expect(document.querySelector('.comment-thread-scope')?.textContent).toBe('全局评论')
-      const input = document.querySelector<HTMLTextAreaElement>('.comment-composer .comment-input')!
-      input.value = '整体文档结构清晰。'
-      input.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
-
-      expect(editableBundle.comments).toHaveLength(1)
-      expect(editableBundle.comments?.[0]).toMatchObject({
-        status: 'open',
-        anchor: null,
-        messages: [{ body: '整体文档结构清晰。' }],
-      })
+      // But existing whole-document comment threads render properly
       expect(document.querySelector('.comment-global-group .comment-thread')).not.toBeNull()
       expect(document.querySelector('.comment-thread-scope')?.textContent).toBe('全局评论')
+      expect(document.querySelector('.comment-body')?.textContent).toBe('整体文档结构清晰。')
       expect(document.querySelector('.comment-count')?.textContent).toBe('1')
     } finally {
       browser.destroy()

@@ -159,6 +159,7 @@ export class FileBrowser {
   private structureLockedTooltip?: string
   private primaryHandoffHandler?: () => Promise<void>
   private primaryHandoffTooltip?: string
+  private copyReviewMenuCustomizer?: ((menu: HTMLElement, defaultItems: HTMLElement[]) => void)
   private pendingWritesCheck?: () => boolean
   private durableActionsOnlyCheck?: () => boolean
   private readonly headerExtraControls: HTMLElement[] = []
@@ -1447,6 +1448,10 @@ export class FileBrowser {
     }
   }
 
+  setCopyReviewMenuCustomizer(customizer: ((menu: HTMLElement, defaultItems: HTMLElement[]) => void) | null): void {
+    this.copyReviewMenuCustomizer = customizer ?? undefined
+  }
+
   setCopyButtonTitle(title: string): void {
     this.primaryHandoffTooltip = title
     if (this.copyButton) {
@@ -1573,8 +1578,11 @@ export class FileBrowser {
 
   private openCopyReviewMenu(anchor: HTMLElement): void {
     const menu = this.openPopover(anchor, 'copy-review-menu')
-    menu.append(
-      this.menuButton(this.t.copyAllChanges, () => {
+    const manualHandoffLabel = this.primaryHandoffHandler
+      ? (this.locale === 'zh-Hans' ? '手动交接（Manual Handoff）' : 'Manual Handoff')
+      : this.t.copyAllChanges
+    const defaultItems = [
+      this.menuButton(manualHandoffLabel, () => {
         menu.remove()
         void this.copyReviewFull()
       }, { icon: 'copy', menuitem: false }),
@@ -1582,7 +1590,12 @@ export class FileBrowser {
         menu.remove()
         void this.copyReviewInspectPrompt()
       }, { icon: 'eye', menuitem: false }),
-    )
+    ]
+    if (this.copyReviewMenuCustomizer) {
+      this.copyReviewMenuCustomizer(menu, defaultItems)
+    } else {
+      menu.append(...defaultItems)
+    }
   }
 
   async copyReviewFull(): Promise<void> {

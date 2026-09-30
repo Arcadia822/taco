@@ -480,9 +480,7 @@ describe('HostedBrowserController & attachHostedSession', () => {
       expect(api.hosted?.()).toEqual({ tacoId: 'test-taco-id', apiBase: '/v1/tacos/test-taco-id' })
       expect(document.getElementById('taco-host-styles')).not.toBeNull()
       expect(root.querySelector('.host-status-button')).not.toBeNull()
-      expect(root.querySelector('.host-author-button')).not.toBeNull()
-      expect(root.querySelector('.host-listeners-button')).not.toBeNull()
-
+      expect(root.querySelector('.host-presence-button')).not.toBeNull()
       browser.destroy()
     } finally {
       script.remove()
