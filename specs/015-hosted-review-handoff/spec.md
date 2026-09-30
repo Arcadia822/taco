@@ -180,7 +180,7 @@ Header 扩展控件持久保存左右位置，主交接动作持久保存图标�
 
 验证：CLI 37 项、HostedSession/租约 22 项测试通过；已有全局评论保留和 Header 重建用例通过。实际 Host 页面检查 spacer 右侧 ghost 控件和在线计数角标；中英文切换后主按钮与菜单首项图标/文案一致；姓名 Enter 提交、Escape 取消、失焦提交；中文 Session 经 CLI→SSE→SQLite→listeners→悬浮卡片保持原文。`connectedAt` 为初始连接时间，心跳更新 `lastSeenAt` 不改变它。新增字段采用 PostgreSQL/SQLite 加列迁移；本轮仅 SQLite 实际运行，PostgreSQL 未做服务实测。未重跑已知无关 Mermaid/Tiptap/image 失败的整仓测试，不宣称全仓测试通过。
 
-## 11. 交接反馈与固定面包屑（2026-09-30）
+## 11. 交接反馈与固定面包屑（历史方案，Header 已由 §14 替代）
 
 交接刷新 Host 内容时保留 Checkpoints 页面和布局。Header 固定三级：Taco 标题 → Category → 文件 Title（无 Title 时用相对路径与文件名）；Checkpoints 页面为 Taco 标题 → 国际化 Checkpoints → 配置名称。Taco 标题保持行内编辑，普通文件 Category 保持可切换；Checkpoint 所属分组继续由配置决定。
 
@@ -203,3 +203,21 @@ prepare：Host 成品基线 2,868,737 B，估计 +0.3–1 KiB；Complete 2,834,7
 develop 实测：Host 2,868,893 B（+156 B，+0.0054%，估算 +0.3–1 KiB）；Complete 2,834,789 B（+0 B）；Lite 294,963 B（−3 B）；skill Complete 2,729,254 B（+0 B）、Lite 189,428 B（−3 B）；skill 全目录 14,035,396 B（+209 B，估算 +0–300 B 文档）。Host 低于估算，压缩与移除原图标／角标代码抵消增量；Lite 的 −3 B 为生成压缩差异。无新增依赖／请求，无阈值触发。
 
 验证：构建与三变体 gate 通过，HostedSession 10 项通过。真实浏览器＋实际 SSE：单名 Agent 时显示人类与 omp 圆形重叠头像，点击正常展开菜单；五名 Agent 时显示三枚 Harness avatar 与 `+2`，完整五名仍在菜单，Header 未挤压或裁切 Handoff。临时四名测试监听已停止，保留 omp Review Agent。Skill presence 说明同步；官网没有需要更新的独立文字，Host 专用资产由构建同步。
+
+## 13. 监听详情运行时标签
+
+监听详情英文标签改为 `runtime`，中文改为「运行时」；协议字段与 CLI `--harness` 保持现有名称。prepare：Host 基线 2,868,893 B，预计增量 0–32 B；Complete／Lite／skill shell 预计 0 B，skill 文档预计 0 B，无新增依赖或联网行为。
+
+托管页恢复现有 Save／保存按钮及下拉菜单，继续保存本地 Taco 文件；Host 自动保存与交接保持既有语义。移除 Host 专用隐藏规则，预计 Host 成品相对 2,868,893 B 总增量 −256 至 +32 B，本地 Complete／Lite 及 skill shell 预计 0 B。无新增依赖、联网行为。最终 Header 与文档同步见 §14。
+
+## 14. Header 简化（替代三级面包屑方案）
+
+Taco Complete／Lite 与 Tacobin Host 共用 Header：文件页只显示文件名（包括扩展名，不用 frontmatter Title 或相对路径），Checkpoints 页只显示国际化 Checkpoints／检查点。彻底删除面包屑 DOM、分隔符、Taco title 输入、CP 模板名称输入、Header Category 切换及对应事件／样式。存储中的标题、模板名称、导航仍保留；文件正文标题编辑与创建文件时分类不受影响。保存按钮恢复，运行时标签用英文 `runtime`、中文「运行时」。
+
+prepare：以前一轮重叠头像产物为基线，Complete 2,834,789 B、Lite 294,963 B、Host 2,868,893 B、skill Complete 2,729,254 B、skill Lite 189,428 B、skill 全目录 14,035,396 B；各 shell／成品预计 −0.5 至 −2 KiB，skill 目录镜像预计 −3 至 −12 KiB、文档 −0.5 至 +0.5 KiB。无新增依赖／外部联网行为。本节替代未交付的 chevron 方案和此前三级 Header 编辑交互。
+
+窄屏 ≤560px 保持单行 Header：Handoff／Save 主按钮显示图标并保留可访问名称与下拉菜单，页面名溢出省略，移除折叠状态的重复品牌图标。所有控件保留；头像栈、主题和语言按钮可见。
+
+develop 实测（字节，§14 基线）：Complete 2,832,705（−2,084 B，−0.0735%，估算 −0.5 至 −2 KiB）；Lite 292,937（−2,026 B，−0.687%，同估算）；Host 2,866,481（−2,412 B，−0.0841%，同估算）；skill Complete 2,727,170（−2,084 B）；skill Lite 187,402（−2,026 B）；skill 全目录 14,023,072（−12,324 B，估算镜像 −3 至 −12 KiB、文档 −0.5 至 +0.5 KiB）。Complete 比估算下界多减 36 B，Host 多减 364 B，来自删除编辑事件／Category popover 入口与压缩；目录落在镜像加文档估算内。无新增依赖或联网行为。本轮所有 shell 均减小，无增大阈值触发。累计相对仓库 2026-09-28 基线，Lite shell 仍 +6,370 B（3.52%）、Lite 成品 +6,656 B（2.33%）；原因是此前共享交接／评论／Checkpoint 能力，若继续缩减需单独精简通用本地交互。
+
+验证：最终构建、Complete／Lite／Host gate 与生成镜像通过；定向 file-browser／HostedSession 30 项通过，类型断言修正后 Checkpoints 页面保持回归单独通过。真实浏览器验证三变体文件 Header 显示 `spec.md`（正文 Title 为 New Feature Specification），中英文 Checkpoints／检查点，删除控件零残留。Host 详情可见英文 `runtime`、中文「运行时」；保存下拉含 Save／Save a copy／Save & unpack。禁用浏览器 File System Access 后走真实下载路径，点击确认后保存并解析 Feature_Specification.taco.html，包含原 docId、三文件与 template。未操作系统保存选择器。窄屏 390px 设备配置（实测 CSS 视口 354px）Header 控件边界均在视口内，语言按钮 right=347px。刷新原 Taco 保留 docId、导航与零评论，浏览器 validate 为 ok:true、零 error／warning／info。官网演示由构建同步，本地官网与评审 URL 保持可用；实际 omp 订阅从 sequence 2 恢复。未宣称全仓测试通过。

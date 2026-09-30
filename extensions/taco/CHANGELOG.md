@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Bug Fixes
+
+* **ui**: Show only filenames or localized Checkpoints in the shared Taco and Tacobin header; remove header title, template and Category editing. Keep narrow-screen save and handoff controls accessible.
+* **host**: Restore local Taco saving and label listener details `runtime` / `运行时`.
+
 ## [0.12.0](https://github.com/Arcadia822/taco/compare/v0.11.0...v0.12.0) (2026-09-29)
 
 ### Features

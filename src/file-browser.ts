@@ -30,7 +30,7 @@ import {
 import { createBrandMarkContainer } from './brand.ts'
 import { createSourceEditor, setDefaultHighlighter, type SourceEditorController } from './source-editor.ts'
 import { FileNavigation } from './file-navigation.ts'
-import { getAvailableGroups, getFileCurrentGroup, openGroupSelectorPopover } from './group-selector.ts'
+import { getAvailableGroups } from './group-selector.ts'
 import { assignFileToGroup, createInitialManifest } from './navigation-editor.ts'
 import { showNewFileDialog } from './new-file-dialog.ts'
 import {
@@ -116,8 +116,6 @@ export class FileBrowser {
   private instructionTab!: HTMLButtonElement
   private instructionPanel!: HTMLElement
   private instructionContent!: HTMLElement
-  private categoryBadge!: HTMLButtonElement
-  private checkpointTemplateInput!: HTMLInputElement
   private workspacePath!: HTMLElement
   private readonly markdownMigrationErrors = new Map<string, { message: string; content: string }>()
 
@@ -455,68 +453,8 @@ export class FileBrowser {
     const collapsedBrandMark = createBrandMarkContainer('collapsed-brand-mark brand-mark')
     const collapsedBrandName = el('strong', 'collapsed-brand-name', 'Taco')
     const leftHeaderToggle = createControlButton('panel-left', this.t.expandFiles, () => this.toggleSidebar(), 'header-panel-toggle workspace-left-toggle')
-    const title = el('input', 'bundle-title')
-    title.type = 'text'
-    title.value = this.bundle.title
-    title.size = Math.max(1, Math.min(title.value.length, 56))
-    title.spellcheck = false
-    title.disabled = !bundleCanWrite(this.bundle)
-    title.title = this.t.documentTitle
-    title.setAttribute('aria-label', this.t.documentTitle)
-    title.addEventListener('input', () => {
-      title.size = Math.max(1, Math.min(title.value.length, 56))
-      this.store.commit({ kind: 'document' }, () => { this.bundle.title = title.value.trim() || 'Untitled' })
-      document.title = `${this.bundle.title} — Taco`
-    })
-    title.addEventListener('change', () => {
-      title.value = this.bundle.title
-    })
-    const checkpointLabels = checkpointCopy(this.locale)
-    const checkpointPageTitle = el('span', 'checkpoint-page-title', checkpointLabels.checkpoints)
-    this.checkpointTemplateInput = el('input', 'checkpoint-template-name') as HTMLInputElement
-    this.checkpointTemplateInput.type = 'text'
-    this.checkpointTemplateInput.value = resolveCheckpoints(this.bundle).state?.template ?? ''
-    this.checkpointTemplateInput.placeholder = checkpointLabels.checkpointUnnamed
-    this.checkpointTemplateInput.setAttribute('aria-label', checkpointLabels.checkpointTemplateName)
-    this.checkpointTemplateInput.size = Math.max(8, Math.min(this.checkpointTemplateInput.value.length, 32))
-    this.checkpointTemplateInput.disabled = !bundleCanWrite(this.bundle)
-    this.checkpointTemplateInput.addEventListener('input', () => {
-      this.checkpointTemplateInput.size = Math.max(8, Math.min(this.checkpointTemplateInput.value.length, 32))
-    })
-    this.checkpointTemplateInput.addEventListener('change', () => {
-      const current = resolveCheckpoints(this.bundle)
-      if (!current.valid || !current.state) return
-      const name = this.checkpointTemplateInput.value.trim()
-      this.checkpointTemplateInput.value = name
-      if (name === (current.state.template ?? '')) return
-      const next = structuredClone(current.state)
-      if (name) next.template = name
-      else delete next.template
-      this.store.commit({ kind: 'document' }, () => { this.bundle.checkpoints = next })
-    })
-    this.checkpointTemplateInput.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') { event.preventDefault(); this.checkpointTemplateInput.blur() }
-      else if (event.key === 'Escape') {
-        this.checkpointTemplateInput.value = resolveCheckpoints(this.bundle).state?.template ?? ''
-        this.checkpointTemplateInput.blur()
-      }
-    })
-    const breadcrumbs = el('nav', 'workspace-breadcrumbs')
-    breadcrumbs.setAttribute('aria-label', this.t.documentTitle)
-    const separator = (): HTMLElement => {
-      const arrow = el('span', 'workspace-breadcrumb-separator', '→')
-      arrow.setAttribute('aria-hidden', 'true')
-      return arrow
-    }
-    this.categoryBadge = el('button', 'workspace-category-badge') as HTMLButtonElement
-    this.categoryBadge.type = 'button'
-    this.categoryBadge.addEventListener('click', () => { void this.promptChangeCategory() })
-    this.workspacePath = el('div', 'workspace-path', this.selected ? relativePath(this.bundle, this.selected) : '')
-    const secondLevel = el('span', 'workspace-breadcrumb-level workspace-breadcrumb-category')
-    secondLevel.append(this.categoryBadge, checkpointPageTitle)
-    const thirdLevel = el('span', 'workspace-breadcrumb-level workspace-breadcrumb-document')
-    thirdLevel.append(this.workspacePath, this.checkpointTemplateInput)
-    breadcrumbs.append(title, separator(), secondLevel, separator(), thirdLevel)
+    const checkpointPageTitle = el('span', 'checkpoint-page-title', checkpointCopy(this.locale).checkpoints)
+    this.workspacePath = el('div', 'workspace-path')
     this.syncWorkspaceHeader()
     this.workspaceHeaderSpacer = el('span', 'workspace-header-spacer')
 
@@ -571,7 +509,8 @@ export class FileBrowser {
       collapsedBrandMark,
       collapsedBrandName,
       leftHeaderToggle,
-      breadcrumbs,
+      this.workspacePath,
+      checkpointPageTitle,
       ...this.headerExtraControls.filter(({ position }) => position === 'left').map(({ control }) => control),
       this.workspaceHeaderSpacer,
       ...this.headerExtraControls.filter(({ position }) => position === 'right').map(({ control }) => control),
@@ -1247,64 +1186,9 @@ export class FileBrowser {
 
   private get t() { return copy[this.locale] }
   private syncWorkspaceHeader(): void {
-    const result = resolveCheckpoints(this.bundle)
     const path = this.selected?.path ?? this.selectedPlaceholder
-    const fileTitle = this.selected
-      ? (frontmatterTitle(this.selected.content) || this.selected.title?.trim())
-      : undefined
-    this.workspacePath.textContent = fileTitle || (path ? path.slice(this.bundle.root.length + 1) : '')
-    this.workspacePath.title = path ? path.slice(this.bundle.root.length + 1) : ''
-    if (this.checkpointView || !path) {
-      this.categoryBadge.style.display = 'none'
-      return
-    }
-    this.categoryBadge.style.display = 'inline-flex'
-    const node = result.valid ? result.nodes.find((item) => item.documents.some((doc) => doc.path === path)) : undefined
-    this.categoryBadge.classList.toggle('is-checkpoint', Boolean(node))
-    if (node) {
-      const category = this.selected ? resolveFileCategory(this.bundle, this.selected) : null
-      this.categoryBadge.textContent = node.title
-      this.categoryBadge.title = category?.overridden
-        ? checkpointCopy(this.locale).checkpointOverridden(category.overridden)
-        : checkpointCopy(this.locale).checkpointGroupHint
-      this.categoryBadge.disabled = true
-      this.categoryBadge.classList.remove('is-editable')
-      return
-    }
-    if (!this.selected) return
-    const groupInfo = getFileCurrentGroup(this.bundle, this.selected, this.t.ungrouped)
-    this.categoryBadge.textContent = groupInfo.groupTitle
-    this.categoryBadge.title = bundleCanWrite(this.bundle)
-      ? `${groupInfo.groupTitle} · ${this.t.changeCategory}`
-      : groupInfo.groupTitle
-    this.categoryBadge.disabled = !bundleCanWrite(this.bundle)
-    this.categoryBadge.classList.toggle('is-editable', bundleCanWrite(this.bundle))
-  }
-
-  private promptChangeCategory(): void {
-    if (!this.selected || !bundleCanWrite(this.bundle) || resolveFileCategory(this.bundle, this.selected).source === 'checkpoint') return
-    const groupInfo = getFileCurrentGroup(this.bundle, this.selected, this.t.ungrouped)
-
-    openGroupSelectorPopover({
-      anchor: this.categoryBadge,
-      bundle: this.bundle,
-      file: this.selected,
-      currentGroupId: groupInfo.groupId,
-      labels: {
-        ungrouped: this.t.ungrouped,
-        checkpoint: checkpointCopy(this.locale).checkpoint,
-      },
-      onSelectGroup: (targetGroupId) => {
-        if (!this.selected) return
-        this.store.commit({ kind: 'all' }, () => {
-          const current = createInitialManifest(this.bundle)
-          const next = assignFileToGroup(current, this.selected!.path, targetGroupId, this.bundle.root, this.bundle)
-          this.bundle.navigation = next
-        })
-        this.syncWorkspaceHeader()
-        this.fileNavigation?.refresh(this.selected)
-      },
-    })
+    this.workspacePath.textContent = path?.split('/').pop() ?? ''
+    this.workspacePath.title = this.workspacePath.textContent
   }
 
 

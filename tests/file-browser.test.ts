@@ -238,9 +238,9 @@ describe('FileBrowser', () => {
     const bundle = structuredClone(testBundle)
     const browser = new FileBrowser(document.getElementById('app')!, bundle)
     await waitForEditor()
-    const title = document.querySelector<HTMLInputElement>('.bundle-title')!
-    title.value = 'Changed title'
-    title.dispatchEvent(new Event('input', { bubbles: true }))
+    const fileTitle = document.querySelector<HTMLElement>('.document-inline-title-text')!
+    fileTitle.textContent = 'Changed file title'
+    fileTitle.dispatchEvent(new Event('input', { bubbles: true }))
     const clickHandoff = () => {
       if (mode === 'full') document.querySelector<HTMLButtonElement>('.copy-review-main')!.click()
       else {
@@ -394,7 +394,6 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(true)
     expect(document.querySelector('.tiptap')).toBeNull()
     expect(document.querySelector('.workspace-header .mode-control')).toBeNull()
-    expect(document.querySelector('.workspace-path')?.textContent).toBe('contracts/api.yaml')
     expect(Array.from(document.querySelectorAll<HTMLButtonElement>('.right-panel-tabs [role="tab"]')).map((tab) => [tab.textContent, tab.hidden])).toEqual([
       ['大纲', true],
       ['评论', false],
@@ -985,19 +984,6 @@ describe('FileBrowser', () => {
   })
 
 
-  it('edits the Taco title in the header and keeps the document state in sync', () => {
-    const editableBundle = structuredClone(testBundle)
-    new FileBrowser(document.getElementById('app')!, editableBundle)
-    const title = document.querySelector<HTMLInputElement>('.workspace-header .bundle-title')!
-
-    expect(title.value).toBe('Browser test')
-    title.value = 'Renamed Taco'
-    title.dispatchEvent(new Event('input', { bubbles: true }))
-
-    expect(editableBundle.title).toBe('Renamed Taco')
-    expect(document.title).toBe('Renamed Taco — Taco')
-    expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(true)
-  })
 
   it('edits file title metadata without renaming the file or adding it to the outline', async () => {
     const editableBundle = structuredClone(testBundle)
@@ -1064,9 +1050,6 @@ describe('FileBrowser', () => {
     const editor = (browser as unknown as { markdownEditor: { commands: { insertContent: (content: string) => boolean } } }).markdownEditor
     editor.commands.insertContent('Review edit ')
     expect(browser.getModifiedReviewFiles()[0].content).toContain('Review edit ')
-    const title = document.querySelector<HTMLInputElement>('.workspace-header .bundle-title')!
-    title.value = 'Download fallback'
-    title.dispatchEvent(new Event('input', { bubbles: true }))
 
     document.querySelector<HTMLButtonElement>('.save-button')!.click()
     const firstDialog = document.querySelector<HTMLDialogElement>('.confirmation-dialog')!
@@ -1283,7 +1266,7 @@ describe('FileBrowser', () => {
     browser.destroy()
   })
 
-  it('creates ordinary files without changing checkpoint membership and keeps category switching available', async () => {
+  it('creates ordinary files without changing checkpoint membership and retains their selected category', async () => {
     const bundle = structuredClone(testBundle)
     bundle.checkpoints = {
       version: 1,
@@ -1313,87 +1296,9 @@ describe('FileBrowser', () => {
     })
     expect(browser.getCheckpointDocumentAdditions()).toEqual([])
     expect(bundle.navigation.groups[0].paths).toContain('extra-proof.md')
-    const badge = document.querySelector<HTMLButtonElement>('.workspace-category-badge')!
-    expect(badge.disabled).toBe(false)
-    expect(badge.textContent).toBe('Custom')
-    badge.click()
-    expect(document.querySelector('.group-selector-popover')).not.toBeNull()
     browser.destroy()
   })
 
-  it('lets an ordinary file use a Checkpoint category without acquiring a document status', async () => {
-    const bundle = structuredClone(testBundle)
-    bundle.checkpoints = {
-      version: 1,
-      nodes: [{ id: 'gate', title: 'Gate', after: [], documents: [{ path: 'specs/001-browser/spec.md' }] }],
-      documents: [],
-    }
-    bundle.navigation = { version: 1, groups: [{ id: 'custom', title: 'Custom', paths: ['plan.md'] }] }
-    const original = structuredClone(bundle.checkpoints)
-    const browser = new FileBrowser(document.getElementById('app')!, bundle)
-
-    document.querySelector<HTMLButtonElement>('.file-row[data-path$="plan.md"]')!.click()
-    const badge = document.querySelector<HTMLButtonElement>('.workspace-category-badge')!
-    badge.click()
-    const gate = Array.from(document.querySelectorAll<HTMLButtonElement>('.group-selector-popover .popover-action'))
-      .find((button) => button.textContent?.trim() === 'Gate · 检查点')!
-    gate.click()
-
-    const categoryFile = document.querySelector<HTMLElement>('.checkpoint-group .file-row[data-path$="plan.md"]')!
-    expect(categoryFile).not.toBeNull()
-    expect(categoryFile.closest('.checkpoint-file-row')).toBeNull()
-    expect(categoryFile.querySelector('.checkpoint-status-button')).toBeNull()
-    expect(badge.disabled).toBe(false)
-    expect(badge.textContent).toBe('Gate')
-    expect(bundle.checkpoints).toEqual(original)
-    expect(browser.getCheckpointDocumentAdditions()).toEqual([])
-
-    badge.click()
-    Array.from(document.querySelectorAll<HTMLButtonElement>('.group-selector-popover .popover-action'))
-      .find((button) => button.textContent?.trim() === 'Custom')!.click()
-    expect(document.querySelector('.checkpoint-group .file-row[data-path$="plan.md"]')).toBeNull()
-    expect(badge.textContent).toBe('Custom')
-    expect(bundle.checkpoints).toEqual(original)
-
-    document.querySelector<HTMLButtonElement>('[data-stage="checkpoint-gate"] .add-file-to-group-btn')!.click()
-    const dialog = document.querySelector<HTMLDialogElement>('.new-file-dialog')!
-    expect(dialog.querySelector<HTMLSelectElement>('.new-file-category')!.value).toBe('checkpoint-gate')
-    dialog.querySelector<HTMLInputElement>('.new-file-input')!.value = 'category-only'
-    dialog.querySelector<HTMLButtonElement>('.new-file-confirm')!.click()
-    await vi.waitFor(() => expect(document.querySelector('.checkpoint-group .file-row[data-path$="category-only.md"]')).not.toBeNull())
-    expect(bundle.files.find(({ path }) => path.endsWith('/category-only.md'))?.path).toBe(`${bundle.root}/category-only.md`)
-    expect(bundle.checkpoints).toEqual(original)
-    expect(browser.getCheckpointDocumentAdditions()).toEqual([])
-    browser.destroy()
-  })
-  it('reassigns a file without moving its virtual path or comment anchor', () => {
-    const bundle = structuredClone(testBundle)
-    const file = bundle.files.find(({ path }) => path.endsWith('/plan.md'))!
-    const originalPath = file.path
-    bundle.files.push({ path: 'specs/001-browser/docs/guide.md', mediaType: 'text/markdown', content: '# Guide' })
-    bundle.navigation = { version: 1, groups: [{ id: 'category-docs', title: 'docs', paths: ['docs/guide.md'] }] }
-    bundle.comments = [{
-      id: 'thread-category',
-      anchor: { path: originalPath, position: { start: 0, end: 4 },
-        quote: { exact: file.content.slice(0, 4), prefix: '', suffix: '' } },
-      status: 'open',
-      messages: [{ id: 'message-category', author: 'Ada', body: 'Check this', createdAt: '2026-09-24T00:00:00.000Z' }],
-      createdAt: '2026-09-24T00:00:00.000Z',
-      updatedAt: '2026-09-24T00:00:00.000Z',
-    }]
-    const browser = new FileBrowser(document.getElementById('app')!, bundle)
-    document.querySelector<HTMLButtonElement>('.file-row[data-path$="plan.md"]')!.click()
-    document.querySelector<HTMLButtonElement>('.workspace-category-badge')!.click()
-    Array.from(document.querySelectorAll<HTMLButtonElement>('.group-selector-popover .popover-action'))
-      .find((button) => button.textContent?.trim() === 'docs')!.click()
-
-    expect(file.path).toBe(originalPath)
-    expect(bundle.comments[0].anchor!.path).toBe(originalPath)
-    expect(bundle.navigation.groups.find(({ id }) => id === 'category-docs')?.paths).toContain('plan.md')
-    expect(document.querySelector('[data-stage="category-docs"] .file-row[data-path$="plan.md"]')).not.toBeNull()
-    expect(parseBundle(JSON.stringify(bundle)).ok).toBe(true)
-    browser.destroy()
-  })
 
 
   it('orders the same file actions for ordinary and Checkpoint files and uses the entry key', () => {
@@ -1481,7 +1386,6 @@ describe('FileBrowser', () => {
     document.querySelector<HTMLButtonElement>('.confirmation-dialog-actions button:last-child')!.click()
     await vi.waitFor(() => expect(bundle.files).toEqual([]))
     expect(document.querySelector('.workspace-path')?.textContent).toBe('')
-    expect(document.querySelector<HTMLElement>('.workspace-category-badge')?.style.display).toBe('none')
     expect(document.querySelector('.file-viewer .empty-state')).not.toBeNull()
     browser.destroy()
   })
@@ -1534,11 +1438,7 @@ describe('FileBrowser', () => {
     })
     expect(document.querySelector('.checkpoint-view')).not.toBeNull()
     expect(document.getElementById('app')!.classList.contains('is-checkpoint-view')).toBe(true)
-    expect(document.querySelector<HTMLInputElement>('.checkpoint-template-name')!.value).toBe('Release review')
-    const tacoTitle = document.querySelector<HTMLInputElement>('.workspace-breadcrumbs .bundle-title')!
-    tacoTitle.value = 'Renamed from Checkpoints'
-    tacoTitle.dispatchEvent(new Event('input', { bubbles: true }))
-    expect(bundle.title).toBe('Renamed from Checkpoints')
+    expect(bundle.checkpoints).toMatchObject({ template: 'Release review' })
     browser.destroy()
   })
 
@@ -1651,7 +1551,6 @@ describe('FileBrowser', () => {
 
     const editor = await waitForEditor()
     expect(document.getElementById('app')?.classList.contains('is-readonly')).toBe(true)
-    expect(document.querySelector<HTMLInputElement>('.bundle-title')?.disabled).toBe(true)
     expect(document.querySelector<HTMLElement>('.document-inline-title-text')?.contentEditable).toBe('false')
     expect(editor.getAttribute('contenteditable')).toBe('false')
 
