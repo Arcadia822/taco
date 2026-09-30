@@ -1440,14 +1440,16 @@ export class FileBrowser {
     }
   }
 
-  setPrimaryHandoffHandler(handler: (() => Promise<void>) | null, tooltip?: string): void {
+  setPrimaryHandoffHandler(handler: (() => Promise<void>) | null, tooltip?: string, icon?: Parameters<typeof svgIcon>[0]): void {
     this.primaryHandoffHandler = handler ?? undefined
     this.primaryHandoffTooltip = tooltip
     if (this.copyButton) {
       this.copyButton.title = tooltip ?? this.t.copyReview
+      if (icon) {
+        setButtonIcon(this.copyButton, icon)
+      }
     }
   }
-
   setCopyReviewMenuCustomizer(customizer: ((menu: HTMLElement, defaultItems: HTMLElement[]) => void) | null): void {
     this.copyReviewMenuCustomizer = customizer ?? undefined
   }
@@ -1467,10 +1469,15 @@ export class FileBrowser {
     this.durableActionsOnlyCheck = check ?? undefined
   }
 
-  addHeaderControl(control: HTMLElement): () => void {
+  addHeaderControl(control: HTMLElement, position: 'left' | 'right' = 'right'): () => void {
     this.headerExtraControls.push(control)
     if (this.workspaceHeaderSpacer?.parentElement) {
-      this.workspaceHeaderSpacer.parentElement.insertBefore(control, this.workspaceHeaderSpacer)
+      if (position === 'left') {
+        this.workspaceHeaderSpacer.parentElement.insertBefore(control, this.workspaceHeaderSpacer)
+      } else {
+        // Insert right after spacer or before copyReviewGroup
+        this.workspaceHeaderSpacer.parentElement.insertBefore(control, this.copyReviewGroup)
+      }
     }
     return () => {
       const idx = this.headerExtraControls.indexOf(control)
@@ -1579,14 +1586,17 @@ export class FileBrowser {
   private openCopyReviewMenu(anchor: HTMLElement): void {
     const menu = this.openPopover(anchor, 'copy-review-menu')
     const manualHandoffLabel = this.primaryHandoffHandler
-      ? (this.locale === 'zh-Hans' ? '手动交接（Manual Handoff）' : 'Manual Handoff')
+      ? (this.locale === 'zh-Hans' ? '手动交接' : 'Manual Handoff')
       : this.t.copyAllChanges
+    const manualHandoffNoDataLabel = this.primaryHandoffHandler
+      ? (this.locale === 'zh-Hans' ? '手动交接（不含数据）' : 'Manual Handoff (w/o data)')
+      : this.t.copyTabInspect
     const defaultItems = [
       this.menuButton(manualHandoffLabel, () => {
         menu.remove()
         void this.copyReviewFull()
       }, { icon: 'copy', menuitem: false }),
-      this.menuButton(this.t.copyTabInspect, () => {
+      this.menuButton(manualHandoffNoDataLabel, () => {
         menu.remove()
         void this.copyReviewInspectPrompt()
       }, { icon: 'eye', menuitem: false }),

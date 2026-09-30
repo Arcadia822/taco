@@ -31,7 +31,6 @@ export class HostedBrowserController {
   readonly session: HostedSession
   private status: HostedStatus | null = null
   private listeners: HostListenerSnapshot | null = null
-  private statusButton: HTMLButtonElement | null = null
   private presenceButton: HTMLButtonElement | null = null
   private readonly removeControls: Array<() => void> = []
   private destroyed = false
@@ -56,7 +55,7 @@ export class HostedBrowserController {
 
     // Structure locked in hosted review mode
     browser.setStructureLocked(true, this.t.hostSharedField)
-    browser.setPrimaryHandoffHandler(async () => this.primaryHandoff(), this.t.hostHandoffTooltip)
+    browser.setPrimaryHandoffHandler(async () => this.primaryHandoff(), this.t.hostHandoffTooltip, 'bot-handoff')
     browser.setCopyReviewMenuCustomizer((menu, defaultItems) => this.customizeHandoffMenu(menu, defaultItems))
     browser.setDurableCommentsOnlyCheck(() => this.session.currentStatus.readiness !== 'unsupported')
     browser.setPendingWritesCheck(() => this.session.hasPendingWrites())
@@ -98,20 +97,17 @@ export class HostedBrowserController {
   }
 
   private mountHeaderControls(): void {
-    this.statusButton = createControlButton('check', this.t.hostStatus, () => this.openStatusMenu(), 'host-status-button', true, false)
-    this.presenceButton = createControlButton('users', this.t.hostPresence, () => { void this.openPresenceMenu() }, 'host-presence-button', true, false)
+    // Only mount presence button (icon-only, ghost style, positioned right before Handoff group)
+    this.presenceButton = createControlButton('users', this.t.hostPresence, () => { void this.openPresenceMenu() }, 'host-presence-button control-button-icon', false, true)
 
-    this.removeControls.push(this.browser.addHeaderControl(this.statusButton))
-    this.removeControls.push(this.browser.addHeaderControl(this.presenceButton))
+    this.removeControls.push(this.browser.addHeaderControl(this.presenceButton, 'right'))
 
     this.syncPresenceButton()
-    this.syncStatusButton()
   }
 
   private handleLocaleChange(): void {
     this.browser.setStructureLocked(true, this.t.hostSharedField)
-    this.browser.setCopyButtonTitle(this.t.hostHandoffTooltip)
-    this.syncStatusButton()
+    this.browser.setPrimaryHandoffHandler(async () => this.primaryHandoff(), this.t.hostHandoffTooltip, 'bot-handoff')
     this.syncPresenceButton()
   }
 
@@ -131,45 +127,18 @@ export class HostedBrowserController {
     if (status.save === 'conflict' && !wasConflict) {
       this.browser.toast(this.t.hostConflictNotice)
     }
-    this.syncStatusButton()
+    if (status.save === 'error' && this.status?.save !== 'error') {
+      this.browser.toast(this.t.hostSaveErrorNotice)
+    }
   }
 
-  private statusLabel(status: HostedStatus): string {
-    if (status.readiness === 'loading') return this.t.hostConnecting
-    if (status.readiness === 'failed') return this.t.saveFailed
-    if (status.save === 'conflict') return this.t.hostConflict
-    if (status.save === 'error') return this.t.saveFailed
-    if (status.comments === 'error') return this.t.hostCommentsError
-    if (status.save === 'saving') return this.t.hostSaving
-    if (status.comments === 'pending') return this.t.hostCommentsPending
-    if (status.save === 'dirty') return this.t.unsaved
-    return this.t.hostSaved
-  }
 
-  private syncStatusButton(): void {
-    const button = this.statusButton
-    const status = this.status
-    if (!button || !status) return
-    const label = this.statusLabel(status)
-    const troubled = status.readiness === 'failed'
-      || status.save === 'error' || status.save === 'conflict' || status.comments === 'error'
-    const busy = status.readiness === 'loading' || status.save === 'saving' || status.comments === 'pending'
-    const labelNode = button.querySelector('.button-label')
-    if (labelNode) labelNode.textContent = label
-    button.title = label
-    button.setAttribute('aria-label', `${this.t.hostStatus}: ${label}`)
-    button.classList.toggle('is-trouble', troubled)
-    setButtonIcon(button, troubled ? 'alert' : busy ? 'save' : 'check')
-  }
 
   private syncPresenceButton(): void {
     const button = this.presenceButton
     if (!button) return
     const count = this.listeners?.listeners.length ?? 0
     const name = currentAuthorName() || this.t.guest
-    const label = count > 0 ? `${name} (${count})` : name
-    const labelNode = button.querySelector('.button-label')
-    if (labelNode) labelNode.textContent = label
     button.title = `${this.t.hostPresence}: ${name}${count > 0 ? ` · ${count} agent(s)` : ''}`
     button.setAttribute('aria-label', button.title)
     setButtonIcon(button, count > 0 ? 'users' : 'user')
@@ -217,29 +186,6 @@ export class HostedBrowserController {
     const openMenu = document.querySelector<HTMLElement>('.host-presence-menu')
     if (openMenu) this.fillPresenceMenu(openMenu)
   }
-  private openStatusMenu(): void {
-    const status = this.status
-    const button = this.statusButton
-    if (!status || !button) return
-    if (status.save === 'conflict') {
-      const menu = this.browser.openPopover(button, 'host-status-menu')
-      menu.append(this.browser.menuButton(this.t.hostLoadLatest, () => {
-        menu.remove()
-        void this.session.discardLocalDraft()
-      }, { icon: 'chevron-down' }))
-      return
-    }
-    if (status.readiness === 'failed' || status.save === 'error' || status.comments === 'error') {
-      const menu = this.browser.openPopover(button, 'host-status-menu')
-      menu.append(this.browser.menuButton(this.t.hostRetry, () => {
-        menu.remove()
-        this.session.retry()
-      }, { icon: 'save' }))
-      return
-    }
-    this.browser.toast(`${this.statusLabel(status)}${status.detail ? ` · ${status.detail}` : ''}`)
-  }
-
   private async openPresenceMenu(): Promise<void> {
     const button = this.presenceButton
     if (!button) return
@@ -254,16 +200,14 @@ export class HostedBrowserController {
     menu.replaceChildren()
     const currentName = currentAuthorName() || this.t.guest
 
-    // Section 1: Active Reviewers (Human)
+    // Section 1: Humans (人类)
     const humanSection = el('div', 'host-presence-section')
     humanSection.append(el('h3', 'host-presence-heading', this.t.hostActiveHumans))
 
     const humanRow = el('div', 'host-member-row host-member-human')
-    const humanMain = el('div', 'host-member-main')
     const avatar = el('span', 'host-avatar', currentName.charAt(0) || 'U')
     avatar.style.backgroundColor = this.hashColor(currentName)
     const nameSpan = el('span', 'host-member-name', currentName)
-    humanMain.append(avatar, nameSpan)
 
     const editBtn = el('button', 'host-edit-name-btn') as HTMLButtonElement
     editBtn.type = 'button'
@@ -274,7 +218,7 @@ export class HostedBrowserController {
       void this.promptAuthor()
     })
 
-    humanRow.append(humanMain, editBtn)
+    humanRow.append(avatar, nameSpan, editBtn)
     humanSection.append(humanRow)
     menu.append(humanSection)
 
@@ -299,14 +243,12 @@ export class HostedBrowserController {
 
   private buildAgentRow(listener: HostListener): HTMLElement {
     const row = el('div', 'host-member-row host-member-agent')
-    const main = el('div', 'host-member-main')
 
     const harnessIconName = HOST_HARNESS_ICONS[listener.harness ?? ''] ?? 'bot'
     const iconWrapper = el('span', 'host-agent-icon')
     iconWrapper.append(svgIcon(harnessIconName))
 
     const name = el('span', 'host-member-name', listener.name || this.t.hostListenerAnonymous)
-    main.append(iconWrapper, name)
 
     // Info trigger with hover card
     const infoTrigger = el('button', 'host-info-trigger') as HTMLButtonElement
@@ -327,7 +269,7 @@ export class HostedBrowserController {
     addCardRow(this.t.hostStartedListening, this.formatListenerTime(listener.lastSeenAt))
 
     infoTrigger.append(card)
-    row.append(main, infoTrigger)
+    row.append(iconWrapper, name, infoTrigger)
     return row
   }
 
@@ -382,7 +324,6 @@ export class HostedBrowserController {
   private destroyControlsOnly(): void {
     for (const remove of this.removeControls) remove()
     this.removeControls.length = 0
-    this.statusButton = null
     this.presenceButton = null
   }
 
