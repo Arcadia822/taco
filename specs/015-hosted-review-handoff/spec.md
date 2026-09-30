@@ -221,3 +221,9 @@ prepare：以前一轮重叠头像产物为基线，Complete 2,834,789 B、Lite 
 develop 实测（字节，§14 基线）：Complete 2,832,705（−2,084 B，−0.0735%，估算 −0.5 至 −2 KiB）；Lite 292,937（−2,026 B，−0.687%，同估算）；Host 2,866,481（−2,412 B，−0.0841%，同估算）；skill Complete 2,727,170（−2,084 B）；skill Lite 187,402（−2,026 B）；skill 全目录 14,023,072（−12,324 B，估算镜像 −3 至 −12 KiB、文档 −0.5 至 +0.5 KiB）。Complete 比估算下界多减 36 B，Host 多减 364 B，来自删除编辑事件／Category popover 入口与压缩；目录落在镜像加文档估算内。无新增依赖或联网行为。本轮所有 shell 均减小，无增大阈值触发。累计相对仓库 2026-09-28 基线，Lite shell 仍 +6,370 B（3.52%）、Lite 成品 +6,656 B（2.33%）；原因是此前共享交接／评论／Checkpoint 能力，若继续缩减需单独精简通用本地交互。
 
 验证：最终构建、Complete／Lite／Host gate 与生成镜像通过；定向 file-browser／HostedSession 30 项通过，类型断言修正后 Checkpoints 页面保持回归单独通过。真实浏览器验证三变体文件 Header 显示 `spec.md`（正文 Title 为 New Feature Specification），中英文 Checkpoints／检查点，删除控件零残留。Host 详情可见英文 `runtime`、中文「运行时」；保存下拉含 Save／Save a copy／Save & unpack。禁用浏览器 File System Access 后走真实下载路径，点击确认后保存并解析 Feature_Specification.taco.html，包含原 docId、三文件与 template。未操作系统保存选择器。窄屏 390px 设备配置（实测 CSS 视口 354px）Header 控件边界均在视口内，语言按钮 right=347px。刷新原 Taco 保留 docId、导航与零评论，浏览器 validate 为 ok:true、零 error／warning／info。官网演示由构建同步，本地官网与评审 URL 保持可用；实际 omp 订阅从 sequence 2 恢复。未宣称全仓测试通过。
+
+## 15. 交接下拉箭头 hover 修正
+
+箭头错误传入组件 `primary=true`，常态灰色被自定义 `.copy-review-more` 覆盖，但 hover 命中绿色 `.control-button-primary:hover`。移除错误参数，沿用组件默认按钮 hover，不新增 hover 特例。prepare：以 §14 最终字节为基线，Complete／Lite／Host 成品与 skill 双 shell 各预计 −32 至 +32 B，skill 全目录含镜像预计 −256 至 +256 B。无新增依赖或联网行为；技能无需新增操作说明，官网演示随构建更新。
+
+develop：Complete 成品 2,832,705 B（0 B）、Lite 292,934 B（−3 B）、Host 2,866,481 B（0 B）、skill Complete 2,727,170 B（0 B）、skill Lite 187,399 B（−3 B）、skill 目录 14,023,069 B（−3 B），均在估算内，压缩使删除参数几乎无字节变化。无依赖／请求变化，无增大阈值触发。构建与三变体 gate 通过；真实浏览器 Complete／Lite／Host 箭头 hover=true，背景均保持 rgb(238,238,238)，与主交接按钮相同，primary 标记消失，下拉菜单可打开。Host 截图显示交接灰色、保存绿色；官网演示镜像已生成，实际监听从 sequence 2 恢复。

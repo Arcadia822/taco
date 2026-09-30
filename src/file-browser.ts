@@ -462,7 +462,7 @@ export class FileBrowser {
     this.copyButton.title = this.primaryHandoffTooltip ?? this.t.copyReview
     this.copyButton.querySelector('.button-label')!.textContent = this.primaryHandoffLabel ?? this.t.copyReviewLabel
 
-    const copyMore = createControlButton('chevron-down', this.t.copyReview, () => this.openCopyReviewMenu(copyMore), 'copy-review-more', false, true)
+    const copyMore = createControlButton('chevron-down', this.t.copyReview, () => this.openCopyReviewMenu(copyMore), 'copy-review-more')
     copyMore.setAttribute('aria-label', this.t.copyReview)
     copyMore.title = this.t.copyReview
     this.copyReviewGroup = el('div', 'copy-review-group v2-button-group')
