@@ -144,7 +144,7 @@ export class CommentsController {
     if (!threads.length && !globalThreads.length && !pendingAnchor && !this.pendingGlobal) lane.append(this.buildEmptyCommentBanner())
     for (const { thread } of this.placement.placed) lane.append(this.buildCommentThread(thread))
     if (this.placement.stale.length) lane.append(this.buildStaleCommentGroup(this.placement.stale))
-    if (globalThreads.length || this.pendingGlobal || bundleCanWrite(this.options.bundle)) {
+    if (globalThreads.length || this.pendingGlobal) {
       lane.append(this.buildGlobalCommentGroup(globalThreads))
     }
     this.observeLayout()
