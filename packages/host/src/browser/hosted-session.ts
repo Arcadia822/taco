@@ -81,6 +81,8 @@ interface MirrorThread {
 interface PatchChunk {
   changes: PreparedChange[]
   checkpoints?: unknown
+  title?: string
+  navigation?: unknown
 }
 
 /** One file change plus the exact content it will write, so the mirror can record what was accepted. */
@@ -95,6 +97,17 @@ const relativeToRoot = (root: string, path: string): string =>
   root === '.' || !path.startsWith(`${root}/`) ? path : path.slice(root.length + 1)
 
 const jsonOf = (value: unknown): string | null => (value === undefined ? null : JSON.stringify(value))
+
+const navigationForHost = (bundle: TacoBundle): NavigationManifest | null => {
+  if (!bundle.navigation) return null
+  const fullPath = (path: string): string =>
+    bundle.root === '.' || path.startsWith(`${bundle.root}/`) ? path : `${bundle.root}/${path}`
+  return {
+    ...bundle.navigation,
+    ...(bundle.navigation.entry ? { entry: fullPath(bundle.navigation.entry) } : {}),
+    groups: bundle.navigation.groups.map((group) => ({ ...group, paths: group.paths.map(fullPath) })),
+  }
+}
 
 const errorDetail = (error: unknown): string => {
   if (error instanceof HostApiError) return error.message || `Host rejected the request (${error.status})`
@@ -143,6 +156,8 @@ export class HostedSession {
   private commentsSequence = '0'
   private mirrorFiles = new Map<string, MirrorFile>()
   private mirrorCheckpoints: string | null = null
+  private mirrorTitle = ''
+  private mirrorNavigation: string | null = null
   private mirrorThreads = new Map<string, MirrorThread>()
   private dirty = false
   private commentDirty = false
@@ -235,6 +250,8 @@ export class HostedSession {
     this.commentsSequence = state.commentsThroughSequence
     this.mirrorFiles = mirrorFromSnapshot(state.snapshot)
     this.mirrorCheckpoints = jsonOf(state.snapshot.checkpoints)
+    this.mirrorTitle = state.snapshot.title
+    this.mirrorNavigation = jsonOf(state.snapshot.navigation)
     let commentsFailed = false
     let threads: TacoCommentThread[] = []
     try {
@@ -431,8 +448,14 @@ export class HostedSession {
     if (this.destroyed || !this.ready || this.save === 'saving' || this.save === 'conflict') return
     if (!this.dirty) return
     const patches = this.computeFileChanges()
-    const checkpointsChanged = this.checkpointsChanged()
-    if (patches.length === 0 && !checkpointsChanged) {
+    const bundle = this.options.bridge.bundle
+    const navigation = navigationForHost(bundle)
+    const metadata: Pick<HostAutoSavePatch, 'title' | 'navigation' | 'checkpoints'> = {
+      ...(bundle.title === this.mirrorTitle ? {} : { title: bundle.title }),
+      ...(jsonOf(navigation ?? undefined) === this.mirrorNavigation ? {} : { navigation }),
+      ...(this.checkpointsChanged() ? { checkpoints: structuredClone(bundle.checkpoints ?? null) } : {}),
+    }
+    if (patches.length === 0 && Object.keys(metadata).length === 0) {
       this.dirty = false
       this.setStatus({ save: 'saved' })
       return
@@ -441,19 +464,23 @@ export class HostedSession {
     this.flightSignature = this.signature()
     try {
       const prepared = await this.prepareUploads(patches)
-      for (const chunk of this.chunkPatches(prepared, checkpointsChanged)) {
+      for (const chunk of this.chunkPatches(prepared, metadata)) {
         const patch: HostAutoSavePatch = {
           protocol: 'taco-state/1',
           expectedStateVersion: this.stateVersion,
           author: this.options.bridge.author(),
           fileChanges: chunk.changes.map((change) => change.patch),
           ...(chunk.checkpoints === undefined ? {} : { checkpoints: chunk.checkpoints }),
+          ...(chunk.title === undefined ? {} : { title: chunk.title }),
+          ...(chunk.navigation === undefined ? {} : { navigation: chunk.navigation }),
         }
         // One key per logical write: a retry after a lost response must replay, never duplicate.
         const key = newIdempotencyKey()
         const result = await this.withRetry(() => this.options.client.autosave(patch, key))
         this.stateVersion = result.stateVersion
         this.applyAcknowledged(chunk.changes, patch.checkpoints)
+        if (patch.title !== undefined) this.mirrorTitle = patch.title
+        if (patch.navigation !== undefined) this.mirrorNavigation = jsonOf(patch.navigation ?? undefined)
       }
       if (this.signature() === this.flightSignature) {
         this.dirty = false
@@ -493,15 +520,17 @@ export class HostedSession {
     return prepared
   }
 
-  private chunkPatches(changes: readonly PreparedChange[], checkpointsChanged: boolean): PatchChunk[] {
+  private chunkPatches(changes: readonly PreparedChange[], metadata: Pick<HostAutoSavePatch, 'title' | 'navigation' | 'checkpoints'>): PatchChunk[] {
     // `…"fileChanges":[]}` — swapping `[]` for `[p1,p2]` costs each patch plus its separators.
     const wrapper = JSON.stringify({
       protocol: 'taco-state/1',
       expectedStateVersion: this.stateVersion,
       author: this.options.bridge.author(),
+      ...metadata,
       fileChanges: [],
     })
     const openBytes = encodeBytes(wrapper.slice(0, -2))
+    if (openBytes + 2 > PATCH_BYTE_LIMIT) throw new Error('Document metadata exceeds the autosave request limit')
     const chunks: PatchChunk[] = []
     let current: PreparedChange[] = []
     let currentBytes = 0
@@ -516,8 +545,8 @@ export class HostedSession {
       current.push(change)
     }
     chunks.push({ changes: current })
-    // Checkpoints are validated against the resulting file set, so they travel last.
-    if (checkpointsChanged) chunks[chunks.length - 1].checkpoints = this.options.bridge.bundle.checkpoints ?? null
+    // Navigation and Checkpoints are validated against the resulting file set, so travel last.
+    Object.assign(chunks[chunks.length - 1], metadata)
     return chunks
   }
 
@@ -705,6 +734,8 @@ export class HostedSession {
     this.commentsSequence = state.commentsThroughSequence
     this.mirrorFiles = mirrorFromSnapshot(state.snapshot)
     this.mirrorCheckpoints = jsonOf(state.snapshot.checkpoints)
+    this.mirrorTitle = state.snapshot.title
+    this.mirrorNavigation = jsonOf(state.snapshot.navigation)
     this.adoptSnapshotContent(state.snapshot, threads)
     this.dirty = false
     this.commentDirty = false
@@ -733,12 +764,16 @@ export class HostedSession {
     })
   }
 
-  async refreshListeners(): Promise<void> {
-    if (this.destroyed || !this.ready) return
+  async refreshListeners(): Promise<HostListenerSnapshot | null> {
+    if (this.destroyed || !this.ready) return null
     try {
-      this.options.bridge.adoptListeners(await this.options.client.listListeners())
-    } catch {
-      // Presence is advisory: a failed poll must not disturb the save state or claim delivery.
+      const snapshot = await this.options.client.listListeners()
+      this.options.bridge.adoptListeners(snapshot)
+      return snapshot
+    } catch (error) {
+      // Presence is advisory: a background poll must not disturb the save state or claim delivery.
+      // But return null so callers who await can detect failure if desired.
+      return null
     }
   }
 
@@ -764,6 +799,8 @@ export class HostedSession {
     return JSON.stringify([
       bundle.files.map((file) => [file.id ?? file.path, file.path, file.mediaType, file.content]),
       bundle.checkpoints ?? null,
+      bundle.title,
+      bundle.navigation ?? null,
     ])
   }
 

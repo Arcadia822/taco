@@ -5,6 +5,10 @@ import { Fira_Code, Geist } from 'next/font/google'
 import './home.css'
 import { AgentTerminal, type AgentRun } from '../components/agent-terminal'
 import { TacoPixelBackground } from '../components/taco-pixel-background'
+import {
+  TACO_SKILL_INSTALL_COMMAND,
+  TACO_CLI_INSTALL_COMMAND,
+} from '../install-commands.ts'
 
 const geist = Geist({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-geist' })
 const firaCode = Fira_Code({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-fira-code' })
@@ -139,7 +143,7 @@ const I18N = {
     forSkill: 'Skill',
     agentPrompt:
       '阅读 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md ，按其中步骤为我安装 Taco；安装完成后，向我介绍 Taco 怎么用。',
-    skillCmd: 'npx skills@latest add arcadia822/taco --skill=taco',
+    skillCmd: TACO_SKILL_INSTALL_COMMAND,
     copy: '复制',
     copied: '已复制',
     copyFailed: '复制失败',
@@ -195,7 +199,7 @@ const I18N = {
     section4Desc:
       '本地单文件不含托管协作代码，可离线评审；Tacobin 分享链接使用独立的托管评审界面。持链接者可自报姓名编辑和评论，改动自动保存。评审者确认保存成功后点击「交接」，才产生可补读的 review.handed_off；评论本身不会唤醒 Agent。监听者名称仅为自报，在线不代表意见已送达或处理。',
     section4CliTitle: 'CLI',
-    section4CliCmd: 'npm install -g @tacobin/cli',
+    section4CliCmd: TACO_CLI_INSTALL_COMMAND,
     section4AgentTitle: 'FOR AGENT',
     section4AgentPrompt:
       '阅读 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md 的托管评审说明，安装 taco-cli。先 dry-run 核对公开内容，再发布测试 Taco，保存返回的 URL 和 tacoId；用 tacoId 订阅或补读事件。等我在分享页评论并点击「交接」后，只处理 review.handed_off，用 taco-cli handoff 读取快照、比对源文件、完成修改并向我报告；不要把评论事件当作交接。',
@@ -252,7 +256,7 @@ const I18N = {
     forSkill: 'Skill',
     agentPrompt:
       'Read https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and install Taco for me by following it. When done, walk me through how to use Taco.',
-    skillCmd: 'npx skills@latest add arcadia822/taco --skill=taco',
+    skillCmd: TACO_SKILL_INSTALL_COMMAND,
     copy: 'Copy',
     copied: 'Copied',
     copyFailed: 'Could not copy',
@@ -308,7 +312,7 @@ const I18N = {
     section4Desc:
       'Local Taco files contain no hosted collaboration code and remain reviewable offline. Tacobin serves a separate shared review page. Anyone with the link can edit and comment under a self-reported name; changes autosave. After confirming a successful save, the reviewer clicks Handoff to record a replayable review.handed_off event. A comment alone does not wake an agent, and listener presence is not a delivery receipt.',
     section4CliTitle: 'CLI',
-    section4CliCmd: 'npm install -g @tacobin/cli',
+    section4CliCmd: TACO_CLI_INSTALL_COMMAND,
     section4AgentTitle: 'FOR AGENT',
     section4AgentPrompt:
       'Read the hosted-review section of https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and install taco-cli. Dry-run and inspect the public payload, publish a test Taco, save its URL and tacoId, then subscribe or replay events. After I comment and click Handoff on the shared page, process only review.handed_off: fetch the snapshot with taco-cli handoff, compare against the canonical files, apply feedback, and report back. Do not treat a comment event as Handoff.',

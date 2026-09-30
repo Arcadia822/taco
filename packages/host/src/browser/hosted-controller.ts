@@ -16,6 +16,10 @@ import { hostCopy, type HostCopy } from './hosted-i18n.ts'
 import { HOSTED_STYLES } from './hosted-styles.ts'
 import { harnessLogo } from './harness-logos.ts'
 import {
+  TACO_SKILL_INSTALL_COMMAND,
+  TACO_CLI_INSTALL_COMMAND,
+} from '../install-commands.ts'
+import {
   createControlButton,
   el,
   setButtonIcon,
@@ -30,7 +34,7 @@ export class HostedBrowserController {
   private readonly client: HostClient
   readonly session: HostedSession
   private status: HostedStatus | null = null
-  private listeners: HostListenerSnapshot | null = null
+  listeners: HostListenerSnapshot | null = null
   private presenceButton: HTMLButtonElement | null = null
   private readonly removeControls: Array<() => void> = []
   private destroyed = false
@@ -54,7 +58,7 @@ export class HostedBrowserController {
     })
 
     // Structure locked in hosted review mode
-    browser.setStructureLocked(true, this.t.hostSharedField)
+    browser.setStructureLocked(true)
     browser.setPrimaryHandoffHandler(async () => this.primaryHandoff(), this.t.hostHandoffTooltip, 'bot-handoff', this.t.hostHandoffCommand)
     browser.setCopyReviewMenuCustomizer((menu, defaultItems) => this.customizeHandoffMenu(menu, defaultItems))
     browser.setDurableCommentsOnlyCheck(() => this.session.currentStatus.readiness !== 'unsupported')
@@ -103,7 +107,7 @@ export class HostedBrowserController {
   }
 
   private handleLocaleChange(): void {
-    this.browser.setStructureLocked(true, this.t.hostSharedField)
+    this.browser.setStructureLocked(true)
     this.browser.setPrimaryHandoffHandler(async () => this.primaryHandoff(), this.t.hostHandoffTooltip, 'bot-handoff', this.t.hostHandoffCommand)
     this.syncPresenceButton()
   }
@@ -327,15 +331,145 @@ export class HostedBrowserController {
       this.browser.toast(this.t.hostHandoffBusy)
       return
     }
+
+    // Refresh live listeners before handoff
+    const refreshed = await this.session.refreshListeners()
+    if (!refreshed) {
+      this.browser.toast(this.t.hostListenersFetchFailed)
+      return
+    }
+
+    const activeListeners = refreshed.listeners
+    if (activeListeners.length === 0) {
+      this.showNoListenersDialog()
+      return
+    }
+
+    // Capture target listener names/count before commit since listeners disconnect on success
+    const listenerCount = activeListeners.length
+    const singleListenerName = listenerCount === 1 ? (activeListeners[0].name?.trim() || this.t.hostListenerAnonymous) : null
+
     const outcome = await this.session.handoff()
-    if (outcome.kind === 'done') this.browser.toast(this.t.hostHandoffDone)
-    else if (outcome.kind === 'no-change') this.browser.toast(this.t.hostHandoffNoChange)
-    else if (outcome.kind === 'conflict') this.browser.toast(this.t.hostHandoffConflict)
-    else if (outcome.kind === 'unsupported') this.browser.toast(this.t.hostHandoffUnsupported)
-    else if (outcome.kind === 'failed') this.browser.toast(this.t.hostHandoffFailed(outcome.detail))
-    else if (outcome.save === 'saving') this.browser.toast(this.t.hostHandoffBusy)
-    else if (outcome.save === 'error') this.browser.toast(this.t.hostSaveErrorNotice)
-    else this.browser.toast(this.t.hostHandoffBlocked)
+    if (outcome.kind === 'done') {
+      if (listenerCount === 1 && singleListenerName) {
+        this.browser.toast(this.t.hostHandoffDoneSingle(singleListenerName))
+      } else {
+        this.browser.toast(this.t.hostHandoffDoneMultiple(listenerCount))
+      }
+    } else if (outcome.kind === 'no-change') {
+      this.browser.toast(this.t.hostHandoffNoChange)
+    } else if (outcome.kind === 'conflict') {
+      this.browser.toast(this.t.hostHandoffConflict)
+    } else if (outcome.kind === 'unsupported') {
+      this.browser.toast(this.t.hostHandoffUnsupported)
+    } else if (outcome.kind === 'failed') {
+      this.browser.toast(this.t.hostHandoffFailed(outcome.detail))
+    } else if (outcome.save === 'saving') {
+      this.browser.toast(this.t.hostHandoffBusy)
+    } else if (outcome.save === 'error') {
+      this.browser.toast(this.t.hostSaveErrorNotice)
+    } else {
+      this.browser.toast(this.t.hostHandoffBlocked)
+    }
+  }
+
+  showNoListenersDialog(): void {
+    document.querySelector('.host-no-listeners-dialog')?.remove()
+    const dialog = el('dialog', 'confirmation-dialog host-no-listeners-dialog') as HTMLDialogElement
+    dialog.setAttribute('aria-labelledby', 'taco-no-listeners-title')
+
+    const title = el('h2', 'confirmation-dialog-title', this.t.hostHandoffNoListenersTitle)
+    title.id = 'taco-no-listeners-title'
+
+    const body = el('div', 'confirmation-dialog-body')
+    const desc = el('p', '', this.t.hostHandoffNoListenersDesc)
+    body.append(desc)
+
+    const guide = el('div', 'host-install-guide')
+
+    // Step 1: Install Taco skill
+    const step1 = el('div', 'host-install-step')
+    step1.append(el('div', 'host-install-step-title', this.t.hostHandoffInstallSkillLabel))
+    const row1 = el('div', 'host-install-code-row')
+    const code1 = el('code', '', TACO_SKILL_INSTALL_COMMAND)
+    const copyBtn1 = el('button', 'host-install-copy-btn', this.t.hostHandoffCopyCmd) as HTMLButtonElement
+    copyBtn1.type = 'button'
+    copyBtn1.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard?.writeText(TACO_SKILL_INSTALL_COMMAND)
+        copyBtn1.textContent = this.t.hostHandoffCopiedCmd
+        setTimeout(() => { copyBtn1.textContent = this.t.hostHandoffCopyCmd }, 2000)
+      } catch {}
+    })
+    row1.append(code1, copyBtn1)
+    step1.append(row1)
+    guide.append(step1)
+
+    // Step 2: Install taco-cli
+    const step2 = el('div', 'host-install-step')
+    step2.append(el('div', 'host-install-step-title', this.t.hostHandoffInstallCliLabel))
+    const row2 = el('div', 'host-install-code-row')
+    const code2 = el('code', '', TACO_CLI_INSTALL_COMMAND)
+    const copyBtn2 = el('button', 'host-install-copy-btn', this.t.hostHandoffCopyCmd) as HTMLButtonElement
+    copyBtn2.type = 'button'
+    copyBtn2.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard?.writeText(TACO_CLI_INSTALL_COMMAND)
+        copyBtn2.textContent = this.t.hostHandoffCopiedCmd
+        setTimeout(() => { copyBtn2.textContent = this.t.hostHandoffCopyCmd }, 2000)
+      } catch {}
+    })
+    row2.append(code2, copyBtn2)
+    step2.append(row2)
+    guide.append(step2)
+
+    // Step 3: Start subscribe
+    const subscribeCmd = `taco-cli subscribe ${this.capability.tacoId} --host ${location.origin}`
+    const step3 = el('div', 'host-install-step')
+    step3.append(el('div', 'host-install-step-title', this.t.hostHandoffStartSubscribeLabel))
+    const row3 = el('div', 'host-install-code-row')
+    const code3 = el('code', '', subscribeCmd)
+    const copyBtn3 = el('button', 'host-install-copy-btn', this.t.hostHandoffCopyCmd) as HTMLButtonElement
+    copyBtn3.type = 'button'
+    copyBtn3.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard?.writeText(subscribeCmd)
+        copyBtn3.textContent = this.t.hostHandoffCopiedCmd
+        setTimeout(() => { copyBtn3.textContent = this.t.hostHandoffCopyCmd }, 2000)
+      } catch {}
+    })
+    row3.append(code3, copyBtn3)
+    step3.append(row3)
+    guide.append(step3)
+
+    body.append(guide)
+
+    const actions = el('div', 'confirmation-dialog-actions')
+    const closeBtn = createControlButton('x', this.t.hostHandoffClose, () => finish(), '', true, true)
+    actions.append(closeBtn)
+
+    dialog.append(title, body, actions)
+
+    const finish = (): void => {
+      try {
+        if (dialog.open && typeof dialog.close === 'function') dialog.close()
+      } finally {
+        dialog.remove()
+      }
+    }
+
+    dialog.addEventListener('cancel', (event) => {
+      event.preventDefault()
+      finish()
+    })
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog) finish()
+    })
+
+    document.body.append(dialog)
+    if (typeof dialog.showModal === 'function') dialog.showModal()
+    else dialog.setAttribute('open', '')
+    closeBtn.focus()
   }
 
   hostedInfo(): { tacoId: string; apiBase: string } | null {

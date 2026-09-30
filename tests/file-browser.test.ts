@@ -984,13 +984,6 @@ describe('FileBrowser', () => {
     expect(block.querySelector('.tiptap-code-block-tools')).not.toBeNull()
   })
 
-  it('shows the selected relative path in the workspace header instead of a document title row', () => {
-    new FileBrowser(document.getElementById('app')!, structuredClone(testBundle))
-    expect(document.querySelector('.workspace-path')?.textContent).toBe('spec.md')
-    expect(document.querySelector('.file-header')).toBeNull()
-    document.querySelector<HTMLButtonElement>('[data-path$="checklists/requirements.md"]')!.click()
-    expect(document.querySelector('.workspace-path')?.textContent).toBe('checklists/requirements.md')
-  })
 
   it('edits the Taco title in the header and keeps the document state in sync', () => {
     const editableBundle = structuredClone(testBundle)
@@ -1523,6 +1516,29 @@ describe('FileBrowser', () => {
     expect(graphRow.querySelector('.checkpoint-document-status')).toBeNull()
     expect(document.querySelector<HTMLButtonElement>('.checkpoint-nav-item')?.textContent).toContain('检查点')
     expect(document.querySelector<HTMLElement>('.checkpoint-page-title')?.textContent).toContain('检查点')
+    browser.destroy()
+  })
+
+  it('keeps the Checkpoints page when hosted saved content is adopted', () => {
+    const bundle = structuredClone(testBundle)
+    bundle.checkpoints = {
+      version: 1, template: 'Release review',
+      nodes: [{ id: 'gate', title: 'Gate', after: [], documents: [{ path: bundle.files[0].path }] }],
+      documents: [],
+    }
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    document.querySelector<HTMLButtonElement>('.checkpoint-nav-item')!.click()
+    browser.adoptBundleContent({
+      title: bundle.title, files: structuredClone(bundle.files),
+      checkpoints: structuredClone(bundle.checkpoints), comments: [],
+    })
+    expect(document.querySelector('.checkpoint-view')).not.toBeNull()
+    expect(document.getElementById('app')!.classList.contains('is-checkpoint-view')).toBe(true)
+    expect(document.querySelector<HTMLInputElement>('.checkpoint-template-name')!.value).toBe('Release review')
+    const tacoTitle = document.querySelector<HTMLInputElement>('.workspace-breadcrumbs .bundle-title')!
+    tacoTitle.value = 'Renamed from Checkpoints'
+    tacoTitle.dispatchEvent(new Event('input', { bubbles: true }))
+    expect(bundle.title).toBe('Renamed from Checkpoints')
     browser.destroy()
   })
 

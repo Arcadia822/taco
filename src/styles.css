@@ -75,22 +75,28 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
   font-size: 12px; font-weight: 560; text-overflow: ellipsis; white-space: nowrap;
 }
 .bundle-title:focus { border-color: var(--accent); background: var(--surface); outline: 0; }
+.workspace-breadcrumbs { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 1 auto; font-size: 12px; }
+.workspace-breadcrumb-level { display: flex; align-items: center; min-width: 0; }
+.workspace-breadcrumb-category { flex: 0 1 auto; }
+.workspace-breadcrumb-document { flex: 0 1 auto; }
+.workspace-breadcrumb-separator { color: var(--muted); flex: 0 0 auto; }
+.workspace-breadcrumbs .bundle-title { max-width: min(24vw, 260px); }
 .workspace-category-badge {
-  display: inline-flex; align-items: center; justify-content: center; height: 22px; padding: 0 7px;
-  border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--muted);
-  font: 500 11px/1 var(--sans); white-space: nowrap; flex-shrink: 0; cursor: default;
-  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 160ms var(--ease-out);
+  display: inline-flex; align-items: center; justify-content: center; height: 22px; padding: 0 5px;
+  border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--muted);
+  font: 500 12px/1 var(--sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; cursor: default;
+  transition: background-color 140ms ease, color 140ms ease;
 }
 .workspace-category-badge.is-editable {
-  cursor: pointer; border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); color: var(--ink);
+  cursor: pointer; color: var(--ink);
 }
 .workspace-category-badge.is-editable:hover {
-  background: var(--surface-2); border-color: var(--accent-dark); color: var(--accent-dark);
+  background: var(--surface-2); color: var(--ink);
 }
 .workspace-category-badge.is-editable:active {
   transform: scale(0.96);
 }
-.workspace-path { width: max-content; min-width: 0; max-width: min(42vw, 520px); overflow: hidden; flex: 0 1 auto; color: var(--muted); font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-path { min-width: 0; max-width: min(28vw, 360px); overflow: hidden; color: var(--muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .control-button {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: auto; min-width: var(--chrome-size); height: var(--chrome-size); min-height: var(--chrome-size);
   padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); white-space: nowrap; font-size: 12px; font-weight: 560;
@@ -1113,7 +1119,13 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 }
 
 @media (max-width: 560px) {
-  .bundle-title { display: none; }
+  .taco-shell { --mobile-header-height: calc(76px + env(safe-area-inset-top)); }
+  .workspace-header { flex-wrap: wrap; align-content: center; row-gap: 4px; flex-basis: var(--mobile-header-height); }
+  .workspace-breadcrumbs { order: -1; flex: 1 0 100%; gap: 4px; }
+  .workspace-breadcrumbs .bundle-title { max-width: 30vw; }
+  .workspace-breadcrumb-category { max-width: 27vw; flex-shrink: 0; }
+  .workspace-breadcrumb-document { max-width: 32vw; flex: 1 1 auto; overflow: hidden; }
+  .workspace-breadcrumb-document .workspace-path, .workspace-breadcrumb-document .checkpoint-template-name { max-width: 100%; }
   .taco-shell { --right-panel: 100vw; }
 }
 
@@ -1286,14 +1298,14 @@ button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visibl
 .checkpoint-status-button:hover, .checkpoint-document-status:hover { background: var(--surface-2); }
 .checkpoint-file-select .file-name { flex: 0 1 auto; }
 .checkpoint-file-row .file-attribute { color: var(--muted); }
-.workspace-category-badge.is-checkpoint { border-color: color-mix(in srgb, var(--status-freeze) 55%, var(--line)); color: var(--ink); }
-.checkpoint-page-title { display: none; align-items: center; min-width: 0; margin-left: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
-.checkpoint-template-name { min-width: 72px; max-width: min(32vw, 300px); margin-left: 4px; padding: 3px 5px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--ink); font: inherit; font-weight: 600; text-overflow: ellipsis; }
+.workspace-category-badge.is-checkpoint { color: var(--ink); }
+.checkpoint-page-title { display: none; min-width: 0; color: var(--muted); white-space: nowrap; }
+.checkpoint-template-name { display: none; field-sizing: content; min-width: 32px; max-width: min(28vw, 300px); padding: 3px 5px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--ink); font: inherit; text-overflow: ellipsis; }
 .checkpoint-template-name:not(:disabled):hover, .checkpoint-template-name:not(:disabled):focus-visible { border-color: var(--line-strong); background: var(--surface); }
 .checkpoint-template-name:disabled { opacity: 1; cursor: default; }
-.is-checkpoint-view .bundle-title, .is-checkpoint-view .workspace-path, .is-checkpoint-view .workspace-category-badge,
+.is-checkpoint-view .workspace-path, .is-checkpoint-view .workspace-category-badge,
   .is-checkpoint-view .comment-toggle { display: none; }
-.is-checkpoint-view .checkpoint-page-title { display: flex; }
+.is-checkpoint-view .checkpoint-page-title, .is-checkpoint-view .checkpoint-template-name { display: block; }
 .is-checkpoint-view .workspace-body { grid-template-columns: minmax(0, 1fr) 0; }
 .is-checkpoint-view .comment-panel { display: none; }
 .is-checkpoint-view .file-viewer { overflow: auto; padding: 0; scrollbar-width: thin; overscroll-behavior: contain; }

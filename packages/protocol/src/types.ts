@@ -82,6 +82,8 @@ export interface NavigationConfig {
   groups: NavigationGroup[]
 }
 
+export type NavigationManifest = NavigationConfig
+
 export interface DocumentSnapshot {
   format: 'taco/files'
   version: 1
@@ -136,6 +138,8 @@ export interface AutoSavePatch {
   author: string
   fileChanges: FilePatch[]
   checkpoints?: CheckpointsState | null
+  title?: string
+  navigation?: NavigationManifest | null
 }
 
 export interface ChangedFile {

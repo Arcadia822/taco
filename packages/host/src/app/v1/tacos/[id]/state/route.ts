@@ -131,9 +131,21 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     )
   }
 
-  if (patch.fileChanges.length === 0 && patch.checkpoints === undefined) {
+  if (
+    patch.fileChanges.length === 0 &&
+    patch.checkpoints === undefined &&
+    patch.title === undefined &&
+    patch.navigation === undefined
+  ) {
     return NextResponse.json(
-      { error: { code: 'BAD_REQUEST', message: 'Patch must contain at least one fileChange or checkpoints' } },
+      { error: { code: 'BAD_REQUEST', message: 'Patch must contain at least one fileChange, checkpoints, title, or navigation' } },
+      { status: 400 },
+    )
+  }
+
+  if (patch.title !== undefined && (typeof patch.title !== 'string' || patch.title.trim().length === 0)) {
+    return NextResponse.json(
+      { error: { code: 'BAD_REQUEST', message: 'title must be a non-empty string when provided' } },
       { status: 400 },
     )
   }
@@ -148,10 +160,11 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
         author,
         fileChanges: patch.fileChanges,
         checkpoints: patch.checkpoints,
+        title: patch.title,
+        navigation: patch.navigation,
       },
       idempotencyKey,
     )
-
     return NextResponse.json(result, { status: 200 })
   } catch (err) {
     if (err instanceof NotFoundError) {

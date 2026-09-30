@@ -928,4 +928,122 @@ describe('TACO-33 Host Backend Persistence & Logic', () => {
       unlinkSync(testDbPath)
     } catch {}
   })
+  it('persists title and navigation in metadata-only or mixed autosave patch, clears navigation with null, and validates', async () => {
+    const testDbPath = `/tmp/taco-test-${randomUUID()}.db`
+    const db = new SqliteDbAdapter(testDbPath)
+    const tacoId = randomUUID()
+
+    await db.publishTaco(tacoId, 'Initial Title', sampleSnapshot)
+
+    // 1. Metadata-only patch with title and navigation category
+    const patch1: AutoSavePatch = {
+      protocol: 'taco-state/1',
+      expectedStateVersion: '1',
+      author: 'Alice',
+      fileChanges: [],
+      title: 'Renamed Spec Title',
+      navigation: {
+        version: 1,
+        entry: 'specs/sample/spec.md',
+        groups: [
+          {
+            id: 'category-docs',
+            title: 'Documentation Category',
+            paths: ['specs/sample/spec.md'],
+          },
+        ],
+      },
+    }
+
+    const res1 = await db.autosaveSharedState(tacoId, patch1, randomUUID())
+    expect(res1.stateVersion).toBe('2')
+
+    // Read state reflects title and navigation
+    const shared1 = await db.getSharedState(tacoId)
+    expect(shared1).not.toBeNull()
+    expect(shared1!.stateVersion).toBe('2')
+    expect(shared1!.snapshot.title).toBe('Renamed Spec Title')
+    expect(shared1!.snapshot.navigation).toBeDefined()
+    expect(shared1!.snapshot.navigation!.groups[0].title).toBe('Documentation Category')
+
+    // 2. Reject invalid empty title (ValidationError)
+    const invalidTitlePatch: AutoSavePatch = {
+      protocol: 'taco-state/1',
+      expectedStateVersion: '2',
+      author: 'Alice',
+      fileChanges: [],
+      title: '   ',
+    }
+    await expect(db.autosaveSharedState(tacoId, invalidTitlePatch, randomUUID())).rejects.toThrowError(ValidationError)
+
+    // 3. Reject invalid navigation (referring to non-existent file path)
+    const invalidNavPatch: AutoSavePatch = {
+      protocol: 'taco-state/1',
+      expectedStateVersion: '2',
+      author: 'Alice',
+      fileChanges: [],
+      navigation: {
+        version: 1,
+        groups: [
+          {
+            id: 'category-invalid',
+            title: 'Invalid Category',
+            paths: ['specs/sample/non_existent.md'],
+          },
+        ],
+      },
+    }
+    await expect(db.autosaveSharedState(tacoId, invalidNavPatch, randomUUID())).rejects.toThrowError(ValidationError)
+
+    // 4. Clear navigation by supplying null, while changing file content
+    const patch2: AutoSavePatch = {
+      protocol: 'taco-state/1',
+      expectedStateVersion: '2',
+      author: 'Bob',
+      fileChanges: [
+        {
+          path: 'specs/sample/spec.md',
+          changeType: 'modified',
+          mediaType: 'text/markdown',
+          content: '# Spec v2 with cleared nav\n',
+        },
+      ],
+      navigation: null,
+    }
+
+    const res2 = await db.autosaveSharedState(tacoId, patch2, randomUUID())
+    expect(res2.stateVersion).toBe('3')
+
+    const shared2 = await db.getSharedState(tacoId)
+    expect(shared2!.stateVersion).toBe('3')
+    expect(shared2!.snapshot.title).toBe('Renamed Spec Title')
+    expect(shared2!.snapshot.navigation).toBeUndefined()
+
+    // 5. Handoff commit preserves title in handoff snapshot/events
+    const handoff = await db.commitHandoff(
+      tacoId,
+      {
+        author: 'Alice',
+        expectedStateVersion: '3',
+        expectedCommentsThroughSequence: '0',
+      },
+      randomUUID(),
+    )
+    expect(handoff.changed).toBe(true)
+    expect(handoff.handoffId).toBeDefined()
+
+    const handoffRecord = await db.getHandoff(tacoId, handoff.handoffId!)
+    expect(handoffRecord).not.toBeNull()
+
+    // History detail reflects title and navigation states
+    const historyList = await db.listHistory(tacoId)
+    expect(historyList.length).toBeGreaterThanOrEqual(1)
+    const historyDetail = await db.getHistoryVersion(tacoId, historyList[0].id)
+    expect(historyDetail).not.toBeNull()
+    expect(historyDetail!.snapshot.title).toBe('Renamed Spec Title')
+
+    try {
+      unlinkSync(testDbPath)
+    } catch {}
+  })
 })
