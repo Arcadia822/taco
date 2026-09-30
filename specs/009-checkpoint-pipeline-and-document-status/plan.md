@@ -14,7 +14,7 @@ specification: 'spec.md'
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | protocol   | `packages/protocol/src/checkpoints.ts`（新）                                                                                             | 类型、校验、成员表、排列、派生状态。全部是同步纯函数，没有外部依赖                                       |
 | taco 核心  | `src/model.ts`、`src/category.ts`、`src/navigation.ts`                                                                                   | bundle 字段、category 来源 `checkpoint`、Checkpoint 分组与占位行                                         |
-| taco 界面  | `src/ui-primitives.ts`、`src/file-navigation.ts`、`src/file-browser.ts`、`src/checkpoint-view.ts`（新）、`src/i18n.ts`、`src/styles.css` | 状态图形、置顶菜单项、分组锁定、页头 Checkpoint 标签、占位页、Checkpoint 视图；视觉规格见 [ui.md](ui.md) |
+| taco 界面  | `src/ui-primitives.ts`、`src/file-navigation.ts`、`src/file-browser.ts`、`src/checkpoint-view.ts`（新）、`src/i18n.ts`、`src/styles.css` | 状态图形、置顶菜单项、分组锁定、页头 basename 与 Checkpoints 标签、占位页、Checkpoint 视图；视觉规格见 [ui.md](ui.md) |
 | taco 协作  | `src/sync/validation.ts`                                                                                                                 | 实时协作时保留并校验 `checkpoints`                                                                       |
 | Agent 接口 | `src/main.ts`、`skills/taco/`                                                                                                            | `window.taco.getCheckpoints()`、Handoff、生成脚本、SKILL.md                                              |
 | 模板       | `extensions/taco/templates/`                                                                                                             | `checkpoints` 定义                                                                                       |
@@ -152,11 +152,11 @@ export interface ResolvedDocumentNavigation {
 - `src/file-navigation.ts` 将入口呈现为**文档树之外**的置顶内置菜单项，`src/checkpoint-view.ts` 渲染其主区域：
   - 独立的 `.sidebar-pinned` 位于品牌行下方、`sidebar-scroll` 上方，不画分隔线，下方留出比分类间距更大的空白；
   - 不属于 `ResolvedDocumentNavigation`，没有文件行菜单；选中时主区域显示 Checkpoints 视图，文件选中态取消。
-- Checkpoints 页面标题为 `Checkpoints: <模板名称>`；名称编辑写入 `template`，只读模式禁用。不渲染 `frontier` 摘要或 `unlinked` 列表，后两项仍在 `resolveCheckpoints` 结果中供 Agent 使用。
+- Checkpoints 页面标题显示本地化页面名称（`Checkpoints`／`检查点`）；底层存储与协议保留可选的 `template`，界面 Header 不显示也不编辑模板名称。不渲染 `frontier` 摘要或 `unlinked` 列表，后两项仍在 `resolveCheckpoints` 结果中供 Agent 使用。
 - 按 `checkpointLayout` 纵向排列层级，同层横排且桌面不换行。卡片沿用 Taco 的 surface、边框、字色和 accent token：所有卡片有柔和阴影，文档行最小 46px、上下各 10px，标题与文档状态图标同列居中；可用且未冻结时仅以边框强调，不画左侧色条；等待前置时用虚线边框。阅读区域允许双轴滚动，SVG 连线随图一起滚动；≤620px 同层纵向堆叠并隐藏连线。
 - 占位页复用文件页的外壳，正文区显示路径、所属 Checkpoint、optional 标记和"创建文件"按钮，不显示状态控件或空内容提示。
 - 占位页为已声明的路径创建文件；普通新增对话框提供本地化的文件类型、文件名和含 Checkpoint category 的分类选择；从 Checkpoint 分组打开时默认选择该 category。两种创建操作都不改变 Checkpoint 节点成员表；只有在定义中已引用的路径才会成为 Checkpoint 文档。
-- 文件页头：`syncWorkspaceHeader` 发现当前文件是 Checkpoint 文档时，把 `categoryBadge` 渲染为只含 Checkpoint 标题的不可点击标签，边框略作区分；不显示状态。category 被覆盖时，悬停提示说明原 category 未生效。普通文件显式选择 Checkpoint category 后标签仍可编辑，也没有状态；状态菜单只从已创建的 Checkpoint 文档侧栏行和 Checkpoint 视图文档行打开（ui.md §4）。确认、输入、署名和预览等对话框统一使用共享 `control-button` 操作按钮。
+- 文件页头：共用 Header 简化规范，只显示文件 basename（含扩展名），不设页头 Category 标签或状态控件；既有文件在 Header 不暴露分类切换或移动控件。普通文件在创建 dialog 中可选择 Checkpoint category，这类文件仅侧栏归入对应分组，没有状态；状态菜单只从已创建的 Checkpoint 文档侧栏行和 Checkpoint 视图文档行打开（ui.md §4）。确认、输入、署名和预览等对话框统一使用共享 `control-button` 操作按钮。
 
 ### AD-8：Agent 接口
 
@@ -216,8 +216,8 @@ graph TD
 
 - AD-5、AD-6、AD-7。
 - 测试：
-  - 扩展 `tests/file-browser.test.ts`：Checkpoint 分组没有编辑入口；状态切换后 ⌘S 保存，数据块中只有 `documents` 变化；reader 模式下所有控件禁用；占位行和占位页无状态，创建文件后既有状态记录保持不变；从 Checkpoint 分组新增普通文件默认归入其 category、不改变节点成员表、没有状态，并仍可从页头切换分类。
-  - 在浏览器中实际打开用 §3 示例生成的 `.taco.html`，目视确认 Checkpoints 入口、只有标题与 DAG 的视图（无模板来源、frontier 摘要或未关联列表）、占位行；检查细边框技术卡片、可用性提示、正交连线及窄屏堆叠无连线，并确认侧栏图标和页头状态入口符合 [ui.md](ui.md)。
+  - 扩展 `tests/file-browser.test.ts`：Checkpoint 分组没有编辑入口；状态切换后 ⌘S 保存，数据块中只有 `documents` 变化；reader 模式下所有控件禁用；占位行和占位页无状态，创建文件后既有状态记录保持不变；从 Checkpoint 分组新增普通文件默认归入其 category、不改变节点成员表、没有状态；Header 仅显示 basename，无 Category 切换控件。
+  - 在浏览器中实际打开用 §3 示例生成的 `.taco.html`，目视确认 Checkpoints 入口、只有标题（本地化 Checkpoints／检查点，无模板名称输入、frontier 摘要或未关联列表）与 DAG 的视图、占位行；检查细边框技术卡片、可用性提示、正交连线及窄屏堆叠无连线，并确认侧栏图标和状态入口符合 [ui.md](ui.md)。
 
 ### 阶段 4：Agent 接口与模板
 

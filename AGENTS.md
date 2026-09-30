@@ -2,7 +2,7 @@
 
 Write new Taco Markdown metadata as leading YAML frontmatter. Put the document title in `title`; do not add an H1 solely to repeat that title, and do not imitate YAML with a heading such as `## title: "..."`. New specs begin their body at H2 or lower.
 
-The file tree supplies directory Categories: a first-level folder groups its files, while files at the root stay Unassigned. File names such as `spec.md`, `plan.md`, and `tasks.md` have no special routing. An explicit `navigation` manifest can assign virtual files to groups without changing their paths; use the built-in Category control to record a file's group in that manifest. Do not infer grouping from document content.
+The file tree supplies directory Categories: a first-level folder groups its files, while files at the root stay Unassigned. File names such as `spec.md`, `plan.md`, and `tasks.md` have no special routing. An explicit `navigation` manifest can assign virtual files to groups without changing their paths; choose a Category in the new-file dialog or edit that manifest for existing files. Header Category switching is unavailable. Do not infer grouping from document content.
 
 Classification is a Taco capability, not a document property: do not write a routing or scope key into documents. The deprecated `taco_scope` property and the legacy `**Taco scope**: ...` form are not read and must not be generated.
 

@@ -24,9 +24,9 @@ title: "Tasks: Taco File Browser"
 ## Phase 3 — Bento Shell Alignment
 
 - [x] T014 Keep the file sidebar collapse control on its own panel boundary
-- [x] T015 Move the root-relative file path and the reusable 24px-tall WYSIWYG/Markdown text segmented control into the workspace Header; remove the document title row
+- [x] T015 Move file basename into the unified workspace Header, keeping the editable file title row in the document body
 - [x] T016 Match Bento's nine built-in shell languages: English, Japanese, Simplified Chinese, Traditional Chinese, Spanish, French, German, Italian, and Portuguese
-- [x] T017 Add Share, a Castrel v2 save split button, and a globe language tool item; omit persistent help
+- [x] T017 Add a gray Handoff split button, a green Save split button, theme switch, globe language control, and panel toggles; omit persistent help
 - [x] T018 Reconnect the Bento-derived single-file serializer to the canonical file bundle
 - [x] T019 Restructure the shell after Castrel: first the file/workspace/comments panels, then a Header and Content per panel; comments closed by default
 - [x] T020 Move the collapsed panel's reopen control into the workspace Header and turn Header actions into ghost buttons

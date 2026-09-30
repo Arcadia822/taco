@@ -8,10 +8,10 @@ specification: 'spec.md'
 ## 1. 范围与原则
 
 本文细化 [spec](spec.md) §6–§8 中与界面相关的部分。
-
-- 能复用现有组件的，一律复用。Checkpoint 名沿用 category 原来的显示方式：侧栏分组行和页头分组标签。
+- 能复用现有组件的，一律复用。侧栏 Checkpoint 名沿用 category 原来的分组显示方式。
 - 状态用图标表示；选择状态的菜单里，图标旁显示状态名。
-- 导航行沿用 `.sidebar-row`，页头标签沿用 `.workspace-category-badge`，弹出菜单沿用 `.topbar-popover`。
+- 导航行沿用 `.sidebar-row`，弹出菜单沿用 `.topbar-popover`。
+- 文件 Header 共用简化规范：仅显示文件 basename（含扩展名），无 bundle title 输入、无模板名输入、无 Header Category 标签、无面包屑。
 - 界面颜色沿用 Taco token，状态色由四个 CSS 变量定义。
 
 ## 2. 状态图标
@@ -90,22 +90,22 @@ specification: 'spec.md'
 
 ## 4. 文件页头
 
-### 4.1 分组标签
+### 4.1 简化页头
 
-页头元素不变：文档集标题、分组标签（`categoryBadge`）、路径。**页头不显示状态。**
+Complete、Lite 与 Host 共用简化 Header 规范：
 
 ```text
-[ 设计评审 ] [ 开发设计 ]  specs/demo/plan.md                              分享 复制 保存
-              └ 分组标签内容为 Checkpoint 名；边框换成 Checkpoint 色，不可点击
+journey.md                                      [交接 ▾] [保存 ▾] ◐ 🌐 ◧
 ```
 
-- 对 Checkpoint 文档（包括占位页），分组标签的文字就是所属 Checkpoint 的 `title`，与普通分组标签的写法相同。
-- 视觉上只有两处不同：
-  - 边框颜色为 `color-mix(in srgb, var(--status-freeze) 55%, var(--line))`。这是 Checkpoint 的专属色，与"可编辑"标签的绿色边框区分开；
-  - 标签不可点击：不加 `is-editable`，光标为默认样式，不弹出分组选择器。
-- 悬停提示为"分组由 Checkpoint 决定"。如果文件自身声明的 category 被覆盖，提示改为"分组由 Checkpoint 决定，原 category「其他」未生效"。
-- 非 Checkpoint 文档：分组标签仍可编辑，包括仅选择 Checkpoint category 的普通文件；这类文件不会得到状态或 DAG 成员身份。
-
+- **页头不显示状态，也不显示 Category**：文件页仅显示当前文件的 basename（包含扩展名，如 `plan.md`、`journey.md`），占位页同理；Checkpoints 视图仅显示本地化页面标题（`Checkpoints`／`检查点`）。
+- **无面包屑、无 Category 标签、无输入控件**：彻底不渲染文档集标题输入、模板名称输入、页头 Category 分组标签（`categoryBadge`）及面包屑路径。
+- **Header 按钮布局**：
+  - Header 交接（Handoff）为灰色 splitbutton，下拉箭头默认 variant hover 灰色；
+  - 保存（Save）为绿色 splitbutton；
+  - 依次提供主题切换、语言切换和左右侧栏展开/收起入口；
+  - 在屏幕宽度 ≤560px 时，Handoff 与 Save 主按钮切换为图标模式，保留可访问名称（aria-label）与下拉功能。
+- **分类维护途径**：新建文件时在创建对话框（`showNewFileDialog`）中选择分类（可选择 Checkpoint category、普通分类或未分组）；既有文件的分类由文件树与 manifest 决定，Header 不提供分类切换或移动控件，不支持拖拽。
 ### 4.2 状态菜单
 
 从已创建的 Checkpoint 文档侧栏文件行或 Checkpoint 视图文档行点击状态图标，弹出的是同一个菜单：
@@ -141,14 +141,14 @@ specification: 'spec.md'
 ```
 
 - 内容居中，最大宽度 420px，距顶部 18vh。
-- 页头照常显示分组标签（Checkpoint 名）和路径。
+- 页头照常显示占位文件的 basename（如 `test-cases.md`），无 Header Category 标签。
 - 只读模式下不显示"创建文件"按钮，改为一行提示"此文件尚未创建"。
 - 创建成功后，页面原地切换到该文件的编辑器。
 
 ## 6. Checkpoints 视图
 
 ```text
-Checkpoints: 设计评审
+Checkpoints
 
                  ┌──────────────────────────┐
                  │ 用户旅程                ▢ │
@@ -167,7 +167,7 @@ Checkpoints: 设计评审
                  └╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┘
 ```
 
-- 页头显示 `Checkpoints: <模板名称>`；名称可编辑，空名称显示占位提示。`template` 不改变 DAG 推导。右侧不显示 `frontier` 摘要或未关联状态记录；这些数据仍可由解析 API 读取。
+- 页头显示本地化页面名称（英文 `Checkpoints`，中文 `检查点`）；不显示或编辑模板名称，无模板名输入控件。`template` 作为底层可选配置保留，不改变 DAG 推导。右侧不显示 `frontier` 摘要或未关联状态记录；这些数据仍可由解析 API 读取。
 - 用现有 `--surface`、`--sidebar-surface`、`--line`、`--line-strong`、`--ink`、`--muted`、`--accent-dark`，不另造图谱配色。卡片宽约 260px，细边框、小圆角、可辨认的柔和阴影；文档行最小高度 46px，上下各 10px 内边距。标题与文档状态在同一右侧图标列水平居中。
 - 可用且未冻结的节点只用略带强调色的边框提示，不画左侧色条；等待前置节点用虚线边框和较淡标题，保留阴影。可用性只改变视觉提示，不限制状态操作；`frontier` 仍是 API 派生值。
 - DAG 按拓扑层级纵向排列，同层横排且桌面不自动换行；内容超出工作区时由同一个阅读区域横向、纵向滚动。层间用 SVG 正交折线连接，起点保留圆端口，终点使用指向后继节点的箭头。可用性影响线色或虚线；滚动时连线仍随卡片移动，不独立承载操作或状态文字。
@@ -211,6 +211,6 @@ Checkpoints: 设计评审
 
 1. 亮色和暗色主题下，四种状态图标都能区分；灰度截图中仅凭形状也能区分。
 2. 侧栏宽度 250px 时，行悬停或选中显示紧贴文件名的入口与可选图标，两者可并排；分类新增按钮与文件操作按钮对齐，状态图标与 `…` 菜单互不遮挡，文件名正常省略，整行悬停底色连续。
-3. 页头的 Checkpoint 分组标签边框颜色明显区别于可编辑标签，并且点击无响应。
+3. 页头不显示 Category 标签，文件页仅展示 basename，Checkpoints 页展示本地化页面标题，无模板名或标题输入框。
 4. 只读模式（Tacobin）下，状态菜单中的选项置灰，占位页不显示"创建文件"。
 5. 窄屏抽屉模式下，同层节点纵向堆叠，连线隐藏，卡片和文档标记不被裁切。

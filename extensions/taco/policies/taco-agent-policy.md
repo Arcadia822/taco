@@ -11,11 +11,12 @@
   add an ATX or Setext H1 that repeats the YAML title. Begin the Markdown body at
   H2 (`##`) or lower. Preserve an existing authored H1 during unrelated edits;
   do not silently migrate legacy content.
-- Core files and known Spec Kit convention paths are routed automatically. Do not
-  write a routing or scope property into documents: classification is Taco's
-  built-in Category, recorded in the Taco file's navigation manifest. Never
-  generate the deprecated `taco_scope` key or the legacy
-  `**Taco scope**: ...` form; Taco reads neither one.
+- First-level directories form Categories and root files remain Unassigned;
+  filenames and Spec Kit convention paths have no special routing. Use the
+  new-file dialog's Category choice or the navigation manifest to group files
+  without changing their paths. Header Category switching is unavailable.
+  Never generate a routing property, the deprecated `taco_scope` key, or the
+  legacy `**Taco scope**: ...` form; Taco reads neither one.
 - Choose the artifact carrier by information type: keep narrative, constraints,
   decisions, and acceptance criteria in `spec.md`/`plan.md`; put reusable
   flow/sequence/state designs in `diagrams/*.mmd`, HTTP APIs in

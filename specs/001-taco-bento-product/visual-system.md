@@ -45,8 +45,8 @@ The selected file uses a low-contrast neutral surface and medium text. Format is
 
 - Left panel: 252px; an optional 326px global right panel is reserved for comments.
 - Header: 40px fixed height, transparent surface; all direct children use 8px spacing.
-- Header title: the bundle title immediately followed by a softened root-relative file path, with no separator glyph.
-- Header actions: when a Markdown file is open, a reusable 24px-tall WYSIWYG/Markdown text segmented control, 24px ghost icon buttons with 16px line icons, and a 24px primary Save split button.
+- Header title: displays only the selected file's basename including its extension (e.g. `spec.md`), or localized Checkpoints / 检查点 in Checkpoints view. There is no bundle title input, no template name input, no Header Category switch, and no breadcrumb delimiter.
+- Header actions: a gray Handoff split button (arrow hover background stays gray), a green primary Save split button, theme switch, globe language switcher, and left/right panel entries (sidebar collapse/expand and comments/outline panel toggle). On narrow viewports (≤560px), Handoff and Save collapse to icon-only buttons while retaining full accessible names.
 - Sidebar brand, stages, folders, and files: one shared 24px row primitive with a 24×24 leading slot, 8px spacing, a 12px label, and a 6px corner radius.
 - Body: a relaxed 1.7 line height.
 - Wide tables and code blocks scroll instead of widening the entire viewport.

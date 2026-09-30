@@ -90,7 +90,7 @@ Taco 新增一项**状态记录能力**：一个 Taco 可以声明若干 Checkpo
 ### 字段
 
 - `version`：固定为 `1`。
-- `template`：可选的 Checkpoint 模板名称，不参与派生状态；Checkpoints 页头显示并允许编辑。未命名时显示占位名称。
+- `template`：可选的 Checkpoint 模板名称，不参与派生状态；属于底层存储的可选配置字段，界面 Header 不显示也不编辑模板名，保留在 protocol 及 Handoff 中。
 - `nodes[]`：Checkpoint 定义。
   - `id`：非空字符串，在所有 `nodes` 中唯一。
   - `title`：非空字符串，用于展示。
@@ -104,7 +104,7 @@ Taco 新增一项**状态记录能力**：一个 Taco 可以声明若干 Checkpo
 
 1. 状态为 `todo` 的文档往往还不存在，`files[]` 里没有对应条目。
 2. Agent 刷新时会根据 canonical 目录重新生成 `files[]`。按现有规则，顶层字段会原样保留；而文件级扩展字段在重建时容易丢失。
-3. 状态表与定义分开存放：状态变化只更新 `documents`；页头改名更新 `template`。文件创建、重命名或删除不会修改 Checkpoint 的成员定义 `nodes`，文档要求仍由 Agent 在数据块中独立维护。
+3. 状态表与定义分开存放：状态变化只更新 `documents`；模板名 `template` 仅作为存储与协议配置保留。文件创建、重命名或删除不会修改 Checkpoint 的成员定义 `nodes`，文档要求仍由 Agent 在数据块中独立维护。
 
 ### 默认值与校验
 
@@ -190,8 +190,8 @@ Checkpoint 的成员只由 `nodes[].documents[].path` 决定，**不读**文件 
 3. `first-level-dir`：一级目录 `_dir.yaml` 中的 `category`。
 4. **"未分类"**。
 
-- 冲突处理：Checkpoint 成员如果自身 frontmatter 或所在目录的 `_dir.yaml` 声明了另一个 category，以 Checkpoint 为准。页头分组标签的悬停提示说明原 category 未生效；不修改文件内容。
-- Checkpoint 成员的页头分组标签只显示 Checkpoint 标题，边框略作区分，不显示状态、不可点击，也不能改归属。要改归属只能改定义，而定义在界面中只读（ui.md §4）。
+- 冲突处理：Checkpoint 成员如果自身 frontmatter 或所在目录的 `_dir.yaml` 声明了另一个 category，以 Checkpoint 为准；不修改文件内容。
+- 文件页头共用简化规范：只显示当前文件 basename（含扩展名），不设页头 Category 标签或状态控件；既有文件不在 Header 暴露分组切换或移动控件。要改归属只能改定义，而定义在界面中只读（ui.md §4）。
 - 同一目录里，不属于任何 Checkpoint 的文件仍按原规则解析；它也可以通过导航 manifest 显式选择 Checkpoint category，而不成为 Checkpoint 文档。
 
 ### 分组身份与导航
@@ -217,12 +217,12 @@ Checkpoint 的成员只由 `nodes[].documents[].path` 决定，**不读**文件 
   - 不在 `files[]` 中，不参与搜索，不能重命名、删除，也不能设为入口。
   - 只在 `checkpoints` 合法时出现。
   - 选中后，主区域显示 Checkpoint 视图。
-- **Checkpoints 视图**：页头为 `Checkpoints: <模板名>`，模板名可编辑并写入 `checkpoints.template`；未命名时显示占位名称。DAG 按 §4 的布局规则自上而下展开。
+- **Checkpoints 视图**：页头为本地化页面名称（英文 `Checkpoints`，中文 `检查点`），不显示或编辑模板名称。DAG 按 §4 的布局规则自上而下展开。
   - 不显示 `frontier` 摘要或未关联状态记录列表。
   - 节点显示标题、聚合状态及可用性视觉提示；节点内各文档显示状态、是否可选、是否已创建。点击文档跳转到对应的文件页或占位页。
 - **状态切换**：点击已创建的 Checkpoint 文档侧栏文件行或 Checkpoints 视图文档行的状态图标，在菜单中切换四种状态，每次实际切换都更新 `updatedAt`；占位页和文件页头没有状态控件。
 - 状态变化和其他编辑一样是内存中的未保存修改：⌘S 保存进 `.taco.html`，Handoff 会带出这些变化。
-- 除模板名外，Checkpoint 定义（`nodes`）在界面中只读；文件创建与成员定义互不耦合。
+- Checkpoint 定义（`nodes`）在界面中只读；文件创建与成员定义互不耦合。
 
 ## 9. 模板
 
@@ -271,13 +271,13 @@ Taco 实时协作（relay）：
    - 占位文件不出现在搜索、`listFiles`、保存后的 `files[]` 中。
 8. navigation manifest 的某个 group 列出了 `specs/demo/plan.md`：该文件仍在 `design` 分组中，这一项被忽略并给出警告，manifest 原值保留。界面上不能把 `plan.md` 移到其他分组，也不能重命名或删除 `design` 分组；从该分组的新增按钮创建普通文件时，默认选中 `design` category，`nodes` 不变，该文件没有状态。manifest 中其余非 Checkpoint 文件照常排列。
 9. Checkpoint 与 category 的交互：
-   - 根目录文件 frontmatter 写 `category: 其他`，同时被 Checkpoint `design` 引用：导航中它归入 `design` 分组；页头显示不可点击的 Checkpoint 标题标签，悬停提示原 category「其他」未生效；文件内容不变。
+   - 根目录文件 frontmatter 写 `category: 其他`，同时被 Checkpoint `design` 引用：导航中它归入 `design` 分组；文件 Header 仅展示其 basename（如 `journey.md`），不含页头 Category 标签；文件内容不变。
    - 从 `nodes` 中移除这个文件后，它回到"其他"分组。
-   - 不属于 Checkpoint 的文件可选择 Checkpoint category，在对应侧栏分组显示，但不进入 `nodes[].documents`、Checkpoints 视图或状态表；仍可从页头更改分类。
+   - 不属于 Checkpoint 的文件可在创建对话框或 manifest 中选择 Checkpoint category，并在对应侧栏分组显示，但不进入 `nodes[].documents`、Checkpoints 视图或状态表；既有文件在 Header 不提供 Category 更改控件。
    - `spec` 模板打开后，导航显示 `spec` / `plan` / `tasks` 三个 Checkpoint 分组，而不是 stage 导航。
    - 给文件改状态不改变它的 frontmatter 和 `_dir.yaml`。
 10. 通过界面切换状态并按 ⌘S：数据块中只有 `documents` 发生变化，`nodes` 和其他字段逐字节不变。
 11. 对同一个文件，`getCheckpoints()` 与 `checkpoints.mjs` 的派生结果一致；控制台结果包含未保存的修改。Handoff 中列出本次改过的状态。
 12. 带 `checkpoints` 的 Taco 执行 `publish --dry-run` 时不报"未声明字段"。发布后，Host 页面只读展示 Checkpoint 菜单项和视图，派生结果与本地一致。
 13. `skills/taco/templates/` 与 `extensions/taco/templates/` 逐字节一致。
-14. Checkpoints 页头编辑模板名后，`checkpoints.template` 与 Handoff 同步更新；只读模式不可编辑。通过 Checkpoint 分组新增文件时，默认选中该 Checkpoint category，也可选择已有普通 category 或未分组，`nodes[].documents` 保持不变，页头 category 切换对新文件仍可用，Handoff 只报告新文件。目录里若同时存在 `optional` 与入口属性，两个图标并排且只在悬停、聚焦或选中时显示。
+14. `template` 作为底层可选配置保留，界面 Checkpoints 页头仅显示本地化页面标题（Checkpoints／检查点），不提供模板名称编辑控件。通过 Checkpoint 分组新增文件时，创建 dialog 默认选中该 Checkpoint category，也可选择已有普通 category 或未分组，`nodes[].documents` 保持不变，Handoff 只报告新文件。目录里若同时存在 `optional` 与入口属性，两个图标并排且只在悬停、聚焦或选中时显示。

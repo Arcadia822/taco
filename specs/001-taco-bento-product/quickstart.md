@@ -17,9 +17,9 @@ Open `dist-single/Taco_Spec.taco.html` directly from the file system.
 1. Count supported files under `specs/001-taco-bento-product/`, excluding the explicitly ignored HTML prototype and the `.taco.html` container.
 2. Compare the paths with `window.taco.listFiles()`.
 3. Confirm first-level directories such as `contracts/` and `checklists/` form Categories; root files, including `README.md`, `spec.md`, `plan.md`, and `tasks.md`, appear under Unassigned.
-4. In a temporary copy, assign a root document to another Category in the document header, then clear the assignment. Confirm its virtual path and comment anchors stay unchanged while the manifest membership changes.
+4. In a temporary copy, assign a root document to another Category through the file tree / navigation manifest or create a new file with an assigned Category in the new-file dialog. Confirm its virtual path and comment anchors stay unchanged while the manifest membership changes.
 
-Expected: each supported file appears exactly once; nested directories remain navigable, and filename and frontmatter conventions do not determine a group. No drag-and-drop file movement is available.
+Expected: each supported file appears exactly once; nested directories remain navigable, and filename and frontmatter conventions do not determine a group. Existing files have no Header Category switch, and no drag-and-drop file movement is available.
 
 ## Scenario B — Markdown Reading
 

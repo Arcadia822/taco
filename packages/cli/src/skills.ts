@@ -59,14 +59,18 @@ const PUBLISHING_GUIDE_MD = `# Publishing Guide
 const REVIEWING_GUIDE_MD = `# Reviewing Guide
 
 ## Review Workflow
-1. Publish first, then subscribe with \`taco-cli subscribe <tacoId> --host <origin>\`. The stream is Server-Sent Events over \`GET /v1/tacos/<tacoId>/subscribe\`.
-2. Wait for the \`ready\` frame and read its \`cursor\` and \`mode\`: \`live\` means no cursor was requested, \`replay\` means the Host is replaying from the cursor you passed in \`--after\`.
-3. Treat each \`event\` frame as one review fact. Every frame carries \`id\`, \`sequence\`, \`tacoId\`, \`type\`, \`occurredAt\`, \`data\`, and \`actor\`; the Host assigns \`actor\` and \`occurredAt\`, so a client cannot forge either.
+1. Publish first, then keep \`taco-cli subscribe <tacoId> --host <origin>\` running. The Host page requires an active listener for Handoff; without one, it shows installation and subscription commands.
+2. Wait for the \`ready\` frame and read its \`cursor\` and \`mode\`: \`live\` means no cursor was requested, \`replay\` means the Host is replaying from the cursor you passed in \`--after\`. Default subscribe ignores comments/autosaves, emits \`review.handed_off\`, then exits with code 0. Use \`--stream\` (or \`--follow\`) only for continuous full event streaming.
+3. Process only \`review.handed_off\` as completed human review. Read its \`tacoId\` and \`data.handoffId\`, then fetch \`taco-cli handoff <tacoId> <handoffId> --host <origin>\`. Inspect cumulative and incremental file/Checkpoint changes and complete comment history, compare against canonical files, and stop on conflicts before applying feedback. Names are self-reported; event actor/time are assigned by the Host, not authenticated identities.
 4. After any interruption, reconnect with the last confirmed cursor in \`--after <sequence>\`, which the client also reuses automatically when a Host rotates its instance.
 5. Page the same log without a stream through \`taco-cli events <tacoId> [--after <sequence>]\`, which returns \`events\`, \`throughSequence\`, \`nextCursor\`, and \`hasMore\`.
+6. After processing Handoff, start another subscription from its confirmed sequence for the next review round. Comments and autosaves alone never request Agent continuation.
 
 ## What To Expect
 - Reviewers write from the review page at \`<origin>/t/<tacoId>\`; \`taco-cli\` is a reader of what they publish there.
+- The Header Save button saves a local Taco independently of Host autosave. Handoff waits for successful autosave and stops on save failures or conflicts.
+- File headers show the filename; the Checkpoints header shows only its localized page name. Keep stored title, template and navigation fields when refreshing.
+- Clicking the overlapping human/Agent avatars opens the listener list. Details label \`--harness\` as \`runtime\` / \`运行时\`; \`--session\` supplies the readable session name. Presence is not proof of delivery or processing.
 - A comment carries an anchor with the file \`path\`, a \`position\`, and a \`quote\`; nested block identity and no anchor at all are both valid. Comments re-open against the same content, so a quote the document no longer contains is stale rather than silently attached elsewhere.
 - A \`TACO_CLOSED\` error closes the stream with exit code 4: read what was recorded with \`events\` instead of subscribing again.
 - Events are stored by the Host, so a stream that reconnects resumes from your cursor rather than from the live watermark.
