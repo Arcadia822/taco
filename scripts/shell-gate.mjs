@@ -95,9 +95,9 @@ if (variant === 'complete' || variant === 'host') {
   if (!html.includes('id="taco-asset-mermaid"')) fail(`${variant} shell is missing embedded offline Mermaid asset`)
 }
 
-const hostedMarkers = ['taco-host-capability', 'application/taco+host', '/v1/tacos/', 'host-listeners', 'host-status', 'hostHandoff']
+const hostedMarkers = ['taco-host-capability', 'application/taco+host', '/v1/tacos/', 'host-presence', 'host-status', 'hostHandoff']
 if (variant === 'host') {
-  for (const marker of ['taco-host-capability', '/v1/tacos/', 'host-listeners']) {
+  for (const marker of ['taco-host-capability', '/v1/tacos/', 'host-presence']) {
     if (!runtime.includes(marker)) fail(`Host shell is missing hosted runtime marker ${marker}`)
   }
 } else {

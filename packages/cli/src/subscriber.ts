@@ -184,12 +184,11 @@ export class TacoSubscriber {
                 this.lastConfirmedCursor = frame.cursor
               }
             }
-          } else if (frame.kind === 'event') {
-            const eventObj = frame as { kind: string; sequence?: string; type?: string; data?: unknown }
-            if (eventObj.sequence) {
-              this.lastConfirmedCursor = eventObj.sequence
+          } else if (frame.kind === 'event' || ('sequence' in frame && 'type' in frame)) {
+            if ('sequence' in frame && typeof frame.sequence === 'string') {
+              this.lastConfirmedCursor = frame.sequence
             }
-            if (eventObj.type === 'review.handed_off') {
+            if ('type' in frame && frame.type === 'review.handed_off') {
               this.handler.onFrame(text)
               resolve(0)
               socket.close()
@@ -212,8 +211,10 @@ export class TacoSubscriber {
               this.lastConfirmedCursor = frame.cursor
             }
           }
-        } else if (frame.kind === 'event' && frame.sequence) {
-          this.lastConfirmedCursor = frame.sequence
+        } else if (frame.kind === 'event' || ('sequence' in frame && 'type' in frame)) {
+          if ('sequence' in frame && typeof frame.sequence === 'string') {
+            this.lastConfirmedCursor = frame.sequence
+          }
         } else if (frame.kind === 'checkpoint' && frame.cursor) {
           this.lastConfirmedCursor = frame.cursor
         }

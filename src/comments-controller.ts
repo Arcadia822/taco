@@ -543,14 +543,8 @@ export class CommentsController {
     group.setAttribute('aria-label', this.t.documentComment)
     const header = el('div', 'comment-global-header')
     header.append(el('h3', 'comment-global-heading', this.t.documentComment))
-    if (bundleCanWrite(this.options.bundle) && !this.pendingGlobal) {
-      const addBtn = el('button', 'comment-action comment-global-add', this.t.addComment) as HTMLButtonElement
-      addBtn.type = 'button'
-      addBtn.addEventListener('click', () => {
-        this.startDocumentComment()
-      })
-      header.append(addBtn)
-    }
+    // Global comment creation is temporarily disabled per user instruction.
+    // Existing whole-document comments (if any) are still displayed below.
     group.append(header)
     if (this.pendingGlobal) {
       group.append(this.buildNewCommentComposer(null))
