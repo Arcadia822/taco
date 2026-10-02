@@ -73,13 +73,14 @@ Exit codes:
 const DEFAULT_SHELL = fileURLToPath(new URL('../taco-shell.html', import.meta.url))
 const PAYLOAD_TAG = /<script\b(?=[^>]*\bid=["']taco-asset-mermaid["'])[^>]*>([\s\S]*?)<\/script>/i
 /**
- * The DOMPurify call inside `sanitizeText` (`Ys = (e, r) => e && (r.dompurifyConfig
- * ? e = My.sanitize(...) : e = My.sanitize(...), e)`). Removing it is what makes
- * the parser usable without a DOM; the anchor count is asserted before patching.
+ * Matches the DOMPurify call inside `sanitizeText`:
+ * `r.dompurifyConfig ? text = DOMPurify.sanitize(sanitizeMore(text, r), r.dompurifyConfig).toString() : text = DOMPurify.sanitize(sanitizeMore(text, r), {FORBID_TAGS: ["style"]}).toString()`
+ *
+ * Minifiers rename local identifiers (e.g. `r`, `t`, `Iy`, `Chr`), but preserve the ternary
+ * invocation structure. Backreferences ensure structural and identifier consistency across minifier runs.
  */
-const SANITIZE_ANCHOR =
-  'r.dompurifyConfig?e=My.sanitize(Qdr(e,r),r.dompurifyConfig).toString():e=My.sanitize(Qdr(e,r),{FORBID_TAGS:["style"]}).toString()'
-const SANITIZE_BYPASS = 'e=String(Qdr(e,r))'
+const SANITIZE_PATTERN =
+  /\b([a-zA-Z0-9_$]+)\.dompurifyConfig\s*\?\s*([a-zA-Z0-9_$]+)\s*=\s*([a-zA-Z0-9_$]+)\.sanitize\(\s*([a-zA-Z0-9_$]+)\(\s*\2\s*,\s*\1\s*\)\s*,\s*\1\.dompurifyConfig\s*\)\.toString\(\)\s*:\s*\2\s*=\s*\3\.sanitize\(\s*\4\(\s*\2\s*,\s*\1\s*\)\s*,\s*\{\s*(?:FORBID_TAGS|['"]FORBID_TAGS['"])\s*:\s*\[['"]style['"]\]\s*\}\s*\)\.toString\(\)/g
 // CommonMark fence shape: up to three leading spaces, three or more backticks or
 // tildes, then an info string. Tracking the marker and its length is what keeps a
 // nested example inside another fence from being read as a real diagram.
@@ -188,15 +189,18 @@ const parseArgs = (argv) => {
  * A moved anchor means the payload was rebuilt: refuse rather than validate.
  */
 const bypassSanitize = (source, origin, what = 'payload') => {
-  const hits = source.split(SANITIZE_ANCHOR).length - 1
-  if (hits !== 1) {
+  const matches = [...source.matchAll(SANITIZE_PATTERN)]
+  if (matches.length !== 1) {
     abort(
-      `${what} structure has changed: the DOMPurify bypass anchor appears ${hits} time(s) in ${origin}, expected exactly 1` +
+      `${what} structure has changed: the DOMPurify bypass anchor appears ${matches.length} time(s) in ${origin}, expected exactly 1` +
         ' - re-derive the anchor before trusting any result (a build without it cannot be checked without a DOM)',
       origin,
     )
   }
-  return source.replace(SANITIZE_ANCHOR, SANITIZE_BYPASS)
+  const [fullMatch, config, text, , sanitizeMore] = matches[0]
+  const bypass = `${text}=String(${sanitizeMore}(${text},${config}))`
+  const index = matches[0].index
+  return source.slice(0, index) + bypass + source.slice(index + fullMatch.length)
 }
 
 /** Import the patched payload from a temp `.mjs` file and hand back its parser. */

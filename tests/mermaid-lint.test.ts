@@ -18,13 +18,16 @@ import { describe, expect, it } from 'vitest'
 const script = resolve('skills/taco/scripts/lint-mermaid.mjs')
 const shell = resolve('skills/taco/taco-shell.html')
 const payloadTag = /<script\b(?=[^>]*\bid=["']taco-asset-mermaid["'])[^>]*>([\s\S]*?)<\/script>/i
-const sanitizeAnchor =
-  'r.dompurifyConfig?e=My.sanitize(Qdr(e,r),r.dompurifyConfig).toString():e=My.sanitize(Qdr(e,r),{FORBID_TAGS:["style"]}).toString()'
+const sanitizePattern =
+  /\b([a-zA-Z0-9_$]+)\.dompurifyConfig\s*\?\s*([a-zA-Z0-9_$]+)\s*=\s*([a-zA-Z0-9_$]+)\.sanitize\(\s*([a-zA-Z0-9_$]+)\(\s*\2\s*,\s*\1\s*\)\s*,\s*\1\.dompurifyConfig\s*\)\.toString\(\)\s*:\s*\2\s*=\s*\3\.sanitize\(\s*\4\(\s*\2\s*,\s*\1\s*\)\s*,\s*\{\s*(?:FORBID_TAGS|['"]FORBID_TAGS['"])\s*:\s*\[['"]style['"]\]\s*\}\s*\)\.toString\(\)/g
 
 /** The Complete shell's embedded parser, inflated once for the bypass tests. */
 const shellPayload = inflateRawSync(
   Buffer.from(payloadTag.exec(readFileSync(shell, 'utf8'))?.[1]?.trim() ?? '', 'base64'),
 ).toString('utf8')
+const sanitizeMatch = shellPayload.match(sanitizePattern)
+if (!sanitizeMatch) throw new Error('DOMPurify sanitize anchor not found in shell payload')
+const sanitizeAnchor = sanitizeMatch[0]
 
 interface Diagnostic {
   file: string
@@ -299,7 +302,7 @@ describe('lint-mermaid.mjs', () => {
       `<!doctype html><html><body><script id="taco-asset-mermaid" type="taco/deflate-b64">${deflateRawSync(Buffer.from(text)).toString('base64')}</script></body></html>`
     const removed = join(directory, 'removed.html')
     const doubled = join(directory, 'doubled.html')
-    writeFileSync(removed, asShell(shellPayload.replace(sanitizeAnchor, 'e=String(Qdr(e,r))')))
+    writeFileSync(removed, asShell(shellPayload.replace(sanitizeAnchor, '')))
     writeFileSync(
       doubled,
       asShell(shellPayload.replace(sanitizeAnchor, `${sanitizeAnchor}${sanitizeAnchor}`)),
