@@ -1,4 +1,5 @@
 import type { TextAnchor } from '@taco/protocol'
+import type { TacoBlock } from '../../../../src/model.ts'
 import type { HostCapability } from './host-capability.ts'
 
 /** Snapshot file as served by `GET /v1/tacos/{id}/state` (path is the full bundle path). */
@@ -8,6 +9,7 @@ export interface HostSnapshotFile {
   path: string
   mediaType: string
   content: string
+  blocks?: TacoBlock[]
 }
 
 export interface HostSnapshot {
@@ -100,6 +102,12 @@ export interface HostListener {
 export interface HostListenerSnapshot {
   observedAt: string
   listeners: HostListener[]
+}
+
+export interface HostHandoffRequest {
+  author: string
+  expectedStateVersion: string
+  expectedCommentsThroughSequence: string
 }
 
 export interface HostHandoffCommit {
@@ -272,7 +280,7 @@ export class HostClient {
   }
 
   async commitHandoff(
-    request: { author: string; expectedStateVersion: string; expectedCommentsThroughSequence: string },
+    request: HostHandoffRequest,
     idempotencyKey: string,
   ): Promise<HostHandoffCommit> {
     const response = await this.mutate(this.endpoint('/handoffs'), 'POST', request, idempotencyKey)

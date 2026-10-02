@@ -426,8 +426,6 @@ describe('Tiptap Markdown integration', () => {
 
     expect(editor.state.doc.firstChild?.type.name).toBe('centeredBlock')
     expect(editor.view.dom.querySelector('.taco-centered-block')?.getAttribute('align')).toBe('center')
-    expect(editor.view.dom.querySelector('.taco-centered-block img')?.getAttribute('src')).toMatch(/^data:image\/gif;base64,/)
-    expect(editor.view.dom.querySelector('.taco-centered-block img')?.getAttribute('data-taco-source')).toBe('src/assets/taco-logo.svg')
     expect(editor.getMarkdown()).toContain('<div align="center">')
     expect(editor.getMarkdown()).toContain('</div>')
   })

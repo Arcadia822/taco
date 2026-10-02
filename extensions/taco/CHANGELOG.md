@@ -7,6 +7,10 @@
 * **ui**: Show only filenames or localized Checkpoints in the shared Taco and Tacobin header; remove header title, template and Category editing. Keep narrow-screen save and handoff controls accessible.
 * **host**: Restore local Taco saving and label listener details `runtime` / `运行时`.
 * **ui**: Use the default button variant for the handoff dropdown arrow so its gray background does not turn primary green on hover.
+* **host**: Fix PostgreSQL save acknowledgements, JSONB events and handoff connection reuse; prevent SQLite transaction interleaving, rebuild reused paths correctly, expire upload quota, return missing handoffs and preserve comment anchor validity.
+* **review**: Keep comment and handoff request identities after lost responses; preserve rendered block IDs, navigation and local Save/manual review baselines; offer retry and confirmed conflict recovery.
+* **cli**: Support Unicode listener metadata, emit only the first default handoff, acknowledge cursors after output and clean up cancelled replay subscriptions.
+* **skill**: Match Mermaid sanitization structurally across minifier variable changes while rejecting missing or ambiguous payloads.
 
 ### Documentation
 

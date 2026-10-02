@@ -8,6 +8,8 @@ import {
   type HostClient,
   type HostCommentMutation,
   type HostCommentThread,
+  type HostHandoffCommit,
+  type HostHandoffRequest,
   type HostFilePatch,
   type HostListenerSnapshot,
   type HostSnapshot,
@@ -109,6 +111,12 @@ const navigationForHost = (bundle: TacoBundle): NavigationManifest | null => {
   }
 }
 
+const navigationForBrowser = (root: string, navigation: NavigationManifest): NavigationManifest => ({
+  ...navigation,
+  ...(navigation.entry ? { entry: relativeToRoot(root, navigation.entry) } : {}),
+  groups: navigation.groups.map((group) => ({ ...group, paths: group.paths.map((path) => relativeToRoot(root, path)) })),
+})
+
 const errorDetail = (error: unknown): string => {
   if (error instanceof HostApiError) return error.message || `Host rejected the request (${error.status})`
   return error instanceof Error ? error.message : String(error)
@@ -165,7 +173,8 @@ export class HostedSession {
   private commentTimer: number | null = null
   private listenerTimer: number | null = null
   private queue: Promise<void> = Promise.resolve()
-  private handoffKey: string | null = null
+  private pendingHandoff: { key: string; payload: HostHandoffRequest } | null = null
+  private pendingComment: { key: string; op: HostCommentMutation } | null = null
   private handoffBusy = false
   private destroyed = false
   private firstLoad: Promise<void> | null = null
@@ -184,6 +193,7 @@ export class HostedSession {
     return !this.destroyed && (
       this.dirty ||
       this.commentDirty ||
+      this.pendingHandoff !== null ||
       this.save === 'dirty' ||
       this.save === 'saving' ||
       this.save === 'error' ||
@@ -306,8 +316,9 @@ export class HostedSession {
         path: file.path,
         mediaType: file.mediaType,
         content: file.content,
+        ...(file.blocks ? { blocks: structuredClone(file.blocks) } : {}),
       })),
-      ...(snapshot.navigation ? { navigation: structuredClone(snapshot.navigation) as NavigationManifest } : {}),
+      ...(snapshot.navigation ? { navigation: navigationForBrowser(snapshot.root, snapshot.navigation as NavigationManifest) } : {}),
       ...(snapshot.checkpoints === undefined ? {} : { checkpoints: structuredClone(snapshot.checkpoints) }),
       comments,
     })
@@ -574,24 +585,16 @@ export class HostedSession {
   }
 
   private async saveComments(): Promise<void> {
-    if (this.destroyed || !this.ready || !this.commentDirty) return
-    const ops = this.computeCommentOps()
-    if (ops.length === 0) {
-      this.commentDirty = false
-      this.setStatus({ comments: 'saved' })
-      return
-    }
+    if (this.destroyed || !this.ready || (!this.commentDirty && !this.pendingComment)) return
     this.setStatus({ comments: 'pending' })
     try {
-      for (const op of ops) {
-        // One key per action: a retry after a lost response must replay, never post twice.
-        const key = newIdempotencyKey()
-        const sequence = await this.withRetry(() => this.options.client.mutateComment(op, key))
-        this.applyCommentOp(op)
-        if (sequence && BigInt(sequence) > BigInt(this.commentsSequence)) this.commentsSequence = sequence
+      // Confirm an unknown result before computing actions against the accepted mirror.
+      if (this.pendingComment) await this.commitPendingComment()
+      for (const op of this.computeCommentOps()) {
+        this.pendingComment = { op, key: newIdempotencyKey() }
+        await this.commitPendingComment()
       }
-      const remainingOps = this.computeCommentOps()
-      if (remainingOps.length === 0) {
+      if (this.computeCommentOps().length === 0) {
         this.commentDirty = false
         this.setStatus({ comments: 'saved' })
       } else {
@@ -602,6 +605,19 @@ export class HostedSession {
       this.setStatus({ comments: 'error', detail: errorDetail(error) })
     } finally {
       this.updateUnloadGuard()
+    }
+  }
+
+  private async commitPendingComment(): Promise<void> {
+    const pending = this.pendingComment!
+    try {
+      const sequence = await this.withRetry(() => this.options.client.mutateComment(pending.op, pending.key))
+      this.applyCommentOp(pending.op)
+      if (sequence && BigInt(sequence) > BigInt(this.commentsSequence)) this.commentsSequence = sequence
+      this.pendingComment = null
+    } catch (error) {
+      if (!(error instanceof HostTransportError)) this.pendingComment = null
+      throw error
     }
   }
 
@@ -687,6 +703,9 @@ export class HostedSession {
     if (this.handoffBusy) return { kind: 'blocked', save: 'saving' }
     this.handoffBusy = true
     try {
+      const outstanding = this.pendingHandoff
+      let recovered: HostHandoffCommit | null = null
+      if (outstanding) recovered = await this.commitPendingHandoff()
       const status = await this.flush()
       if (status.save === 'conflict') return { kind: 'conflict' }
       if (status.save === 'error' || status.comments === 'error') return { kind: 'blocked', save: 'error' }
@@ -696,15 +715,16 @@ export class HostedSession {
       const synced = await this.enqueue(() => this.syncFromHost({ expectedGeneration }))
       if (!synced || this.dirty || this.commentDirty) return { kind: 'blocked', save: 'dirty' }
 
-      const key = this.handoffKey ?? newIdempotencyKey()
-      this.handoffKey = key
-      const result = await this.withRetry(() => this.options.client.commitHandoff({
+      const payload = {
         author: this.options.bridge.author(),
         expectedStateVersion: this.stateVersion,
         expectedCommentsThroughSequence: this.commentsSequence,
-      }, key))
-      // A definitive answer arrived, so the key must not be reused for a later handoff.
-      this.handoffKey = null
+      }
+      if (recovered && outstanding && jsonOf(outstanding.payload) === jsonOf(payload)) {
+        return recovered.changed ? { kind: 'done', handoffId: recovered.handoffId } : { kind: 'no-change' }
+      }
+      this.pendingHandoff = { key: newIdempotencyKey(), payload }
+      const result = await this.commitPendingHandoff()
       return result.changed ? { kind: 'done', handoffId: result.handoffId } : { kind: 'no-change' }
     } catch (error) {
       if (error instanceof HostApiError && error.status === 409) {
@@ -715,6 +735,20 @@ export class HostedSession {
       return { kind: 'failed', detail: errorDetail(error) }
     } finally {
       this.handoffBusy = false
+    }
+  }
+
+  private async commitPendingHandoff(): Promise<HostHandoffCommit> {
+    const pending = this.pendingHandoff!
+    try {
+      const result = await this.withRetry(() => this.options.client.commitHandoff(pending.payload, pending.key))
+      this.pendingHandoff = null
+      return result
+    } catch (error) {
+      if (!(error instanceof HostTransportError)) this.pendingHandoff = null
+      throw error
+    } finally {
+      this.updateUnloadGuard()
     }
   }
 

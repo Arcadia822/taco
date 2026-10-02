@@ -197,7 +197,7 @@ const I18N = {
     section4Eyebrow: '06 / TACOBIN 协作空间',
     section4Title: 'Tacobin：为团队连接 Taco 与 Agent',
     section4Desc:
-      '本地 Taco 可离线评审；Tacobin 分享页支持共享编辑与评论，改动自动保存。保持 Agent 订阅在线；没有监听者时，交接会展示安装与订阅命令。自动保存成功后点击「交接」，才产生 review.handed_off；保存按钮另存本地 Taco，评论不会唤醒 Agent。点击重叠头像查看完整监听名单，在线不代表意见已送达或处理。',
+      '本地 Taco 可离线评审；Tacobin 分享页支持共享编辑与评论，改动自动保存。保存失败可重试；冲突会保留草稿，确认放弃后才加载最新评审。保持 Agent 订阅在线；没有监听者时，交接会展示安装与订阅命令。自动保存成功后点击「交接」，才产生 review.handed_off；保存按钮另存本地 Taco，评论不会唤醒 Agent。点击重叠头像查看完整监听名单，在线不代表意见已送达或处理。',
     section4CliTitle: 'CLI',
     section4CliCmd: TACO_CLI_INSTALL_COMMAND,
     section4AgentTitle: 'FOR AGENT',
@@ -310,7 +310,7 @@ const I18N = {
     section4Eyebrow: '06 / TACOBIN SPACE',
     section4Title: 'Tacobin: Collaborative Relay for Teams & Agents',
     section4Desc:
-      'Local Taco files work offline; Tacobin supports shared edits and comments that autosave. Keep an Agent subscribed: without a listener, Handoff shows installation and subscription commands. After autosave succeeds, Handoff records review.handed_off; Save writes a local Taco copy, and comments do not wake an agent. Click the overlapping avatars for the full listener list; online presence is not a delivery receipt.',
+      'Local Taco files work offline; Tacobin supports shared edits and comments that autosave. Retry failed saves; conflicts retain your draft until you confirm discarding it and loading the latest review. Keep an Agent subscribed: without a listener, Handoff shows installation and subscription commands. After autosave succeeds, Handoff records review.handed_off; Save writes a local Taco copy, and comments do not wake an agent. Click the overlapping avatars for the full listener list; online presence is not a delivery receipt.',
     section4CliTitle: 'CLI',
     section4CliCmd: TACO_CLI_INSTALL_COMMAND,
     section4AgentTitle: 'FOR AGENT',

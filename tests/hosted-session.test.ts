@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { HostedSession } from '../packages/host/src/browser/hosted-session.ts'
+import { HostApiError, HostClient, HostTransportError } from '../packages/host/src/browser/host-client.ts'
 import type {
   HostAutosaveResult,
-  HostClient,
   HostCommentMutation,
   HostCommentThread,
   HostHandoffCommit,
@@ -459,6 +459,94 @@ describe('HostedSession contract fixes (Findings 1, 3, 4 and concurrency protect
       expect(session.currentStatus.save).toBe('saved')
     } finally { session.destroy() }
   })
+  const recoverySession = (client: HostClient) => {
+    const snapshot = structuredClone(sampleSnapshot)
+    const bundle: TacoBundle = { ...snapshot, files: snapshot.files.map((file) => ({ ...file })), navigation: undefined, comments: [] }
+    const session = new HostedSession({
+      client: client as unknown as HostClient,
+      bridge: {
+        bundle, author: () => 'Alice', onStatus: () => {}, adoptListeners: () => {},
+        adoptContent: (content) => Object.assign(bundle, content),
+      },
+    })
+    return { bundle, session }
+  }
+
+  it('confirms the original handoff after a lost response before handing off a newer version', async () => {
+    const client = createMockClient()
+    const { bundle, session } = recoverySession(client as unknown as HostClient)
+    const accepted = new Map<string, { payload: unknown; result: HostHandoffCommit }>()
+    let lose = true
+    const commit = vi.fn(async (payload: unknown, key: string) => {
+      const previous = accepted.get(key)
+      if (previous && JSON.stringify(previous.payload) !== JSON.stringify(payload)) throw new HostApiError(409, 'KEY_REUSED', 'payload changed')
+      const result = previous?.result ?? { changed: true, handoffId: `h${accepted.size + 1}`, event: null }
+      accepted.set(key, { payload: structuredClone(payload), result })
+      if (lose) throw new HostTransportError('response lost')
+      return result
+    })
+    client.commitHandoff = commit as typeof client.commitHandoff
+    try {
+      await session.start()
+      expect((await session.handoff()).kind).toBe('failed')
+      expect(session.hasPendingWrites()).toBe(true)
+      bundle.title = 'New version'
+      session.markContentChanged()
+      await session.flush()
+      lose = false
+      expect(await session.handoff()).toEqual({ kind: 'done', handoffId: 'h2' })
+      expect([...accepted.values()].map(({ payload }) => payload)).toEqual([
+        { author: 'Alice', expectedStateVersion: '1', expectedCommentsThroughSequence: '1' },
+        { author: 'Alice', expectedStateVersion: '2', expectedCommentsThroughSequence: '1' },
+      ])
+    } finally { session.destroy() }
+  })
+
+  it('confirms a comment create across flushes before sending its newer resolved status', async () => {
+    const client = createMockClient()
+    const { bundle, session } = recoverySession(client as unknown as HostClient)
+    const accepted = new Map<string, HostCommentMutation>()
+    let lose = true
+    client.mutateComment.mockImplementation(async (op: HostCommentMutation, key?: string) => {
+      if (!accepted.has(key!)) {
+        if (op.action === 'create' && [...accepted.values()].some((old) => old.threadId === op.threadId)) throw new Error('duplicate thread')
+        accepted.set(key!, structuredClone(op))
+      }
+      if (lose) throw new HostTransportError('response lost')
+      return String(accepted.size + 1)
+    })
+    try {
+      await session.start()
+      bundle.comments = [{ id: 't', status: 'open', anchor: null, createdAt: '2026-10-01', updatedAt: '2026-10-01', messages: [{ id: 'm', author: 'Alice', body: 'Review', createdAt: '2026-10-01' }] }]
+      session.markCommentsChanged()
+      await session.flush()
+      expect(session.currentStatus.comments).toBe('error')
+      bundle.comments[0].status = 'resolved'
+      session.markCommentsChanged()
+      lose = false
+      await session.flush()
+      expect([...accepted.values()].map((op) => op.action)).toEqual(['create', 'resolve'])
+      expect(session.currentStatus.comments).toBe('saved')
+    } finally { session.destroy() }
+  })
+
+  it('retains stable rendered block identities and converts hosted navigation to browser paths', async () => {
+    const client = createMockClient()
+    const snapshot = structuredClone(sampleSnapshot)
+    snapshot.files[0].blocks = [{ id: 'stable-code', type: 'code', html: '<pre>const a = 1</pre>' }]
+    snapshot.navigation = { version: 1, entry: snapshot.files[0].path, groups: [{ id: 'g', title: 'Review', paths: [snapshot.files[0].path] }] }
+    client.readState.mockResolvedValue({ stateVersion: '1', commentsThroughSequence: '1', snapshot })
+    const { bundle, session } = recoverySession(client as unknown as HostClient)
+    try {
+      await session.start()
+      expect(bundle.files[0].blocks?.[0].id).toBe('stable-code')
+      expect(bundle.navigation).toEqual({ version: 1, entry: 'spec.md', groups: [{ id: 'g', title: 'Review', paths: ['spec.md'] }] })
+      bundle.title = 'Updated'
+      session.markContentChanged()
+      await session.flush()
+      expect(client.autosave).toHaveBeenCalledWith(expect.objectContaining({ title: 'Updated' }), expect.any(String))
+    } finally { session.destroy() }
+  })
 })
 
 describe('HostedBrowserController & attachHostedSession', () => {
@@ -646,6 +734,46 @@ describe('HostedBrowserController & attachHostedSession', () => {
       browser.destroy()
     } finally {
       script.remove()
+      document.getElementById('taco-host-styles')?.remove()
+    }
+  })
+  it('offers retry and a cancellable discard control', async () => {
+    const readState = vi.spyOn(HostClient.prototype, 'readState').mockResolvedValue({ stateVersion: '1', commentsThroughSequence: '0', snapshot: { ...createSampleBundle(), version: 1, docId: 'test-doc' } })
+    const readComments = vi.spyOn(HostClient.prototype, 'readComments').mockResolvedValue([])
+    const listListeners = vi.spyOn(HostClient.prototype, 'listListeners').mockResolvedValue({ observedAt: '', listeners: [] })
+    const script = document.createElement('script')
+    script.id = 'taco-host-capability'
+    script.type = 'application/taco+host'
+    script.textContent = JSON.stringify({ version: 1, tacoId: 'test-taco-id', apiBase: '/v1/tacos/test-taco-id' })
+    document.head.append(script)
+    const root = document.createElement('div')
+    const browser = new FileBrowser(root, createSampleBundle())
+    const controller = attachHostedSession(browser)!
+    const discard = vi.spyOn(controller.session, 'discardLocalDraft').mockResolvedValue(undefined)
+    const retry = vi.spyOn(controller.session, 'retry').mockImplementation(() => {})
+    vi.spyOn(controller.session, 'flush').mockResolvedValue({ readiness: 'ready', save: 'saved', comments: 'saved' })
+    try {
+      await controller.session.start()
+      controller['renderStatus']({ readiness: 'ready', save: 'conflict', comments: 'saved' })
+      const button = root.querySelector<HTMLButtonElement>('.host-recovery-button')!
+      expect(button.closest<HTMLElement>('.host-recovery-control')!.hidden).toBe(false)
+      button.click()
+      document.querySelector<HTMLButtonElement>('.confirmation-dialog-actions button:first-child')!.click()
+      await vi.waitFor(() => expect(button.disabled).toBe(false))
+      expect(discard).not.toHaveBeenCalled()
+      button.click()
+      document.querySelector<HTMLButtonElement>('.confirmation-dialog-actions button:last-child')!.click()
+      await vi.waitFor(() => expect(discard).toHaveBeenCalledOnce())
+      await vi.waitFor(() => expect(button.disabled).toBe(false))
+      controller['renderStatus']({ readiness: 'ready', save: 'saved', comments: 'error' })
+      button.click()
+      await vi.waitFor(() => expect(retry).toHaveBeenCalledOnce())
+    } finally {
+      browser.destroy()
+      script.remove()
+      readState.mockRestore()
+      readComments.mockRestore()
+      listListeners.mockRestore()
       document.getElementById('taco-host-styles')?.remove()
     }
   })

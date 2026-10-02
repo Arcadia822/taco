@@ -23,6 +23,7 @@ import {
   createControlButton,
   el,
   sidebarRow,
+  showConfirmDialog,
   svgIcon,
 } from '../../../../src/ui-primitives.ts'
 import { currentAuthorName, setAuthorName } from '../../../../src/identity.ts'
@@ -35,6 +36,9 @@ export class HostedBrowserController {
   private status: HostedStatus | null = null
   listeners: HostListenerSnapshot | null = null
   private presenceButton: HTMLButtonElement | null = null
+  private recoveryControl: HTMLElement | null = null
+  private recoveryButton: HTMLButtonElement | null = null
+  private recoveryLabel: HTMLElement | null = null
   private readonly removeControls: Array<() => void> = []
   private destroyed = false
 
@@ -101,6 +105,14 @@ export class HostedBrowserController {
     this.presenceButton = createControlButton('users', this.t.hostPresence, () => { void this.openPresenceMenu() }, 'host-presence-button')
 
     this.removeControls.push(this.browser.addHeaderControl(this.presenceButton, 'right'))
+    this.recoveryControl = el('div', 'host-recovery-control')
+    this.recoveryControl.hidden = true
+    this.recoveryLabel = el('span', 'host-recovery-status')
+    this.recoveryLabel.setAttribute('role', 'status')
+    this.recoveryLabel.setAttribute('aria-live', 'polite')
+    this.recoveryButton = createControlButton('alert', this.t.hostRetry, () => { void this.recover() }, 'host-recovery-button', true)
+    this.recoveryControl.append(this.recoveryLabel, this.recoveryButton)
+    this.removeControls.push(this.browser.addHeaderControl(this.recoveryControl, 'right'))
 
     this.syncPresenceButton()
   }
@@ -109,6 +121,7 @@ export class HostedBrowserController {
     this.browser.setStructureLocked(true)
     this.browser.setPrimaryHandoffHandler(async () => this.primaryHandoff(), this.t.hostHandoffTooltip, 'bot-handoff', this.t.hostHandoffCommand)
     this.syncPresenceButton()
+    this.syncRecoveryControl()
   }
 
   private renderStatus(status: HostedStatus): void {
@@ -116,6 +129,7 @@ export class HostedBrowserController {
     const wasConflict = this.status?.save === 'conflict'
     const wasError = this.status?.save === 'error'
     this.status = status
+    this.syncRecoveryControl()
     if (status.readiness === 'unsupported') {
       // No Host baseline after all: behave exactly like the plain reader page.
       this.browser.currentBundle.access = 'reader'
@@ -130,6 +144,41 @@ export class HostedBrowserController {
     }
     if (status.save === 'error' && !wasError) {
       this.browser.toast(this.t.hostSaveErrorNotice)
+    }
+  }
+
+  private syncRecoveryControl(): void {
+    if (!this.recoveryControl || !this.recoveryButton || !this.recoveryLabel) return
+    const conflict = this.status?.save === 'conflict'
+    const error = this.status?.save === 'error' || this.status?.comments === 'error'
+    this.recoveryControl.hidden = !conflict && !error
+    this.recoveryLabel.textContent = conflict ? this.t.hostConflict : this.t.saveFailed
+    const label = conflict ? this.t.hostLoadLatest : this.t.hostRetry
+    this.recoveryButton.querySelector('.button-label')!.textContent = label
+    this.recoveryButton.title = label
+    this.recoveryButton.setAttribute('aria-label', label)
+  }
+
+  private async recover(): Promise<void> {
+    if (!this.recoveryButton || this.recoveryButton.disabled) return
+    const button = this.recoveryButton
+    button.disabled = true
+    try {
+      if (this.status?.save === 'conflict') {
+        const discard = await showConfirmDialog({
+          title: this.t.hostLoadLatest,
+          messages: [this.t.hostConflictNotice, this.t.hostDiscardConfirm],
+          confirmLabel: this.t.hostLoadLatest,
+          cancelLabel: this.t.cancel,
+          destructive: true,
+        })
+        if (discard) await this.session.discardLocalDraft()
+      } else {
+        this.session.retry()
+        await this.session.flush()
+      }
+    } finally {
+      button.disabled = false
     }
   }
 
@@ -491,6 +540,9 @@ export class HostedBrowserController {
     for (const remove of this.removeControls) remove()
     this.removeControls.length = 0
     this.presenceButton = null
+    this.recoveryControl = null
+    this.recoveryButton = null
+    this.recoveryLabel = null
   }
 
   destroy(): void {
