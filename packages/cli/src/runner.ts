@@ -63,6 +63,7 @@ export const parseCliArgs = (argv: string[]): ParsedArgs => {
 
 class SseSessionAdapter implements WebSocketSessionAdapter {
   private abortController: AbortController | null = null
+  private closed = false
   private onMsgCb: (msg: string) => void = () => {}
   private onClsCb: (code: number, reason: string) => void = () => {}
   private onErrCb: (err: Error) => void = () => {}
@@ -132,6 +133,7 @@ class SseSessionAdapter implements WebSocketSessionAdapter {
     let currentDataLines: string[] = []
 
     const processLine = (line: string) => {
+      if (this.closed) return
       if (line === '') {
         if (currentDataLines.length > 0) {
           const message = currentDataLines.join('\n')
@@ -149,12 +151,13 @@ class SseSessionAdapter implements WebSocketSessionAdapter {
 
     ;(async () => {
       try {
-        while (true) {
+        while (!this.closed) {
           const { done, value } = await reader.read()
           if (done) break
+          if (this.closed) break
           buffer += decoder.decode(value, { stream: true })
           let newlineIdx: number
-          while ((newlineIdx = buffer.indexOf('\n')) !== -1) {
+          while (!this.closed && (newlineIdx = buffer.indexOf('\n')) !== -1) {
             let line = buffer.slice(0, newlineIdx)
             buffer = buffer.slice(newlineIdx + 1)
             if (line.endsWith('\r')) {
@@ -164,34 +167,38 @@ class SseSessionAdapter implements WebSocketSessionAdapter {
           }
         }
 
-        buffer += decoder.decode()
-        if (buffer.length > 0) {
-          let newlineIdx: number
-          while ((newlineIdx = buffer.indexOf('\n')) !== -1) {
-            let line = buffer.slice(0, newlineIdx)
-            buffer = buffer.slice(newlineIdx + 1)
-            if (line.endsWith('\r')) {
-              line = line.slice(0, -1)
-            }
-            processLine(line)
-          }
+        if (!this.closed) {
+          buffer += decoder.decode()
           if (buffer.length > 0) {
-            if (buffer.endsWith('\r')) {
-              buffer = buffer.slice(0, -1)
+            let newlineIdx: number
+            while (!this.closed && (newlineIdx = buffer.indexOf('\n')) !== -1) {
+              let line = buffer.slice(0, newlineIdx)
+              buffer = buffer.slice(newlineIdx + 1)
+              if (line.endsWith('\r')) {
+                line = line.slice(0, -1)
+              }
+              processLine(line)
             }
-            processLine(buffer)
-            buffer = ''
+            if (!this.closed && buffer.length > 0) {
+              if (buffer.endsWith('\r')) {
+                buffer = buffer.slice(0, -1)
+              }
+              processLine(buffer)
+              buffer = ''
+            }
+          }
+          if (!this.closed && currentDataLines.length > 0) {
+            const message = currentDataLines.join('\n')
+            currentDataLines = []
+            this.onMsgCb(message)
           }
         }
-        if (currentDataLines.length > 0) {
-          const message = currentDataLines.join('\n')
-          currentDataLines = []
-          this.onMsgCb(message)
-        }
 
-        this.onClsCb(1000, 'Stream closed')
+        if (!this.closed) {
+          this.onClsCb(1000, 'Stream closed')
+        }
       } catch (err) {
-        if ((err as Error).name !== 'AbortError') {
+        if (!this.closed && (err as Error).name !== 'AbortError') {
           this.onErrCb(err as Error)
         }
       }
@@ -201,6 +208,8 @@ class SseSessionAdapter implements WebSocketSessionAdapter {
   send(_data: string): void {}
 
   close(): void {
+    if (this.closed) return
+    this.closed = true
     this.abortController?.abort()
     this.onClsCb(1000, 'client-closed')
   }

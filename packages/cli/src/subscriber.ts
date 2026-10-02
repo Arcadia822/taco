@@ -38,9 +38,11 @@ export interface TacoSubscriberOptions {
 export class TacoSubscriber {
   private lastConfirmedCursor: string | null = null
   private running = true
+  private settled = false
   private readonly listenerId: string
   private readonly metadata?: SubscribeMetadata
   private readonly mode: SubscribeMode
+  private readonly options?: TacoSubscriberOptions
 
   constructor(
     private readonly hostUrl: string,
@@ -49,6 +51,7 @@ export class TacoSubscriber {
     private readonly adapterFactory: () => WebSocketSessionAdapter,
     options?: TacoSubscriberOptions,
   ) {
+    this.options = options
     this.lastConfirmedCursor = options?.initialAfter ?? null
     this.metadata = options?.metadata
     this.listenerId = options?.metadata?.listenerId || crypto.randomUUID()
@@ -57,7 +60,7 @@ export class TacoSubscriber {
   async start(): Promise<{ exitCode: number }> {
     let reconnectAttempts = 0
     const startReconnectTime = Date.now()
-    const maxReconnectTime = this.options?.maxReconnectTimeMs || 5 * 60 * 1000 // 5 minutes
+    const maxReconnectTime = this.options?.maxReconnectTimeMs ?? 5 * 60 * 1000 // 5 minutes
 
     while (this.running) {
       try {
@@ -99,9 +102,13 @@ export class TacoSubscriber {
         })
 
         if (Date.now() - startReconnectTime > maxReconnectTime) {
+          const durationStr =
+            maxReconnectTime === 5 * 60 * 1000
+              ? '5 minutes'
+              : `${Math.round(maxReconnectTime / 1000)} seconds`
           this.handler.onError({
             code: 'RETRY_EXHAUSTED',
-            message: 'Unreachable for over 5 minutes; aborting subscription',
+            message: `Unreachable for over ${durationStr}; aborting subscription`,
           })
           return { exitCode: 5 }
         }
@@ -139,16 +146,17 @@ export class TacoSubscriber {
       headers['X-Taco-Model'] = this.metadata.model
     }
     if (this.metadata?.modelId) {
-      headers['X-Taco-Model-Id'] = this.metadata.modelId
+      headers['X-Taco-Model-Id'] = encodeURIComponent(this.metadata.modelId)
     }
     if (this.metadata?.name) {
-      headers['X-Taco-Listener-Name'] = this.metadata.name
+      headers['X-Taco-Listener-Name'] = encodeURIComponent(this.metadata.name)
     }
     if (this.metadata?.sessionTitle) {
       headers['X-Taco-Session'] = encodeURIComponent(this.metadata.sessionTitle)
     }
 
     socket.onMessage((text) => {
+      if (this.settled) return
       try {
         const frame = JSON.parse(text) as {
           kind: string
@@ -161,6 +169,7 @@ export class TacoSubscriber {
           // Settle first: closing the transport reports a client-initiated close synchronously,
           // and that must not be mistaken for a dropped connection worth reconnecting.
           if (frame.error?.code === 'CURSOR_EXPIRED') {
+            this.settled = true
             this.handler.onError({
               code: 'CURSOR_EXPIRED',
               message: frame.error.message || 'Cursor has expired and cannot be replayed',
@@ -170,6 +179,7 @@ export class TacoSubscriber {
             return
           }
           if (frame.error?.code === 'TACO_CLOSED') {
+            this.settled = true
             resolve(4)
             socket.close()
             return
@@ -189,20 +199,25 @@ export class TacoSubscriber {
               }
             }
           } else if (frame.kind === 'event' || ('sequence' in frame && 'type' in frame)) {
-            if ('sequence' in frame && typeof frame.sequence === 'string') {
-              this.lastConfirmedCursor = frame.sequence
-            }
             if ('type' in frame && frame.type === 'review.handed_off') {
               this.handler.onFrame(text)
+              this.settled = true
+              if ('sequence' in frame && typeof frame.sequence === 'string') {
+                this.lastConfirmedCursor = frame.sequence
+              }
               resolve(0)
               socket.close()
               return
+            }
+            // Filtered events (comments, files, etc.) - advance cursor without emitting
+            if ('sequence' in frame && typeof frame.sequence === 'string') {
+              this.lastConfirmedCursor = frame.sequence
             }
           }
           return
         }
 
-        // Stream mode: emit every frame
+        // Stream mode: emit frame before updating cursor
         this.handler.onFrame(text)
 
         if (frame.kind === 'ready') {
@@ -230,8 +245,10 @@ export class TacoSubscriber {
     })
 
     socket.onClose((code, reason) => {
+      if (this.settled) return
       if (code === 1000 && reason === 'taco.closed') {
         // Taco closed cleanly
+        this.settled = true
         resolve(0)
         return
       }
@@ -245,8 +262,10 @@ export class TacoSubscriber {
     })
 
     socket.onError((err) => {
+      if (this.settled) return
       const errObj = err as Error & { statusCode?: number; code?: string }
       if (errObj.code === 'CURSOR_EXPIRED' || errObj.statusCode === 410) {
+        this.settled = true
         this.handler.onError({
           code: 'CURSOR_EXPIRED',
           message: errObj.message || 'Cursor has expired and cannot be replayed',
@@ -271,8 +290,10 @@ export class TacoSubscriber {
         )
       })
       .catch((err) => {
+        if (this.settled) return
         const errObj = err as Error & { statusCode?: number; code?: string }
         if (errObj.code === 'CURSOR_EXPIRED' || errObj.statusCode === 410) {
+          this.settled = true
           this.handler.onError({
             code: 'CURSOR_EXPIRED',
             message: errObj.message || 'Cursor has expired and cannot be replayed',
@@ -281,6 +302,7 @@ export class TacoSubscriber {
           return
         }
         if (errObj.code === 'NOT_FOUND' || errObj.statusCode === 404) {
+          this.settled = true
           this.handler.onError({
             code: 'NOT_FOUND',
             message: errObj.message || 'Taco not found',
@@ -289,6 +311,7 @@ export class TacoSubscriber {
           return
         }
         if (errObj.code === 'VALIDATION_ERROR' || errObj.statusCode === 400) {
+          this.settled = true
           this.handler.onError({
             code: 'VALIDATION_ERROR',
             message: errObj.message || 'Validation error',

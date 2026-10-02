@@ -295,8 +295,8 @@ describe('taco-cli (Phase 1)', () => {
       )
       expect(recordedHeaders[0].get('X-Taco-Harness')).toBe('claude-code')
       expect(recordedHeaders[0].get('X-Taco-Model')).toBe('claude')
-      expect(recordedHeaders[0].get('X-Taco-Model-Id')).toBe('claude-3-7-sonnet')
-      expect(recordedHeaders[0].get('X-Taco-Listener-Name')).toBe('ReviewerAgent')
+      expect(recordedHeaders[0].get('X-Taco-Model-Id')).toBe(encodeURIComponent('claude-3-7-sonnet'))
+      expect(recordedHeaders[0].get('X-Taco-Listener-Name')).toBe(encodeURIComponent('ReviewerAgent'))
       expect(recordedHeaders[0].get('X-Taco-Session')).toBe(encodeURIComponent('中文会话测试'))
       // Stable listener ID across reconnect!
       const secondListenerId = recordedHeaders[1].get('X-Listener-Id')
@@ -763,6 +763,94 @@ describe('taco-cli (Phase 1)', () => {
       expect(data.id).toBe('99999999-4cad-43d2-a5f6-4f56bcb0a001')
       expect(data.author).toBe('Alice')
       expect(data.payload.root).toBe('specs/015-hosted-review-handoff')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('settles handoff on first review.handed_off frame and ignores subsequent frames in same chunk', async () => {
+    const originalFetch = globalThis.fetch
+    const stdoutChunks: string[] = []
+    const originalWrite = process.stdout.write
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      stdoutChunks.push(String(chunk))
+      return true
+    }) as typeof process.stdout.write
+
+    globalThis.fetch = async (): Promise<Response> => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const encoder = new TextEncoder()
+          // Send ready, first handoff, and second handoff in the SAME stream chunk
+          controller.enqueue(
+            encoder.encode(
+              'data: {"kind":"ready","cursor":"1","mode":"live"}\n\n' +
+                'data: {"kind":"event","id":"h1","sequence":"2","tacoId":"8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001","type":"review.handed_off","occurredAt":"2026-09-29T00:01:00Z","actor":"Alice","data":{"handoffId":"11111111-4cad-43d2-a5f6-4f56bcb0a001"}}\n\n' +
+                'data: {"kind":"event","id":"h2","sequence":"3","tacoId":"8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001","type":"review.handed_off","occurredAt":"2026-09-29T00:02:00Z","actor":"Bob","data":{"handoffId":"22222222-4cad-43d2-a5f6-4f56bcb0a001"}}\n\n' +
+                'data: {"kind":"error","error":{"code":"TACO_CLOSED"}}\n\n',
+            ),
+          )
+          controller.close()
+        },
+      })
+      return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+    }
+
+    try {
+      const res = await runCli([
+        'subscribe',
+        '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001',
+        '--host',
+        'https://host.example',
+      ])
+      expect(res.exitCode).toBe(0)
+
+      const lines = stdoutChunks.join('').split('\n').filter(Boolean)
+      const frames = lines.map((l) => JSON.parse(l))
+      // Must emit ready + EXACTLY ONE handoff frame, ignoring subsequent handoff / TACO_CLOSED in same chunk
+      expect(frames.length).toBe(2)
+      expect(frames[0].kind).toBe('ready')
+      expect(frames[1].type).toBe('review.handed_off')
+      expect(frames[1].data.handoffId).toBe('11111111-4cad-43d2-a5f6-4f56bcb0a001')
+    } finally {
+      process.stdout.write = originalWrite
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('encodes unicode --name and --model-id via encodeURIComponent', async () => {
+    const originalFetch = globalThis.fetch
+    const recordedHeaders: Headers[] = []
+
+    globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const headers = new Headers(init?.headers)
+      recordedHeaders.push(headers)
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const encoder = new TextEncoder()
+          controller.enqueue(
+            encoder.encode('data: {"kind":"error","error":{"code":"TACO_CLOSED"}}\n\n'),
+          )
+          controller.close()
+        },
+      })
+      return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+    }
+
+    try {
+      const res = await runCli([
+        'subscribe',
+        '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001',
+        '--name',
+        '中文审查员',
+        '--model-id',
+        '通义千问-2.5',
+        '--host',
+        'https://host.example',
+      ])
+      expect(res.exitCode).toBe(4)
+      expect(recordedHeaders[0].get('X-Taco-Listener-Name')).toBe(encodeURIComponent('中文审查员'))
+      expect(recordedHeaders[0].get('X-Taco-Model-Id')).toBe(encodeURIComponent('通义千问-2.5'))
     } finally {
       globalThis.fetch = originalFetch
     }
