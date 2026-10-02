@@ -70,7 +70,7 @@ jobs:
 
       - name: Verify the production deployment
         env:
-          PRODUCTION_URL: https://tacobin.arcadia-han.com
+          PRODUCTION_URL: https://taco.arcadia-han.com
         run: |
           echo "Polling $PRODUCTION_URL/deploy.json for tag $GITHUB_REF_NAME ..."
           deadline=$((SECONDS + 900))

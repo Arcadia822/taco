@@ -33,7 +33,7 @@ Taco is local-first by design:
 - One-off commands emit one compact JSON object; event streams emit NDJSON. Parse output instead of scraping prose.
 - Run \`taco-cli publish <file.taco.html> --dry-run\` before the first network publication.
 - Subscribe with \`taco-cli subscribe <tacoId>\` before waiting for review; reconnect with the last confirmed sequence after interruption.
-- Use \`--host https://tacobin.arcadia-han.com\` for the public Tacobin service unless the project specifies another Host.
+- Use \`--host https://taco.arcadia-han.com\` for the public Tacobin service unless the project specifies another Host.
 - \`taco-cli\` publishes and reads; it does not update, close, delete, or export a Host Taco.
 `
 

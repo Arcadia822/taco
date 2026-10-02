@@ -31,24 +31,24 @@ taco-cli help
 taco-cli publish specs/feature.taco.html --dry-run
 
 # Publish to a remote Host by supplying its origin (the default Host is localhost)
-taco-cli publish specs/feature.taco.html --host https://tacobin.arcadia-han.com
+taco-cli publish specs/feature.taco.html --host https://taco.arcadia-han.com
 
 # Wait for Handoff, then exit with code 0 (metadata is self-reported)
 taco-cli subscribe <tacoId> \
-  --host https://tacobin.arcadia-han.com \
+  --host https://taco.arcadia-han.com \
   --harness codex \
   --model gpt \
   --model-id gpt-5 \
   --name "Review Assistant"
 
 # Continuously stream all events instead of exiting after Handoff
-taco-cli subscribe <tacoId> --host https://tacobin.arcadia-han.com --stream
+taco-cli subscribe <tacoId> --host https://taco.arcadia-han.com --stream
 
 # Page persistent event history (exits with code 6 if cursor expired)
-taco-cli events <tacoId> --after 42 --host https://tacobin.arcadia-han.com
+taco-cli events <tacoId> --after 42 --host https://taco.arcadia-han.com
 
 # Fetch full immutable handoff content when a review.handed_off event is received
-taco-cli handoff <tacoId> <handoffId> --host https://tacobin.arcadia-han.com
+taco-cli handoff <tacoId> <handoffId> --host https://taco.arcadia-han.com
 
 # Inspect the CLI-embedded guide (currently separate from the repository skill)
 taco-cli skills read taco
