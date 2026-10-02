@@ -259,3 +259,7 @@ develop 实测（相对本节 prepare 基线，字节）：
 验证：最终根构建、Complete／Lite／Host gate、生成镜像与 CLI 构建通过，格式检查通过。全仓 54 个测试文件中 53 通过，584 项中 583 通过；唯一失败为未修改的 update-check 测试，CLI shim 预期 installed=0.1.4，实际 null，未宣称全仓全绿。相关数据库、PostgreSQL 驱动 fixture、订阅、浏览器状态、导航与 Mermaid 回归通过；取消回放在 replay 等待期间关闭，断言无 timer／subscriber 残留。PostgreSQL 未连接真实服务，事务与 JSONB 行为由驱动 fixture 验证。
 
 真实浏览器／HTTP／SQLite 烟测：冲突取消保留本地草稿，确认放弃后加载远端版本且本地 Save／manual Handoff 差异基线仍保留；改名与删除同步 full-path navigation。交接提交后连续丢失两次响应，重试先确认旧 payload／key，再提交新版本；评论同样丢响应后点击 Retry，数据库仍仅一个 thread、message、create action。实际 CLI 使用中文名称与模型 ID，Host 详情正确显示，首个交接后退出 0。官网同步中英文恢复说明，本地预览 http://localhost:32171；最终 Taco 保留原 docId、导航与评审状态，以新构建 runtime 提供独立可打开产物。
+
+收尾更正（2026-10-02）：CI 的测试／构建已通过，但 committed-artifacts gate 发现本机 pnpm 依赖树生成的镜像与 npm lockfile 不一致。执行 npm ci 后重建，最终以 package-lock.json 为准：Complete 2,844,334 B（相对 prepare +8,700 B，0.3068%）、Lite 295,038 B（−825 B，−0.2788%）、Host 2,878,646 B（+9,236 B，0.3219%）；skill Complete 2,735,870 B（+8,700 B，0.3190%）、Lite 186,574 B（−825 B，−0.4402%）、目录 14,067,387 B（+44,020 B，0.3139%）。之前表格保留为 pnpm 环境历史测量；以上数字为交付口径，估算偏差额外来自依赖树变化，无依赖 manifest／lockfile 变更。本轮任一 shell 仍未达 1% 或 32 KiB；累计相对 2026-09-28 基线，Lite skill +5,542 B（3.06%）、Lite 成品 +8,757 B（3.06%），继续超过累计告知阈值。缩减选项与上文相同。
+
+收尾验证：npm ci 后全仓 54/54 个文件、584/584 项测试全部通过；此前 update-check 的本地失败不再出现。完整构建和三变体 gate 通过，最终以远端最新提交的 CI 与 committed-artifacts 检查确认可合并状态。
