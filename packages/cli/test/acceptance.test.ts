@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   canonicalizeJson,
   computeSnapshotContentHash,
@@ -628,5 +628,188 @@ describe('008-taco-host-contract 21 Acceptance Scenarios (spec.md Section 10)', 
     })
     expect(webRes.status).toBe(200)
     expect(webRes.headers['Content-Type']).toContain('text/html')
+  })
+
+  it('Scenario 22: subscriber options honor custom maxReconnectTimeMs including zero', async () => {
+    const dummyHandler = {
+      onFrame: () => {},
+      onDiagnostic: () => {},
+      onError: () => {},
+    }
+    const dummyFactory = () => ({
+      connect: async () => {
+        throw new Error('Connection failed')
+      },
+      send: () => {},
+      close: () => {},
+      onMessage: () => {},
+      onClose: () => {},
+      onError: () => {},
+    })
+
+    // maxReconnectTimeMs = 0 should immediately exhaust retry instead of defaulting to 5 min
+    let reportedError: { code: string; message: string } | null = null
+    const subscriber = new TacoSubscriber(
+      'http://localhost:32167',
+      randomUUID(),
+      {
+        ...dummyHandler,
+        onError: (err) => {
+          reportedError = err
+        },
+      },
+      dummyFactory,
+      { maxReconnectTimeMs: 0 },
+    )
+    const res = await subscriber.start()
+    expect(res.exitCode).toBe(5)
+    expect(reportedError?.code).toBe('RETRY_EXHAUSTED')
+  })
+
+  it('Scenario 23: handler error prevents cursor advancement while filtered events advance cursor', async () => {
+    vi.useFakeTimers()
+
+    try {
+      let lastConfirmed: string | null = null
+      let handoffMsgCb: ((text: string) => void) | null = null
+      let handoffCloseCb: ((code: number, reason: string) => void) | null = null
+
+      const handoffAdapter = {
+        connect: async (url: string) => {
+          const parsedUrl = new URL(url)
+          lastConfirmed = parsedUrl.searchParams.get('after')
+        },
+        send: () => {},
+        close: () => {
+          handoffCloseCb?.(1000, 'client-closed')
+        },
+        onMessage: (cb: (msg: string) => void) => {
+          handoffMsgCb = cb
+        },
+        onClose: (cb: (code: number, reason: string) => void) => {
+          handoffCloseCb = cb
+        },
+        onError: () => {},
+      }
+
+      const handoffSubscriber = new TacoSubscriber(
+        'http://localhost:32167',
+        randomUUID(),
+        {
+          onFrame: () => {},
+          onDiagnostic: () => {},
+          onError: () => {},
+        },
+        () => handoffAdapter,
+        { mode: 'handoff', initialAfter: '10' },
+      )
+
+      const handoffPromise = handoffSubscriber.start()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(lastConfirmed).toBe('10')
+
+      // Filtered event advances cursor
+      handoffMsgCb!(
+        JSON.stringify({
+          kind: 'event',
+          type: 'comment.created',
+          sequence: '16',
+          data: {},
+        }),
+      )
+
+      // Settle handoff subscriber cleanly
+      handoffMsgCb!(
+        JSON.stringify({
+          kind: 'event',
+          type: 'review.handed_off',
+          sequence: '17',
+          data: { handoffId: randomUUID() },
+        }),
+      )
+      const handoffRes = await handoffPromise
+      expect(handoffRes.exitCode).toBe(0)
+
+      // Now test stream subscriber handler throw does NOT advance cursor
+      let streamMsgCb: ((text: string) => void) | null = null
+      let streamCloseCb: ((code: number, reason: string) => void) | null = null
+      let streamConnectCount = 0
+
+      const streamAdapter = {
+        connect: async (url: string) => {
+          streamConnectCount += 1
+          const parsedUrl = new URL(url)
+          lastConfirmed = parsedUrl.searchParams.get('after')
+        },
+        send: () => {},
+        close: () => {
+          streamCloseCb?.(1000, 'client-closed')
+        },
+        onMessage: (cb: (msg: string) => void) => {
+          streamMsgCb = cb
+        },
+        onClose: (cb: (code: number, reason: string) => void) => {
+          streamCloseCb = cb
+        },
+        onError: () => {},
+      }
+
+      let throwOnFrame = false
+      const streamSubscriber = new TacoSubscriber(
+        'http://localhost:32167',
+        randomUUID(),
+        {
+          onFrame: () => {
+            if (throwOnFrame) {
+              throw new Error('Handler failed on output')
+            }
+          },
+          onDiagnostic: () => {},
+          onError: () => {},
+        },
+        () => streamAdapter,
+        { mode: 'stream', initialAfter: '20' },
+      )
+
+      const streamPromise = streamSubscriber.start()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(lastConfirmed).toBe('20')
+      expect(streamConnectCount).toBe(1)
+
+      // Successfully process sequence 21 -> advances confirmed cursor
+      streamMsgCb!(
+        JSON.stringify({
+          kind: 'event',
+          type: 'status.updated',
+          sequence: '21',
+          data: {},
+        }),
+      )
+
+      // Next frame throws in handler -> reject socket, triggers reconnect loop with backoff timer
+      throwOnFrame = true
+      streamMsgCb!(
+        JSON.stringify({
+          kind: 'event',
+          type: 'status.updated',
+          sequence: '22',
+          data: {},
+        }),
+      )
+
+      // Advance virtual timer past backoff delay (Math.min(1000 * 1.5, 10000) = 1500ms)
+      await vi.advanceTimersByTimeAsync(2000)
+
+      // Second connection attempt occurred with cursor 21 (NOT 22)
+      expect(streamConnectCount).toBe(2)
+      expect(lastConfirmed).toBe('21')
+
+      // Terminate stream cleanly
+      streamSubscriber.stop()
+      streamCloseCb?.(1000, 'taco.closed')
+      await streamPromise
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

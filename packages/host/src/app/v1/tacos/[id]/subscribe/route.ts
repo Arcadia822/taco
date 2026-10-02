@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { type NextRequest, NextResponse } from 'next/server'
-import { DatabaseNotConfiguredError, getDatabase, GoneError } from '@/lib/db'
-import { subscribeToTacoEvents } from '@/lib/server-state'
+import { DatabaseNotConfiguredError, getDatabase, GoneError } from '../../../../../lib/db.ts'
+import { subscribeToTacoEvents } from '../../../../../lib/server-state.ts'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,8 +48,17 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     )
   }
 
-  const modelId = req.headers.get('x-taco-model-id')?.trim()
-  if (modelId !== undefined && modelId !== null && modelId !== '') {
+  const rawModelId = req.headers.get('x-taco-model-id')?.trim()
+  let modelId: string | undefined = undefined
+  if (rawModelId !== undefined && rawModelId !== null && rawModelId !== '') {
+    try {
+      modelId = decodeURIComponent(rawModelId).trim()
+    } catch {
+      return NextResponse.json(
+        { error: { code: 'BAD_REQUEST', message: 'Invalid X-Taco-Model-Id: malformed percent-encoding' } },
+        { status: 400 },
+      )
+    }
     if (modelId.length < 1 || modelId.length > 128) {
       return NextResponse.json(
         { error: { code: 'BAD_REQUEST', message: 'X-Taco-Model-Id must be between 1 and 128 characters' } },
@@ -58,8 +67,17 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     }
   }
 
-  const listenerName = req.headers.get('x-taco-listener-name')?.trim()
-  if (listenerName !== undefined && listenerName !== null && listenerName !== '') {
+  const rawListenerName = req.headers.get('x-taco-listener-name')?.trim()
+  let listenerName: string | undefined = undefined
+  if (rawListenerName !== undefined && rawListenerName !== null && rawListenerName !== '') {
+    try {
+      listenerName = decodeURIComponent(rawListenerName).trim()
+    } catch {
+      return NextResponse.json(
+        { error: { code: 'BAD_REQUEST', message: 'Invalid X-Taco-Listener-Name: malformed percent-encoding' } },
+        { status: 400 },
+      )
+    }
     if (listenerName.length < 1 || listenerName.length > 64) {
       return NextResponse.json(
         { error: { code: 'BAD_REQUEST', message: 'X-Taco-Listener-Name must be between 1 and 64 characters' } },
@@ -67,7 +85,6 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       )
     }
   }
-
   const rawSession = req.headers.get('x-taco-session')?.trim()
   let sessionTitle: string | undefined = undefined
   if (rawSession !== undefined && rawSession !== null && rawSession !== '') {
@@ -147,6 +164,24 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     let leaseTimer: NodeJS.Timeout | null = null
     let streamClosed = false
 
+    const cleanup = () => {
+      if (unsubscribe) {
+        unsubscribe()
+        unsubscribe = null
+      }
+      if (pollTimer) {
+        clearInterval(pollTimer)
+        pollTimer = null
+      }
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer)
+        heartbeatTimer = null
+      }
+      if (leaseTimer) {
+        clearInterval(leaseTimer)
+        leaseTimer = null
+      }
+    }
     const stream = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder()
@@ -174,12 +209,6 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
 
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(readyData)}\n\n`))
 
-        const cleanup = () => {
-          if (unsubscribe) unsubscribe()
-          clearInterval(pollTimer!)
-          clearInterval(heartbeatTimer!)
-          clearInterval(leaseTimer!)
-        }
 
         // Sequential polling queue to prevent concurrent overlapping polls
         let isPolling = false
@@ -210,19 +239,25 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
         if (isReplay) {
           try {
             const replayEvents = await db.getEventsAfter(tacoId, afterSeq)
+            if (streamClosed) {
+              cleanup()
+              return
+            }
             for (const ev of replayEvents) {
               if (streamClosed) break
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(ev)}\n\n`))
               currentSentSequence = BigInt(ev.sequence)
             }
-            if (!streamClosed) {
-              const checkpointFrame = {
-                kind: 'checkpoint',
-                tacoId,
-                cursor: String(currentSentSequence),
-              }
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(checkpointFrame)}\n\n`))
+            if (streamClosed) {
+              cleanup()
+              return
             }
+            const checkpointFrame = {
+              kind: 'checkpoint',
+              tacoId,
+              cursor: String(currentSentSequence),
+            }
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(checkpointFrame)}\n\n`))
           } catch (err) {
             streamClosed = true
             cleanup()
@@ -231,6 +266,10 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
             } catch {}
             return
           }
+        }
+        if (streamClosed) {
+          cleanup()
+          return
         }
         // 3. Live tail polling:
         // Poll every 1s for cross-instance Vercel commits
@@ -274,10 +313,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       },
       cancel() {
         streamClosed = true
-        if (unsubscribe) unsubscribe()
-        clearInterval(pollTimer!)
-        clearInterval(heartbeatTimer!)
-        clearInterval(leaseTimer!)
+        cleanup()
       },
     })
 
