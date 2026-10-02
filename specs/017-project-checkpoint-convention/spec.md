@@ -2,7 +2,7 @@
 title: '017-project-checkpoint-convention'
 feature_id: '017-project-checkpoint-convention'
 created: '2026-10-02'
-status: 'Draft'
+status: 'Frozen'
 issue: 'https://github.com/Arcadia822/taco/issues/76'
 linear: 'https://linear.app/castrel/issue/TACO-34'
 input: |-
