@@ -237,3 +237,25 @@ develop 实测（以 §15 最终产物为基线）：Complete 2,835,634 B、Lite
 累计相对仓库 2026-09-28 基线，Lite skill shell +6,367 B（3.52%）、Lite 成品 +9,582 B（3.35%），超过 1% 告知阈值；前者来自此前共享交接／评论／Checkpoint 能力，后者还包含本轮内嵌规范文档增长。可选缩减方案是单独精简通用本地交互或默认内嵌文档，本轮保持功能与文档完整。
 
 验证：根构建、Complete／Lite／Host gate、CLI 构建、文档格式检查通过；实际运行 CLI skills read 返回更新的 reviewing 指南。skill 结构校验 valid:true、errors:[]，保留既有 SKILL.md 33,313 字符超过建议 20,000 的 advisory warning。真实官网中英文正文完整显示，既有指令栏横向滚动可读取完整内容，复制按钮返回 Copied；未改变指令栏布局。README 镜像字节一致，默认产品／Checkpoint 规格同步最终 Header；历史记录保留，旧 Header 设计明确由 §14 取代。无额外测试或全仓通过声明。
+
+## 17. PR #85 审查问题修复
+
+prepare：以 §16 最终构建为基线：Complete 2,835,634 B、Lite 295,863 B、Host 2,869,410 B、skill Complete 2,727,170 B、skill Lite 187,399 B、skill 全目录 14,023,367 B、CLI dist/main.js 78,302 B。预计 Complete／Lite 成品与 skill 双 shell 各 +0.5 至 +2 KiB；Host 成品 +2 至 +8 KiB；skill 全目录 +2 至 +10 KiB（生成镜像、Mermaid lint 与指南）；CLI +0.2 至 +1 KiB。修复数据库事务、事件解析、快照重建、配额与锚点，订阅元数据／游标／取消，浏览器请求幂等恢复、导航、代码块身份和本地保存基线；冲突提供明确放弃草稿入口，失败提供重试。无新增依赖或联网目的地；沿用现有 Host API，丢响应时以原 payload 和 key 确认请求。
+
+develop 实测（相对本节 prepare 基线，字节）：
+
+| 产物 | 估算增量 | 实测大小 | 实测增量 | 偏差原因 |
+| --- | --- | --- | --- | --- |
+| Complete 成品 | +512 至 +2,048 | 2,835,738 | +104（0.0037%） | 复用导航 helper，删除旧循环抵消修复增量 |
+| Lite 成品 | +512 至 +2,048 | 295,980 | +117（0.0395%） | 同上，压缩结果略有差异 |
+| Host 成品 | +2,048 至 +8,192 | 2,870,630 | +1,220（0.0425%） | 幂等恢复与恢复入口经压缩后低于估算 |
+| skill Complete shell | +512 至 +2,048 | 2,727,274 | +104（0.0038%） | 与 Complete runtime 同步 |
+| skill Lite shell | +512 至 +2,048 | 187,516 | +117（0.0624%） | 与 Lite runtime 同步 |
+| skill 全目录 | +2,048 至 +10,240 | 14,025,349 | +1,982（0.0141%） | 镜像与指南增量，比估算下界少 66 B |
+| CLI dist/main.js | +205 至 +1,024 | 80,068 | +1,766（2.2554%） | 内嵌恢复指南、Unicode 元数据与订阅关闭逻辑比估算多 |
+
+本轮单个 shell／成品均未达到 1% 或 32 KiB 增长阈值；无新增依赖或联网目的地，复用现有 Host 请求确认未知提交结果。累计相对仓库 2026-09-28 基线，Lite skill shell +6,484 B（3.58%）、Lite 成品 +9,699 B（3.39%），超过 1% 告知阈值；来自此前共享交接／评论／Checkpoint 与内嵌规范，本轮分别增加 117 B。可选缩减方案仍为单独精简通用本地交互或默认内嵌文档。
+
+验证：最终根构建、Complete／Lite／Host gate、生成镜像与 CLI 构建通过，格式检查通过。全仓 54 个测试文件中 53 通过，584 项中 583 通过；唯一失败为未修改的 update-check 测试，CLI shim 预期 installed=0.1.4，实际 null，未宣称全仓全绿。相关数据库、PostgreSQL 驱动 fixture、订阅、浏览器状态、导航与 Mermaid 回归通过；取消回放在 replay 等待期间关闭，断言无 timer／subscriber 残留。PostgreSQL 未连接真实服务，事务与 JSONB 行为由驱动 fixture 验证。
+
+真实浏览器／HTTP／SQLite 烟测：冲突取消保留本地草稿，确认放弃后加载远端版本且本地 Save／manual Handoff 差异基线仍保留；改名与删除同步 full-path navigation。交接提交后连续丢失两次响应，重试先确认旧 payload／key，再提交新版本；评论同样丢响应后点击 Retry，数据库仍仅一个 thread、message、create action。实际 CLI 使用中文名称与模型 ID，Host 详情正确显示，首个交接后退出 0。官网同步中英文恢复说明，本地预览 http://localhost:32171；最终 Taco 保留原 docId、导航与评审状态，以新构建 runtime 提供独立可打开产物。

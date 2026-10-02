@@ -6,6 +6,12 @@ export const HOSTED_STYLES = `/* Hosted review: the Host owns a shared saved sta
 .host-presence-agent, .host-presence-overflow { background: var(--surface); color: var(--ink); }
 .host-presence-agent .host-harness-logo { width: 16px; height: 16px; }
 .host-presence-overflow { font-size: 9px; font-weight: 600; }
+.host-recovery-control { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; max-width: 300px; }
+.host-recovery-control[hidden] { display: none; }
+.host-recovery-status { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.control-button.host-recovery-button { height: auto; min-height: 28px; white-space: normal; text-align: left; }
+.host-recovery-button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+@media (max-width: 560px) { .host-recovery-control { max-width: 120px; } .host-recovery-status { display: none; } }
 
 
 /* Presence Popover - aligned with .topbar-popover standards */

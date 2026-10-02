@@ -31,7 +31,7 @@ import { createBrandMarkContainer } from './brand.ts'
 import { createSourceEditor, setDefaultHighlighter, type SourceEditorController } from './source-editor.ts'
 import { FileNavigation } from './file-navigation.ts'
 import { getAvailableGroups } from './group-selector.ts'
-import { assignFileToGroup, createInitialManifest } from './navigation-editor.ts'
+import { assignFileToGroup, createInitialManifest, removeFileFromManifest, renameFileInManifest } from './navigation-editor.ts'
 import { showNewFileDialog } from './new-file-dialog.ts'
 import {
   createControlButton,
@@ -1317,8 +1317,8 @@ export class FileBrowser {
     this.selected = this.checkpointView ? null : ((previousPath ? fileByPath(this.bundle, previousPath) : null) ?? defaultFile(this.bundle))
     this.selectedPlaceholder = null
     this.cachedResolvedCheckpoints = null
-    this.dirtyTracker.markSaved()
-    this.captureCheckpointBaseline()
+    this.dirtyTracker.note({ kind: 'all' })
+    // Host persistence is independent of the local Save and manual review baseline.
     this.build()
     this.fileNavigation?.refresh(this.selected)
   }
@@ -1779,14 +1779,7 @@ export class FileBrowser {
     this.store.commit({ kind: 'document' }, () => {
       file.path = newPath
       if (this.bundle.navigation) {
-        const oldRel = oldPath.slice(this.bundle.root.length + 1)
-        const newRel = newPath.slice(this.bundle.root.length + 1)
-        for (const group of this.bundle.navigation.groups) {
-          group.paths = group.paths.map((p) => (p === oldRel ? newRel : p))
-        }
-        if (this.bundle.navigation.entry === oldRel) {
-          this.bundle.navigation.entry = newRel
-        }
+        this.bundle.navigation = renameFileInManifest(this.bundle.navigation, oldPath, newPath, this.bundle.root)
       }
       if (wasTracked && checkpoints.state) {
         this.bundle.checkpoints = { ...checkpoints.state, documents: checkpoints.state.documents.filter((record) => record.path !== oldPath) }
@@ -1813,13 +1806,7 @@ export class FileBrowser {
     this.store.commit({ kind: 'document' }, () => {
       this.bundle.files = this.bundle.files.filter((f) => f.path !== filePath)
       if (this.bundle.navigation) {
-        const rel = filePath.slice(this.bundle.root.length + 1)
-        for (const group of this.bundle.navigation.groups) {
-          group.paths = group.paths.filter((p) => p !== rel)
-        }
-        if (this.bundle.navigation.entry === rel) {
-          delete this.bundle.navigation.entry
-        }
+        this.bundle.navigation = removeFileFromManifest(this.bundle.navigation, filePath, this.bundle.root)
       }
       if (wasTracked && checkpoints.state) {
         this.bundle.checkpoints = { ...checkpoints.state, documents: checkpoints.state.documents.filter((record) => record.path !== filePath) }

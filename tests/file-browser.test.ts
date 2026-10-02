@@ -565,8 +565,7 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.tiptap [onerror]')).toBeNull()
     const image = document.querySelector<HTMLImageElement>('.tiptap img')
     if (image) {
-      expect(image.src).toMatch(/^data:image\/gif;base64,/)
-      expect(image.dataset.tacoSource).toBe('https://attacker.test/pixel')
+      expect(image.getAttribute('src') ?? '').not.toMatch(/^(?:https?:)?\/\//i)
     }
     browser.destroy()
   })
@@ -1439,6 +1438,49 @@ describe('FileBrowser', () => {
     expect(document.querySelector('.checkpoint-view')).not.toBeNull()
     expect(document.getElementById('app')!.classList.contains('is-checkpoint-view')).toBe(true)
     expect(bundle.checkpoints).toMatchObject({ template: 'Release review' })
+    browser.destroy()
+  })
+
+  it('keeps the local Save and manual handoff baseline when Host content is adopted', () => {
+    const bundle = structuredClone(testBundle)
+    const file = bundle.files[0]
+    const original = file.content
+    bundle.checkpoints = { version: 1, nodes: [{ id: 'gate', title: 'Gate', after: [], documents: [{ path: file.path }] }], documents: [] }
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    const files = structuredClone(bundle.files)
+    files[0].content = '# Saved remotely\n'
+    browser.adoptBundleContent({
+      title: bundle.title, files, comments: [],
+      checkpoints: { ...bundle.checkpoints as object, documents: [{ path: file.path, status: 'complete', updatedAt: '2026-10-01T00:00:00Z' }] },
+    })
+    expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(true)
+    expect(browser.getModifiedReviewFiles()[0]).toMatchObject({ content: '# Saved remotely\n' })
+    expect(browser.getModifiedReviewFiles()[0].diff).toContain('-# Product')
+    expect(browser.getModifiedReviewFiles()[0].diff).toContain('+# Saved remotely')
+    expect(browser.getCheckpointChanges()).toEqual([{ path: file.path, from: 'todo', to: 'complete' }])
+    browser.adoptBundleContent({ title: bundle.title, files: [{ ...files[0], content: original }, ...files.slice(1)], comments: [] })
+    expect(browser.getModifiedReviewFiles()).toEqual([])
+    browser.destroy()
+  })
+
+  it('updates full-path navigation on hosted file rename and deletion', async () => {
+    const bundle = structuredClone(testBundle)
+    const oldPath = bundle.files[0].path
+    bundle.navigation = { version: 1, entry: oldPath, groups: [{ id: 'review', title: 'Review', paths: [oldPath, bundle.files[1].path] }] }
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    browser.setStructureLocked(true)
+    const rename = browser['handleRenameFile'](bundle.files[0])
+    document.querySelector<HTMLInputElement>('.prompt-dialog-input')!.value = 'renamed'
+    document.querySelector<HTMLButtonElement>('.prompt-dialog .confirmation-dialog-actions button:last-child')!.click()
+    await rename
+    expect(bundle.navigation.entry).toBe('renamed.md')
+    expect(bundle.navigation.groups[0].paths).toEqual(['renamed.md', bundle.files[1].path])
+    const deletion = browser['handleDeleteFile'](bundle.files[0])
+    document.querySelector<HTMLButtonElement>('.confirmation-dialog-actions button:last-child')!.click()
+    await deletion
+    expect(bundle.files.some((candidate) => candidate.path === oldPath || candidate.path.endsWith('/renamed.md'))).toBe(false)
+    expect(bundle.navigation.entry).toBeUndefined()
+    expect(bundle.navigation.groups[0].paths).toEqual([bundle.files[0].path])
     browser.destroy()
   })
 

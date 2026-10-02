@@ -69,6 +69,8 @@ const REVIEWING_GUIDE_MD = `# Reviewing Guide
 ## What To Expect
 - Reviewers write from the review page at \`<origin>/t/<tacoId>\`; \`taco-cli\` is a reader of what they publish there.
 - The Header Save button saves a local Taco independently of Host autosave. Handoff waits for successful autosave and stops on save failures or conflicts.
+- Failed writes retain the draft and expose Retry. Conflicts retain it until the reviewer confirms discarding local changes and loading the latest saved review; cancelling preserves it. Host autosave does not reset the local Save or manual Handoff baseline.
+- Unknown comment or Handoff responses are retried with their original payload and idempotency key before newer changes. Unicode listener names and model IDs are supported; raw HTTP clients percent-encode the listener-name and model-id headers. Cursors advance after successful output, and default subscribe emits only the first Handoff.
 - File headers show the filename; the Checkpoints header shows only its localized page name. Keep stored title, template and navigation fields when refreshing.
 - Clicking the overlapping human/Agent avatars opens the listener list. Details label \`--harness\` as \`runtime\` / \`运行时\`; \`--session\` supplies the readable session name. Presence is not proof of delivery or processing.
 - A comment carries an anchor with the file \`path\`, a \`position\`, and a \`quote\`; nested block identity and no anchor at all are both valid. Comments re-open against the same content, so a quote the document no longer contains is stale rather than silently attached elsewhere.
