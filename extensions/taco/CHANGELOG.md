@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.13.0](https://github.com/Arcadia822/taco/compare/v0.12.0...v0.13.0) (2026-10-02)
+
+### Features
+
+* **host**: stack human and agent presence avatars (TACO-33) ([1482d98](https://github.com/Arcadia822/taco/commit/1482d981c6e2f8feae361afa6f37c291a60ea18f))
+* **host**: polish header action layout, ghost presence icon, and handoff dropdown items (TACO-33) ([58f5e19](https://github.com/Arcadia822/taco/commit/58f5e195b85234b815782ffaf4dacef2608acc54))
+* **host**: optimize header controls, add presence popover, and disable global comments (TACO-33) ([cbe6a30](https://github.com/Arcadia822/taco/commit/cbe6a30d5af187b057fb3701e6b1b5cb2fc55b19))
+* **cli**: make subscribe wait for handoff and exit by default, add --stream mode (TACO-33) ([4b6f755](https://github.com/Arcadia822/taco/commit/4b6f755f374661e17e0a79221c5468e8efefab65))
+* **host**: isolate hosted review runtime from portable shells (TACO-33) ([af2a4ff](https://github.com/Arcadia822/taco/commit/af2a4ffb2276e0e507e01883a76cbafa8ef7933a))
+* **host**: add explicit review handoff and listener presence (TACO-33) ([5db9c84](https://github.com/Arcadia822/taco/commit/5db9c84ab0ffabda9e5eeec33301caba69aee644))
+
+### Bug Fixes
+
+* **review**: recover unknown writes and preserve local review state ([70df08e](https://github.com/Arcadia822/taco/commit/70df08e60c0e262f8323ffaf1ac41ec85048369e))
+* **agents**: support current Mermaid sanitizer payloads ([fc30797](https://github.com/Arcadia822/taco/commit/fc30797a100521abe85c26643db96db56e30916a))
+* **cli**: preserve subscription acknowledgements and cancellation ([83b7f5c](https://github.com/Arcadia822/taco/commit/83b7f5ccc70598c320b368755a6c0ab480fed972))
+* **host**: preserve transactional review state and snapshots ([9ad1567](https://github.com/Arcadia822/taco/commit/9ad1567a65ed6228ca4962e2438aa2a35c276578))
+* **ui**: use default variant for handoff dropdown arrow (TACO-33) ([c6b1ca6](https://github.com/Arcadia822/taco/commit/c6b1ca64fb603c14f708ac48871075d788f29872))
+* **ui**: simplify shared header and restore hosted saving (TACO-33) ([4f3b37e](https://github.com/Arcadia822/taco/commit/4f3b37e4cd355e44225d4620ae43af1eec679993))
+* **host**: preserve checkpoint handoff and editable breadcrumbs (TACO-33) ([622f8e6](https://github.com/Arcadia822/taco/commit/622f8e6a3687f655c79d40760ec24333d0dedc22))
+* **host**: preserve handoff controls and enrich listener presence (TACO-33) ([bcde872](https://github.com/Arcadia822/taco/commit/bcde872be4b3a03e957ce5c2b6caf1187101a2df))
+
+### Chores & Maintenance
+
+* chore: **release**: tacobin-v0.6.0 ([fa5d036](https://github.com/Arcadia822/taco/commit/fa5d03669414da4ea6ddb8ecc3b15249bf4fa9f8))
+* chore: **release**: taco-cli v0.4.0 ([f0fae0e](https://github.com/Arcadia822/taco/commit/f0fae0eb24414e11e4c5493e601bec1ab0d5c76c))
+* build: **review**: regenerate shells from authoritative npm lockfile ([511000f](https://github.com/Arcadia822/taco/commit/511000f6c13b9d6fcfc7be5f92ce03b48f00d572))
+* docs: **review**: align guides with final hosted review UI (TACO-33) ([af7217a](https://github.com/Arcadia822/taco/commit/af7217a3295f78aba3161c15fccb051b8af7ad7a))
+* docs: **host**: revise TACO-33 handoff review design ([8f5fc0e](https://github.com/Arcadia822/taco/commit/8f5fc0e1c9a5d12b9de68eef68e1e0ddd8c49b5b))
+* docs: **host**: design TACO-33 human-triggered handoff ([89ed622](https://github.com/Arcadia822/taco/commit/89ed622812e3db00b422ad3e62278338b934135e))
+* docs: **host**: start TACO-33 hosted handoff design ([0f4cb03](https://github.com/Arcadia822/taco/commit/0f4cb0315c89988ce89deac29cab486c77ab6070))
+* ci: **release**: run the nightly auto release every 4 hours (#84) ([4efbb2e](https://github.com/Arcadia822/taco/commit/4efbb2ef9293d22e08a1cf4cc44398536816b384))
+
 ## Unreleased
 
 ### Bug Fixes
