@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import type {
   AutoSavePatch,
   ChangedFile,
@@ -12,6 +12,7 @@ import type {
   HandoffPayload,
   HandoffRecord,
   SnapshotFile,
+  TextAnchor,
 } from '@taco/protocol'
 import { isSafePath, validateCheckpoints, validateDocumentSnapshot } from '@taco/protocol'
 import pg from 'pg'
@@ -456,12 +457,14 @@ export function canonicalJsonStringify(val: unknown): string {
   return '{' + entries.join(',') + '}'
 }
 
+function sha256HexSync(data: Uint8Array | string): string {
+  const hash = createHash('sha256')
+  hash.update(data)
+  return hash.digest('hex')
+}
+
 export async function sha256Hex(data: Uint8Array | string): Promise<string> {
-  const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data
-  const hashBuf = await crypto.subtle.digest('SHA-256', bytes)
-  return Array.from(new Uint8Array(hashBuf))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
+  return sha256HexSync(data)
 }
 
 export function toFullPath(p: string, root = '.'): string {
@@ -474,6 +477,113 @@ export function toRelPath(fullPath: string, root = '.'): string {
   if (fullPath.startsWith(`${root}/`)) return fullPath.slice(root.length + 1)
   return fullPath
 }
+export interface ReanchorResult {
+  anchor: TextAnchor
+  isStale: boolean
+}
+
+export function relocateAnchorAgainstFiles(
+  anchor: TextAnchor,
+  filesMap: Map<string, SnapshotFile>,
+  root: string,
+  renames: Map<string, string>,
+): ReanchorResult {
+  let targetFullPath = toFullPath(anchor.path, root)
+  if (renames.has(targetFullPath)) {
+    targetFullPath = renames.get(targetFullPath)!
+  }
+
+  const targetFile = filesMap.get(targetFullPath)
+  if (!targetFile) {
+    return { anchor, isStale: true }
+  }
+
+  const updatedAnchor: TextAnchor = {
+    ...anchor,
+    path: targetFullPath,
+  }
+
+  // If the anchor is associated with a rendered block, verify block existence in target file
+  if (anchor.block) {
+    const blockId = anchor.block.id
+    const hasBlock = Boolean(targetFile.blocks?.some((b) => b.id === blockId))
+    if (!hasBlock) {
+      return { anchor: updatedAnchor, isStale: true }
+    }
+  }
+
+  const content = targetFile.content || ''
+  const exact = anchor.quote?.exact
+  if (!exact) {
+    return { anchor: updatedAnchor, isStale: false }
+  }
+
+  const pos = anchor.position
+  if (pos && typeof pos.start === 'number' && typeof pos.end === 'number' && pos.start >= 0 && pos.end <= content.length) {
+    if (content.slice(pos.start, pos.end) === exact) {
+      return { anchor: updatedAnchor, isStale: false }
+    }
+  }
+
+  const prefix = anchor.quote?.prefix || ''
+  const suffix = anchor.quote?.suffix || ''
+  const matches: number[] = []
+  let idx = content.indexOf(exact)
+  while (idx !== -1) {
+    matches.push(idx)
+    idx = content.indexOf(exact, idx + 1)
+  }
+
+  if (matches.length === 0) {
+    return { anchor: updatedAnchor, isStale: true }
+  }
+
+  if (matches.length === 1) {
+    const start = matches[0]
+    const end = start + exact.length
+    return {
+      anchor: {
+        ...updatedAnchor,
+        position: { start, end },
+      },
+      isStale: false,
+    }
+  }
+
+  if (prefix || suffix) {
+    const scored = matches.map((m) => {
+      let score = 0
+      if (prefix && m >= prefix.length && content.slice(m - prefix.length, m) === prefix) {
+        score += 2
+      }
+      if (suffix && content.slice(m + exact.length, m + exact.length + suffix.length) === suffix) {
+        score += 2
+      }
+      const dist = pos ? Math.abs(m - pos.start) : m
+      return { m, score, dist }
+    })
+
+    scored.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score
+      return a.dist - b.dist
+    })
+
+    if (scored[0].score > 0 && (scored.length === 1 || scored[0].score > scored[1].score)) {
+      const start = scored[0].m
+      const end = start + exact.length
+      return {
+        anchor: {
+          ...updatedAnchor,
+          position: { start, end },
+        },
+        isStale: false,
+      }
+    }
+  }
+
+  return { anchor: updatedAnchor, isStale: true }
+}
+
 
 export function computeFileDiffs(
   baselineFiles: SnapshotFile[],
@@ -989,6 +1099,34 @@ export class PostgresDbAdapter implements TacoDb {
         `UPDATE shared_states SET state_version = $1, snapshot_json = $2, updated_at = $3 WHERE taco_id = $4`,
         [nextVersion, snapStr, nowIso, tacoId],
       )
+      // Check and update persistent comment threads if file changes affect them
+      if (patch.fileChanges.length > 0) {
+        const renames = new Map<string, string>()
+        for (const fc of patch.fileChanges) {
+          if (fc.changeType === 'renamed' && fc.previousPath) {
+            renames.set(toFullPath(fc.previousPath, root), toFullPath(fc.path, root))
+          }
+        }
+        const threadRows = await client.query(
+          'SELECT id, anchor, is_anchor_stale FROM persistent_comment_threads WHERE taco_id = $1',
+          [tacoId],
+        )
+        for (const tr of threadRows.rows) {
+          if (!tr.anchor) continue
+          const rawAnchor: TextAnchor = typeof tr.anchor === 'string' ? JSON.parse(tr.anchor) : tr.anchor
+          const reanchor = relocateAnchorAgainstFiles(rawAnchor, filesMap, root, renames)
+          const isStale = Boolean(reanchor.isStale)
+          const newAnchorJson = JSON.stringify(reanchor.anchor)
+          const oldAnchorJson = typeof tr.anchor === 'string' ? tr.anchor : JSON.stringify(tr.anchor)
+          if (isStale !== Boolean(tr.is_anchor_stale) || newAnchorJson !== oldAnchorJson) {
+            await client.query(
+              'UPDATE persistent_comment_threads SET anchor = $1, is_anchor_stale = $2, updated_at = $3 WHERE taco_id = $4 AND id = $5',
+              [newAnchorJson, isStale, nowIso, tacoId, tr.id],
+            )
+          }
+        }
+      }
+
 
       const result = {
         stateVersion: nextVersion,
@@ -1009,8 +1147,8 @@ export class PostgresDbAdapter implements TacoDb {
           [uid, tacoId],
         )
       }
-
       await client.query('COMMIT')
+      return result
     } catch (err) {
       try {
         await client.query('ROLLBACK')
@@ -1081,7 +1219,11 @@ export class PostgresDbAdapter implements TacoDb {
 
   async getReviewThreads(tacoId: string): Promise<CommentThread[]> {
     await this.ensureSchema()
-    const threadRes = await this.pool.query(
+    return this.getReviewThreadsWithClient(tacoId, this.pool)
+  }
+
+  private async getReviewThreadsWithClient(tacoId: string, client: pg.Pool | pg.PoolClient): Promise<CommentThread[]> {
+    const threadRes = await client.query(
       `SELECT id, status, anchor, is_anchor_stale, created_at, updated_at
        FROM persistent_comment_threads
        WHERE taco_id = $1
@@ -1089,7 +1231,7 @@ export class PostgresDbAdapter implements TacoDb {
       [tacoId],
     )
 
-    const msgRes = await this.pool.query(
+    const msgRes = await client.query(
       `SELECT m.id, m.thread_id, m.author, m.body, m.created_at, m.deleted_at
        FROM persistent_comment_messages m
        JOIN comment_thread_actions a ON a.taco_id = m.taco_id AND a.thread_id = m.thread_id AND a.message_id = m.id AND a.type IN ('create', 'reply')
@@ -1098,7 +1240,7 @@ export class PostgresDbAdapter implements TacoDb {
       [tacoId],
     )
 
-    const actRes = await this.pool.query(
+    const actRes = await client.query(
       `SELECT sequence, thread_id, type, author, occurred_at, message_id
        FROM comment_thread_actions
        WHERE taco_id = $1
@@ -1493,22 +1635,24 @@ export class PostgresDbAdapter implements TacoDb {
         const prevFilesMap = new Map<string, SnapshotFile>()
         for (const f of baselineSnapshot.files) prevFilesMap.set(f.path, f)
         const root = baselineSnapshot.root || '.'
+        const toDelete = new Set<string>()
+        const toSet = new Map<string, SnapshotFile>()
         for (const cf of prevPayload.changedFiles) {
           const fullPath = toFullPath(cf.path, root)
           const fullPrevPath = cf.previousPath ? toFullPath(cf.previousPath, root) : undefined
           if (cf.changeType === 'deleted') {
-            prevFilesMap.delete(fullPath)
+            toDelete.add(fullPath)
           } else if (cf.changeType === 'renamed' && fullPrevPath) {
+            toDelete.add(fullPrevPath)
             const prevFile = prevFilesMap.get(fullPrevPath)
-            prevFilesMap.delete(fullPrevPath)
-            prevFilesMap.set(fullPath, {
+            toSet.set(fullPath, {
               id: cf.id || prevFile?.id,
               path: fullPath,
               mediaType: cf.mediaType || prevFile?.mediaType || 'text/plain',
               content: cf.content || '',
             })
           } else if (cf.changeType === 'added') {
-            prevFilesMap.set(fullPath, {
+            toSet.set(fullPath, {
               id: cf.id,
               path: fullPath,
               mediaType: cf.mediaType || 'text/plain',
@@ -1517,13 +1661,19 @@ export class PostgresDbAdapter implements TacoDb {
           } else {
             // modified
             const prevFile = prevFilesMap.get(fullPath)
-            prevFilesMap.set(fullPath, {
+            toSet.set(fullPath, {
               id: cf.id || prevFile?.id,
               path: fullPath,
               mediaType: cf.mediaType || prevFile?.mediaType || 'text/plain',
               content: cf.content || '',
             })
           }
+        }
+        for (const p of toDelete) {
+          prevFilesMap.delete(p)
+        }
+        for (const [p, f] of toSet) {
+          prevFilesMap.set(p, f)
         }
         previousSnapshot = {
           ...baselineSnapshot,
@@ -1548,7 +1698,7 @@ export class PostgresDbAdapter implements TacoDb {
         to: currentSnapshot.checkpoints || null,
       }
 
-      const comments = await this.getReviewThreads(tacoId)
+      const comments = await this.getReviewThreadsWithClient(tacoId, client)
 
       const handoffPayload: HandoffPayload = {
         root: baselineSnapshot.root,
@@ -1887,8 +2037,8 @@ export class PostgresDbAdapter implements TacoDb {
       tacoId: r.taco_id,
       type: r.type,
       occurredAt: new Date(r.occurred_at).toISOString(),
-      actor: typeof r.actor === 'string' ? JSON.parse(r.actor) : r.actor,
-      data: typeof r.data === 'string' ? JSON.parse(r.data) : r.data,
+      actor: r.actor,
+      data: r.data,
     }))
   }
 
@@ -1906,8 +2056,8 @@ export class PostgresDbAdapter implements TacoDb {
       tacoId: r.taco_id,
       type: r.type,
       occurredAt: new Date(r.occurred_at).toISOString(),
-      actor: typeof r.actor === 'string' ? JSON.parse(r.actor) : r.actor,
-      data: typeof r.data === 'string' ? JSON.parse(r.data) : r.data,
+      actor: r.actor,
+      data: r.data,
     }))
   }
 }
@@ -2149,8 +2299,7 @@ export class SqliteDbAdapter implements TacoDb {
       if (taco.status === 'deleted' || taco.status === 'expired') {
         throw new GoneError('Taco is closed, expired, or deleted')
       }
-
-      const requestHash = await sha256Hex(canonicalJsonStringify(patch))
+      const requestHash = sha256HexSync(canonicalJsonStringify(patch))
       const receipt = this.db
         .prepare('SELECT action, response_body, status_code, request_hash FROM mutation_receipts WHERE taco_id = ? AND idempotency_key = ?')
         .get(tacoId, idempotencyKey) as unknown as SqliteReceiptRow | undefined
@@ -2354,6 +2503,33 @@ export class SqliteDbAdapter implements TacoDb {
       this.db
         .prepare('UPDATE shared_states SET state_version = ?, snapshot_json = ?, updated_at = ? WHERE taco_id = ?')
         .run(nextVersion, snapStr, nowIso, tacoId)
+      // Check and update persistent comment threads if file changes affect them
+      if (patch.fileChanges.length > 0) {
+        const renames = new Map<string, string>()
+        for (const fc of patch.fileChanges) {
+          if (fc.changeType === 'renamed' && fc.previousPath) {
+            renames.set(toFullPath(fc.previousPath, root), toFullPath(fc.path, root))
+          }
+        }
+        const threadRows = this.db
+          .prepare('SELECT id, anchor, is_anchor_stale FROM persistent_comment_threads WHERE taco_id = ?')
+          .all(tacoId) as unknown as SqliteCommentThreadRow[]
+        for (const tr of threadRows) {
+          if (!tr.anchor) continue
+          const rawAnchor: TextAnchor = JSON.parse(tr.anchor)
+          const reanchor = relocateAnchorAgainstFiles(rawAnchor, filesMap, root, renames)
+          const isStale = reanchor.isStale ? 1 : 0
+          const newAnchorJson = JSON.stringify(reanchor.anchor)
+          const oldAnchorJson = tr.anchor
+          const currentStaleNum = Number(Boolean(tr.is_anchor_stale))
+          if (isStale !== currentStaleNum || newAnchorJson !== oldAnchorJson) {
+            this.db
+              .prepare('UPDATE persistent_comment_threads SET anchor = ?, is_anchor_stale = ?, updated_at = ? WHERE taco_id = ? AND id = ?')
+              .run(newAnchorJson, isStale, nowIso, tacoId, tr.id)
+          }
+        }
+      }
+
 
       const result = {
         stateVersion: nextVersion,
@@ -2430,7 +2606,7 @@ export class SqliteDbAdapter implements TacoDb {
     }
   }
 
-  async getReviewThreads(tacoId: string): Promise<CommentThread[]> {
+  private getReviewThreadsSync(tacoId: string): CommentThread[] {
     this.ensureSchema()
     const threads = this.db
       .prepare('SELECT id, status, anchor, is_anchor_stale, created_at, updated_at FROM persistent_comment_threads WHERE taco_id = ? ORDER BY created_at ASC')
@@ -2490,6 +2666,10 @@ export class SqliteDbAdapter implements TacoDb {
     }))
   }
 
+  async getReviewThreads(tacoId: string): Promise<CommentThread[]> {
+    return this.getReviewThreadsSync(tacoId)
+  }
+
   async mutateReviewThread(
     tacoId: string,
     actionPayload: {
@@ -2510,8 +2690,7 @@ export class SqliteDbAdapter implements TacoDb {
       if (taco.status === 'deleted' || taco.status === 'expired') {
         throw new GoneError('Taco is closed, expired, or deleted')
       }
-
-      const requestHash = await sha256Hex(canonicalJsonStringify(actionPayload))
+      const requestHash = sha256HexSync(canonicalJsonStringify(actionPayload))
       const receipt = this.db
         .prepare('SELECT action, response_body, status_code, request_hash FROM mutation_receipts WHERE taco_id = ? AND idempotency_key = ?')
         .get(tacoId, idempotencyKey) as unknown as SqliteReceiptRow | undefined
@@ -2693,8 +2872,7 @@ export class SqliteDbAdapter implements TacoDb {
       if (taco.status === 'deleted' || taco.status === 'expired') {
         throw new GoneError('Taco is closed, expired, or deleted')
       }
-
-      const requestHash = await sha256Hex(canonicalJsonStringify(payloadReq))
+      const requestHash = sha256HexSync(canonicalJsonStringify(payloadReq))
       const receipt = this.db
         .prepare('SELECT action, response_body, status_code, request_hash FROM mutation_receipts WHERE taco_id = ? AND idempotency_key = ?')
         .get(tacoId, idempotencyKey) as unknown as SqliteReceiptRow | undefined
@@ -2757,22 +2935,24 @@ export class SqliteDbAdapter implements TacoDb {
         const prevFilesMap = new Map<string, SnapshotFile>()
         for (const f of baselineSnapshot.files) prevFilesMap.set(f.path, f)
         const root = baselineSnapshot.root || '.'
+        const toDelete = new Set<string>()
+        const toSet = new Map<string, SnapshotFile>()
         for (const cf of prevPayload.changedFiles) {
           const fullPath = toFullPath(cf.path, root)
           const fullPrevPath = cf.previousPath ? toFullPath(cf.previousPath, root) : undefined
           if (cf.changeType === 'deleted') {
-            prevFilesMap.delete(fullPath)
+            toDelete.add(fullPath)
           } else if (cf.changeType === 'renamed' && fullPrevPath) {
+            toDelete.add(fullPrevPath)
             const prevFile = prevFilesMap.get(fullPrevPath)
-            prevFilesMap.delete(fullPrevPath)
-            prevFilesMap.set(fullPath, {
+            toSet.set(fullPath, {
               id: cf.id || prevFile?.id,
               path: fullPath,
               mediaType: cf.mediaType || prevFile?.mediaType || 'text/plain',
               content: cf.content || '',
             })
           } else if (cf.changeType === 'added') {
-            prevFilesMap.set(fullPath, {
+            toSet.set(fullPath, {
               id: cf.id,
               path: fullPath,
               mediaType: cf.mediaType || 'text/plain',
@@ -2781,13 +2961,19 @@ export class SqliteDbAdapter implements TacoDb {
           } else {
             // modified
             const prevFile = prevFilesMap.get(fullPath)
-            prevFilesMap.set(fullPath, {
+            toSet.set(fullPath, {
               id: cf.id || prevFile?.id,
               path: fullPath,
               mediaType: cf.mediaType || prevFile?.mediaType || 'text/plain',
               content: cf.content || '',
             })
           }
+        }
+        for (const p of toDelete) {
+          prevFilesMap.delete(p)
+        }
+        for (const [p, f] of toSet) {
+          prevFilesMap.set(p, f)
         }
         previousSnapshot = {
           ...baselineSnapshot,
@@ -2810,7 +2996,7 @@ export class SqliteDbAdapter implements TacoDb {
         to: currentSnapshot.checkpoints || null,
       }
 
-      const comments = await this.getReviewThreads(tacoId)
+      const comments = this.getReviewThreadsSync(tacoId)
 
       const handoffPayload: HandoffPayload = {
         root: baselineSnapshot.root,
@@ -2829,8 +3015,7 @@ export class SqliteDbAdapter implements TacoDb {
       if (new TextEncoder().encode(payloadStr).byteLength > 32 * 1024 * 1024) {
         throw new PayloadTooLargeError('Handoff payload exceeds 32 MiB limit')
       }
-
-      const payloadHash = `sha256:${await sha256Hex(payloadStr)}`
+      const payloadHash = `sha256:${sha256HexSync(payloadStr)}`
       const handoffId = randomUUID()
       const nextSequence = BigInt(taco.last_sequence) + 1n
       const nextSequenceStr = String(nextSequence)
@@ -2911,6 +3096,7 @@ export class SqliteDbAdapter implements TacoDb {
     }
 
     const row = this.db.prepare('SELECT id, taco_id, author, created_at, payload_json FROM handoffs WHERE id = ? AND taco_id = ?').get(handoffId, tacoId) as unknown as SqliteHandoffRow | undefined
+    if (!row) return null
     return {
       id: row.id,
       tacoId: row.taco_id,
@@ -2940,36 +3126,43 @@ export class SqliteDbAdapter implements TacoDb {
   async upsertListenerLease(tacoId: string, listener: ListenerRecord): Promise<void> {
     this.ensureSchema()
     const nowIso = new Date().toISOString()
-    this.db
-      .prepare(
-        `INSERT INTO listener_leases (taco_id, listener_id, name, session_title, harness, model, model_id, connected_at, last_seen_at, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(taco_id, listener_id) DO UPDATE SET
-           name = excluded.name,
-           session_title = excluded.session_title,
-           harness = excluded.harness,
-           model = excluded.model,
-           model_id = excluded.model_id,
-           connected_at = CASE
-             WHEN listener_leases.expires_at > ? THEN listener_leases.connected_at
-             ELSE excluded.connected_at
-           END,
-           last_seen_at = excluded.last_seen_at,
-           expires_at = excluded.expires_at`,
-      )
-      .run(
-        tacoId,
-        listener.listenerId,
-        listener.name || null,
-        listener.sessionTitle || null,
-        listener.harness || null,
-        listener.model || null,
-        listener.modelId || null,
-        listener.connectedAt || listener.lastSeenAt,
-        listener.lastSeenAt,
-        listener.expiresAt,
-        nowIso,
-      )
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      this.db
+        .prepare(
+          `INSERT INTO listener_leases (taco_id, listener_id, name, session_title, harness, model, model_id, connected_at, last_seen_at, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(taco_id, listener_id) DO UPDATE SET
+             name = excluded.name,
+             session_title = excluded.session_title,
+             harness = excluded.harness,
+             model = excluded.model,
+             model_id = excluded.model_id,
+             connected_at = CASE
+               WHEN listener_leases.expires_at > ? THEN listener_leases.connected_at
+               ELSE excluded.connected_at
+             END,
+             last_seen_at = excluded.last_seen_at,
+             expires_at = excluded.expires_at`,
+        )
+        .run(
+          tacoId,
+          listener.listenerId,
+          listener.name || null,
+          listener.sessionTitle || null,
+          listener.harness || null,
+          listener.model || null,
+          listener.modelId || null,
+          listener.connectedAt || listener.lastSeenAt,
+          listener.lastSeenAt,
+          listener.expiresAt,
+          nowIso,
+        )
+      this.db.exec('COMMIT')
+    } catch (err) {
+      try { this.db.exec('ROLLBACK') } catch {}
+      throw err
+    }
   }
 
   async createUploadReservation(
@@ -2979,8 +3172,9 @@ export class SqliteDbAdapter implements TacoDb {
   ): Promise<{ uploadId: string; status: 'pending' | 'committed'; expiresAt: string }> {
     this.ensureSchema()
     this.db.exec('BEGIN IMMEDIATE')
+    const nowIso = new Date().toISOString()
     try {
-      this.db.prepare("DELETE FROM upload_reservations WHERE expires_at < datetime('now')").run()
+      this.db.prepare("DELETE FROM upload_reservations WHERE expires_at < ?").run(nowIso)
 
       const taco = this.db.prepare('SELECT id, status FROM tacos WHERE id = ?').get(tacoId) as unknown as SqliteTacoRow | undefined
       if (!taco) throw new NotFoundError('Taco not found')
@@ -3005,8 +3199,8 @@ export class SqliteDbAdapter implements TacoDb {
       const quota = this.db
         .prepare(`SELECT COUNT(*) as count, COALESCE(SUM(payload_bytes), 0) as total_bytes
                   FROM upload_reservations
-                  WHERE taco_id = ? AND expires_at >= datetime('now') AND (status = 'pending' OR (status = 'committed' AND content IS NOT NULL))`)
-        .get(tacoId) as unknown as { count: number; total_bytes: number }
+                  WHERE taco_id = ? AND expires_at >= ? AND (status = 'pending' OR (status = 'committed' AND content IS NOT NULL))`)
+        .get(tacoId, nowIso) as unknown as { count: number; total_bytes: number }
       if (quota.count >= 10) {
         try { this.db.exec('ROLLBACK') } catch {}
         throw new PayloadTooLargeError('Too many active upload reservations for this Taco')
@@ -3055,17 +3249,18 @@ export class SqliteDbAdapter implements TacoDb {
   async commitUploadContent(uploadId: string, rawBytes: Uint8Array): Promise<void> {
     this.ensureSchema()
     this.db.exec('BEGIN IMMEDIATE')
+    const nowIso = new Date().toISOString()
     try {
       const r = this.db.prepare('SELECT taco_id, payload_bytes, status, expires_at FROM upload_reservations WHERE id = ?').get(uploadId) as unknown as SqliteUploadReservationRow | undefined
       if (!r) throw new NotFoundError('Upload reservation not found')
-      if (new Date(r.expires_at).getTime() < Date.now()) {
+      if (r.expires_at < nowIso) {
         throw new GoneError('Upload reservation expired')
       }
       const quota = this.db
         .prepare(`SELECT COALESCE(SUM(payload_bytes), 0) as total_bytes
                   FROM upload_reservations
-                  WHERE taco_id = ? AND id != ? AND expires_at >= datetime('now') AND status = 'committed' AND content IS NOT NULL`)
-        .get(r.taco_id, uploadId) as unknown as { total_bytes: number }
+                  WHERE taco_id = ? AND id != ? AND expires_at >= ? AND status = 'committed' AND content IS NOT NULL`)
+        .get(r.taco_id, uploadId, nowIso) as unknown as { total_bytes: number }
       if (quota.total_bytes + r.payload_bytes > 33554432) {
         try { this.db.exec('ROLLBACK') } catch {}
         throw new PayloadTooLargeError('Committed unreferenced upload quota exceeded (max 32 MiB)')
