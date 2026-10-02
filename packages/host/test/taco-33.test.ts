@@ -1046,4 +1046,372 @@ describe('TACO-33 Host Backend Persistence & Logic', () => {
       unlinkSync(testDbPath)
     } catch {}
   })
+
+  it('returns null when getting non-existent handoff in SQLite', async () => {
+    const testDbPath = `/tmp/taco-test-${randomUUID()}.db`
+    const db = new SqliteDbAdapter(testDbPath)
+    const tacoId = randomUUID()
+
+    await db.publishTaco(tacoId, 'Handoff Test', sampleSnapshot)
+    const result = await db.getHandoff(tacoId, randomUUID())
+    expect(result).toBeNull()
+
+    try {
+      unlinkSync(testDbPath)
+    } catch {}
+  })
+
+  it('marks comment anchor stale or relocates anchor on autosave file modifications/deletions/renames in SQLite', async () => {
+    const testDbPath = `/tmp/taco-test-${randomUUID()}.db`
+    const db = new SqliteDbAdapter(testDbPath)
+    const tacoId = randomUUID()
+
+    await db.publishTaco(tacoId, 'Anchor Stale Test', sampleSnapshot)
+
+    // Create thread 1 on spec.md
+    const t1 = await db.mutateReviewThread(
+      tacoId,
+      {
+        author: 'Alice',
+        action: 'create',
+        body: 'Comment on Line 1',
+        anchor: {
+          path: 'specs/sample/spec.md',
+          position: { start: 18, end: 24 },
+          quote: { exact: 'Line 1', prefix: 'Spec\n\n', suffix: '\nLine 2' },
+        },
+      },
+      randomUUID(),
+    )
+    const threadId1 = (t1.event.data as Record<string, unknown>).threadId as string
+
+    // Create thread 2 on data.json
+    const t2 = await db.mutateReviewThread(
+      tacoId,
+      {
+        author: 'Bob',
+        action: 'create',
+        body: 'Comment on JSON',
+        anchor: {
+          path: 'specs/sample/data.json',
+          position: { start: 2, end: 5 },
+          quote: { exact: 'foo', prefix: '{"', suffix: '": "bar"}' },
+        },
+      },
+      randomUUID(),
+    )
+    const threadId2 = (t2.event.data as Record<string, unknown>).threadId as string
+
+    // 1. Rename data.json -> config.json
+    const renamePatch: AutoSavePatch = {
+      protocol: 'taco-state/1',
+      expectedStateVersion: '1',
+      author: 'Alice',
+      fileChanges: [
+        {
+          id: 'file_data',
+          path: 'specs/sample/config.json',
+          previousPath: 'specs/sample/data.json',
+          changeType: 'renamed',
+          mediaType: 'application/json',
+          content: '{"foo": "bar"}\n',
+        },
+      ],
+    }
+    await db.autosaveSharedState(tacoId, renamePatch, randomUUID())
+
+    let threads = await db.getReviewThreads(tacoId)
+    const th2 = threads.find((t) => t.id === threadId2)!
+    expect(th2.isAnchorStale).toBe(false)
+    expect(th2.anchor!.path).toBe('specs/sample/config.json')
+    // 2. Modify spec.md removing "Line 1"
+    const modifyPatch: AutoSavePatch = {
+      protocol: 'taco-state/1',
+      expectedStateVersion: '2',
+      author: 'Alice',
+      fileChanges: [
+        {
+          id: 'file_spec',
+          path: 'specs/sample/spec.md',
+          changeType: 'modified',
+          mediaType: 'text/markdown',
+          content: '# Original Spec\n\nReplaced content without that line\n',
+        },
+      ],
+    }
+    await db.autosaveSharedState(tacoId, modifyPatch, randomUUID())
+
+    threads = await db.getReviewThreads(tacoId)
+    const th1 = threads.find((t) => t.id === threadId1)!
+    expect(th1.isAnchorStale).toBe(true)
+
+    // 3. Thread with block anchor where block is missing or present
+    const sampleSnapshotWithBlock: DocumentSnapshot = {
+      ...sampleSnapshot,
+      files: [
+        {
+          id: 'file_block_test',
+          path: 'specs/sample/block.md',
+          mediaType: 'text/markdown',
+          content: '```ts\nconst x = 1\n```\n',
+          blocks: [
+            { id: 'block_valid', type: 'codeBlock', html: '<pre><code>const x = 1</code></pre>' },
+          ],
+        },
+      ],
+    }
+    const blockTacoId = randomUUID()
+    await db.publishTaco(blockTacoId, 'Block Test', sampleSnapshotWithBlock)
+
+    const tBlock = await db.mutateReviewThread(
+      blockTacoId,
+      {
+        author: 'Alice',
+        action: 'create',
+        body: 'Comment on block',
+        anchor: {
+          path: 'specs/sample/block.md',
+          position: { start: 6, end: 17 },
+          quote: { exact: 'const x = 1', prefix: '```ts\n', suffix: '\n```' },
+          block: { id: 'block_valid', type: 'codeBlock', language: 'ts' },
+        },
+      },
+      randomUUID(),
+    )
+    const blockThreadId = (tBlock.event.data as Record<string, unknown>).threadId as string
+
+    // Autosave removing the block from blocks array
+    // Autosave removing the code block from content
+    const removeBlockPatch: AutoSavePatch = {
+      protocol: 'taco-state/1',
+      expectedStateVersion: '1',
+      author: 'Alice',
+      fileChanges: [
+        {
+          id: 'file_block_test',
+          path: 'specs/sample/block.md',
+          changeType: 'modified',
+          mediaType: 'text/markdown',
+          content: '# Just heading, no code block\n',
+        },
+      ],
+    }
+    await db.autosaveSharedState(blockTacoId, removeBlockPatch, randomUUID())
+    const blockThreads = await db.getReviewThreads(blockTacoId)
+    const bThread = blockThreads.find((t) => t.id === blockThreadId)!
+    expect(bThread.isAnchorStale).toBe(true)
+
+    try {
+      unlinkSync(testDbPath)
+    } catch {}
+  })
+
+  it('reconstructs previous snapshot correctly: delete b then rename a to b, followed by comment-only second handoff with incrementalFiles=[]', async () => {
+    const testDbPath = `/tmp/taco-test-${randomUUID()}.db`
+    const db = new SqliteDbAdapter(testDbPath)
+    const tacoId = randomUUID()
+
+    // Setup snapshot with two files: a.json and b.json
+    const initialSnapshot: DocumentSnapshot = {
+      ...sampleSnapshot,
+      files: [
+        {
+          id: 'file_a',
+          path: 'specs/sample/a.json',
+          mediaType: 'application/json',
+          content: '{"name": "A"}\n',
+        },
+        {
+          id: 'file_b',
+          path: 'specs/sample/b.json',
+          mediaType: 'application/json',
+          content: '{"name": "B"}\n',
+        },
+      ],
+    }
+    await db.publishTaco(tacoId, 'Delete B Rename A to B Test', initialSnapshot)
+
+    // 1. Delete b, rename a -> b
+    const patch1: AutoSavePatch = {
+      protocol: 'taco-state/1',
+      expectedStateVersion: '1',
+      author: 'Alice',
+      fileChanges: [
+        {
+          path: 'specs/sample/b.json',
+          changeType: 'deleted',
+        },
+        {
+          id: 'file_a',
+          path: 'specs/sample/b.json',
+          previousPath: 'specs/sample/a.json',
+          changeType: 'renamed',
+          mediaType: 'application/json',
+          content: '{"name": "A in B"}\n',
+        },
+      ],
+    }
+    await db.autosaveSharedState(tacoId, patch1, randomUUID())
+
+    const handoff1 = await db.commitHandoff(
+      tacoId,
+      { author: 'Alice', expectedStateVersion: '2', expectedCommentsThroughSequence: '0' },
+      randomUUID(),
+    )
+    expect(handoff1.changed).toBe(true)
+
+    // 2. Add comment only (state version remains 2, commentsThroughSequence advances)
+    const commentRes = await db.mutateReviewThread(
+      tacoId,
+      { author: 'Bob', action: 'create', body: 'Comment only', anchor: null },
+      randomUUID(),
+    )
+    const handoff2 = await db.commitHandoff(
+      tacoId,
+      { author: 'Bob', expectedStateVersion: '2', expectedCommentsThroughSequence: commentRes.event.sequence },
+      randomUUID(),
+    )
+    expect(handoff2.changed).toBe(true)
+    const h2Record = await db.getHandoff(tacoId, handoff2.handoffId!)
+    expect(h2Record).not.toBeNull()
+    expect(h2Record!.payload.incrementalFiles).toEqual([])
+
+    try {
+      unlinkSync(testDbPath)
+    } catch {}
+  })
+
+  it('reconstructs previous snapshot correctly on cycle: a->tmp, b->a, tmp->b, followed by comment-only second handoff with incrementalFiles=[]', async () => {
+    const testDbPath = `/tmp/taco-test-${randomUUID()}.db`
+    const db = new SqliteDbAdapter(testDbPath)
+    const tacoId = randomUUID()
+
+    const initialSnapshot: DocumentSnapshot = {
+      ...sampleSnapshot,
+      files: [
+        {
+          id: 'file_a',
+          path: 'specs/sample/a.json',
+          mediaType: 'application/json',
+          content: '{"val": 1}\n',
+        },
+        {
+          id: 'file_b',
+          path: 'specs/sample/b.json',
+          mediaType: 'application/json',
+          content: '{"val": 2}\n',
+        },
+      ],
+    }
+    await db.publishTaco(tacoId, 'Cycle Swap Test', initialSnapshot)
+
+    // Autosave 1: a -> tmp
+    const patch1: AutoSavePatch = {
+      protocol: 'taco-state/1',
+      expectedStateVersion: '1',
+      author: 'Alice',
+      fileChanges: [
+        {
+          id: 'file_a',
+          path: 'specs/sample/tmp.json',
+          previousPath: 'specs/sample/a.json',
+          changeType: 'renamed',
+          mediaType: 'application/json',
+          content: '{"val": 1}\n',
+        },
+      ],
+    }
+    await db.autosaveSharedState(tacoId, patch1, randomUUID())
+
+    // Autosave 2: b -> a
+    const patch2: AutoSavePatch = {
+      protocol: 'taco-state/1',
+      expectedStateVersion: '2',
+      author: 'Alice',
+      fileChanges: [
+        {
+          id: 'file_b',
+          path: 'specs/sample/a.json',
+          previousPath: 'specs/sample/b.json',
+          changeType: 'renamed',
+          mediaType: 'application/json',
+          content: '{"val": 2}\n',
+        },
+      ],
+    }
+    await db.autosaveSharedState(tacoId, patch2, randomUUID())
+
+    // Autosave 3: tmp -> b
+    const patch3: AutoSavePatch = {
+      protocol: 'taco-state/1',
+      expectedStateVersion: '3',
+      author: 'Alice',
+      fileChanges: [
+        {
+          id: 'file_a',
+          path: 'specs/sample/b.json',
+          previousPath: 'specs/sample/tmp.json',
+          changeType: 'renamed',
+          mediaType: 'application/json',
+          content: '{"val": 1}\n',
+        },
+      ],
+    }
+    await db.autosaveSharedState(tacoId, patch3, randomUUID())
+
+    // First handoff after full cycle
+    const handoff1 = await db.commitHandoff(
+      tacoId,
+      { author: 'Alice', expectedStateVersion: '4', expectedCommentsThroughSequence: '0' },
+      randomUUID(),
+    )
+    expect(handoff1.changed).toBe(true)
+
+    // Add comment only
+    const commentRes = await db.mutateReviewThread(
+      tacoId,
+      { author: 'Bob', action: 'create', body: 'Comment after cycle', anchor: null },
+      randomUUID(),
+    )
+
+    // Second handoff (comment-only)
+    const handoff2 = await db.commitHandoff(
+      tacoId,
+      { author: 'Bob', expectedStateVersion: '4', expectedCommentsThroughSequence: commentRes.event.sequence },
+      randomUUID(),
+    )
+    expect(handoff2.changed).toBe(true)
+    const h2Record = await db.getHandoff(tacoId, handoff2.handoffId!)
+    expect(h2Record).not.toBeNull()
+    expect(h2Record!.payload.incrementalFiles).toEqual([])
+
+    try {
+      unlinkSync(testDbPath)
+    } catch {}
+  })
+
+  it('handles concurrent upload reservations and expiration comparisons consistently', async () => {
+    const testDbPath = `/tmp/taco-test-${randomUUID()}.db`
+    const db = new SqliteDbAdapter(testDbPath)
+    const tacoId = randomUUID()
+
+    await db.publishTaco(tacoId, 'Upload Expiry Test', sampleSnapshot)
+
+    // Create reservation
+    const res = await db.createUploadReservation(
+      tacoId,
+      { purpose: 'file-upload', payloadBytes: 100, payloadHash: 'sha256:dummy' },
+      randomUUID(),
+    )
+    expect(res.status).toBe('pending')
+
+    // Commit content
+    await db.commitUploadContent(res.uploadId, new TextEncoder().encode('hello world'))
+    const content = await db.getUploadContent(res.uploadId)
+    expect(content).toBe('hello world')
+
+    try {
+      unlinkSync(testDbPath)
+    } catch {}
+  })
 })

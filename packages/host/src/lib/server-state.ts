@@ -89,12 +89,8 @@ export function broadcastPasteEvent(ev: TacoCommentEvent): void {
 }
 
 export async function getSharedReviewState(tacoId: string): Promise<SharedStateResult | null> {
-  try {
-    const db = getDatabase()
-    return await db.getSharedState(tacoId)
-  } catch {
-    return null
-  }
+  const db = getDatabase()
+  return await db.getSharedState(tacoId)
 }
 
 // Export dummy state for any legacy direct field access
