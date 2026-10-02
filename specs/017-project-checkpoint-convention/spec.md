@@ -292,14 +292,14 @@ Checkpoint 模板：采用（2026-10-02）
 
 不引入新依赖，不新增联网行为。用户项目内的模板 Taco 默认 Lite，每份约 187.6 KB（§4.1 示例实测 187,557 B，随节点与 `instruction` 字数略有变化），属于用户项目文件，不计入 Taco 发布产物。
 
-### 7.1 实测（develop 阶段，2026-10-02，提交 6a5ab4b 之后）
+### 7.1 实测（develop 阶段，2026-10-02，提交 4c547de 之后）
 
 | 产物 | 基线（origin/main 7b87ad7） | 实测 | 估算 | 偏差与原因 |
 | --- | --- | --- | --- | --- |
-| `skills/taco/SKILL.md` | 33,402 B | 35,426 B（+2,024 B，+6.1%） | +1,200～1,800 B | 超出估算 224 B，但仍在 Issue 上限 2,048 B 内。场景试验发现模板门槛与回复义务必须写在 `SKILL.md` 本身：只写在 reference 里时，B3/B4/B13 的 Agent 没有照做，于是多加了一条门槛说明 |
-| `skills/taco/references/checkpoints.md` | 5,220 B | 15,356 B（+10,136 B） | +3,000～4,000 B | 超出约 6 KB。实现时把 spec §3、§4 的规则写全，逐条写明在回复里必须说明什么（否则场景试验中 Agent 会静默跳过），并按独立审查意见列全最小安装（无 `scripts/`）下手工校验所需的 `validateCheckpoints` 规则 |
+| `skills/taco/SKILL.md` | 33,402 B | 35,425 B（+2,023 B，+6.1%） | +1,200～1,800 B | 超出估算 223 B，但仍在 Issue 上限 2,048 B 内。场景试验发现模板门槛与回复义务必须写在 `SKILL.md` 本身：只写在 reference 里时，B3/B4/B13 的 Agent 没有照做，于是多加了一条门槛说明 |
+| `skills/taco/references/checkpoints.md` | 5,220 B | 15,507 B（+10,287 B） | +3,000～4,000 B | 超出约 6.3 KB。实现时把 spec §3、§4 的规则写全，逐条写明在回复里必须说明什么（否则场景试验中 Agent 会静默跳过），并按独立审查意见列全最小安装（无 `scripts/`）下手工校验所需的 `validateCheckpoints` 规则 |
 | `docs/agent-installation.md` | 16,343 B | 16,491 B（+148 B） | +100～200 B | 在估算内 |
-| `skills/taco/` 已跟踪文件字节总和 | 14,067,388 B | 14,079,548 B（+12,160 B，+0.09%） | +4～6 KB | 超出部分即上面三行之和。`du -sk` 在 APFS 克隆的 worktree 上偏大（18,372 KiB vs 13,820 KiB），不能作为口径 |
+| `skills/taco/` 已跟踪文件字节总和 | 14,067,388 B | 14,079,698 B（+12,310 B，+0.09%） | +4～6 KB | 超出部分即上面三行之和。`du -sk` 在 APFS 克隆的 worktree 上偏大（18,372 KiB vs 13,820 KiB），不能作为口径 |
 | `skills/taco/taco-shell.html` / `taco-shell-lite.html` | 2,735,870 B / 186,575 B | 2,735,870 B / 186,575 B | 0 B | 无偏差 |
 | `extensions/taco/`、`dist-single/`、`packages/cli` | — | 0 B（未改动） | 0 B | 无偏差 |
 
@@ -392,11 +392,14 @@ Issue 的验收条件 1～3 保持原样；4 按评审意见 2 改为分诊语�
 | B11 | 通过（重跑） | 不使用残留模板，沿用 CONTRIBUTING |
 | B12 | 通过（重跑） | 回复提示缺少 `.taco/README.md`；询问选哪个模板（不是询问是否采用） |
 | B13 | 通过（重跑） | 报告 `root: custom` 不符合契约，不使用模板 |
+| B14（新增） | 通过（修复后重跑） | 最小安装（无 `scripts/`），模板 `after: ["spec","spec"]`：手工校验发现重复前驱，报告违反的规则，跳过模板并改用普通评审，没有自行去重。修复前曾把重复项去重后照样使用模板，促成独立审查后的提交 4c547de |
+
+独立审查后，又按审查意见修复了 4 处（无 README 也可使用模板、可写入首次答复记录、手工校验覆盖全部规则、查看 instruction 的操作方法）。受影响的 S5（接受、拒绝）与 B12 在修复后重跑，均通过：S5 写入首行「采用」或「不采用」的记录，接受时还写入模板，`validateCheckpoints` 通过；B12 未创建 README。
 
 产物检查：
 
 - **V-tmpl**：S1 产物与模板都通过 `parseBundle` 和 `validateCheckpoints`。断言全部成立：节点数一致、路径前缀为新 `root/`、`docId` 不同、`documents` 为空、`template` 等于模板标题、必需文档都有 instruction、`frontier: ["spec"]`。浏览器中 `window.taco.validate()` 返回 `ok: true`，只有 2 条 `checkpoint-document-missing` 警告。B3 模板的 `validateCheckpoints` 失败，与预期一致。
-- **V-size**：见 §7.1；`SKILL.md` 增量 2,024 B ≤ 2,048 B；`skills/` 下只有 `taco` 一个 skill 目录。
+- **V-size**：见 §7.1；当前 `SKILL.md` 增量 2,023 B ≤ 2,048 B；`skills/` 下只有 `taco` 一个 skill 目录。
 - **回归**：`npm test` 54 个文件、584 个用例通过（多次运行）；`npm run build` 退出码 0。`tests/update-check.test.ts` 的「newer taco-cli from the git channel」用例在全量并行运行时偶发失败（`cli.installed` 为 `null`，属于子进程 `--version` 计时问题）；单独运行 6 次都通过，在 `origin/main` 上运行结果相同。本次改动没有触及该脚本和测试。
 
 ## 10. 实现任务
