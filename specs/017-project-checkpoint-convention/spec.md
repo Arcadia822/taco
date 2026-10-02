@@ -78,8 +78,8 @@ flowchart TD
 2. **`.taco/` 目录下的模板 Taco 与决定记录**（`.taco/README.md`）：
    - `decision: adopted` 且 `templates` 列出的模板可用 → 按 §3.2 使用；多份模板按 README 说明的适用场景选择，无法判断时询问用户（这是选模板，不是重新询问是否采用）。
    - 有模板但无记录（或记录未列出）→ 模板本身就是项目规范（Issue 明列「`.taco/` 下的模板 Taco」为来源之一），按 §3.2 使用，并在报告中提示补充决定记录。
-   - `decision: declined` → 即便 `.taco/` 下存在模板也不套用（记录优先于文件存在），向用户提示一次冲突；本次按普通 Taco 评审，不再提建议。
-   - `adopted` 但模板缺失或无法解析 → 报告问题，本次按普通 Taco 评审，不自动重建模板。
+   - `decision: declined` → 即便 `.taco/` 下存在模板也不套用（记录优先于文件存在），向用户提示一次冲突。它只关闭「建立建议」（第 5 步），不覆盖第 3 步的既有项目约定；本次文档组织继续走第 3 步。
+   - `adopted` 但模板缺失或无法解析 → 报告问题，不自动重建模板、不重新提建议；本次继续走第 3 步，无其它约定时按普通 Taco 评审。
    - 记录无法识别（`decision` 缺失或取值未知）→ 报告，按普通 Taco 评审，不改写记录。
 3. **项目其它形式的流程约定**：`AGENTS.md`/`CLAUDE.md` 等 Agent 规则文件、`CONTRIBUTING*`、`.github/pull_request_template.md`、`.specify/`（Spec Kit）、`specs/` 或 `docs/adr/` 的既有目录惯例。命中时引用该约定决定本次文档集合与评审顺序，并在报告中写明依据（文件与行）；不要求迁移到 `.taco/`，不提建立模板的建议。
 4. **`declined` 记录**（第 2、3 步均未命中时）：按普通 Taco 评审，不再提建议，无论需求复杂度。
@@ -239,7 +239,7 @@ templates:               # 仅 adopted 时出现；相对 .taco/ 的文件名
 | 1. 现有 taco skill 增加的说明简短（SKILL.md 增量 ≲ 1–2 KB），不新增 skill 目录 | §2.1-5、§5、§7 | V-size |
 | 2. 有 `.taco/` 模板时：新 Taco 采用模板 DAG、路径落在新 `root` 内、状态表为空、未创建文档显示为占位；写文档前遵循 `instruction` | §3.1-2、§3.2、§4.1 | S1、V-tmpl |
 | 3. 有其它形式规范（无 `.taco/`）时：引用该规范组织文档，不要求建立 `.taco/` | §3.1-3、§6 Spec Kit | S2 |
-| 4. 无规范无记录 + 复杂需求：提出建议与依据，未确认不建模板；答复后出现记录；之后新会话不再询问（拒绝 → 普通评审；采用 → 按模板，简单修改只写本次需要的文档，见 §3.2-7）；无规范 + 简单修改：不提建议 | §3.3、§4.2 | S3、S4、S5、S6、S7 |
+| 4. 无规范无记录 + 复杂需求：提出建议与依据，未确认不建模板；答复后出现记录；之后新会话不再询问（拒绝 → 普通评审；采用 → 按模板，简单修改只写本次需要的文档，见 §3.2-7）；无规范 + 简单修改：不提建议 | §3.3、§4.2 | S3～S7、S15～S17 |
 | 5. 新会话仅凭 skill 与项目内模板，能回答产出哪些文档、硬性要求、下一步节点 | §3.2 末段 | S8 |
 
 ## 9. 验证方案
@@ -255,7 +255,7 @@ templates:               # 仅 adopted 时出现；相对 .taco/ 的文件名
 | S3 | 无规范、无记录 | 复杂需求，用户答「接受」 | 先提一次建议并给依据；答复前未创建任何 `.taco/` 文件；答复后出现 `decision: adopted` 记录与模板草案 |
 | S4 | 同 S3 | 复杂需求，用户答「拒绝」 | 出现 `decision: declined` 记录；本次普通 Taco，无 `checkpoints` |
 | S5 | S4 产出的仓库，新会话 | 复杂需求 | 不再询问，普通 Taco |
-| S6 | S3 产出的仓库，新会话 | 简单修改 | 不再询问；不强加整套文档：只写本次需要的文档（或按普通 Taco 评审单个文档），其余节点留占位 |
+| S6 | S3 产出的仓库，新会话 | 简单修改 | 不再询问。分两种结果：本次涉及模板文档 → 只写本次需要的文档，其余节点留占位；本次不涉及需求文档（如单文件修订）→ 按普通 Taco 评审单个文档，不套需求图 |
 | S7 | 无规范、无记录 | 简单修改（单文件文案） | 不提建议，不写 `.taco/` |
 | S8 | S1 夹具，新会话 | 提问「这个需求要产出哪些文档、硬性要求、下一步做哪个」 | 答案与 `checkpoints.mjs` 输出的 `documents`/`instruction`/`frontier` 一致 |
 | S9 | 嵌套 monorepo：`packages/a/` 内有自己的 `.taco/`，仓库根无 | 在 `packages/a` 下提复杂需求 | 用最靠近工作目录的 `.taco/`，报告中写明来源目录 |
@@ -263,12 +263,16 @@ templates:               # 仅 adopted 时出现；相对 .taco/ 的文件名
 | S11 | README 的 `decision` 取值非法 | 复杂需求 | 报告「记录无法识别」，按普通 Taco 评审，不改写 README，不重新提议 |
 | S12 | 模板里有 `feature/../outside.md` 或重复路径 | 复杂需求 | 判定模板损坏，停止并报告，不猜测改写 |
 | S13 | 既有需求 Taco 已有 `checkpoints` 且状态表非空，模板已更新 | 刷新该 Taco | 定义与状态表原样保留，不重新套用模板 |
+| S14 | worktree：主检出之外的 `gitdir:` 工作树，工作树内有自己的 `.taco/` | 在工作树内提复杂需求 | 项目根识别命中 `gitdir:`；使用工作树内的 `.taco/`，报告写明来源目录 |
+| S15 | 非仓库目录（无 `.git`），无任何规范 | 复杂需求 | 不提建议、不写 `.taco/`，按普通 Taco 评审 |
+| S16 | S3 夹具处于「用户未答复」状态的仓库，新会话 | 复杂需求 | 未创建任何记录；允许再提一次建议（仍限每会话一次） |
+| S17 | `declined` 记录与 `CONTRIBUTING.md` 流程约定共存 | 复杂需求 | 不套模板；按 CONTRIBUTING 约定组织文档并在报告中引用文件与行；不再提建议 |
 
 执行方式：每个场景启动一个只加载 `skills/taco/`（实现后的版本）的全新子 Agent，输入需求描述；对 S3/S4 由测试者扮演用户答复。记录每个场景的 Agent 提问原文与产出文件。
 
 **产物检查**：
 
-- V-tmpl：模板与 S1 产物都要通过两层校验——`parseBundle` 与对各自 `root` 的 `validateCheckpoints` 完整规则（`resolveCheckpoints`/`checkpoints.mjs` 对没有 `checkpoints` 的 bundle 也返回 `valid: true`，不能只看这个标志）。随后运行 `node skills/taco/scripts/checkpoints.mjs <file>`，断言：`nodes` 数量与模板一致、每条 required 文档带非空 `instruction`、路径前缀为新 `root/`、`checkpoints.documents` 为 `[]` 且 `status` 全为 `todo`/无 `updatedAt`、`checkpoints.template` 为模板标题、`frontier` 为模板入口节点。在浏览器打开 S1 产物，确认占位行与 `Instruction` 标签页可见。
+- V-tmpl：模板与 S1 产物都要通过两层校验——`parseBundle` 与对各自 `root` 的 `validateCheckpoints` 完整规则（`resolveCheckpoints`/`checkpoints.mjs` 对没有 `checkpoints` 的 bundle 也返回 `valid: true`，不能只看这个标志）。随后运行 `node skills/taco/scripts/checkpoints.mjs <file>`，断言：`nodes` 数量与模板一致、路径前缀为新 `root/`、`checkpoints.documents` 为 `[]` 且 `status` 全为 `todo`/无 `updatedAt`、`checkpoints.template` 为模板标题、`frontier` 为模板入口节点；S1 夹具自身要求每条 required 文档带非空 `instruction`（协议允许缺省，此处是夹具断言）。在浏览器打开 S1 产物，确认占位行与 `Instruction` 标签页可见。
 - V-size：`wc -c skills/taco/SKILL.md skills/taco/references/checkpoints.md` 与 §7 基线对比，`SKILL.md` 增量 ≤ 2,048 B；`find skills -maxdepth 1 -type d` 仍只有 `skills/taco`。
 - 回归：`npm test`（含 `tests/skill-pack.test.ts` 对 `SKILL.md` 关键引用的检查、`tests/templates.test.ts` 镜像检查）全部通过。
 
@@ -278,7 +282,7 @@ templates:               # 仅 adopted 时出现；相对 .taco/ 的文件名
 2. 在 `skills/taco/SKILL.md` 的「Optional document and Checkpoint examples」节加入简短段落并链接上节；调整 `:24` 措辞避免重复。按 D1、D2 的最终决定调整相应措辞。
 3. `docs/agent-installation.md:51` 补一句话。
 4. 检查 `packages/host/` 是否描述了相关 skill 行为；有则同步并启动本地预览。
-5. 搭建 `tmp/taco-34-fixtures/` 并执行 S1～S13、V-tmpl、V-size、`npm test`；把结果与体积实测写入本文件 §7 与 PR 描述。
+5. 搭建 `tmp/taco-34-fixtures/` 并执行 S1～S17、V-tmpl、V-size、`npm test`；把结果与体积实测写入本文件 §7 与 PR 描述。
 6. 构建并提供可在浏览器打开的 S1 产物 Taco 作为可验证交付物（`AGENTS.md` 要求）。
 
 ## 11. 待决策点
@@ -286,7 +290,7 @@ templates:               # 仅 adopted 时出现；相对 .taco/ 的文件名
 ### D1：模板里的 `instruction` 由谁、在哪里编辑
 
 - **问题**：Issue 写「人可以直接在浏览器 Checkpoints 页查看和编辑 instruction」，同时把「改 Taco 运行时的渲染与数据模型」列为范围外。
-- **背景**：当前运行时 `Instruction` 面板只读（`src/file-browser.ts:1057-1061, 1095`），Checkpoint 卡片只能改状态（`src/checkpoint-view.ts:186-217`）；Spec 009 明确不在 Taco 界面编辑 Checkpoint 定义。两条要求在本特性范围内无法同时满足。
+- **背景**：当前运行时 `Instruction` 内容为只读写入（`src/file-browser.ts:1101-1102`），Checkpoint 卡片只能改状态（`src/checkpoint-view.ts:186-217`）；Spec 009 明确不在 Taco 界面编辑 Checkpoint 定义。两条要求在本特性范围内无法同时满足。
 - **选项与取舍**：
   - A. **浏览器只读查看，编辑通过 Agent**：人在浏览器读 `instruction`，在模板 Taco 上留评论或直接告诉 Agent，由 Agent 改数据块。不改运行时，与范围外一致；代价是人不能自助改字。
   - B. **另开 Issue 做浏览器内编辑 `instruction`**：本特性按 A 交付，新 Issue 设计运行时编辑（涉及 Spec 009 边界、Handoff 新增定义变更通道）。体验最好，但需要单独设计与评审。
