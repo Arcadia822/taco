@@ -31,10 +31,10 @@ Never transplant a pack's `bundle.json` structure into a directory that does not
 
 Before creating a new requirement Taco, find and follow the project's Checkpoint convention; read *Project Checkpoint convention* in `references/checkpoints.md` first. Precedence: the user's instruction in this request; an installed Spec Kit extension; `.taco/` (`.taco/README.md`'s first line records adoption; each `.taco/*.taco.html` is an empty Taco holding only `checkpoints`); other project conventions (`AGENTS.md`, `CONTRIBUTING`, PR template, `specs/` layout; cite file and line); then this skill's examples.
 
-- Use the `.taco/` nearest the working directory and give its path in your reply. Use a template there only if the README's first line is exactly `Checkpoint 模板：采用（YYYY-MM-DD）` or there is no README (say it is missing), `node scripts/checkpoints.mjs <template>` reports `valid: true` with non-empty `nodes`, and its bundle `root` is `feature`. Otherwise — another first line, a missing or invalid template, another `root` — say so in your reply; never use or repair it.
+- Use the `.taco/` nearest the working directory and give its path in your reply. Use a template there only if the README's first line is exactly `Checkpoint 模板：采用（YYYY-MM-DD）` or there is no README (say it is missing), its bundle `root` is `feature`, and it passes the reference's *Validate* step (script or, without `scripts/`, every listed rule by hand). Otherwise — another first line, a missing or invalid template, another `root` — say so in your reply; never use, repair, or normalize it.
 - An adopted template is an option, not an obligation: triage each request to one template or none, and state the choice and the reason; small changes usually get none. When one template's stated scope fits, use it without asking. To use one, copy only its `checkpoints.nodes`, map its `feature/` paths to this request's `root`, and start from a fresh `docId` and `documents: []`.
 - With no convention and no record, suggest a template once, and only when this request's review needs call for staged review or sign-off by different roles — never because of document count. Record the answer in `.taco/README.md`; once recorded, never ask about adoption again.
-- Write `.taco/` only to record the user's answer to that suggestion, or when the user asks to refine the process; otherwise never modify it.
+- Write `.taco/` only to record the user's answer to that suggestion, or when the user asks to refine the process.
 
 ### Check for updates once per work session
 
