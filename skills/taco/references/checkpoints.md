@@ -27,9 +27,9 @@ Use the first source that applies. The project root is the directory holding `.g
 1. **The user's instruction in this request**: requiring or forbidding Checkpoints, or naming a template or graph.
 2. **An installed Spec Kit extension** (`.specify/extensions/taco/`): follow the extension's own convention.
 3. **`.taco/` decision record and templates**: read the first line of `.taco/README.md` (see *Decision record*), then the templates:
-   - first line *adopted*, or no README but templates exist: if at least one template meets the *Template contract*, triage (below); otherwise report it and go to step 4;
-   - first line *declined*: use no `.taco/` template, even if one exists — mention the mismatch once — and go to step 4;
-   - first line unrecognized: report it and use ordinary Taco review; do not suggest, do not rewrite the README, and stop here;
+   - first line *adopted*, or no README but templates exist: if at least one template meets the *Template contract*, triage (below); otherwise say in your reply that no usable template exists and why, and go to step 4;
+   - first line *declined*: use no `.taco/` template, even if one exists; say in your reply that the record and the leftover template disagree, and go to step 4;
+   - any other first line is unrecognized, even when it reads like approval (`Checkpoints: yes`): say so in your reply, use ordinary Taco review with no template, do not suggest, do not rewrite the README, and stop here;
    - neither README nor templates: go to step 4.
 4. **Other project process conventions**: `AGENTS.md`/`CLAUDE.md`, `CONTRIBUTING*`, `.github/pull_request_template.md`, or an established `specs/` or `docs/adr/` layout. Let it decide this request's documents and review order, and cite the file and line. Do not ask the project to adopt `.taco/`.
 5. **This skill's bundled examples** (`templates/spec/` and the others): reference only, never a default structure.
@@ -40,17 +40,17 @@ If nothing applies, consider a suggestion (below). Once `.taco/README.md` record
 
 An adopted template is an **option**, not an obligation. For every new requirement:
 
-1. Collect the candidates and when each applies. With a README, use the templates it lists and their stated scope. Without one, list every `.taco/*.taco.html` that meets the contract and infer scope from its title, nodes, and `instruction`s; say a decision record is missing, but do not create or edit the README.
+1. Collect the candidates and when each applies. With a README, use the templates it lists and their stated scope. Without one, list every `.taco/*.taco.html` that meets the contract and infer scope from its title, nodes, and `instruction`s; say in your reply that the decision record is missing, but do not create or edit the README.
 2. Match them against this request's review needs: named review milestones, staged reviews, or sign-off by different roles.
 3. Choose one template, or none. Small changes — copy edits, a single-point fix — usually get none and an ordinary Taco without `checkpoints`.
 4. State the choice and the reason in your reply ("using `Feature_Checkpoints`: design and plan are reviewed separately" or "no template: single-file copy edit"). The user may overrule it.
-5. If the scopes cannot settle between several templates, ask which one to use.
+5. When exactly one template's stated scope fits, use it without asking. Ask which one to use only when the scopes cannot settle between several templates.
 
 Triage writes nothing; `.taco/README.md` holds only the project-level decision.
 
 ### Using a template: copy the definition, not the runtime
 
-1. **Validate** the template's `checkpoints` with the full `validateCheckpoints` rules: `version` 1, unique node `id`s, `after` naming existing ids with no cycle, safe and unique document paths under the template `root/`, and a `documents` array. `parseBundle` does not check `checkpoints`, so its success proves nothing here. A failing template is broken: report it, skip it for this request, and do not repair it.
+1. **Validate** the template before anything else: run `node scripts/checkpoints.mjs <template.taco.html>` (relative to the installed skill) and require `valid: true` and a bundle `root` of `feature` (read `root` from the data block; the reader does not print it), or apply the same `validateCheckpoints` rules by hand: `version` 1, unique node `id`s, `after` naming existing ids with no cycle, safe and unique document paths under the template `root/`, and a `documents` array. `parseBundle` does not check `checkpoints`, so its success proves nothing here. A failing template is broken: say so in your reply with the reader's `error`, skip it for this request, and do not repair it — never drop or rewrite the offending path to make it pass.
 2. **Copy only `checkpoints.nodes`.** The new Taco gets a fresh `docId` (`crypto.randomUUID()`) and inherits nothing else from the template: not its `docId`, `title`, `files`, `comments`, `navigation`, or status records.
 3. **Map paths.** The template `root` is always `feature`. Strip the `feature/` prefix from each document path and prepend this request's `root/` (`feature/plan.md` with `root: "specs/018-search"` becomes `specs/018-search/plan.md`), then re-run the path checks against the new `root`. A template whose `root` is not `feature` does not meet the contract: report it and skip it; do not edit it.
 4. **Keep and reset.** Keep each node's `id`, `title`, and `after`, and each document's `optional` and `instruction`. Set `checkpoints.template` to the template's title and `checkpoints.documents` to `[]`.
