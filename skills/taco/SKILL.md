@@ -21,11 +21,19 @@ Nothing to install. A `.taco.html` is plain HTML with one plaintext JSON data bl
 
 ### Optional document and Checkpoint examples
 
-This skill bundles optional document examples in `templates/` next to this `SKILL.md`: `spec/`, `architecture/`, `api-reference/`, and `adr/`. (A Taco source checkout carries the same packs at `extensions/taco/templates/`; an installed Spec Kit extension exposes them at `.specify/extensions/taco/templates/`.) First use the user's instructions and project-owned templates or review policy, if present. Read a bundled pack's `README.md` and `template.md` only when it is useful as a starting reference; its fields, files, and Checkpoint graph are not required structure.
+This skill bundles optional document examples in `templates/` next to this `SKILL.md`: `spec/`, `architecture/`, `api-reference/`, and `adr/`. (A Taco source checkout carries the same packs at `extensions/taco/templates/`; an installed Spec Kit extension exposes them at `.specify/extensions/taco/templates/`.) First use the user's instructions and the project's own Checkpoint convention (see *Project Checkpoint convention* below), if present. Read a bundled pack's `README.md` and `template.md` only when it is useful as a starting reference; its fields, files, and Checkpoint graph are not required structure.
 
 Decide whether to use Checkpoints from the review contract, not the task label or document count. Use them when the team needs named review milestones, dependencies, or explicit status tracking; follow any project-specific Checkpoint policy or reviewer request. Otherwise omit `checkpoints` and use Taco's ordinary document review. For comparison, a small copy edit or straightforward bug fix often needs no Checkpoint, while a `spec.md` → `plan.md` → `tasks.md` review can draw on the bundled `spec/` **SDD example**. Neither shape is mandatory: a small change may require client sign-off, and a complex change may use a different project-defined graph. If adapting an example, update every `checkpoints.nodes[].documents[].path` to the new root; never import sample status records as real review progress.
 
 Never transplant a pack's `bundle.json` structure into a directory that does not contain its paths. A copied Checkpoint graph or `navigation` manifest renders empty groups and `Not created` placeholder rows — a document that looks broken instead of simple. The packs supply prose to adapt (`template.md`); their `bundle.json` is a working example of *those* files, not a layout to impose.
+
+### Project Checkpoint convention
+
+Before creating a new requirement Taco, find and follow the project's Checkpoint convention; read *Project Checkpoint convention* in `references/checkpoints.md` first. Precedence: the user's instruction in this request; an installed Spec Kit extension; `.taco/` (the first line of `.taco/README.md` records whether the project adopted templates, and each `.taco/*.taco.html` is an empty Taco holding only a `checkpoints` definition); other project conventions (`AGENTS.md`, `CONTRIBUTING`, PR template, `specs/` layout); then this skill's examples.
+
+- An adopted template is an option, not an obligation: triage each request to one template or none, and state the choice and the reason; small changes usually get none. To use one, copy only its `checkpoints.nodes`, map its `feature/` paths to this request's `root`, and start from a fresh `docId` and `documents: []`.
+- With no convention and no record, suggest a template once, and only when this request's review needs call for staged review or sign-off by different roles — never because of document count. Record the answer in `.taco/README.md`; once recorded, never ask about adoption again.
+- Leave `.taco/` untouched unless the user asks to refine the process.
 
 ### Check for updates once per work session
 
@@ -183,7 +191,7 @@ Rules that come with it:
 
 Decide and state the presentation before writing anything. This is where an unexpected sidebar gets caught.
 
-- Group from the review contract and the directory itself, never from a template's names. A directory of research notes must not grow `spec` / `plan` / `tasks`; declare Checkpoints or `navigation` groups only for documents that exist or that the user explicitly scheduled.
+- Group from the review contract and the directory itself, never from a template's names. A directory of research notes must not grow `spec` / `plan` / `tasks`; declare Checkpoints or `navigation` groups only for documents that exist, that the user explicitly scheduled, or that a `.taco/` template chosen for this request declares.
 - Work out the resulting sidebar: which file lands in which group, what falls under `Unassigned`, and which document opens first. The derivation rules live in `references/bundle-format.md`; where Node is available, the optional `scripts/pack.mjs --dry-run` prints the exact result for the real directory.
 - Keep the structure proportional to the directory. One flat Markdown document stays one file; do not add folders, files, or groups to look organized.
 
@@ -210,7 +218,7 @@ You are authoring one document model — the bundle. A directory of Markdown is 
 - Verification has two levels (`references/output-path.md` §7). **V1**: with a review tab open, run `window.taco.validate()` in its console — it checks what the renderer actually did (comment anchors, cross-document links, navigation and Checkpoint paths, unmigrated blocks) and must return `ok: true` with no error. **V2**: no browser available — parse the block you wrote and check the shape rules, then state plainly that you did not verify rendering. Never present V2 as V1, and never write at all when you cannot parse the string (report `unverifiable`). Where Node is available, the optional `scripts/pack.mjs verify <name.taco.html>` prints the structure a reviewer will see; it is a convenience, not a required step.
 - Compare the reported structure with the shape you decided in step 0: entry document, each group with its files, what sits under `Unassigned`, and open/resolved comment threads.
 - Fix a mismatch, or state it plainly, before handing the file over. A warning you shipped silently is a surprise the reviewer finds instead. Report the verification level you reached and every `warning`/`error` finding it produced.
-- A Checkpoint document shown as `not created` is expected only when you deliberately scheduled work that does not exist yet. Otherwise the structure was transplanted from a template: remove it.
+- A Checkpoint document shown as `not created` is expected only when you deliberately scheduled work that does not exist yet, including documents a `.taco/` template chosen for this request declares. Otherwise the structure was transplanted from a template: remove it.
 - Validate every diagram before you ship it. `node scripts/lint-mermaid.mjs <file.mmd|file.md>...` (or `--dir <docDir>`) parses each `.mmd` file and every ```` ```mermaid ```` fence with the same Mermaid build the Complete shell embeds, so a pass here means it parses in the file the reviewer opens. Exit code `0` = all parsed, `1` = diagnostics (each with kind, `line:column` and the raw parser text), `2` = the check could not run at all — `2` is never a pass. A diagram that fails here would otherwise reach the reviewer as one generic browser error.
 - Confirm the artifact loads: the data block must parse and satisfy the shape rules. A Recovery-mode file is a failed hand-off, not a preview.
 
