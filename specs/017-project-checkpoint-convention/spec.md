@@ -290,7 +290,20 @@ Checkpoint 模板：采用（2026-10-02）
 | `extensions/taco/assets/`、`dist-single/` 外壳 | — | 0 B |
 | 发布产物（`taco-extension-*.zip`、`dist-single/` 构建产物、`taco-cli` 内嵌指南） | — | 0 B；skill 目录以安装/复制方式分发，随本次改动 +4～6 KB |
 
-不引入新依赖，不新增联网行为。用户项目内的模板 Taco 默认 Lite，实测 187,455 B/个（§4.1），属于用户项目文件，不计入 Taco 发布产物。实现阶段按同一口径用 `wc -c` 与 `du -sk` 实测，与上表并列记录。
+不引入新依赖，不新增联网行为。用户项目内的模板 Taco 默认 Lite，实测 187,455 B/个（§4.1），属于用户项目文件，不计入 Taco 发布产物。
+
+### 7.1 实测（develop 阶段，2026-10-02，提交 afd1a09 之后）
+
+| 产物 | 基线（origin/main 7b87ad7） | 实测 | 估算 | 偏差与原因 |
+| --- | --- | --- | --- | --- |
+| `skills/taco/SKILL.md` | 33,402 B | 35,443 B（+2,041 B，+6.1%） | +1,200～1,800 B | 超出估算 241 B，但仍在 Issue 上限 2,048 B 内。场景试验发现模板门槛与回复义务必须写在 `SKILL.md` 本身：只写在 reference 里时，B3/B4/B13 的 Agent 没有照做，于是多加了一条门槛说明 |
+| `skills/taco/references/checkpoints.md` | 5,220 B | 14,582 B（+9,362 B） | +3,000～4,000 B | 超出 5.4 KB。实现时把 spec §3、§4 的规则写全，并逐条写明在回复里必须说明什么，否则场景试验中 Agent 会静默跳过 |
+| `docs/agent-installation.md` | 16,343 B | 16,491 B（+148 B） | +100～200 B | 在估算内 |
+| `skills/taco/` 已跟踪文件字节总和 | 14,067,388 B | 14,078,791 B（+11,403 B，+0.08%） | +4～6 KB | 超出部分即上面两行之和。`du -sk` 在 APFS 克隆的 worktree 上偏大（18,372 KiB vs 13,820 KiB），不能作为口径 |
+| `skills/taco/taco-shell.html` / `taco-shell-lite.html` | 2,735,870 B / 186,575 B | 2,735,870 B / 186,575 B | 0 B | 无偏差 |
+| `extensions/taco/`、`dist-single/`、`packages/cli` | — | 0 B（未改动） | 0 B | 无偏差 |
+
+两种外壳均无增长，远低于 `AGENTS.md` 中「较大增大」的阈值（≥ 1% 或 ≥ 32 KB）。
 
 ## 8. 验收条件对应
 
@@ -347,6 +360,44 @@ Issue 的验收条件 1～3 保持原样；4 按评审意见 2 改为分诊语�
 - **V-tmpl**：模板与 S1 产物都要通过 `parseBundle` 与对各自 `root` 的 `validateCheckpoints` 完整规则（`checkpoints.mjs` 对没有 `checkpoints` 的 bundle 也返回 `valid: true`，不能只看这个标志）。再运行 `node skills/taco/scripts/checkpoints.mjs <file>`，断言：节点数量与模板一致、路径前缀为新 `root/`、`docId` 与模板不同、`checkpoints.documents` 为 `[]`、`checkpoints.template` 为模板标题、`frontier` 为模板入口节点；S1 夹具自身要求每条必需文档带非空 `instruction`。浏览器打开 S1 产物，确认占位行与 `Instruction` 标签页可见，`window.taco.validate()` 只有 `checkpoint-document-missing` 警告、无错误。
 - **V-size**：`wc -c skills/taco/SKILL.md skills/taco/references/checkpoints.md` 与 §7 基线对比，`SKILL.md` 增量 ≤ 2,048 B；`skills/` 下仍只有 `taco` 一个 skill 目录。
 - **回归**：`npm test` 全部通过（含 `tests/skill-pack.test.ts`、`tests/templates.test.ts`）。
+
+### 9.4 实测结果（develop 阶段，2026-10-02）
+
+夹具：`tmp/taco-34-fixtures/`（22 个最小 git 仓库；B7 为 `gitdir:` worktree）与 `/tmp/taco-34-nonrepo`（B8，不在任何仓库中）。每个场景由一个只读取 `skills/taco/` 的全新子 Agent 执行，记录回复原文与产出文件；`.taco/` 文件在运行前后各做一次 `shasum -a 256`。
+
+第一轮 23 个场景中，16 个直接通过。S2a、S4、B3、B4、B5、B11、B13 偏离预期或判定不清：B3 删掉越界路径后继续用模板；B4、B13 无视首行或 `root` 仍用模板；S2a 只有一个模板适用仍去问用户；B5 没说明模板缺失；S4、B11 无法单独判定。B6、B12、S2b 也有回复义务缺失（没写明 `.taco/` 来源、没提示缺少记录、多问了一次）。原因是模板门槛只写在 reference 里，`SKILL.md` 没有。修正后（提交 88b1d5c、afd1a09）重跑这 11 个场景，全部符合预期。
+
+| 编号 | 结果 | 关键证据 |
+| --- | --- | --- |
+| S1 | 通过 | 回复说明选用 `Feature_Checkpoints` 及理由；产物 DAG 与模板逐节点一致（路径映射后），`root: specs/order-export-csv`，新 `docId`，`documents: []`，`template: Feature Checkpoints`；`spec.md` 满足 instruction（目标、非目标、3 条编号验收条件）；浏览器中 `plan.md` 占位显示「创建文件」与「要求」标签页 |
+| S2a | 通过（重跑） | 未询问，直接按 README 适用场景选用 Feature 并说明依据 |
+| S2b | 通过（重跑） | 未询问，直接选用 Hotfix，产出 `diagnosis.md`（现象、根因、影响范围） |
+| S3 | 通过 | 「不用模板：单处拼写修正」，普通 Taco，无 `checkpoints` |
+| S4 | 通过 | 引用 `CONTRIBUTING.md`，按 design → rollout 只写 `design.md`；未建议 `.taco/` |
+| S5（接受） | 通过 | 建议原文给出依据与写入内容；建议前 `.taco/` 不存在；答复后 README 首行 `Checkpoint 模板：采用（2026-10-02）`，模板草案 `root: feature`、`files: []`、`documents: []`、`valid: true`，经用户确认后写入 |
+| S5（拒绝） | 通过 | README 首行 `Checkpoint 模板：不采用（2026-10-02）`；本次普通 Taco |
+| S6 | 通过 | 无建议，无 `.taco/` |
+| S7 | 通过 | 复杂需求与简单修改都未询问，普通 Taco |
+| S8 | 通过 | 未要求调整流程的 21 个仓库中，`.taco/` 文件哈希前后一致 |
+| B1 | 通过 | 只改了 `plan.md` 的 instruction，其它字段与 shell 字节不变，回复中列出改动 |
+| B2 | 通过 | 选用 Spec Kit 扩展约定，未套用 `.taco/` 模板 |
+| B3 | 通过（重跑） | 报告 `checkpoints.nodes[1].documents[2].path: Path must be safe and within root`，不修复、不使用模板 |
+| B4 | 通过（重跑） | 报告首行无法识别，普通评审，不建议，README 未改 |
+| B5 | 通过（重跑） | 说明模板文件缺失，转用 CONTRIBUTING，不重建、不建议 |
+| B6 | 通过（重跑） | 回复写明使用 `packages/a/.taco/` |
+| B7 | 通过 | 在 `gitdir:` worktree 中使用工作树内的 `.taco/` |
+| B8 | 通过 | 无建议，无 `.taco/` |
+| B9 | 通过 | 用户含糊答复后不写记录 |
+| B10 | 通过 | 刷新时 `docId`、定义与状态表原样保留，模板新增的 `tasks` 节点未被带入 |
+| B11 | 通过（重跑） | 不使用残留模板，沿用 CONTRIBUTING |
+| B12 | 通过（重跑） | 回复提示缺少 `.taco/README.md`；询问选哪个模板（不是询问是否采用） |
+| B13 | 通过（重跑） | 报告 `root: custom` 不符合契约，不使用模板 |
+
+产物检查：
+
+- **V-tmpl**：S1 产物与模板都通过 `parseBundle` 和 `validateCheckpoints`。断言全部成立：节点数一致、路径前缀为新 `root/`、`docId` 不同、`documents` 为空、`template` 等于模板标题、必需文档都有 instruction、`frontier: ["spec"]`。浏览器中 `window.taco.validate()` 返回 `ok: true`，只有 2 条 `checkpoint-document-missing` 警告。B3 模板的 `validateCheckpoints` 失败，与预期一致。
+- **V-size**：见 §7.1；`SKILL.md` 增量 2,041 B ≤ 2,048 B；`skills/` 下只有 `taco` 一个 skill 目录。
+- **回归**：`npm test` 54 个文件、584 个用例通过（多次运行）；`npm run build` 退出码 0。`tests/update-check.test.ts` 的「newer taco-cli from the git channel」用例在全量并行运行时偶发失败（`cli.installed` 为 `null`，属于子进程 `--version` 计时问题）；单独运行 6 次都通过，在 `origin/main` 上运行结果相同。本次改动没有触及该脚本和测试。
 
 ## 10. 实现任务
 
