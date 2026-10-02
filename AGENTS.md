@@ -26,6 +26,7 @@ When a user asks an agent to install, use, package, or review Taco, read `README
 - Conflict boundary: when the optional extension CLI is installed, preview every review import with `sync --dry-run --json` and stop on any conflict; never use `--force` without explicit authorization for the exact conflict paths. When importing through Handoff or a saved file without the CLI, diff the received content against the canonical files yourself and stop on any change you cannot attribute. Never resolve a conflict by silently choosing one side.
 - Treat collaboration-enabled Taco files as potentially credential-bearing. Follow `docs/agent-installation.md` before sending their contents to any external model, service, log, or ticket. Local inspection remains allowed, and revocation or key reset is an explicit user action.
 - Tacobin deploys only from a pushed `tacobin-v*` tag. `packages/host/vercel.json` disables Git-triggered Vercel deployments, and the tag drives the Deploy Tacobin workflow, which calls the project's Deploy Hook; a branch push, a pull request, or the tag by itself publishes nothing.
+- Issue 管理：需求、任务与缺陷一律用 `linctl` 在 Linear 团队 `TACO` 建 Issue，不手动建 GitHub Issue（Linear 会自动同步到 GitHub）。创建时补全上下文字段：状态 `Backlog`、Linear 内建 `priority`（不用 priority 标签代替）、已有语义 `labels`，以及适用的 `project`。
 
 # 体积与依赖预算（prepare 估算 / develop 实测）
 
