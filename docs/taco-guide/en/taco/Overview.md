@@ -50,15 +50,15 @@ The Markdown in your repository is always authoritative. Taco is only the carrie
 - **Product design**: PRDs, interaction flows, copy;
 - Any document collaboration where the agent writes, a human reviews, and the agent revises.
 
-Taco does not provide real-time multi-user editing, version history, or accounts. For online team review, use [Tacobin](Features/03-Tacobin.md).
+Taco does not provide real-time multi-user editing, version history, or accounts. For online team review, use [Tacobin](Features/Tacobin.md).
 
 ## Three parts
 
 | Part | What it is | Read more |
 | --- | --- | --- |
-| Taco | The single-file review workspace itself | [Taco](Features/01-Taco.md) |
-| Taco Skill | Teaches your agent to write, refresh, and read reviews | [Taco Skill](Features/02-Taco-Skill.md) |
-| Tacobin | Share links and an online review relay, used with `taco-cli` | [Tacobin](Features/03-Tacobin.md) |
+| Taco | The single-file review workspace itself | [Taco](Features/Taco.md) |
+| Taco Skill | Teaches your agent to write, refresh, and read reviews | [Taco Skill](Features/Taco-Skill.md) |
+| Tacobin | Share links and an online review relay, used with `taco-cli` | [Tacobin](Features/Tacobin.md) |
 
 ## Design principles
 
@@ -70,6 +70,6 @@ Taco does not provide real-time multi-user editing, version history, or accounts
 
 ## Where to go next
 
-- Get started right away: [Quickstart](Start/01-Quickstart.md)
-- See what each part does: start with [Taco](Features/01-Taco.md)
-- Learn how it is built: [Architecture](Architecture/01-Architecture.md)
+- Get started right away: [Quickstart](Start/Quickstart.md)
+- See what each part does: start with [Taco](Features/Taco.md)
+- Learn how it is built: [Architecture](Architecture/Architecture.md)

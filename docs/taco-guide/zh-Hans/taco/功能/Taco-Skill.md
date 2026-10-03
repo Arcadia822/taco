@@ -69,5 +69,5 @@ specify extension add taco --from https://github.com/Arcadia822/taco/releases/la
 
 ## 边界
 
-- skill 只负责本地文件；分享链接和在线评审需要 [Tacobin](03-Tacobin.md)。
+- skill 只负责本地文件；分享链接和在线评审需要 [Tacobin](Tacobin.md)。
 - 被评审的目录始终是事实来源。Taco 里没有的文件，Agent 不会因此删除仓库里的对应文件。

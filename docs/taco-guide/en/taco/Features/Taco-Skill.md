@@ -69,5 +69,5 @@ This is project-level wiring you request explicitly; you do not need it without 
 
 ## Limits
 
-- The skill handles local files only; share links and online review need [Tacobin](03-Tacobin.md).
+- The skill handles local files only; share links and online review need [Tacobin](Tacobin.md).
 - The reviewed folder stays the source of truth. A file missing from the Taco never causes the agent to delete it from the repository.

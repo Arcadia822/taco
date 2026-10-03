@@ -20,20 +20,20 @@ const LOCALES = {
     entry: '概览.md',
     stages: {
       overview: ['概览', ['概览.md']],
-      start: ['开始', ['开始/01-快速开始.md', '开始/02-常见问题.md']],
-      features: ['功能', ['功能/01-Taco.md', '功能/02-Taco-Skill.md', '功能/03-Tacobin.md']],
-      architecture: ['架构', ['架构/01-技术架构.md', '架构/02-系统组件.mmd', '架构/03-Tacobin-API.yaml']],
+      start: ['开始', ['开始/快速开始.md', '开始/常见问题.md']],
+      features: ['功能', ['功能/Taco.md', '功能/Taco-Skill.md', '功能/Tacobin.md']],
+      architecture: ['架构', ['架构/技术架构.md', '架构/系统组件.mmd', '架构/Tacobin-API.yaml']],
       roadmap: ['路线图', ['路线图.md', '路线图/下一阶段.md']],
     },
-    todo: ['架构/03-Tacobin-API.yaml', '路线图/下一阶段.md'],
+    todo: ['架构/Tacobin-API.yaml', '路线图/下一阶段.md'],
     inProgress: ['路线图.md'],
     frozen: ['概览.md'],
     instructions: {
       '概览.md': '一屏讲清定位、三个特点与三个组成部分；不要求读者操作也能读懂。',
-      '开始/01-快速开始.md': '不超过 5 步，从安装到第一次交接。',
-      '功能/01-Taco.md': '只写已实现的能力；每项能力指明本站中可以看到的示例文件。',
-      '功能/03-Tacobin.md': '讲清 taco-cli 与 Tacobin 的分工；强调评论与自动保存不等于交接。',
-      '架构/03-Tacobin-API.yaml': '与服务端实现逐条核对后补全请求与响应 schema；未实现的接口不得写入。',
+      '开始/快速开始.md': '不超过 5 步，从安装到第一次交接。',
+      '功能/Taco.md': '只写已实现的能力；每项能力指明本站中可以看到的示例文件。',
+      '功能/Tacobin.md': '讲清 taco-cli 与 Tacobin 的分工；强调评论与自动保存不等于交接。',
+      '架构/Tacobin-API.yaml': '与服务端实现逐条核对后补全请求与响应 schema；未实现的接口不得写入。',
       '路线图/下一阶段.md': '列出下一阶段的议题；每个议题写清要解决的问题、依赖哪些已有能力，并标注哪些需要人来决策。不写已完成的内容。',
     },
     comments: [
@@ -41,13 +41,13 @@ const LOCALES = {
         ['lin', '为什么不直接做成 SaaS？团队评审放在网页上不是更方便吗？', 1, 1],
         ['arcadia', '文档要跟代码在同一个仓库、同一段历史里，Agent 也要能直接读写。单文件是底座；需要在线评审时再用 Tacobin，两者不冲突。', 1, 2],
         ['lin', '明白了，那这里保留现在的说法。', 1, 3]]],
-      ['功能/01-Taco.md', 'Lite 的 CDN 不可用时，Markdown 仍可按源码编辑。', 'resolved', [
+      ['功能/Taco.md', 'Lite 的 CDN 不可用时，Markdown 仍可按源码编辑。', 'resolved', [
         ['mo', 'Lite 和 Complete 默认推荐哪个？表格里看不出结论。', 2, 1],
         ['arcadia', '放进仓库、联网评审用 Lite；要发给可能离线的人用 Complete。已经写进常见问题。', 2, 2]]],
-      ['架构/02-系统组件.mmd', 'BIN["Tacobin<br/>taco-host/1"]', 'resolved', [
+      ['架构/系统组件.mmd', 'BIN["Tacobin<br/>taco-host/1"]', 'resolved', [
         ['mo', 'Tacobin 会长期保存正文吗？要不要在图上标出来？', 2, 3],
         ['arcadia', '发布时保存一份不可变基线，仓库仍是事实来源。这一点写在 Tacobin 页的「边界」里，图上不再加。', 2, 4]]],
-      ['功能/03-Tacobin.md', '评论和自动保存都不等于交接，不会唤醒 Agent。', 'open', [
+      ['功能/Tacobin.md', '评论和自动保存都不等于交接，不会唤醒 Agent。', 'open', [
         ['lin', '评审者写完评论就关页面的情况会很多。自动保存成功后，是否应该在页面上提示「尚未交接」？', 3, 1],
         ['arcadia', '同意这是风险。先记下来，等第二轮审阅体验一起设计提示方式。', 3, 2]]],
       ['路线图.md', '全局讨论列表', 'open', [
@@ -60,20 +60,20 @@ const LOCALES = {
     entry: 'Overview.md',
     stages: {
       overview: ['Overview', ['Overview.md']],
-      start: ['Start', ['Start/01-Quickstart.md', 'Start/02-FAQ.md']],
-      features: ['Features', ['Features/01-Taco.md', 'Features/02-Taco-Skill.md', 'Features/03-Tacobin.md']],
-      architecture: ['Architecture', ['Architecture/01-Architecture.md', 'Architecture/02-System.mmd', 'Architecture/03-Tacobin-API.yaml']],
+      start: ['Start', ['Start/Quickstart.md', 'Start/FAQ.md']],
+      features: ['Features', ['Features/Taco.md', 'Features/Taco-Skill.md', 'Features/Tacobin.md']],
+      architecture: ['Architecture', ['Architecture/Architecture.md', 'Architecture/System.mmd', 'Architecture/Tacobin-API.yaml']],
       roadmap: ['Roadmap', ['Roadmap.md', 'Roadmap/Next-Phase.md']],
     },
-    todo: ['Architecture/03-Tacobin-API.yaml', 'Roadmap/Next-Phase.md'],
+    todo: ['Architecture/Tacobin-API.yaml', 'Roadmap/Next-Phase.md'],
     inProgress: ['Roadmap.md'],
     frozen: ['Overview.md'],
     instructions: {
       'Overview.md': 'Explain the positioning, three differentiators, and three parts on one screen; readable without any interaction.',
-      'Start/01-Quickstart.md': 'At most 5 steps from installation to the first handoff.',
-      'Features/01-Taco.md': 'Describe implemented capabilities only; for each, point to an example file on this site.',
-      'Features/03-Tacobin.md': 'Explain how taco-cli and Tacobin divide the work; stress that comments and autosave are not a handoff.',
-      'Architecture/03-Tacobin-API.yaml': 'Complete request and response schemas after checking each endpoint against the server; never add endpoints that do not exist.',
+      'Start/Quickstart.md': 'At most 5 steps from installation to the first handoff.',
+      'Features/Taco.md': 'Describe implemented capabilities only; for each, point to an example file on this site.',
+      'Features/Tacobin.md': 'Explain how taco-cli and Tacobin divide the work; stress that comments and autosave are not a handoff.',
+      'Architecture/Tacobin-API.yaml': 'Complete request and response schemas after checking each endpoint against the server; never add endpoints that do not exist.',
       'Roadmap/Next-Phase.md': 'List next-phase topics; for each, state the problem, the existing capabilities it depends on, and whether it needs a human decision. Leave out finished work.',
     },
     comments: [
@@ -81,13 +81,13 @@ const LOCALES = {
         ['lin', 'Why not just build a SaaS? Wouldn\'t team review be easier on a website?', 1, 1],
         ['arcadia', 'Docs need to live in the same repository and history as the code, and agents need to read and write them directly. The single file is the foundation; Tacobin adds online review when you need it. The two don\'t compete.', 1, 2],
         ['lin', 'Makes sense, let\'s keep the wording as is.', 1, 3]]],
-      ['Features/01-Taco.md', 'If Lite\'s CDN is unavailable, Markdown can still be edited as source.', 'resolved', [
+      ['Features/Taco.md', 'If Lite\'s CDN is unavailable, Markdown can still be edited as source.', 'resolved', [
         ['mo', 'Which one do we recommend by default, Lite or Complete? The table doesn\'t say.', 2, 1],
         ['arcadia', 'Lite for committing to a repository and online review; Complete for recipients who may be offline. It\'s now in the FAQ.', 2, 2]]],
-      ['Architecture/02-System.mmd', 'BIN["Tacobin<br/>taco-host/1"]', 'resolved', [
+      ['Architecture/System.mmd', 'BIN["Tacobin<br/>taco-host/1"]', 'resolved', [
         ['mo', 'Does Tacobin keep the content long term? Should the diagram say so?', 2, 3],
         ['arcadia', 'Publishing stores an immutable baseline, and the repository stays the source of truth. That\'s under Limits on the Tacobin page, so the diagram stays as is.', 2, 4]]],
-      ['Features/03-Tacobin.md', 'Comments and autosave are not a handoff, and they do not wake the agent.', 'open', [
+      ['Features/Tacobin.md', 'Comments and autosave are not a handoff, and they do not wake the agent.', 'open', [
         ['lin', 'Plenty of reviewers will comment and just close the tab. After autosave succeeds, should the page say "not handed off yet"?', 3, 1],
         ['arcadia', 'Agreed, that\'s a real risk. Logging it for now; we\'ll design the prompt together with the second review round.', 3, 2]]],
       ['Roadmap.md', 'Global discussions list', 'open', [

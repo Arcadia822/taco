@@ -25,7 +25,7 @@ Two ways: click **Handoff** to copy your edits and comments for the agent, or sa
 
 ## Does it support real-time collaboration?
 
-A local Taco does not. For online review with several people, use [Tacobin](../Features/03-Tacobin.md): multiple reviewers can edit and comment at the same time, with autosave.
+A local Taco does not. For online review with several people, use [Tacobin](../Features/Tacobin.md): multiple reviewers can edit and comment at the same time, with autosave.
 
 ## Which files are supported?
 

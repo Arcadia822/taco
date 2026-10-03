@@ -5,7 +5,7 @@ status: Complete
 
 ## Overview
 
-Taco has four parts: an HTML file that carries its own application, a runtime in the browser, a file protocol, and an optional host. See the [system components](02-System.mmd) for how they relate.
+Taco has four parts: an HTML file that carries its own application, a runtime in the browser, a file protocol, and an optional host. See the [system components](System.mmd) for how they relate.
 
 ## One file = shell + data block
 
@@ -46,4 +46,4 @@ Refreshes keep `docId`, comments, navigation, and Checkpoints, which is what let
 ## Hosts
 
 - **Local**: open directly via `file://`, no service needed;
-- **Tacobin**: handles publishing, autosave, presence, and handoff events. See the [Tacobin API](03-Tacobin-API.yaml) for the main endpoints.
+- **Tacobin**: handles publishing, autosave, presence, and handoff events. See the [Tacobin API](Tacobin-API.yaml) for the main endpoints.
