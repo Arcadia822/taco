@@ -9,6 +9,11 @@
 # Requires the repository secret TACOBIN_DEPLOY_HOOK: the Deploy Hook URL from
 # Vercel > tacobin > Settings > Git > Deploy Hooks, created against the `main` branch.
 # Treat that URL as a credential; rotate it in the dashboard if it leaks.
+#
+# The served tag alone proves only that the build finished. The Host also needs its runtime
+# configuration on Vercel — DATABASE_URL (Postgres) and TACO_CSRF_SECRET — or publish and
+# review fail while /deploy.json still answers (tacobin-v0.6.0 shipped without both). The last
+# step therefore publishes a small Taco and reads its shared state, as a reviewer's page does.
 
 name: Deploy Tacobin
 
@@ -87,3 +92,44 @@ jobs:
             fi
             sleep 20
           done
+
+      - name: Smoke-test publish and review against production
+        env:
+          PRODUCTION_URL: https://taco.arcadia-han.com
+        run: |
+          # Publish what `taco-cli publish` sends: a taco/files snapshot in the taco-host/1 envelope.
+          bundle="$(jq -n --arg tag "$GITHUB_REF_NAME" --arg sha "$GITHUB_SHA" '{
+            protocol: "taco-host/1",
+            snapshot: {
+              format: "taco/files", version: 1,
+              docId: "deploy-smoke-\($tag)",
+              title: "Deploy smoke \($tag)",
+              root: "smoke",
+              files: [{ path: "smoke/README.md", mediaType: "text/markdown",
+                        content: "# Deploy smoke\n\nPublished by the Deploy Tacobin workflow for \($tag) (\($sha)) to check that publishing and review work in production.\n" }]
+            }
+          }')"
+
+          publish="$(curl --silent --show-error --max-time 30 --write-out '\n%{http_code}' \
+            --header 'Content-Type: application/json' --data "$bundle" "$PRODUCTION_URL/v1/tacos")"
+          publish_status="${publish##*$'\n'}"
+          publish_body="${publish%$'\n'*}"
+          taco_id="$(printf '%s' "$publish_body" | jq -r '.tacoId // .id // empty' 2>/dev/null || true)"
+          if [ "$publish_status" != "201" ] && [ "$publish_status" != "200" ] || [ -z "$taco_id" ]; then
+            echo "::error::Publishing to $PRODUCTION_URL failed (HTTP $publish_status): $publish_body." \
+              "A 503 naming DATABASE_URL means the Vercel project has no Postgres connection."
+            exit 1
+          fi
+
+          # Reading the shared state queries Postgres and signs a CSRF token, as the review page does.
+          state="$(curl --silent --show-error --max-time 30 --write-out '\n%{http_code}' \
+            "$PRODUCTION_URL/v1/tacos/$taco_id/state")"
+          state_status="${state##*$'\n'}"
+          state_body="${state%$'\n'*}"
+          if [ "$state_status" != "200" ]; then
+            echo "::error::Reading review state for $taco_id failed (HTTP $state_status): $state_body." \
+              "A 500 naming TACO_CSRF_SECRET means that Vercel environment variable is missing."
+            exit 1
+          fi
+
+          echo "Published smoke Taco $PRODUCTION_URL/t/$taco_id and read its review state." >> "$GITHUB_STEP_SUMMARY"
