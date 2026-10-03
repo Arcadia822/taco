@@ -22,7 +22,9 @@ import { TacoStore } from './store.ts'
 import { storageGet, storageSet } from './kernel/storage.ts'
 import {
   filePathFromHash,
+  fileSelectionHash,
   fileSelectionSessionKey,
+  resolveDocumentLink,
   selectedPathForLoad,
   serializeFileSelection,
   usesUrlHashForFileSelection,
@@ -78,20 +80,6 @@ export interface FileBrowserOptions {
  */
 const navigationSignature = (bundle: TacoBundle, file: TacoFile): string =>
   resolveFileCategory(bundle, file).category
-
-const normalizeRelativeLink = (fromPath: string, href: string): { path: string; hash: string } => {
-  const [target, hash = ''] = href.split('#', 2)
-  if (!target) return { path: fromPath, hash }
-  const base = fromPath.split('/').slice(0, -1)
-  const parts = target.startsWith('/') ? target.slice(1).split('/') : [...base, ...target.split('/')]
-  const normalized: string[] = []
-  for (const part of parts) {
-    if (!part || part === '.') continue
-    if (part === '..') normalized.pop()
-    else normalized.push(part)
-  }
-  return { path: normalized.join('/'), hash }
-}
 
 export class FileBrowser {
   private selected: TacoFile | null
@@ -182,10 +170,16 @@ export class FileBrowser {
   private readonly folderOpenState = new Map<string, boolean>()
   private readonly handleHashChange = (): void => {
     const path = filePathFromHash(location.hash)
-    const file = fileByPath(this.bundle, path)
-    if (!file) return
+    // Back to the page's original hashless entry returns to the entry document.
+    const file = path ? fileByPath(this.bundle, path) : defaultFile(this.bundle)
+    if (!file) {
+      if (path !== this.selectedPlaceholder) this.selectPlaceholder(path)
+      return
+    }
     if (file.path !== this.selected?.path) this.selectFile(file, false)
     else this.rememberOfflineSelection(file)
+    const heading = filePathFromHash(`#${location.hash.split('::')[1] ?? ''}`)
+    if (heading) requestAnimationFrame(() => this.outline.scrollToHeading(heading, 'auto'))
   }
   private readonly handleDocumentKeyDown = (event: KeyboardEvent): void => this.onKey(event)
 
@@ -638,14 +632,15 @@ export class FileBrowser {
     )
   }
 
-  private updateSelectionLocation(file: TacoFile, writeHash: boolean, headingId?: string): void {
+  private updateSelectionLocation(file: TacoFile, writeHash: boolean, headingId?: string, push = false): void {
     if (!usesUrlHashForFileSelection(location.protocol)) {
       this.rememberOfflineSelection(file)
       return
     }
     if (!writeHash) return
-    const heading = headingId ? `::${encodeURIComponent(headingId)}` : ''
-    history.replaceState(null, '', `#${encodeURIComponent(file.path)}${heading}`)
+    const hash = fileSelectionHash(file.path, headingId)
+    if (!push) history.replaceState(null, '', hash)
+    else if (hash !== location.hash) history.pushState(null, '', hash)
   }
 
   private finishInitialPreview(): void {
@@ -992,18 +987,42 @@ export class FileBrowser {
     }
   }
 
-  private handleEditorLink(event: Event, file: TacoFile): void {
-    const target = event.target as Element | null
-    const link = target?.closest<HTMLAnchorElement>('a[href]')
+  /**
+   * A document link is a plain relative Markdown link, resolved like a repository viewer would.
+   * In-bundle targets switch the view in place; on a hosted page the switch is a history entry
+   * so Back returns to the previous document. Nothing internal ever reaches `window.open`.
+   */
+  private handleEditorLink(event: MouseEvent, file: TacoFile): void {
+    const link = (event.target as Element | null)?.closest<HTMLAnchorElement>('a[href]')
     if (!link) return
-    const href = link.getAttribute('href') ?? ''
-    if (/^(https?:|mailto:)/i.test(href)) { link.target = '_blank'; link.rel = 'noreferrer noopener'; return }
-    const resolved = normalizeRelativeLink(file.path, href)
-    const targetFile = fileByPath(this.bundle, resolved.path)
-    if (!targetFile) return
     event.preventDefault()
-    this.selectFile(targetFile)
-    if (resolved.hash) requestAnimationFrame(() => this.outline.scrollToHeading(resolved.hash, 'auto'))
+    const resolved = resolveDocumentLink(this.bundle.root, file.path, link.getAttribute('href') ?? '')
+    if (resolved.kind === 'external') {
+      window.open(resolved.href, '_blank', 'noopener,noreferrer')
+      return
+    }
+    const target = resolved.kind === 'internal' ? fileByPath(this.bundle, resolved.path) : undefined
+    const placeholder = resolved.kind === 'internal' && !target && resolveCheckpoints(this.bundle).nodes
+      .some((node) => node.documents.some((doc) => doc.path === resolved.path && !doc.exists))
+    if (resolved.kind !== 'internal' || (!target && !placeholder)) {
+      this.toast(this.t.linkTargetMissing)
+      return
+    }
+    const hosted = usesUrlHashForFileSelection(location.protocol)
+    if (hosted && (event.metaKey || event.ctrlKey)) {
+      const url = new URL(location.href)
+      url.hash = fileSelectionHash(resolved.path, resolved.heading)
+      window.open(url.href, '_blank', 'noopener')
+      return
+    }
+    if (target) {
+      if (target.path !== this.selected?.path) this.selectFile(target, false)
+      this.updateSelectionLocation(target, true, resolved.heading, true)
+      if (resolved.heading) requestAnimationFrame(() => this.outline.scrollToHeading(resolved.heading, 'auto'))
+      return
+    }
+    this.selectPlaceholder(resolved.path)
+    if (hosted) history.pushState(null, '', fileSelectionHash(resolved.path))
   }
   private getResolvedCheckpoints(): ResolvedCheckpoints {
     const ref = this.bundle.checkpoints

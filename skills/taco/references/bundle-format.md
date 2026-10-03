@@ -101,6 +101,16 @@ Non-UTF-8 bytes, symbolic links, and non-regular files are not silently skipped:
 
 `.mmd` content is carried as opaque text: the bundle rules below validate its path and media type, never its diagram syntax. Run `node scripts/lint-mermaid.mjs` (see `SKILL.md` step 2) before handing the file over — otherwise the reviewer's browser is the first thing to parse the diagram, and it reports a failure as one generic sentence.
 
+## Links between documents
+
+Write links exactly as you would for a repository viewer; no Taco-specific syntax exists or is needed:
+
+- `[Plan](plan.md)`, `[Contract](../contracts/api.md)`: relative to the linking file;
+- `[Plan](plan.md#rollout)`: a heading in another file, using the heading's GitHub-style slug; `[Rollout](#rollout)`: a heading in the same file;
+- `[Roadmap](/roadmap.md)`: relative to the bundle `root`;
+- `http(s):` and `mailto:` links open in a new tab.
+
+In a Taco, an in-bundle link switches to that document in place (a hosted page also records a browser history entry). A link to a Checkpoint document that does not exist yet opens its placeholder; a link to anything outside the bundle shows a notice instead of navigating. Never rewrite links into `file://`, absolute disk paths, `#` hashes, or Tacobin URLs: that breaks them in the repository and turns a refresh into a content change.
 
 ## Writing the data block
 

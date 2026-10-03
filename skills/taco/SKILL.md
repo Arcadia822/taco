@@ -113,6 +113,8 @@ The document lives in one plaintext block near the top of the shell:
 
 The runtime's `parseBundle` validates this; anything corrupt puts the file into Recovery mode, so validate before you write. Read `references/bundle-format.md` before writing or debugging the block: it is the authority for required and optional fields, the exact rejection rules, and the serialization contract. An optional `scripts/pack.mjs` helper implements that contract when you have Node and would rather use it.
 
+Link documents to each other with ordinary relative Markdown links (`[Plan](plan.md#rollout)`), the same links that work in the repository; Taco opens them in place. See *Links between documents* in `references/bundle-format.md`.
+
 Bundle fields:
 
 - `format`: `"taco/files"`; `version`: `1`
