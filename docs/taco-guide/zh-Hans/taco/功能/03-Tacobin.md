@@ -48,7 +48,7 @@ Agent 常用的命令：
 | `taco-cli handoff <tacoId> <handoffId> --host <origin>` | 读取这次交接的不可变快照 |
 | `taco-cli events <tacoId> --after <sequence>` | 监听中断后补读事件；没人监听时发生的交接也能找回 |
 
-每次发布都会固定一份不可变的基线；改正后的文件需要重新发布，得到一个新的 Taco。完整流程见 [在线评审](../指南/02-在线评审.md)。
+每次发布都会固定一份不可变的基线；改正后的文件需要重新发布，得到一个新的 Taco。
 
 ## 安全
 

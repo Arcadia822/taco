@@ -23,8 +23,8 @@ One Taco covers one topic. The agent packs a folder from the repository into a T
 | --- | --- | --- |
 | Markdown | WYSIWYG editing; leading YAML becomes a properties panel | The properties at the top of every `.md` |
 | Mermaid (`.mmd` or code blocks in Markdown) | Diagram preview plus source; switch theme and direction, zoom full screen; syntax errors point to the line and column | [System components](../Architecture/02-System.mmd) |
-| JSON / YAML | Syntax-highlighted source editor | [Bundle example](../Architecture/05-Bundle-Example.json) |
-| OpenAPI (JSON / YAML) | An extra **Overview** of operations, parameters, and responses | [Tacobin API](../Architecture/06-Tacobin-API.yaml) |
+| JSON / YAML | Syntax-highlighted source editor | — |
+| OpenAPI (JSON / YAML) | An extra **Overview** of operations, parameters, and responses | [Tacobin API](../Architecture/03-Tacobin-API.yaml) |
 | PNG and SVG images, audio, video | Embedded previews | — |
 | Other text files | Shown as source, with no guessing about the format | — |
 
@@ -55,12 +55,12 @@ Paste it to your agent and it can work through each item. Alternatively, save th
 
 When a topic has several documents that move forward in stages, add Checkpoints to the Taco:
 
-- Define stages as a dependency graph, for example "Overview → Start → Features / Guides / Architecture → Roadmap";
+- Define stages as a dependency graph, for example "Overview → Start → Features / Architecture → Roadmap";
 - Each document has one of four statuses: To do, In progress, Complete, Frozen. A stage's status is aggregated from its documents;
 - Each document can carry **Requirements** written for its author, human or agent;
 - A required document that has not been written yet appears as **Not created**.
 
-This site uses Checkpoints: open **Checkpoints** at the top of the sidebar. `Roadmap/Next-Phase.md` is a document that does not exist yet but already has its requirements written. See the [Checkpoints guide](../Guides/03-Checkpoints.md).
+This site uses Checkpoints: open **Checkpoints** at the top of the sidebar. `Roadmap/Next-Phase.md` is a document that does not exist yet but already has its requirements written.
 
 Checkpoints are optional; a plain Taco is enough when you do not need stage tracking.
 

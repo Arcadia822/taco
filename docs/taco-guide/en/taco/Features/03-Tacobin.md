@@ -48,7 +48,7 @@ Commands the agent uses:
 | `taco-cli handoff <tacoId> <handoffId> --host <origin>` | Reads the immutable snapshot of that handoff |
 | `taco-cli events <tacoId> --after <sequence>` | Catches up after a disconnect; handoffs made while nobody listened are still retrievable |
 
-Each publication fixes an immutable baseline; a corrected file must be published again as a new Taco. See [Online review](../Guides/02-Online-Review.md) for the full flow.
+Each publication fixes an immutable baseline; a corrected file must be published again as a new Taco.
 
 ## Security
 
