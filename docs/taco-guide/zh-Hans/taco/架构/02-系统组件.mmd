@@ -1,0 +1,31 @@
+flowchart TB
+    subgraph Repo["代码仓库"]
+        SRC["文档目录<br/>canonical Markdown / mmd / yaml"]
+        SKILL["Taco Skill<br/>shell + 参考 + 脚本"]
+    end
+
+    subgraph File[".taco.html"]
+        SHELL["shell<br/>阅读器 · 编辑器 · 评论 · 导航"]
+        DATA["数据块<br/>taco/files v1"]
+    end
+
+    subgraph Hosts["宿主"]
+        LOCAL["本地浏览器<br/>file://"]
+        BIN["Tacobin<br/>taco-host/1"]
+    end
+
+    AGENT["Agent"]
+    CLI["taco-cli"]
+    HUMAN["评审者"]
+
+    AGENT -->|写文档| SRC
+    AGENT -->|用 skill 打包| SKILL
+    SKILL --> SHELL
+    SRC --> DATA
+    File --> LOCAL
+    AGENT --> CLI
+    CLI -->|publish / subscribe / handoff| BIN
+    HUMAN --> LOCAL
+    HUMAN --> BIN
+    LOCAL -->|交接改动| AGENT
+    BIN -->|review.handed_off| CLI

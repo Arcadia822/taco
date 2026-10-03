@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant H as Reviewer
+    participant T as Taco (browser)
+    participant A as Agent
+    participant R as Repository sources
+
+    A->>R: Write the plan
+    A->>T: Pack a Taco (new docId)
+    H->>T: Read, edit, comment on selected text
+    H->>T: Click Handoff
+    T-->>H: Diff + open comments (clipboard)
+    H->>A: Paste the handoff
+    A->>R: Check for conflicts against sourceHash
+    alt No conflict
+        A->>R: Apply the changes
+        A->>T: Refresh the same Taco (keeps docId and comments)
+        H->>T: Check round two, resolve or reply
+    else Conflict
+        A-->>H: Report the conflict and diff, wait for a decision
+    end

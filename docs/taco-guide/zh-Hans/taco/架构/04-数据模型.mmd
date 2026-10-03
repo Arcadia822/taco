@@ -1,0 +1,57 @@
+erDiagram
+    BUNDLE ||--|{ FILE : "files[]"
+    BUNDLE ||--o{ THREAD : "comments[]"
+    BUNDLE ||--o| NAVIGATION : navigation
+    BUNDLE ||--o| CHECKPOINTS : checkpoints
+    THREAD ||--|{ MESSAGE : messages
+    THREAD }o--o| FILE : "anchor.path"
+    NAVIGATION ||--o{ GROUP : groups
+    CHECKPOINTS ||--|{ NODE : nodes
+    CHECKPOINTS ||--o{ STATUS : documents
+    NODE ||--o{ REQUIREMENT : documents
+
+    BUNDLE {
+        string format "taco/files"
+        int version "1"
+        string docId "刷新时保留"
+        string title
+        string root
+        string access "可选 reader"
+    }
+    FILE {
+        string path "以 root 开头"
+        string mediaType
+        string content
+        string sourceHash "SHA-256"
+    }
+    THREAD {
+        string id
+        string status "open 或 resolved"
+        string anchor "position + quote"
+    }
+    MESSAGE {
+        string author
+        string body
+        string createdAt
+        string deletedAt "删除后保留占位"
+    }
+    GROUP {
+        string id
+        string title
+        string paths
+    }
+    NODE {
+        string id
+        string title
+        string after "前置节点"
+    }
+    REQUIREMENT {
+        string path "可以尚未创建"
+        string instruction
+        boolean optional
+    }
+    STATUS {
+        string path
+        string status "todo in_progress complete freeze"
+        string updatedAt
+    }

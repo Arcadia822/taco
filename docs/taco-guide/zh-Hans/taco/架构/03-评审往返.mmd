@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant H as 评审者
+    participant T as Taco（浏览器）
+    participant A as Agent
+    participant R as 仓库源文件
+
+    A->>R: 写方案
+    A->>T: 打包生成 Taco（新 docId）
+    H->>T: 阅读、修改、划词评论
+    H->>T: 点「交接改动」
+    T-->>H: diff + 未解决评论（剪贴板）
+    H->>A: 粘贴交接内容
+    A->>R: 对照 sourceHash 检查冲突
+    alt 无冲突
+        A->>R: 应用修改
+        A->>T: 刷新同一个 Taco（保留 docId 与评论）
+        H->>T: 核对第二轮，解决或继续回复
+    else 有冲突
+        A-->>H: 报告冲突与 diff，等待决定
+    end
