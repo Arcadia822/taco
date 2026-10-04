@@ -23,8 +23,9 @@ import { storageGet, storageSet } from './kernel/storage.ts'
 import {
   filePathFromHash,
   fileSelectionHash,
-  fileSelectionSessionKey,
+  headingFromHash,
   resolveDocumentLink,
+  fileSelectionSessionKey,
   selectedPathForLoad,
   serializeFileSelection,
   usesUrlHashForFileSelection,
@@ -106,6 +107,8 @@ export class FileBrowser {
   private instructionContent!: HTMLElement
   private workspacePath!: HTMLElement
   private readonly markdownMigrationErrors = new Map<string, { message: string; content: string }>()
+  /** A path from a deep link that names a required Checkpoint document with no file yet. */
+  private initialPath: string | null
 
   /**
    * A migration failure belongs to the content that produced it: once the reviewer edits the file,
@@ -178,7 +181,7 @@ export class FileBrowser {
     }
     if (file.path !== this.selected?.path) this.selectFile(file, false)
     else this.rememberOfflineSelection(file)
-    const heading = filePathFromHash(`#${location.hash.split('::')[1] ?? ''}`)
+    const heading = headingFromHash(location.hash)
     if (heading) requestAnimationFrame(() => this.outline.scrollToHeading(heading, 'auto'))
   }
   private readonly handleDocumentKeyDown = (event: KeyboardEvent): void => this.onKey(event)
@@ -313,7 +316,9 @@ export class FileBrowser {
     this.commentPanelOpen = !this.narrowLayout.matches && this.desktopCommentPanelOpen
     const selectionKey = fileSelectionSessionKey(bundle.docId)
     const initialPath = selectedPathForLoad(location.protocol, location.hash, storageGet(selectionKey, 'session'))
-    this.selected = fileByPath(bundle, initialPath) ?? defaultFile(bundle)
+    const initialFile = fileByPath(bundle, initialPath)
+    this.selected = initialFile ?? defaultFile(bundle)
+    this.initialPath = initialFile || !initialPath ? null : initialPath
     if (this.selected && fileKind(this.selected) === 'mermaid') this.initialPreviewPath = this.selected.path
     this.initialPreviewReady = this.initialPreviewPath
       ? new Promise<void>((resolve) => { this.resolveInitialPreview = resolve })
@@ -345,6 +350,7 @@ export class FileBrowser {
     }))
 
     this.build()
+    if (this.initialPath) this.selectPlaceholder(this.initialPath)
     window.addEventListener('hashchange', this.handleHashChange)
     this.dirtyTracker.markSaved()
     // An embedding page may present the file as a reviewer's in-progress session (e.g. the Tacobin demo).

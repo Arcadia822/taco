@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   filePathFromHash,
+  fileSelectionHash,
+  headingFromHash,
   resolveDocumentLink,
   selectedPathForLoad,
   serializeFileSelection,
@@ -58,6 +60,29 @@ describe('document links', () => {
     expect(resolveDocumentLink(root, from, '../../../../etc/passwd')).toEqual({ kind: 'unsupported' })
     expect(resolveDocumentLink(root, from, 'file:///tmp/a.md')).toEqual({ kind: 'unsupported' })
     expect(resolveDocumentLink(root, from, 'javascript:alert(1)')).toEqual({ kind: 'unsupported' })
-    expect(resolveDocumentLink(root, from, '%E0%A4%A.md')).toEqual({ kind: 'unsupported' })
+    // A malformed escape is kept literally: it stays inside the bundle as a name nothing matches.
+    expect(resolveDocumentLink(root, from, '%E0%A4%A.md')).toEqual({ kind: 'internal', path: 'taco/功能/%E0%A4%A.md', heading: '' })
+  })
+})
+
+describe('hash heading contract', () => {
+  it('decodes the fragment exactly once, in either direction', () => {
+    // A link to a heading that literally contains '%' must survive the round trip.
+    const hash = fileSelectionHash('taco/指南/02-在线评审.md', '50%-done')
+    expect(headingFromHash(hash)).toBe('50%-done')
+    expect(filePathFromHash(hash)).toBe('taco/指南/02-在线评审.md')
+    // Encoded percent (`%25`) decodes to the literal heading text.
+    expect(headingFromHash('#taco%2Fentry.md::%25')).toBe('%')
+  })
+
+  it('never throws on malformed or missing fragments', () => {
+    expect(headingFromHash('#taco/entry.md')).toBe('')
+    expect(headingFromHash('#taco/entry.md::%E0%A4%A')).toBe('%E0%A4%A')
+    expect(headingFromHash('')).toBe('')
+  })
+
+  it('decodes link fragments once to the same heading text', () => {
+    expect(resolveDocumentLink('taco', 'taco/entry.md', '#50%-done')).toEqual({ kind: 'internal', path: 'taco/entry.md', heading: '50%-done' })
+    expect(resolveDocumentLink('taco', 'taco/entry.md', '#%25')).toEqual({ kind: 'internal', path: 'taco/entry.md', heading: '%' })
   })
 })
