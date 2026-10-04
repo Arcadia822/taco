@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.14.0](https://github.com/Arcadia822/taco/compare/v0.13.0...v0.14.0) (2026-10-02)
+
+### Features
+
+* **skill**: follow project Checkpoint conventions and .taco/ templates (TACO-34) ([6ab0e45](https://github.com/Arcadia822/taco/commit/6ab0e45d53d069614435d39653991014866a20c4))
+
+### Bug Fixes
+
+* **ci**: update Tacobin production verification URL to taco.arcadia-han.com ([7b87ad7](https://github.com/Arcadia822/taco/commit/7b87ad7b928b0b35530437075dbc351499268818))
+
+### Chores & Maintenance
+
+* chore: **release**: taco-cli v0.4.1 ([9995e99](https://github.com/Arcadia822/taco/commit/9995e99e5368a0f94ff1262d6ad60127377751a4))
+* chore: **agents**: use Linear as the single issue tracker ([9569c41](https://github.com/Arcadia822/taco/commit/9569c4112d9e15213d913f711fe7f293d2bf17a3))
+
 ## [0.13.0](https://github.com/Arcadia822/taco/compare/v0.12.0...v0.13.0) (2026-10-02)
 
 ### Features
