@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.14.1](https://github.com/Arcadia822/taco/compare/v0.14.0...v0.14.1) (2026-10-04)
+
+### Features
+
+* **host**: link Try and Download Taco to the new-user documentation Tacos (TACO-11) ([9a70b6d](https://github.com/Arcadia822/taco/commit/9a70b6d7b7abf7a2c2d0f3e0cdb8e23e82d586a6))
+
+### Bug Fixes
+
+* **ui**: record the placeholder path as the offline selection on deep links (TACO-51) ([2f8285c](https://github.com/Arcadia822/taco/commit/2f8285cc0c695778e710672028609d82ce5b7258))
+* **ui**: show the placeholder page on deep links and stop double-decoding heading fragments (TACO-51) ([ffb52ed](https://github.com/Arcadia822/taco/commit/ffb52ed45604bcf77400ccdff1af9dd36c09223d))
+* **ci**: smoke-test Tacobin publish and review after each deploy ([7eb9c97](https://github.com/Arcadia822/taco/commit/7eb9c9710d749dda09885ed036a01f14bc6e1c1a))
+* **ui**: open relative document links inside the Taco (TACO-51) ([9bd624d](https://github.com/Arcadia822/taco/commit/9bd624defda51ee370724ee328c00962b3f0610d))
+
+### Chores & Maintenance
+
+* chore: **release**: tacobin-v0.7.0 ([be44b19](https://github.com/Arcadia822/taco/commit/be44b1929bc31f9111ff44939fcc0e8c669ccd80))
+* Merge pull request #102 from Arcadia822/feature/taco-11-onboarding-docs ([33af2fa](https://github.com/Arcadia822/taco/commit/33af2fad9d0246f56f2151ff629413061f2c2365))
+* chore: merge main into feature/taco-11-onboarding-docs and regenerate shells ([49dba0e](https://github.com/Arcadia822/taco/commit/49dba0e9532df0894ee0b78b9a0bab235929b703))
+* docs: **cli**: make the taco-cli upgrade command explicit and verify the active binary ([59964a6](https://github.com/Arcadia822/taco/commit/59964a6340255c32c13ae629883b03125b017ea7))
+* docs: **guide**: drop numeric prefixes from guide file names (TACO-11) ([309dd07](https://github.com/Arcadia822/taco/commit/309dd07b3a46cb33fda7db7c6d38d4d2f9358e0e))
+* docs: **guide**: trim the new-user Tacos to overview, features, and a short architecture page (TACO-11) ([ffbb75e](https://github.com/Arcadia822/taco/commit/ffbb75e241498f3b3c839edcf540846c109d9e68))
+* docs: **guide**: add bilingual new-user documentation Taco sources (TACO-11) ([830dc0d](https://github.com/Arcadia822/taco/commit/830dc0d1ad128b035cc2a9ed34212321a41dc904))
+
 ## [0.14.0](https://github.com/Arcadia822/taco/compare/v0.13.0...v0.14.0) (2026-10-02)
 
 ### Features
