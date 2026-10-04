@@ -1,0 +1,134 @@
+openapi: 3.1.0
+info:
+  title: Tacobin API（节选）
+  version: 0.1.0-draft
+  description: |
+    Tacobin 实现的 taco-host/1 主要接口节选。本文档仍是草稿（检查点状态：待开始），
+    字段细节以 taco-cli help 与服务端实现为准。
+servers:
+  - url: https://taco.arcadia-han.com
+tags:
+  - name: 发布
+  - name: 评审
+  - name: 事件
+paths:
+  /v1/capabilities:
+    get:
+      tags: [发布]
+      summary: 查询宿主能力与协议版本
+      responses:
+        '200':
+          description: 协议、服务类型与存储信息
+  /v1/anonymous-credentials:
+    post:
+      tags: [发布]
+      summary: 匿名签发 ApiKey
+      description: 返回的密钥只出现一次，调用方需先安全保存再继续上传。
+      responses:
+        '201':
+          description: 新建的匿名用户与 ApiKey
+  /v1/uploads:
+    post:
+      tags: [发布]
+      summary: 两阶段发布的暂存上传
+      security: [{ apiKey: [] }]
+      responses:
+        '201':
+          description: 暂存成功
+  /v1/tacos:
+    post:
+      tags: [发布]
+      summary: 发布 Taco
+      security: [{ apiKey: [] }]
+      responses:
+        '201':
+          description: 返回评审者 url 与 tacoId
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tacoId, url]
+                properties:
+                  tacoId: { type: string }
+                  url: { type: string, format: uri }
+  /v1/tacos/{id}/state:
+    parameters:
+      - $ref: '#/components/parameters/TacoId'
+    get:
+      tags: [评审]
+      summary: 读取当前共享评审状态
+      responses:
+        '200':
+          description: 当前文档与评论
+    patch:
+      tags: [评审]
+      summary: 自动保存（乐观并发）
+      responses:
+        '200':
+          description: 保存成功
+        '409':
+          description: 版本冲突，客户端保留草稿
+  /v1/tacos/{id}/handoffs:
+    parameters:
+      - $ref: '#/components/parameters/TacoId'
+    post:
+      tags: [评审]
+      summary: 评审者点击「交接」
+      description: 没有活跃监听者时拒绝，不产生 review.handed_off。
+      responses:
+        '201':
+          description: 记录 review.handed_off
+  /v1/tacos/{id}/handoffs/{handoffId}:
+    parameters:
+      - $ref: '#/components/parameters/TacoId'
+      - name: handoffId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [评审]
+      summary: 读取不可变交接快照
+      responses:
+        '200':
+          description: 本轮改动与评论
+  /v1/tacos/{id}/subscribe:
+    parameters:
+      - $ref: '#/components/parameters/TacoId'
+    get:
+      tags: [事件]
+      summary: 订阅事件流（SSE）
+      responses:
+        '200':
+          description: text/event-stream
+  /v1/tacos/{id}/events:
+    parameters:
+      - $ref: '#/components/parameters/TacoId'
+      - name: after
+        in: query
+        schema: { type: integer }
+    get:
+      tags: [事件]
+      summary: 分页补读持久事件
+      responses:
+        '200':
+          description: 事件列表
+  /v1/tacos/{id}/listeners:
+    parameters:
+      - $ref: '#/components/parameters/TacoId'
+    get:
+      tags: [事件]
+      summary: 当前在线监听者
+      responses:
+        '200':
+          description: 监听名单
+components:
+  parameters:
+    TacoId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer

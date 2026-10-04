@@ -83,7 +83,13 @@ const markdownLink = (content: string, attrs: Record<string, unknown> | undefine
 }
 
 // The upstream Markdown mark helper only marks text, dropping links on atoms.
+// Clicks are routed by the host (`onLinkClick`): Tiptap's own handler would
+// `window.open` a relative href resolved against the page URL, which is never
+// a real document for a single-file Taco.
 const ImageLink = Link.extend({
+  addOptions() {
+    return { ...this.parent!(), openOnClick: false }
+  },
   parseMarkdown(token, helpers) {
     return helpers.parseInline(token.tokens ?? []).map((node) => ({
       ...node,

@@ -1,0 +1,134 @@
+openapi: 3.1.0
+info:
+  title: Tacobin API (excerpt)
+  version: 0.1.0-draft
+  description: |
+    An excerpt of the main taco-host/1 endpoints implemented by Tacobin. This document is still a draft
+    (Checkpoint status: To do); for field details, defer to taco-cli help and the server implementation.
+servers:
+  - url: https://taco.arcadia-han.com
+tags:
+  - name: Publish
+  - name: Review
+  - name: Events
+paths:
+  /v1/capabilities:
+    get:
+      tags: [Publish]
+      summary: Query host capabilities and protocol version
+      responses:
+        '200':
+          description: Protocol, server type, and storage
+  /v1/anonymous-credentials:
+    post:
+      tags: [Publish]
+      summary: Issue an anonymous ApiKey
+      description: The returned secret is shown once; store it safely before uploading.
+      responses:
+        '201':
+          description: The new anonymous user and ApiKey
+  /v1/uploads:
+    post:
+      tags: [Publish]
+      summary: Staged upload for two-phase publishing
+      security: [{ apiKey: [] }]
+      responses:
+        '201':
+          description: Staged
+  /v1/tacos:
+    post:
+      tags: [Publish]
+      summary: Publish a Taco
+      security: [{ apiKey: [] }]
+      responses:
+        '201':
+          description: Returns the reviewer url and tacoId
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tacoId, url]
+                properties:
+                  tacoId: { type: string }
+                  url: { type: string, format: uri }
+  /v1/tacos/{id}/state:
+    parameters:
+      - $ref: '#/components/parameters/TacoId'
+    get:
+      tags: [Review]
+      summary: Read the current shared review state
+      responses:
+        '200':
+          description: Current documents and comments
+    patch:
+      tags: [Review]
+      summary: Autosave (optimistic concurrency)
+      responses:
+        '200':
+          description: Saved
+        '409':
+          description: Version conflict; the client keeps its draft
+  /v1/tacos/{id}/handoffs:
+    parameters:
+      - $ref: '#/components/parameters/TacoId'
+    post:
+      tags: [Review]
+      summary: Reviewer clicks Handoff
+      description: Rejected when no listener is active; no review.handed_off is recorded.
+      responses:
+        '201':
+          description: Records review.handed_off
+  /v1/tacos/{id}/handoffs/{handoffId}:
+    parameters:
+      - $ref: '#/components/parameters/TacoId'
+      - name: handoffId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Review]
+      summary: Read an immutable handoff snapshot
+      responses:
+        '200':
+          description: This round's edits and comments
+  /v1/tacos/{id}/subscribe:
+    parameters:
+      - $ref: '#/components/parameters/TacoId'
+    get:
+      tags: [Events]
+      summary: Subscribe to the event stream (SSE)
+      responses:
+        '200':
+          description: text/event-stream
+  /v1/tacos/{id}/events:
+    parameters:
+      - $ref: '#/components/parameters/TacoId'
+      - name: after
+        in: query
+        schema: { type: integer }
+    get:
+      tags: [Events]
+      summary: Page through persisted events
+      responses:
+        '200':
+          description: Event list
+  /v1/tacos/{id}/listeners:
+    parameters:
+      - $ref: '#/components/parameters/TacoId'
+    get:
+      tags: [Events]
+      summary: Currently connected listeners
+      responses:
+        '200':
+          description: Listener list
+components:
+  parameters:
+    TacoId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer

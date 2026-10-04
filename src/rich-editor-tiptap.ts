@@ -9,6 +9,7 @@ import {
 import { MarkdownBlockReconstructor } from './markdown-block-reconstructor.ts'
 import { setEditorFrontmatterProperty } from './tiptap-document-properties.ts'
 import { resolveEmbeddedMarkdownAssets } from './markdown-assets.ts'
+import { headingFromHash } from './file-selection.ts'
 import type { RichEditorAdapter, RichEditorHandle, RichEditorMountOptions } from './rich-editor.ts'
 import type { MermaidPluginLabels } from './mermaid.ts'
 
@@ -114,7 +115,7 @@ export class TiptapRichEditorAdapter implements RichEditorAdapter {
       if (destroyed) return
       resolveEmbeddedMarkdownAssets(element, bundle, file)
       onRefreshHighlights?.(element)
-      const headingHash = decodeURIComponent(location.hash.split('::')[1] ?? '')
+      const headingHash = headingFromHash(location.hash)
       if (headingHash && scrollToHeading) scrollToHeading(headingHash)
       onOutlinePaint?.()
     })

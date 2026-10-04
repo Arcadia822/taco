@@ -1399,6 +1399,31 @@ describe('FileBrowser', () => {
     browser.destroy()
   })
 
+  it('keeps a placeholder deep link selected across offline reloads', () => {
+    const bundle = structuredClone(testBundle)
+    const missing = 'specs/001-browser/missing.md'
+    bundle.checkpoints = {
+      version: 1,
+      nodes: [{ id: 'gate', title: 'Gate', after: [], documents: [{ path: missing }] }],
+      documents: [],
+    }
+    const hash = `#${encodeURIComponent(missing)}`
+    vi.stubGlobal('location', { protocol: 'file:', hash, href: `file:///taco.taco.html${hash}` })
+    try {
+      for (let load = 0; load < 2; load += 1) {
+        document.body.innerHTML = '<div id="app"></div>'
+        const browser = new FileBrowser(document.getElementById('app')!, structuredClone(bundle))
+        // The second load reads the offline selection written by the first; it must
+        // not fall back to the entry document.
+        expect(document.querySelector('.checkpoint-placeholder .checkpoint-create-button')).not.toBeNull()
+        expect(document.querySelector('.document-inline-title-text')?.textContent ?? null).toBeNull()
+        browser.destroy()
+      }
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('shows missing Checkpoint documents without status controls until created', () => {
     const bundle = structuredClone(testBundle)
     bundle.checkpoints = {

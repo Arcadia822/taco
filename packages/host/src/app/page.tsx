@@ -136,9 +136,9 @@ const I18N = {
     h1: '一个议题的完整设计，一个文件装下。',
     desc: '人和 Agent 都能顺手地阅读、修改和评论。单个文件放在代码仓库里，跟代码一起做版本管理。',
     tryBtn: '试用 Taco',
-    tryUrl: 'https://taco-spec-zh-cn.arcadia822.chatgpt.site',
+    tryUrl: 'https://taco.arcadia-han.com/t/b89dc5c7-3996-4ab6-b446-3508e4d0af6e',
     downloadBtn: '下载 Taco',
-    comingSoon: '即将推出',
+    downloadUrl: 'https://github.com/Arcadia822/taco/releases/download/taco-docs/Taco_Docs.zh-Hans.taco.html',
     forAgent: 'For Agent',
     forSkill: 'Skill',
     agentPrompt:
@@ -249,9 +249,9 @@ const I18N = {
     h1: 'The whole design doc, in one file.',
     desc: 'Easy for humans and agents to read, edit, and comment. Lives in your repo, versioned with your code.',
     tryBtn: 'Try Taco',
-    tryUrl: 'https://taco-spec-en.arcadia822.chatgpt.site',
+    tryUrl: 'https://taco.arcadia-han.com/t/2733ed73-8250-4cae-a1e5-27d5f409d535',
     downloadBtn: 'Download Taco',
-    comingSoon: 'Coming soon',
+    downloadUrl: 'https://github.com/Arcadia822/taco/releases/download/taco-docs/Taco_Docs.en.taco.html',
     forAgent: 'For Agent',
     forSkill: 'Skill',
     agentPrompt:
@@ -719,10 +719,10 @@ export default function HomePage() {
                   <path d="M5 12h14m-6-6 6 6-6 6" />
                 </svg>
               </a>
-              <button type="button" disabled className="cta-btn cta-btn--ghost" title={t.comingSoon}>
+              <a href={t.downloadUrl} download className="cta-btn cta-btn--ghost">
                 {t.downloadBtn}
                 <span aria-hidden="true">↓</span>
-              </button>
+              </a>
             </div>
 
             {/* 给 Agent 的单行安装 Prompt 与 Skill 安装行 */}

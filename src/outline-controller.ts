@@ -100,7 +100,7 @@ export class OutlineController {
     })
     if (visibleCandidate) return visibleCandidate
 
-    const normalizedId = decodeURIComponent(id).replace(/^#/, '').toLocaleLowerCase()
+    const normalizedId = id.replace(/^#/, '').toLocaleLowerCase()
     const heading = this.headings()
       .find((candidate) => candidate.textContent?.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '') === normalizedId)
     return candidates.find((candidate) => !candidate.closest('[hidden]')) ?? candidates.at(-1) ?? heading ?? null
