@@ -91,10 +91,12 @@ An optional deeper integration ships as a Spec Kit extension (`extensions/taco/`
 ### Option A: npm
 
 ```bash
-npm install -g @tacobin/cli
+npm install -g @tacobin/cli@latest   # also the upgrade command
 # Or invoke directly:
 npx @tacobin/cli help
 ```
+
+After installing or upgrading, run `taco-cli help` and check `binaryVersion`. If it still reports the old version, an earlier install in another global prefix shadows the new one on `PATH` (`command -v taco-cli` shows which); remove that copy rather than reordering `PATH`.
 
 ### Option B: standalone binary
 
