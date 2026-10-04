@@ -180,7 +180,7 @@ export class FileBrowser {
       return
     }
     if (file.path !== this.selected?.path) this.selectFile(file, false)
-    else this.rememberOfflineSelection(file)
+    else this.rememberOfflineSelection(file.path)
     const heading = headingFromHash(location.hash)
     if (heading) requestAnimationFrame(() => this.outline.scrollToHeading(heading, 'auto'))
   }
@@ -323,7 +323,8 @@ export class FileBrowser {
     this.initialPreviewReady = this.initialPreviewPath
       ? new Promise<void>((resolve) => { this.resolveInitialPreview = resolve })
       : Promise.resolve()
-    if (this.selected) this.rememberOfflineSelection(this.selected)
+    if (this.initialPath) this.rememberOfflineSelection(this.initialPath)
+    else if (this.selected) this.rememberOfflineSelection(this.selected.path)
     this.auxiliaryTab = this.embedded || !this.selected || fileKind(this.selected) !== 'markdown' ? 'comments' : 'outline'
     this.comments = new CommentsController({
       bundle: this.bundle,
@@ -609,6 +610,7 @@ export class FileBrowser {
     this.root.classList.remove('is-checkpoint-view')
     this.selectedPlaceholder = path
     this.selected = null
+    this.rememberOfflineSelection(path)
     this.comments.resetForFileChange()
     this.syncWorkspaceHeader()
     this.fileNavigation?.paint(null, false, path)
@@ -629,18 +631,18 @@ export class FileBrowser {
     if (this.checkpointView || this.selectedPlaceholder) this.paintViewer()
   }
 
-  private rememberOfflineSelection(file: TacoFile): void {
+  private rememberOfflineSelection(path: string): void {
     if (usesUrlHashForFileSelection(location.protocol)) return
     storageSet(
       fileSelectionSessionKey(this.bundle.docId),
-      serializeFileSelection(file.path, location.hash),
+      serializeFileSelection(path, location.hash),
       'session',
     )
   }
 
   private updateSelectionLocation(file: TacoFile, writeHash: boolean, headingId?: string, push = false): void {
     if (!usesUrlHashForFileSelection(location.protocol)) {
-      this.rememberOfflineSelection(file)
+      this.rememberOfflineSelection(file.path)
       return
     }
     if (!writeHash) return
