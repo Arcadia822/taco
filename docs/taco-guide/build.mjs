@@ -1,6 +1,8 @@
-// Builds the new-user documentation Tacos (TACO-11) from docs/taco-guide/<locale>/taco
-// into tmp/taco-guide/Taco_文档.taco.html and tmp/taco-guide/Taco_Docs.taco.html.
-// Tacobin hosts them with its own shell; these local builds are for preview.
+// Builds the new-user documentation Tacos (TACO-11) from docs/taco-guide/<locale>/taco.
+// Each build writes two identical artifacts: tmp/taco-guide/<title>.taco.html (preview and
+// the GitHub Release download) and packages/host/public/demo/<locale>/taco-guide.taco.html,
+// the static standalone copy behind the website's Try Taco link. The standalone version is
+// not hosted: edits live in the browser and a reload restores the original.
 // Usage: node docs/taco-guide/build.mjs
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, rmSync, writeFileSync, renameSync } from 'node:fs'
@@ -154,5 +156,8 @@ for (const [locale, cfg] of Object.entries(LOCALES)) {
   html = html.replace(DATA, (_m, open, _body, close) => `${open}${json}${close}`)
   writeFileSync(`${out}.tmp`, html)
   renameSync(`${out}.tmp`, out)
-  process.stdout.write(`${locale}: ${out} (${html.length} chars)\n`)
+  const demoDir = resolve(repo, 'packages/host/public/demo', locale)
+  mkdirSync(demoDir, { recursive: true })
+  writeFileSync(resolve(demoDir, 'taco-guide.taco.html'), html)
+  process.stdout.write(`${locale}: ${out} + ${demoDir}/taco-guide.taco.html (${html.length} chars)\n`)
 }

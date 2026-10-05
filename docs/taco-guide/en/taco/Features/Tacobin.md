@@ -14,6 +14,8 @@ A local Taco suits one person working with their own agent. When reviewers are n
 
 `taco-cli` is the command-line tool that connects the agent side to Tacobin. People do not need it, and local review does not use it.
 
+To see hosted review in action, open this live demo: [Taco Docs (hosted)](https://taco.arcadia-han.com/t/2733ed73-8250-4cae-a1e5-27d5f409d535). Autosave, online listeners, and the explicit handoff exist there — the standalone Taco you are reading now has none of them.
+
 ## What reviewers see
 
 - The same reading, editing, and commenting interface as a local Taco;
