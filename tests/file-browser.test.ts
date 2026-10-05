@@ -1818,6 +1818,31 @@ describe('FileBrowser', () => {
     }
   })
 
+  it('never blocks unload in embeds, where nothing persists', () => {
+    history.replaceState(null, '', '/?embed&pending')
+    const embedBundle = structuredClone(testBundle)
+    embedBundle.comments = [{
+      id: 'thread-1',
+      anchor: null,
+      status: 'open',
+      messages: [{ id: 'message-1', author: 'lin', body: '待处理的意见', createdAt: '2026-10-05T08:00:00.000Z' }],
+      createdAt: '2026-10-05T08:00:00.000Z',
+      updatedAt: '2026-10-05T08:00:00.000Z',
+    }]
+    const addSpy = vi.spyOn(window, 'addEventListener')
+    const browser = new FileBrowser(document.getElementById('app')!, embedBundle)
+    try {
+      // `pending` marks the loaded comments dirty — exactly the landing demo's state on open.
+      expect(browser['dirtyTracker'].isDirty()).toBe(true)
+      // The unload guard must not even be registered for an embed.
+      expect(addSpy).not.toHaveBeenCalledWith('beforeunload', expect.anything())
+    } finally {
+      browser.destroy()
+      addSpy.mockRestore()
+      history.replaceState(null, '', '/')
+    }
+  })
+
 
   it('collects a missing comment author in an application dialog without losing the pending submission', async () => {
     sessionStorage.clear()

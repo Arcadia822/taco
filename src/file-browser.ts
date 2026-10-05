@@ -359,8 +359,12 @@ export class FileBrowser {
     this.captureCheckpointBaseline()
     this.syncDirtyState()
     document.addEventListener('keydown', this.handleDocumentKeyDown)
-    window.addEventListener('beforeunload', this.handleBeforeUnload)
-    this.cleanups.push(() => window.removeEventListener('beforeunload', this.handleBeforeUnload))
+    // An embed is a non-persisting playground (the landing demo never writes or downloads a
+    // copy), so an unload warning about unsaved edits would be noise on the hosting page.
+    if (!this.embedded) {
+      window.addEventListener('beforeunload', this.handleBeforeUnload)
+      this.cleanups.push(() => window.removeEventListener('beforeunload', this.handleBeforeUnload))
+    }
 
     this.narrowLayout.addEventListener('change', this.handleNarrowLayoutChange)
     this.systemAppearance.addEventListener('change', this.handleSystemAppearanceChange)
