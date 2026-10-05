@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.14.2](https://github.com/Arcadia822/taco/compare/v0.14.1...v0.14.2) (2026-10-05)
+
+### Features
+
+* **host**: serve the guide statically and point Try Taco at it (TACO-55) ([ee87e3c](https://github.com/Arcadia822/taco/commit/ee87e3cacebd035927f1c07720520e4073420f2e))
+
+### Bug Fixes
+
+* **ui**: never block unload in embeds (TACO-56) ([af99ded](https://github.com/Arcadia822/taco/commit/af99deda5441ae72cdba06003bfe61fd21164042))
+
+### Chores & Maintenance
+
+* chore: **release**: tacobin-v0.8.1 ([42c0360](https://github.com/Arcadia822/taco/commit/42c036049ab807aedbb0a881052f8d54336c9b30))
+* chore: **release**: tacobin-v0.8.0 ([ae76db9](https://github.com/Arcadia822/taco/commit/ae76db922950817395b1bf242b5cf5c295b3e40e))
+* docs: **guide**: state the standalone boundary and link the hosted review demo (TACO-55) ([7ffad59](https://github.com/Arcadia822/taco/commit/7ffad59a80d34d5c475bb035882dfc5cf80a15b8))
+
 ## [0.14.1](https://github.com/Arcadia822/taco/compare/v0.14.0...v0.14.1) (2026-10-04)
 
 ### Features
