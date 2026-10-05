@@ -46,4 +46,4 @@ After updating the source files, the agent refreshes the **same** Taco and opens
 
 To see what each part does, read [Taco](../Features/Taco.md), [Taco Skill](../Features/Taco-Skill.md), and [Tacobin](../Features/Tacobin.md).
 
-> You can also select text and comment, or edit the content, right here on this site. Nothing is saved: reload the page and everything goes back to how it was.
+> You can also select text and comment, or edit the content, right here on this site. This is a standalone Taco: no online listener and no autosave — **Handoff** only copies the content to your clipboard, and you give it to your agent yourself. Edits live in your browser; reload the page and everything goes back to how it was.
