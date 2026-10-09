@@ -55,7 +55,7 @@ export class HostedBrowserController {
         bundle: browser.currentBundle,
         author: () => currentAuthorName() || this.t.guest,
         onStatus: (status) => this.renderStatus(status),
-        adoptContent: (content) => browser.adoptBundleContent(content),
+        adoptContent: (content, options) => browser.adoptBundleContent(content, options),
         adoptListeners: (snapshot) => this.renderListeners(snapshot),
       },
     })
@@ -120,6 +120,7 @@ export class HostedBrowserController {
   private handleLocaleChange(): void {
     this.browser.setStructureLocked(true)
     this.browser.setPrimaryHandoffHandler(async () => this.primaryHandoff(), this.t.hostHandoffTooltip, 'bot-handoff', this.t.hostHandoffCommand)
+    this.browser.setPendingWritesCheck(() => this.session.hasPendingWrites())
     this.syncPresenceButton()
     this.syncRecoveryControl()
   }
@@ -132,6 +133,8 @@ export class HostedBrowserController {
     this.syncRecoveryControl()
     if (status.readiness === 'unsupported') {
       // No Host baseline after all: behave exactly like the plain reader page.
+      this.browser.setPendingWritesCheck(null)
+      this.browser.setDurableCommentsOnlyCheck(null)
       this.browser.currentBundle.access = 'reader'
       this.browser.setStructureLocked(false)
       this.browser.setPrimaryHandoffHandler(null)
@@ -139,6 +142,7 @@ export class HostedBrowserController {
       this.browser.rebuild()
       return
     }
+    this.browser.setPendingWritesCheck(() => this.session.hasPendingWrites())
     if (status.save === 'conflict' && !wasConflict) {
       this.browser.toast(this.t.hostConflictNotice)
     }
@@ -548,6 +552,8 @@ export class HostedBrowserController {
   destroy(): void {
     if (this.destroyed) return
     this.destroyed = true
+    this.browser.setPendingWritesCheck(null)
+    this.browser.setDurableCommentsOnlyCheck(null)
     this.destroyControlsOnly()
     this.session.destroy()
   }

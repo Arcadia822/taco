@@ -52,7 +52,7 @@ export interface HostedBridge {
   /** Self-reported reviewer name; never treated as authentication. */
   author: () => string
   onStatus: (status: HostedStatus) => void
-  adoptContent: (content: HostedContent) => void
+  adoptContent: (content: HostedContent, options?: { establishReviewBaseline?: boolean }) => void
   adoptListeners: (snapshot: HostListenerSnapshot) => void
 }
 
@@ -274,7 +274,7 @@ export class HostedSession {
     if (this.destroyed) return
     const preReadyEdit = this.editGeneration !== baselineGen || this.dirty || this.commentDirty
     if (!preReadyEdit) {
-      this.adoptSnapshotContent(state.snapshot, threads)
+      this.adoptSnapshotContent(state.snapshot, threads, { establishReviewBaseline: true })
       this.dirty = false
       this.commentDirty = false
       this.setStatus({
@@ -301,8 +301,11 @@ export class HostedSession {
     void this.refreshListeners()
     this.updateUnloadGuard()
   }
-
-  private adoptSnapshotContent(snapshot: HostSnapshot, comments: TacoCommentThread[]): void {
+  private adoptSnapshotContent(
+    snapshot: HostSnapshot,
+    comments: TacoCommentThread[],
+    options?: { establishReviewBaseline?: boolean },
+  ): void {
     this.mirrorThreads = new Map(comments.map((thread) => [thread.id, {
       status: thread.status,
       messages: new Map(thread.messages.map((message) => [message.id, { deleted: Boolean(message.deletedAt) }])),
@@ -321,7 +324,7 @@ export class HostedSession {
       ...(snapshot.navigation ? { navigation: navigationForBrowser(snapshot.root, snapshot.navigation as NavigationManifest) } : {}),
       ...(snapshot.checkpoints === undefined ? {} : { checkpoints: structuredClone(snapshot.checkpoints) }),
       comments,
-    })
+    }, options)
   }
 
   /** A file, Checkpoint, or comment change the reviewer just made in the browser. */

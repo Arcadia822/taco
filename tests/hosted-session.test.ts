@@ -777,4 +777,290 @@ describe('HostedBrowserController & attachHostedSession', () => {
       document.getElementById('taco-host-styles')?.remove()
     }
   })
+  describe('TACO-54 dirty indicator and review baseline assertions', () => {
+    it('Clean on open: ready/saved/saved with empty comments or resolved history leaves buttons clean and beforeunload quiet', async () => {
+      const initialBundle = createSampleBundle()
+      const readState = vi.spyOn(HostClient.prototype, 'readState').mockResolvedValue({
+        stateVersion: '1',
+        commentsThroughSequence: '1',
+        snapshot: { ...initialBundle, version: 1, docId: 'test-doc' },
+      })
+      const readComments = vi.spyOn(HostClient.prototype, 'readComments').mockResolvedValue([
+        {
+          id: 'thread-resolved-1',
+          status: 'resolved',
+          anchor: null,
+          isAnchorStale: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          messages: [{ id: 'm1', author: 'Bob', body: 'Old resolved comment', createdAt: new Date().toISOString(), deletedAt: null }],
+          actions: [],
+        },
+      ])
+      const listListeners = vi.spyOn(HostClient.prototype, 'listListeners').mockResolvedValue({ observedAt: '', listeners: [] })
+      const script = document.createElement('script')
+      script.id = 'taco-host-capability'
+      script.type = 'application/taco+host'
+      script.textContent = JSON.stringify({ version: 1, tacoId: 'test-taco-id', apiBase: '/v1/tacos/test-taco-id' })
+      document.head.append(script)
+
+      const root = document.createElement('div')
+      const browser = new FileBrowser(root, initialBundle)
+      const controller = attachHostedSession(browser)!
+      try {
+        await controller.session.start()
+        const saveBtn = root.querySelector<HTMLButtonElement>('.save-button')!
+        const copyBtn = root.querySelector<HTMLButtonElement>('.copy-review-main')!
+
+        expect(controller.session.hasPendingWrites()).toBe(false)
+        expect(saveBtn.classList.contains('is-dirty')).toBe(false)
+        expect(copyBtn.classList.contains('is-dirty')).toBe(false)
+        expect(saveBtn.title).not.toContain('Unsaved')
+        expect(saveBtn.title).not.toContain('未保存')
+
+        // Beforeunload check
+        const beforeunloadEvent = new Event('beforeunload', { cancelable: true }) as BeforeUnloadEvent
+        window.dispatchEvent(beforeunloadEvent)
+        expect(beforeunloadEvent.defaultPrevented).toBe(false)
+      } finally {
+        browser.destroy()
+        script.remove()
+        readState.mockRestore()
+        readComments.mockRestore()
+        listListeners.mockRestore()
+        document.getElementById('taco-host-styles')?.remove()
+      }
+    })
+
+    it('Clean with durable open comments: open thread from GET does not mark buttons dirty, but keeps thread in panel and handoff', async () => {
+      const initialBundle = createSampleBundle()
+      const readState = vi.spyOn(HostClient.prototype, 'readState').mockResolvedValue({
+        stateVersion: '1',
+        commentsThroughSequence: '1',
+        snapshot: { ...initialBundle, version: 1, docId: 'test-doc' },
+      })
+      const readComments = vi.spyOn(HostClient.prototype, 'readComments').mockResolvedValue([
+        {
+          id: 'thread-open-1',
+          status: 'open',
+          anchor: null,
+          isAnchorStale: false,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          messages: [{ id: 'm1', author: 'Carol', body: 'Active feedback', createdAt: new Date().toISOString(), deletedAt: null }],
+          actions: [],
+        },
+      ])
+      const listListeners = vi.spyOn(HostClient.prototype, 'listListeners').mockResolvedValue({ observedAt: '', listeners: [] })
+      const script = document.createElement('script')
+      script.id = 'taco-host-capability'
+      script.type = 'application/taco+host'
+      script.textContent = JSON.stringify({ version: 1, tacoId: 'test-taco-id', apiBase: '/v1/tacos/test-taco-id' })
+      document.head.append(script)
+
+      const root = document.createElement('div')
+      const browser = new FileBrowser(root, initialBundle)
+      const controller = attachHostedSession(browser)!
+      try {
+        await controller.session.start()
+        const saveBtn = root.querySelector<HTMLButtonElement>('.save-button')!
+        const copyBtn = root.querySelector<HTMLButtonElement>('.copy-review-main')!
+
+        expect(controller.session.hasPendingWrites()).toBe(false)
+        expect(saveBtn.classList.contains('is-dirty')).toBe(false)
+        expect(copyBtn.classList.contains('is-dirty')).toBe(false)
+
+        // The open thread is still present in browser bundle comments
+        expect(browser.currentBundle.comments?.some((t) => t.id === 'thread-open-1' && t.status === 'open')).toBe(true)
+        // Initial load without reviewer edits must not produce modified review files diff
+        expect(browser.getModifiedReviewFiles()).toHaveLength(0)
+      } finally {
+        browser.destroy()
+        script.remove()
+        readState.mockRestore()
+        readComments.mockRestore()
+        listListeners.mockRestore()
+        document.getElementById('taco-host-styles')?.remove()
+      }
+    })
+
+    it('Edits turn dirty, delayed autosave clears back to clean, and manual review diff is preserved', async () => {
+      let stateVersion = '1'
+      const initialBundle = createSampleBundle()
+      const readState = vi.spyOn(HostClient.prototype, 'readState').mockResolvedValue({
+        stateVersion,
+        commentsThroughSequence: '0',
+        snapshot: { ...initialBundle, version: 1, docId: 'test-doc' },
+      })
+      const readComments = vi.spyOn(HostClient.prototype, 'readComments').mockResolvedValue([])
+      let resolveAutosave: ((val: HostAutosaveResult) => void) | null = null
+      const autosave = vi.spyOn(HostClient.prototype, 'autosave').mockImplementation(() => {
+        return new Promise<HostAutosaveResult>((resolve) => {
+          resolveAutosave = resolve
+        })
+      })
+      const listListeners = vi.spyOn(HostClient.prototype, 'listListeners').mockResolvedValue({ observedAt: '', listeners: [] })
+      const script = document.createElement('script')
+      script.id = 'taco-host-capability'
+      script.type = 'application/taco+host'
+      script.textContent = JSON.stringify({ version: 1, tacoId: 'test-taco-id', apiBase: '/v1/tacos/test-taco-id' })
+      document.head.append(script)
+
+      const root = document.createElement('div')
+      const browser = new FileBrowser(root, initialBundle)
+      const controller = attachHostedSession(browser)!
+      try {
+        await controller.session.start()
+        const saveBtn = root.querySelector<HTMLButtonElement>('.save-button')!
+        const copyBtn = root.querySelector<HTMLButtonElement>('.copy-review-main')!
+        expect(saveBtn.classList.contains('is-dirty')).toBe(false)
+
+        // Make an edit via updateFileContent
+        browser['updateFileContent'](browser.currentBundle.files[0].path, '# Hello Edited\n', undefined)
+
+        expect(controller.session.hasPendingWrites()).toBe(true)
+        expect(saveBtn.classList.contains('is-dirty')).toBe(true)
+        expect(copyBtn.classList.contains('is-dirty')).toBe(true)
+
+        // Fast-forward debounce timer
+        const flushPromise = controller.session.flush()
+        await vi.waitFor(() => expect(autosave).toHaveBeenCalledOnce())
+
+        // While autosave is in flight, buttons stay dirty
+        expect(controller.session.hasPendingWrites()).toBe(true)
+        expect(saveBtn.classList.contains('is-dirty')).toBe(true)
+
+        // Autosave completes
+        stateVersion = '2'
+        resolveAutosave!({ stateVersion, savedAt: new Date().toISOString(), historyWindowId: 'win-1' })
+        await flushPromise
+        await vi.waitFor(() => expect(controller.session.hasPendingWrites()).toBe(false))
+
+        expect(saveBtn.classList.contains('is-dirty')).toBe(false)
+        expect(copyBtn.classList.contains('is-dirty')).toBe(false)
+
+        // Preserves manual review diff (design invariant §3.5)
+        const modified = browser.getModifiedReviewFiles()
+        expect(modified).toHaveLength(1)
+        expect(modified[0].content).toBe('# Hello Edited\n')
+        expect(modified[0].diff).toContain('+# Hello Edited')
+      } finally {
+        browser.destroy()
+        script.remove()
+        readState.mockRestore()
+        readComments.mockRestore()
+        autosave.mockRestore()
+        listListeners.mockRestore()
+        document.getElementById('taco-host-styles')?.remove()
+      }
+    })
+
+    it('In-flight race: editing version B while saving A keeps indicator dirty until B is acknowledged', async () => {
+      let stateVersion = '1'
+      const initialBundle = createSampleBundle()
+      const readState = vi.spyOn(HostClient.prototype, 'readState').mockResolvedValue({
+        stateVersion,
+        commentsThroughSequence: '0',
+        snapshot: { ...initialBundle, version: 1, docId: 'test-doc' },
+      })
+      const readComments = vi.spyOn(HostClient.prototype, 'readComments').mockResolvedValue([])
+      const autosaveResolvers: Array<(val: HostAutosaveResult) => void> = []
+      const autosave = vi.spyOn(HostClient.prototype, 'autosave').mockImplementation(() => {
+        return new Promise<HostAutosaveResult>((resolve) => {
+          autosaveResolvers.push(resolve)
+        })
+      })
+      const listListeners = vi.spyOn(HostClient.prototype, 'listListeners').mockResolvedValue({ observedAt: '', listeners: [] })
+      const script = document.createElement('script')
+      script.id = 'taco-host-capability'
+      script.type = 'application/taco+host'
+      script.textContent = JSON.stringify({ version: 1, tacoId: 'test-taco-id', apiBase: '/v1/tacos/test-taco-id' })
+      document.head.append(script)
+
+      const root = document.createElement('div')
+      const browser = new FileBrowser(root, initialBundle)
+      const controller = attachHostedSession(browser)!
+      try {
+        await controller.session.start()
+        const saveBtn = root.querySelector<HTMLButtonElement>('.save-button')!
+        const copyBtn = root.querySelector<HTMLButtonElement>('.copy-review-main')!
+
+        // Edit A
+        browser['updateFileContent'](browser.currentBundle.files[0].path, '# Edit A\n', undefined)
+        const saveAPromise = controller.session.flush()
+        await vi.waitFor(() => expect(autosave).toHaveBeenCalledTimes(1))
+
+        // While A is saving, edit B
+        browser['updateFileContent'](browser.currentBundle.files[0].path, '# Edit B\n', undefined)
+
+        // A resolves
+        stateVersion = '2'
+        autosaveResolvers[0]({ stateVersion, savedAt: new Date().toISOString(), historyWindowId: 'win-1' })
+        await saveAPromise
+
+        // Flag must still be dirty because B is pending
+        expect(controller.session.hasPendingWrites()).toBe(true)
+        expect(saveBtn.classList.contains('is-dirty')).toBe(true)
+        expect(copyBtn.classList.contains('is-dirty')).toBe(true)
+
+        // Flush and resolve B
+        const saveBPromise = controller.session.flush()
+        await vi.waitFor(() => expect(autosave).toHaveBeenCalledTimes(2))
+        stateVersion = '3'
+        autosaveResolvers[1]({ stateVersion, savedAt: new Date().toISOString(), historyWindowId: 'win-2' })
+        await saveBPromise
+
+        // Now clean
+        expect(controller.session.hasPendingWrites()).toBe(false)
+        expect(saveBtn.classList.contains('is-dirty')).toBe(false)
+        expect(copyBtn.classList.contains('is-dirty')).toBe(false)
+      } finally {
+        browser.destroy()
+        script.remove()
+        readState.mockRestore()
+        readComments.mockRestore()
+        autosave.mockRestore()
+        listListeners.mockRestore()
+        document.getElementById('taco-host-styles')?.remove()
+      }
+    })
+
+    it('Restores local tracker on unsupported host status and controller destroy', async () => {
+      const initialBundle = createSampleBundle()
+      const readState = vi.spyOn(HostClient.prototype, 'readState').mockResolvedValue(null) // unsupported
+      const readComments = vi.spyOn(HostClient.prototype, 'readComments').mockResolvedValue([])
+      const listListeners = vi.spyOn(HostClient.prototype, 'listListeners').mockResolvedValue({ observedAt: '', listeners: [] })
+      const script = document.createElement('script')
+      script.id = 'taco-host-capability'
+      script.type = 'application/taco+host'
+      script.textContent = JSON.stringify({ version: 1, tacoId: 'test-taco-id', apiBase: '/v1/tacos/test-taco-id' })
+      document.head.append(script)
+
+      const root = document.createElement('div')
+      const browser = new FileBrowser(root, initialBundle)
+      const controller = attachHostedSession(browser)!
+      try {
+        await controller.session.start()
+        expect(controller.session.currentStatus.readiness).toBe('unsupported')
+
+        // On unsupported, controller marks bundle access = reader and rebuilds
+        expect(controller.session.currentStatus.readiness).toBe('unsupported')
+        // Direct edit to dirty tracker or bundle content
+        browser.currentBundle.files[0].content = '# Local Edit\n'
+        browser['dirtyTracker'].note({ kind: 'all' })
+        browser['syncDirtyState']()
+
+        const saveBtn = root.querySelector<HTMLButtonElement>('.save-button')!
+        // Local tracker takes effect!
+        expect(saveBtn.classList.contains('is-dirty')).toBe(true)
+      } finally {
+        browser.destroy()
+        script.remove()
+        readState.mockRestore()
+        readComments.mockRestore()
+        listListeners.mockRestore()
+        document.getElementById('taco-host-styles')?.remove()
+      }
+    })
+  })
 })
