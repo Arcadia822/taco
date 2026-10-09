@@ -263,3 +263,25 @@ develop 实测（相对本节 prepare 基线，字节）：
 收尾更正（2026-10-02）：CI 的测试／构建已通过，但 committed-artifacts gate 发现本机 pnpm 依赖树生成的镜像与 npm lockfile 不一致。执行 npm ci 后重建，最终以 package-lock.json 为准：Complete 2,844,334 B（相对 prepare +8,700 B，0.3068%）、Lite 295,038 B（−825 B，−0.2788%）、Host 2,878,646 B（+9,236 B，0.3219%）；skill Complete 2,735,870 B（+8,700 B，0.3190%）、Lite 186,574 B（−825 B，−0.4402%）、目录 14,067,387 B（+44,020 B，0.3139%）。之前表格保留为 pnpm 环境历史测量；以上数字为交付口径，估算偏差额外来自依赖树变化，无依赖 manifest／lockfile 变更。本轮任一 shell 仍未达 1% 或 32 KiB；累计相对 2026-09-28 基线，Lite skill +5,542 B（3.06%）、Lite 成品 +8,757 B（3.06%），继续超过累计告知阈值。缩减选项与上文相同。
 
 收尾验证：npm ci 后全仓 54/54 个文件、584/584 项测试全部通过；此前 update-check 的本地失败不再出现。完整构建和三变体 gate 通过，最终以远端最新提交的 CI 与 committed-artifacts 检查确认可合并状态。
+
+## 18. 托管未保存指示器权威化（TACO-54，2026-10-09）
+
+**问题**：托管打开时本地 `BundleDirtyTracker` 产生伪 dirty（服务端空 baseline 与后读入的 durable 评论），自动保存成功后指示器不清零，`beforeunload` 混用两套判定导致误报未保存修改。
+
+**改动**：`src/file-browser.ts` 增加 `setPendingWritesCheck`／`setDurableCommentsOnlyCheck` 权威回调，`syncDirtyState()` 与 `handleBeforeUnload()` 在托管模式只认 `hasPendingWrites()`；`adoptBundleContent()` 支持 `{ establishReviewBaseline }` 在初次成功加载建立评审与 Checkpoint 基线；`HostedSession.setStatus()` 恢复 destroyed 守卫，并在 unsupported 时清理定时器与 pendingHandoff。open 评论不再点亮脏点，按钮干净时仍可交接反馈。
+
+**prepare 估算**：本轮为缺陷修复，修复前未留存估算记录（缺失，不补写虚构数字）。
+
+**develop 实测**（2026-10-09，`npm ci` + `npm run build` + `wc -c`，相对同日 main `c2b0c3d`）：
+
+| 产物 | 实测大小 | 实测增量 | 偏差说明 |
+|---|---|---|---|
+| Complete 成品（`dist-single/Taco_Spec.taco.html`／extensions 镜像） | 2,846,082 | +152 B（+0.005%） | 脏状态权威判定与基线建立逻辑 |
+| Lite 成品（`dist-single/Taco_Spec_Lite.taco.html`／extensions 镜像） | 296,789 | +111 B | 同上（Lite 载荷） |
+| Host 专用 shell（`dist-single/Taco_Spec_Host.taco.html`／`packages/host/assets`） | 2,880,822 | +340 B | 另含 `hosted-session`／`hosted-controller` 改动进入 Host runtime |
+| skill Complete shell（`skills/taco/taco-shell.html`） | 2,737,618 | +152 B | 与 Complete 成品同源 |
+| skill Lite shell（`skills/taco/taco-shell-lite.html`） | 188,325 | +111 B | 与 Lite 成品同源 |
+
+无新增 npm 依赖、无新增联网目的地。单个 shell 增量远低于 1% 或 32 KiB 阈值；累计相对 2026-09-28 基线，Lite skill shell +7,293 B（4.03%）、Lite 成品 +10,508 B（3.67%），累计幅度来自此前各轮共享交接／评论／Checkpoint 与内嵌规范，本轮各自仅 +111 B。AGENTS.md 基线已随本次构建刷新。
+
+**验证**：`npm ci` 后全仓 54/54 个测试文件、614/614 项测试通过（含 TACO-54 回归 8 项：对 base 代码全红、修复后全绿）；`npm run build` 后生成物零漂移，`skills/taco/templates` 与 `extensions/taco/templates` 镜像逐 blob 一致；rebase 到含 #111 的 main 后重复构建与全量测试。

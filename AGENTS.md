@@ -38,7 +38,7 @@ When a user asks an agent to install, use, package, or review Taco, read `README
   - skill 目录用 `du`/`wc` 比较 `skills/taco/`；
   - 结论写入 PR 描述与设计源文件。
 - **阈值与告知义务：任一 shell（`skills/taco/taco-shell.html`、`skills/taco/taco-shell-lite.html` 及其镜像 `extensions/taco/assets/`、`dist-single/`）相对当前基线增长 ≥ 1%，或绝对增量 ≥ 32 KB，即视为「较大增大」，必须在交付说明中**主动、明确地告知用户**，给出数字、原因与可选替代方案；未达阈值也应在实测记录中给出数字。
-- **基线（2026-09-28，`dist-single` 构建产物）**：`Taco_Spec.taco.html` 2,835,255 字节；`Taco_Spec_Lite.taco.html` 286,281 字节；`skills/taco/taco-shell.html` 2,730,006 字节；`skills/taco/taco-shell-lite.html` 181,032 字节。基线变化时同步更新本节。
+- **基线（2026-10-09，`dist-single` 构建产物）**：`Taco_Spec.taco.html` 2,846,082 字节；`Taco_Spec_Lite.taco.html` 296,789 字节；`skills/taco/taco-shell.html` 2,737,618 字节；`skills/taco/taco-shell-lite.html` 188,325 字节。基线变化时同步更新本节。
 
 # Semantic commit messages
 

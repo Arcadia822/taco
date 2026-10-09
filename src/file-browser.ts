@@ -1321,6 +1321,15 @@ export class FileBrowser {
   }
 
   private syncDirtyState(): void {
+    if (this.pendingWritesCheck) {
+      const isPending = Boolean(this.pendingWritesCheck())
+      this.saveButton.classList.toggle('is-dirty', isPending)
+      this.saveButton.title = isPending ? this.t.unsaved : this.t.save
+      this.saveButton.setAttribute('aria-label', this.saveButton.title)
+      this.copyButton.classList.toggle('is-dirty', isPending)
+      return
+    }
+
     const saveDirty = this.dirtyTracker.isDirty()
     this.saveButton.classList.toggle('is-dirty', saveDirty)
     this.saveButton.title = saveDirty ? this.t.unsaved : this.t.save
@@ -1359,7 +1368,7 @@ export class FileBrowser {
     navigation?: NavigationManifest
     checkpoints?: unknown
     comments: TacoCommentThread[]
-  }): void {
+  }, options?: { establishReviewBaseline?: boolean }): void {
     const previousPath = this.selected?.path ?? this.selectedPlaceholder
     const wasCheckpointView = this.checkpointView
     this.bundle.title = content.title || this.bundle.title
@@ -1375,7 +1384,12 @@ export class FileBrowser {
     this.selected = this.checkpointView ? null : ((previousPath ? fileByPath(this.bundle, previousPath) : null) ?? defaultFile(this.bundle))
     this.selectedPlaceholder = null
     this.cachedResolvedCheckpoints = null
-    this.dirtyTracker.note({ kind: 'all' })
+    if (options?.establishReviewBaseline) {
+      this.dirtyTracker.markSaved()
+      this.captureCheckpointBaseline()
+    } else {
+      this.dirtyTracker.note({ kind: 'all' })
+    }
     // Host persistence is independent of the local Save and manual review baseline.
     this.build()
     this.fileNavigation?.refresh(this.selected)
@@ -1417,6 +1431,13 @@ export class FileBrowser {
 
   setPendingWritesCheck(check: (() => boolean) | null): void {
     this.pendingWritesCheck = check ?? undefined
+    this.refreshDirtyState()
+  }
+
+  refreshDirtyState(): void {
+    if (this.saveButton && this.copyButton) {
+      this.syncDirtyState()
+    }
   }
 
   setDurableCommentsOnlyCheck(check: (() => boolean) | null): void {
@@ -1461,7 +1482,8 @@ export class FileBrowser {
   }
 
   private readonly handleBeforeUnload = (event: BeforeUnloadEvent): void => {
-    if (this.pendingWritesCheck?.() || this.dirtyTracker.isDirty()) {
+    const isDirty = this.pendingWritesCheck ? Boolean(this.pendingWritesCheck()) : this.dirtyTracker.isDirty()
+    if (isDirty) {
       event.preventDefault()
       event.returnValue = ''
     }

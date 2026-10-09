@@ -1572,6 +1572,23 @@ describe('FileBrowser', () => {
     expect(browser.getModifiedReviewFiles()).toEqual([])
     browser.destroy()
   })
+  it('establishes review baseline on initial successful adoption when requested', () => {
+    const bundle = structuredClone(testBundle)
+    const file = bundle.files[0]
+    bundle.checkpoints = { version: 1, nodes: [{ id: 'gate', title: 'Gate', after: [], documents: [{ path: file.path }] }], documents: [] }
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    const files = structuredClone(bundle.files)
+    files[0].content = '# Loaded from Host\n'
+    browser.adoptBundleContent({
+      title: bundle.title, files, comments: [{ id: 'c1', status: 'open', anchor: null, createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z', messages: [{ id: 'm1', author: 'Author', createdAt: '2026-10-01T00:00:00Z', body: 'text' }] }],
+      checkpoints: { ...bundle.checkpoints as object, documents: [{ path: file.path, status: 'complete', updatedAt: '2026-10-01T00:00:00Z' }] },
+    }, { establishReviewBaseline: true })
+    expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(false)
+    expect(browser.getModifiedReviewFiles()).toEqual([])
+    expect(browser.getCheckpointChanges()).toEqual([])
+    browser.destroy()
+  })
+
 
   it('updates full-path navigation on hosted file rename and deletion', async () => {
     const bundle = structuredClone(testBundle)
