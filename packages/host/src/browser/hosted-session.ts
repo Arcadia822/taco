@@ -190,7 +190,7 @@ export class HostedSession {
   }
 
   hasPendingWrites(): boolean {
-    return !this.destroyed && (
+    return !this.destroyed && this.readiness !== 'unsupported' && (
       this.dirty ||
       this.commentDirty ||
       this.pendingHandoff !== null ||
@@ -727,6 +727,8 @@ export class HostedSession {
         return recovered.changed ? { kind: 'done', handoffId: recovered.handoffId } : { kind: 'no-change' }
       }
       this.pendingHandoff = { key: newIdempotencyKey(), payload }
+      this.updateUnloadGuard()
+      if (!this.destroyed) this.options.bridge.onStatus({ ...this.currentStatus })
       const result = await this.commitPendingHandoff()
       return result.changed ? { kind: 'done', handoffId: result.handoffId } : { kind: 'no-change' }
     } catch (error) {
@@ -752,6 +754,7 @@ export class HostedSession {
       throw error
     } finally {
       this.updateUnloadGuard()
+      if (!this.destroyed) this.options.bridge.onStatus({ ...this.currentStatus })
     }
   }
 
@@ -846,8 +849,16 @@ export class HostedSession {
     if (next.save) this.save = next.save
     if (next.comments) this.comments = next.comments
     this.detail = next.detail
+    if (this.readiness === 'unsupported') {
+      if (this.saveTimer !== null) window.clearTimeout(this.saveTimer)
+      if (this.commentTimer !== null) window.clearTimeout(this.commentTimer)
+      if (this.listenerTimer !== null) window.clearInterval(this.listenerTimer)
+      this.saveTimer = null
+      this.commentTimer = null
+      this.listenerTimer = null
+      this.pendingHandoff = null
+    }
     this.updateUnloadGuard()
-    if (this.destroyed) return
     this.options.bridge.onStatus(this.currentStatus)
   }
 

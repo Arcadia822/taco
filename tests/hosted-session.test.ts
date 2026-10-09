@@ -1062,5 +1062,253 @@ describe('HostedBrowserController & attachHostedSession', () => {
         document.getElementById('taco-host-styles')?.remove()
       }
     })
+    it('Reflects dirty indicator when pendingHandoff is created on unknown transport result and clears when resolved', async () => {
+      const initialBundle = createSampleBundle()
+      let stateVersion = '1'
+      const readState = vi.spyOn(HostClient.prototype, 'readState').mockResolvedValue({
+        stateVersion,
+        commentsThroughSequence: '0',
+        snapshot: { ...initialBundle, version: 1, docId: 'test-doc' },
+      })
+      const readComments = vi.spyOn(HostClient.prototype, 'readComments').mockResolvedValue([])
+      const listListeners = vi.spyOn(HostClient.prototype, 'listListeners').mockResolvedValue({
+        observedAt: new Date().toISOString(),
+        listeners: [{ listenerId: 'l1', name: 'Agent', lastSeenAt: new Date().toISOString(), expiresAt: new Date().toISOString() }],
+      })
+      const autosave = vi.spyOn(HostClient.prototype, 'autosave').mockImplementation(async () => {
+        stateVersion = '2'
+        return { stateVersion, savedAt: new Date().toISOString(), historyWindowId: 'win-1' }
+      })
+      let resolveHandoff: ((val: HostHandoffCommit) => void) | null = null
+      let rejectHandoff: ((err: Error) => void) | null = null
+      const commitHandoff = vi.spyOn(HostClient.prototype, 'commitHandoff').mockImplementation(() => {
+        return new Promise<HostHandoffCommit>((resolve, reject) => {
+          resolveHandoff = resolve
+          rejectHandoff = reject
+        })
+      })
+
+      const script = document.createElement('script')
+      script.id = 'taco-host-capability'
+      script.type = 'application/taco+host'
+      script.textContent = JSON.stringify({ version: 1, tacoId: 'test-taco-id', apiBase: '/v1/tacos/test-taco-id' })
+      document.head.append(script)
+
+      const root = document.createElement('div')
+      const browser = new FileBrowser(root, initialBundle)
+      const controller = attachHostedSession(browser)!
+      try {
+        await controller.session.start()
+        const saveBtn = root.querySelector<HTMLButtonElement>('.save-button')!
+        const copyBtn = root.querySelector<HTMLButtonElement>('.copy-review-main')!
+        expect(saveBtn.classList.contains('is-dirty')).toBe(false)
+        expect(copyBtn.classList.contains('is-dirty')).toBe(false)
+
+        // Edit content first so handoff has something to commit
+        browser['updateFileContent'](initialBundle.files[0].path, '# Handoff Content\n', undefined)
+        expect(saveBtn.classList.contains('is-dirty')).toBe(true)
+        await controller.session.flush()
+        expect(saveBtn.classList.contains('is-dirty')).toBe(false)
+
+        // Start handoff
+        const handoffPromise = controller.session.handoff()
+        await vi.waitFor(() => expect(commitHandoff).toHaveBeenCalledTimes(1))
+        expect(controller.session.hasPendingWrites()).toBe(true)
+        expect(root.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(true)
+        expect(root.querySelector('.copy-review-main')?.classList.contains('is-dirty')).toBe(true)
+
+        rejectHandoff!(new HostTransportError('network disconnected'))
+
+        // Retry starts
+        await vi.waitFor(() => expect(commitHandoff).toHaveBeenCalledTimes(2))
+        expect(controller.session.hasPendingWrites()).toBe(true)
+        expect(root.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(true)
+
+        // Settle retry successfully
+        resolveHandoff!({ handoffId: 'h-1', changed: true, event: null })
+        const outcome = await handoffPromise
+        expect(outcome.kind).toBe('done')
+        expect(controller.session.hasPendingWrites()).toBe(false)
+        expect(root.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(false)
+        expect(root.querySelector('.copy-review-main')?.classList.contains('is-dirty')).toBe(false)
+      } finally {
+        browser.destroy()
+        script.remove()
+        readState.mockRestore()
+        readComments.mockRestore()
+        listListeners.mockRestore()
+        autosave.mockRestore()
+        commitHandoff.mockRestore()
+        document.getElementById('taco-host-styles')?.remove()
+      }
+    })
+
+    it('Cleans up session unload listener on unsupported status without warning on local save', async () => {
+      const initialBundle = createSampleBundle()
+      const readState = vi.spyOn(HostClient.prototype, 'readState').mockResolvedValue(null)
+      const readComments = vi.spyOn(HostClient.prototype, 'readComments').mockResolvedValue([])
+      const listListeners = vi.spyOn(HostClient.prototype, 'listListeners').mockResolvedValue({ observedAt: '', listeners: [] })
+      const script = document.createElement('script')
+      script.id = 'taco-host-capability'
+      script.type = 'application/taco+host'
+      script.textContent = JSON.stringify({ version: 1, tacoId: 'test-taco-id', apiBase: '/v1/tacos/test-taco-id' })
+      document.head.append(script)
+
+      const root = document.createElement('div')
+      const browser = new FileBrowser(root, initialBundle)
+      const controller = attachHostedSession(browser)!
+
+      // Add pre-ready edit
+      controller.session.markContentChanged()
+      expect(controller.session['unloadGuarded']).toBe(true)
+
+      try {
+        await controller.session.start()
+        expect(controller.session.currentStatus.readiness).toBe('unsupported')
+        // Session unload guard must be released!
+        expect(controller.session['unloadGuarded']).toBe(false)
+        expect(controller.session.hasPendingWrites()).toBe(false)
+
+        // Local beforeunload event simulation
+        const event = new Event('beforeunload', { cancelable: true }) as BeforeUnloadEvent
+        browser['handleBeforeUnload'](event)
+        // With no local dirty edits on tracker, no unload warning
+        expect(event.defaultPrevented).toBe(false)
+      } finally {
+        browser.destroy()
+        script.remove()
+        readState.mockRestore()
+        readComments.mockRestore()
+        listListeners.mockRestore()
+        document.getElementById('taco-host-styles')?.remove()
+      }
+    })
+
+    it('Keeps buttons dirty when comments are pending or in error, and preserves checkpoint diff after autosave', async () => {
+      const initialBundle = createSampleBundle()
+      initialBundle.checkpoints = {
+        version: 1,
+        nodes: [{ id: 'gate', title: 'Gate', after: [], documents: [{ path: initialBundle.files[0].path }] }],
+        documents: [],
+      }
+      let stateVersion = '1'
+      const readState = vi.spyOn(HostClient.prototype, 'readState').mockResolvedValue({
+        stateVersion,
+        commentsThroughSequence: '0',
+        snapshot: { ...initialBundle, version: 1, docId: 'test-doc' },
+      })
+      const readComments = vi.spyOn(HostClient.prototype, 'readComments').mockResolvedValue([])
+      const listListeners = vi.spyOn(HostClient.prototype, 'listListeners').mockResolvedValue({ observedAt: '', listeners: [] })
+      const autosave = vi.spyOn(HostClient.prototype, 'autosave').mockImplementation(async () => {
+        stateVersion = '2'
+        return { stateVersion, savedAt: new Date().toISOString(), historyWindowId: 'win-1' }
+      })
+      const mutateComment = vi.spyOn(HostClient.prototype, 'mutateComment').mockRejectedValue(new Error('comment network error'))
+      const script = document.createElement('script')
+      script.id = 'taco-host-capability'
+      script.type = 'application/taco+host'
+      script.textContent = JSON.stringify({ version: 1, tacoId: 'test-taco-id', apiBase: '/v1/tacos/test-taco-id' })
+      document.head.append(script)
+
+      const root = document.createElement('div')
+      const browser = new FileBrowser(root, initialBundle)
+      const controller = attachHostedSession(browser)!
+      try {
+        await controller.session.start()
+        const saveBtn = root.querySelector<HTMLButtonElement>('.save-button')!
+        const copyBtn = root.querySelector<HTMLButtonElement>('.copy-review-main')!
+        expect(saveBtn.classList.contains('is-dirty')).toBe(false)
+
+        // Update checkpoint status
+        browser['changeCheckpointStatus'](initialBundle.files[0].path, 'complete')
+        expect(saveBtn.classList.contains('is-dirty')).toBe(true)
+
+        // Also trigger comment change
+        // Add a new comment thread to bundle comments so computeCommentOps has an op
+        browser.currentBundle.comments = [
+          {
+            id: 'new-thread-1',
+            status: 'open',
+            anchor: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            messages: [{ id: 'nm-1', author: 'Carol', body: 'New comment', createdAt: new Date().toISOString() }],
+          },
+        ]
+        controller.session.markCommentsChanged()
+        expect(saveBtn.classList.contains('is-dirty')).toBe(true)
+        // Content autosaves, but comments fail with error
+        await controller.session.flush()
+        expect(controller.session.currentStatus.save).toBe('saved')
+        expect(controller.session.currentStatus.comments).toBe('error')
+
+        // Even though save is saved, comments is error -> buttons remain dirty!
+        expect(controller.session.hasPendingWrites()).toBe(true)
+        expect(saveBtn.classList.contains('is-dirty')).toBe(true)
+        expect(copyBtn.classList.contains('is-dirty')).toBe(true)
+
+        // Checkpoint changes are preserved for manual review diff
+        expect(browser.getCheckpointChanges()).toEqual([
+          { path: initialBundle.files[0].path, from: 'todo', to: 'complete' },
+        ])
+      } finally {
+        browser.destroy()
+        script.remove()
+        readState.mockRestore()
+        readComments.mockRestore()
+        listListeners.mockRestore()
+        autosave.mockRestore()
+        mutateComment.mockRestore()
+      }
+    })
+
+    it('Enters conflict state on 409 and keeps dirty indicator lit', async () => {
+      const initialBundle = createSampleBundle()
+      let stateVersion = '1'
+      const readState = vi.spyOn(HostClient.prototype, 'readState').mockResolvedValue({
+        stateVersion,
+        commentsThroughSequence: '0',
+        snapshot: { ...initialBundle, version: 1, docId: 'test-doc' },
+      })
+      const readComments = vi.spyOn(HostClient.prototype, 'readComments').mockResolvedValue([])
+      const listListeners = vi.spyOn(HostClient.prototype, 'listListeners').mockResolvedValue({ observedAt: '', listeners: [] })
+        const autosave = vi.spyOn(HostClient.prototype, 'autosave').mockRejectedValue(
+          new HostApiError(409, 'STATE_CONFLICT', 'State changed remotely')
+        )
+
+      const script = document.createElement('script')
+      script.id = 'taco-host-capability'
+      script.type = 'application/taco+host'
+      script.textContent = JSON.stringify({ version: 1, tacoId: 'test-taco-id', apiBase: '/v1/tacos/test-taco-id' })
+      document.head.append(script)
+
+      const root = document.createElement('div')
+      const browser = new FileBrowser(root, initialBundle)
+      const controller = attachHostedSession(browser)!
+      try {
+        await controller.session.start()
+        const saveBtn = root.querySelector<HTMLButtonElement>('.save-button')!
+        const copyBtn = root.querySelector<HTMLButtonElement>('.copy-review-main')!
+
+        // Edit content
+        browser['updateFileContent'](initialBundle.files[0].path, '# Edit for conflict\n', undefined)
+        expect(saveBtn.classList.contains('is-dirty')).toBe(true)
+
+        // Trigger save which results in 409 conflict
+        await controller.session.flush()
+        expect(controller.session.currentStatus.save).toBe('conflict')
+        expect(controller.session.hasPendingWrites()).toBe(true)
+        expect(saveBtn.classList.contains('is-dirty')).toBe(true)
+        expect(copyBtn.classList.contains('is-dirty')).toBe(true)
+      } finally {
+        browser.destroy()
+        script.remove()
+        readState.mockRestore()
+        readComments.mockRestore()
+        listListeners.mockRestore()
+        autosave.mockRestore()
+        document.getElementById('taco-host-styles')?.remove()
+      }
+    })
   })
 })

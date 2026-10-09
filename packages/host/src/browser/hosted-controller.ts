@@ -132,7 +132,9 @@ export class HostedBrowserController {
     this.status = status
     this.syncRecoveryControl()
     if (status.readiness === 'unsupported') {
-      // No Host baseline after all: behave exactly like the plain reader page.
+      // No Host baseline after all: release session controls and unload listener,
+      // behave exactly like the plain reader page.
+      this.session.destroy()
       this.browser.setPendingWritesCheck(null)
       this.browser.setDurableCommentsOnlyCheck(null)
       this.browser.currentBundle.access = 'reader'
@@ -143,6 +145,7 @@ export class HostedBrowserController {
       return
     }
     this.browser.setPendingWritesCheck(() => this.session.hasPendingWrites())
+    this.browser.refreshDirtyState()
     if (status.save === 'conflict' && !wasConflict) {
       this.browser.toast(this.t.hostConflictNotice)
     }

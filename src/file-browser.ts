@@ -1431,6 +1431,10 @@ export class FileBrowser {
 
   setPendingWritesCheck(check: (() => boolean) | null): void {
     this.pendingWritesCheck = check ?? undefined
+    this.refreshDirtyState()
+  }
+
+  refreshDirtyState(): void {
     if (this.saveButton && this.copyButton) {
       this.syncDirtyState()
     }
