@@ -1,9 +1,5 @@
 # Changelog
 
-### Bug Fixes
-
-* **host**: 托管模式未保存指示器只反映未确认持久化；open 评论不再点亮未保存脏点，按钮干净时仍可交接反馈 (TACO-54)
-
 ## [0.14.2](https://github.com/Arcadia822/taco/compare/v0.14.1...v0.14.2) (2026-10-05)
 
 ### Features
