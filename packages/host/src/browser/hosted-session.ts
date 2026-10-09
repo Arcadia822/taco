@@ -859,6 +859,7 @@ export class HostedSession {
       this.pendingHandoff = null
     }
     this.updateUnloadGuard()
+    if (this.destroyed) return
     this.options.bridge.onStatus(this.currentStatus)
   }
 
