@@ -303,6 +303,48 @@ describe('FileBrowser', () => {
     browser.destroy()
   })
 
+  it('renders rich diagnostic details for invalid mark collection errors in fallback view (TACO-47)', async () => {
+    const bundle = structuredClone(testBundle)
+    const failingFile = bundle.files[1]
+    const originalCheck = ProseMirrorNode.prototype.check
+    const check = vi.spyOn(ProseMirrorNode.prototype, 'check').mockImplementation(function (this: ProseMirrorNode) {
+      if (this.textContent.includes('Requirements checklist')) {
+        throw new Error('Invalid collection of marks for node text: bold,bold')
+      }
+      return originalCheck.call(this)
+    })
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    check.mockRestore()
+    expect((await waitForEditor()).textContent).toContain('Outcome')
+
+    const link = document.querySelector<HTMLElement>(`[data-path="${failingFile.path}"]`)
+    link!.click()
+
+    const errorContainer = document.querySelector('.editor-error')
+    expect(errorContainer).not.toBeNull()
+    expect(errorContainer?.textContent).toContain(failingFile.path)
+    expect(errorContainer?.textContent).toContain('富文本编辑器无法加载，已切换到 Markdown 源码；原文未更改')
+    expect(errorContainer?.textContent).toContain('源码仍可编辑')
+    expect(errorContainer?.textContent).toContain('解析结果包含不兼容的内联格式')
+
+    // Check technical details section
+    const details = errorContainer?.querySelector('details.editor-error-details')
+    expect(details).not.toBeNull()
+    expect(details?.textContent).toContain('技术详情')
+    expect(details?.textContent).toContain(`Path: ${failingFile.path}`)
+    expect(details?.textContent).toContain('Marks: bold,bold')
+
+    const source = document.querySelector<HTMLTextAreaElement>('textarea')
+    expect(source?.value).toBe(failingFile.content)
+    expect(source?.readOnly).toBe(false)
+
+    // Editing source clears the source-bound migration failure on re-selection
+    source!.value = '# Updated content'
+    source!.dispatchEvent(new Event('input'))
+
+    browser.destroy()
+  })
+
   it('uses the three-color chart-bubble mark in expanded and collapsed headers', () => {
     new FileBrowser(document.getElementById('app')!, structuredClone(testBundle))
 

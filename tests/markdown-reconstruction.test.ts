@@ -163,4 +163,39 @@ describe('lossless Markdown reconstruction', () => {
     const afterUndo = reconstructor.reconstruct(editor)
     expect(afterUndo).toBe(content)
   })
+
+  it('reconstructs untouched redundant emphasis losslessly across undo and edits to other blocks (TACO-47)', () => {
+    const content = '# Title\r\n\r\nParagraph with **__redundant bold__** and ****extra asterisks****.\r\n\r\nAnother block to edit.\r\n\r\n[def]: https://example.com\r\n'
+    const { editor, reconstructor } = mount(content)
+
+    // 1. Initial no-edit reconstruct is byte-for-byte identical (including CRLF and redundant syntax)
+    expect(reconstructor.reconstruct(editor)).toBe(content)
+
+    // 2. Edit "Another block to edit" -> redundant bold block must remain byte-for-byte untouched
+    replaceText(editor, 'Another block to edit', 'Edited block')
+    const editedOutput = reconstructor.reconstruct(editor)
+    expect(editedOutput).toContain('Paragraph with **__redundant bold__** and ****extra asterisks****.')
+    expect(editedOutput).toContain('[def]: https://example.com')
+    expect(editedOutput).toContain('\r\n')
+
+    // 3. Undo -> returns byte-for-byte to original
+    editor.commands.undo()
+    expect(reconstructor.reconstruct(editor)).toBe(content)
+
+    // 4. Edit the redundant block itself -> only that block is canonicalized by serializer
+    replaceText(editor, 'redundant bold', 'modified bold')
+    const modifiedOutput = reconstructor.reconstruct(editor)
+    expect(modifiedOutput).toContain('Another block to edit.')
+    expect(modifiedOutput).toContain('[def]: https://example.com')
+
+    // 5. Reloading modified output maintains marks and doc.check() passes
+    const reloaded = new Editor({
+      extensions: createTacoEditorExtensions(labels, { renderMermaid: false }),
+      content: modifiedOutput,
+      contentType: 'markdown',
+    })
+    editors.push(reloaded)
+    expect(() => reloaded.state.doc.check()).not.toThrow()
+    expect(reloaded.getHTML()).toContain('<strong>modified bold</strong>')
+  })
 })

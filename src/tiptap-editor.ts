@@ -2,7 +2,8 @@ import StarterKit from '@tiptap/starter-kit'
 import Paragraph from '@tiptap/extension-paragraph'
 import Link from '@tiptap/extension-link'
 import { Markdown } from '@tiptap/markdown'
-import { Editor, Extension, generateHTML } from '@tiptap/core'
+import { Editor, Extension, generateHTML, type JSONContent } from '@tiptap/core'
+import { Mark, type Schema } from '@tiptap/pm/model'
 import Image, { type ImageOptions } from '@tiptap/extension-image'
 import Code from '@tiptap/extension-code'
 import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table'
@@ -126,6 +127,52 @@ const SafeImage = Image.extend({
   },
 })
 
+/**
+ * Normalize ProseMirror JSON node marks using the editor schema:
+ * 1. Constructs Mark instances via `Mark.fromJSON(schema, rawMark)`.
+ * 2. Deduplicates using `mark.eq` (removing only exact duplicate marks).
+ * 3. Sorts canonical marks by schema rank via `Mark.setFrom(deduped)`.
+ * 4. Preserves conflicting marks, unknown marks fail schema resolution as required.
+ */
+export const normalizeNodeMarks = (node: JSONContent, schema: Schema): JSONContent => {
+  if (!node || typeof node !== 'object') return node
+  if (Array.isArray(node.marks) && node.marks.length > 0) {
+    const marks = node.marks.map((markJson) => Mark.fromJSON(schema, markJson))
+    const deduped: Mark[] = []
+    for (const mark of marks) {
+      if (!deduped.some((existing) => existing.eq(mark))) {
+        deduped.push(mark)
+      }
+    }
+    const sorted = Mark.setFrom(deduped)
+    node.marks = sorted.map((mark) => mark.toJSON())
+  }
+  if (Array.isArray(node.content)) {
+    for (const child of node.content) {
+      normalizeNodeMarks(child, schema)
+    }
+  }
+  return node
+}
+
+const TacoMarkdown = Markdown.extend({
+  onBeforeCreate(event) {
+    const isInitialMarkdown = this.editor.options.contentType === 'markdown' && typeof this.editor.options.content === 'string'
+    this.parent?.(event)
+    if (isInitialMarkdown && this.editor.options.content && typeof this.editor.options.content === 'object') {
+      normalizeNodeMarks(this.editor.options.content as JSONContent, this.editor.schema)
+    }
+    const manager = this.storage.manager
+    if (manager) {
+      const originalParse = manager.parse.bind(manager)
+      manager.parse = (markdown: string) => {
+        const json = originalParse(markdown)
+        return normalizeNodeMarks(json, this.editor.schema)
+      }
+    }
+  },
+})
+
 export const createTacoEditorExtensions = (labels: MermaidPluginLabels, options: TacoEditorExtensionOptions = {}) => [
   StarterKit.configure({ codeBlock: false, code: false, paragraph: false, link: false, trailingNode: false }),
   // Emphasis may wrap a code span (`**`x`**`, valid GFM). Excluding emphasis from
@@ -153,7 +200,7 @@ export const createTacoEditorExtensions = (labels: MermaidPluginLabels, options:
   TableCell,
   TaskList,
   TaskItem.configure({ nested: true }),
-  Markdown.configure({ markedOptions: { gfm: true } }),
+  TacoMarkdown.configure({ markedOptions: { gfm: true } }),
 ]
 
 export const ensureTacoBlockIds = (editor: Editor, fileId: string, deterministic: boolean): boolean => {

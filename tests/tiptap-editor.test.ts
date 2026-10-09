@@ -456,4 +456,35 @@ describe('Tiptap Markdown integration', () => {
     expect(new Set(leftIds).size).toBe(leftIds.length)
     expect(left.files[0].blocks).toEqual(right.files[0].blocks)
   })
+
+  it('migrates Markdown with nested redundant bold without failures and remounts successfully', () => {
+    const redundantContent = '# Title\n\n**__x__** and ****y**** and *_z_*.\n\n~~nested ~~strike~~~~.'
+    const bundle: TacoBundle = {
+      format: 'taco/files',
+      version: 1,
+      docId: 'redundant-bold-migration',
+      title: 'Redundant Bold Migration',
+      root: 'specs/redundant-bold',
+      files: [{
+        id: 'file-redundant',
+        path: 'specs/redundant-bold/spec.md',
+        mediaType: 'text/markdown',
+        content: redundantContent,
+      }],
+    }
+
+    const failures = migrateTacoBundleBlocks(bundle, labels)
+    expect(failures).toHaveLength(0)
+    expect(bundle.files[0].content).toBe(redundantContent)
+    expect(bundle.files[0].blocks).toBeDefined()
+    expect(bundle.files[0].blocks?.length).toBeGreaterThan(0)
+
+    // Remounting HTML blocks in editor succeeds with valid doc.check()
+    editor = new Editor({
+      extensions: createTacoEditorExtensions(labels),
+      content: blockHtml(bundle.files[0].blocks),
+      parseOptions: { preserveWhitespace: 'full' },
+    })
+    expect(() => editor!.state.doc.check()).not.toThrow()
+  })
 })
