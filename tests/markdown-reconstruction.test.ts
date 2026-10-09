@@ -165,30 +165,50 @@ describe('lossless Markdown reconstruction', () => {
   })
 
   it('reconstructs untouched redundant emphasis losslessly across undo and edits to other blocks (TACO-47)', () => {
-    const content = '# Title\r\n\r\nParagraph with **__redundant bold__** and ****extra asterisks****.\r\n\r\nAnother block to edit.\r\n\r\n[def]: https://example.com\r\n'
+    const content = '# Title\r\n\r\nParagraph with **__redundant bold__**, *_redundant italic_*, ~~redundant strike~~, and `redundant code`.\r\n\r\nAnother block to edit.\r\n\r\n[def]: https://example.com "Definition"\r\n'
     const { editor, reconstructor } = mount(content)
 
-    // 1. Initial no-edit reconstruct is byte-for-byte identical (including CRLF and redundant syntax)
+    // Capture initial block IDs
+    const initialBlockIds: string[] = []
+    editor.state.doc.forEach((node) => {
+      initialBlockIds.push(node.attrs.tacoBlockId)
+    })
+    expect(initialBlockIds).toHaveLength(3) // heading, redundant paragraph, another paragraph
+    expect(initialBlockIds.every((id) => Boolean(id))).toBe(true)
+
+    // 1. Initial no-edit reconstruct is byte-for-byte identical (including CRLF, definitions, and redundant syntax)
     expect(reconstructor.reconstruct(editor)).toBe(content)
 
-    // 2. Edit "Another block to edit" -> redundant bold block must remain byte-for-byte untouched
+    // 2. Edit "Another block to edit" -> redundant bold block must remain byte-for-byte untouched, reference definition intact
     replaceText(editor, 'Another block to edit', 'Edited block')
     const editedOutput = reconstructor.reconstruct(editor)
-    expect(editedOutput).toContain('Paragraph with **__redundant bold__** and ****extra asterisks****.')
-    expect(editedOutput).toContain('[def]: https://example.com')
+    expect(editedOutput).toContain('Paragraph with **__redundant bold__**, *_redundant italic_*, ~~redundant strike~~, and `redundant code`.')
+    expect(editedOutput).toContain('[def]: https://example.com "Definition"')
     expect(editedOutput).toContain('\r\n')
+
+    // Block IDs of untouched blocks remain strictly identical
+    const currentBlockIds: string[] = []
+    editor.state.doc.forEach((node) => {
+      currentBlockIds.push(node.attrs.tacoBlockId)
+    })
+    expect(currentBlockIds[0]).toBe(initialBlockIds[0]) // Title block ID
+    expect(currentBlockIds[1]).toBe(initialBlockIds[1]) // Redundant paragraph block ID
 
     // 3. Undo -> returns byte-for-byte to original
     editor.commands.undo()
     expect(reconstructor.reconstruct(editor)).toBe(content)
 
     // 4. Edit the redundant block itself -> only that block is canonicalized by serializer
-    replaceText(editor, 'redundant bold', 'modified bold')
+    replaceText(editor, 'redundant bold', 'canonical bold')
     const modifiedOutput = reconstructor.reconstruct(editor)
+    // Untouched block remains exactly as written
     expect(modifiedOutput).toContain('Another block to edit.')
-    expect(modifiedOutput).toContain('[def]: https://example.com')
+    expect(modifiedOutput).toContain('[def]: https://example.com "Definition"')
+    // Modified block is canonicalized (no longer raw **__...__** but canonical serializer format)
+    expect(modifiedOutput).not.toContain('**__')
+    expect(modifiedOutput).toContain('**canonical bold**')
 
-    // 5. Reloading modified output maintains marks and doc.check() passes
+    // 5. Reloading modified output maintains all four mark classes (bold, italic, strike, code), block IDs, and doc.check() passes
     const reloaded = new Editor({
       extensions: createTacoEditorExtensions(labels, { renderMermaid: false }),
       content: modifiedOutput,
@@ -196,6 +216,18 @@ describe('lossless Markdown reconstruction', () => {
     })
     editors.push(reloaded)
     expect(() => reloaded.state.doc.check()).not.toThrow()
-    expect(reloaded.getHTML()).toContain('<strong>modified bold</strong>')
+
+    ensureTacoBlockIds(reloaded, 'test-file', true)
+    const reloadedBlockIds: string[] = []
+    reloaded.state.doc.forEach((node) => {
+      reloadedBlockIds.push(node.attrs.tacoBlockId)
+    })
+    expect(reloadedBlockIds.every((id) => Boolean(id))).toBe(true)
+
+    const reloadedHtml = reloaded.getHTML()
+    expect(reloadedHtml).toContain('<strong>canonical bold</strong>')
+    expect(reloadedHtml).toContain('<em>redundant italic</em>')
+    expect(reloadedHtml).toContain('<s>redundant strike</s>')
+    expect(reloadedHtml).toContain('<code>redundant code</code>')
   })
 })

@@ -458,7 +458,7 @@ describe('Tiptap Markdown integration', () => {
   })
 
   it('migrates Markdown with nested redundant bold without failures and remounts successfully', () => {
-    const redundantContent = '# Title\n\n**__x__** and ****y**** and *_z_*.\n\n~~nested ~~strike~~~~.'
+    const redundantContent = '# Title\n\n**__x__** and ****y**** and *_z_*.\n\n~~nested ~~strike~~ content~~.'
     const bundle: TacoBundle = {
       format: 'taco/files',
       version: 1,
@@ -479,12 +479,32 @@ describe('Tiptap Markdown integration', () => {
     expect(bundle.files[0].blocks).toBeDefined()
     expect(bundle.files[0].blocks?.length).toBeGreaterThan(0)
 
-    // Remounting HTML blocks in editor succeeds with valid doc.check()
+    // Remounting HTML blocks in editor succeeds with valid doc.check(), correct text, marks, and preserved block IDs
+    const blockIds = bundle.files[0].blocks!.map((b) => b.id)
+    expect(blockIds.every((id) => Boolean(id))).toBe(true)
+    expect(new Set(blockIds).size).toBe(blockIds.length)
+
     editor = new Editor({
       extensions: createTacoEditorExtensions(labels),
       content: blockHtml(bundle.files[0].blocks),
       parseOptions: { preserveWhitespace: 'full' },
     })
     expect(() => editor!.state.doc.check()).not.toThrow()
+    expect(editor!.getText()).toContain('x and y and z.')
+    expect(editor!.getText()).toContain('nested strike content')
+
+    // Check remounted marks
+    const remountedHtml = editor!.getHTML()
+    expect(remountedHtml).toContain('<strong>x</strong>')
+    expect(remountedHtml).toContain('<strong>y</strong>')
+    expect(remountedHtml).toContain('<em>z</em>')
+    expect(remountedHtml).toContain('<s>nested strike content</s>')
+
+    // Check block IDs in remounted document match migrated blocks
+    const remountedIds: string[] = []
+    editor!.state.doc.forEach((node) => {
+      remountedIds.push(node.attrs.tacoBlockId)
+    })
+    expect(remountedIds).toEqual(blockIds)
   })
 })

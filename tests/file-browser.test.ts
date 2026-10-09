@@ -303,22 +303,31 @@ describe('FileBrowser', () => {
     browser.destroy()
   })
 
-  it('renders rich diagnostic details for invalid mark collection errors in fallback view (TACO-47)', async () => {
+  it('renders rich diagnostic details for invalid mark collection errors in fallback view, respects read-only, recovers on edit, and preserves data (TACO-47)', async () => {
     const bundle = structuredClone(testBundle)
     const failingFile = bundle.files[1]
+    const originalContent = failingFile.content
+    const originalBlocks = failingFile.blocks
+
     const originalCheck = ProseMirrorNode.prototype.check
+    let shouldFail = true
     const check = vi.spyOn(ProseMirrorNode.prototype, 'check').mockImplementation(function (this: ProseMirrorNode) {
-      if (this.textContent.includes('Requirements checklist')) {
+      if (shouldFail && this.textContent.includes('Requirements checklist')) {
         throw new Error('Invalid collection of marks for node text: bold,bold')
       }
       return originalCheck.call(this)
     })
+
+    // 1. Writable bundle fallback verification
     const browser = new FileBrowser(document.getElementById('app')!, bundle)
-    check.mockRestore()
     expect((await waitForEditor()).textContent).toContain('Outcome')
 
     const link = document.querySelector<HTMLElement>(`[data-path="${failingFile.path}"]`)
     link!.click()
+
+    // Entering fallback does NOT mutate file content or blocks
+    expect(failingFile.content).toBe(originalContent)
+    expect(failingFile.blocks).toBe(originalBlocks)
 
     const errorContainer = document.querySelector('.editor-error')
     expect(errorContainer).not.toBeNull()
@@ -338,11 +347,45 @@ describe('FileBrowser', () => {
     expect(source?.value).toBe(failingFile.content)
     expect(source?.readOnly).toBe(false)
 
-    // Editing source clears the source-bound migration failure on re-selection
-    source!.value = '# Updated content'
+    // 2. Switching away and returning after modifying source: rich editor loads successfully
+    shouldFail = false // Bug resolved in edited content
+    source!.value = '# Updated content without invalid marks'
     source!.dispatchEvent(new Event('input'))
 
+    // Select another document
+    const otherLink = document.querySelector<HTMLElement>(`[data-path="${bundle.files[0].path}"]`)
+    otherLink!.click()
+    expect((await waitForEditor()).textContent).toContain('Outcome')
+
+    // Re-select previously failing file
+    link!.click()
+    const recoveredEditor = await waitForEditor()
+    expect(recoveredEditor).not.toBeNull()
+    expect(recoveredEditor.textContent).toContain('Updated content without invalid marks')
+    expect(document.querySelector('.editor-error')).toBeNull()
+
     browser.destroy()
+    document.getElementById('app')!.replaceChildren()
+    sessionStorage.clear()
+
+    // 3. Read-only bundle fallback verification (bundleCanWrite is false)
+    shouldFail = true
+    const readOnlyBundle = structuredClone(testBundle)
+    readOnlyBundle.access = 'reader'
+    location.hash = ''
+    const roBrowser = new FileBrowser(document.getElementById('app')!, readOnlyBundle)
+    expect((await waitForEditor()).textContent).toContain('Outcome')
+    const roLink = document.querySelector<HTMLElement>(`[data-path="${readOnlyBundle.files[1].path}"]`)
+    roLink!.click()
+
+    const roError = document.querySelector('.editor-error')
+    expect(roError).not.toBeNull()
+    expect(roError?.textContent).toContain('源码视图为只读')
+    const roSource = document.querySelector<HTMLTextAreaElement>('textarea')
+    expect(roSource?.readOnly).toBe(true)
+
+    check.mockRestore()
+    roBrowser.destroy()
   })
 
   it('uses the three-color chart-bubble mark in expanded and collapsed headers', () => {

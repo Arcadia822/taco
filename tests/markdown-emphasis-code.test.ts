@@ -74,40 +74,68 @@ describe('redundant nested emphasis normalization (TACO-47)', () => {
     const editor = new Editor({ extensions: ext() })
     const schema = editor.schema
 
-    // Double and triple JSON marks: bold, italic, strike, code, link with same attrs
+    // Double and triple JSON marks for all schema types: bold, italic, strike, underline, code, link with same attrs
     const sampleNode: JSONContent = {
       type: 'text',
       text: 'hello',
       marks: [
         { type: 'bold' },
+        { type: 'code' },
         { type: 'italic' },
         { type: 'bold' },
+        { type: 'underline' },
+        { type: 'bold' }, // triple bold
         { type: 'strike' },
+        { type: 'code' }, // double code
+        { type: 'underline' }, // double underline
         { type: 'italic' },
+        { type: 'italic' }, // triple italic
+        { type: 'strike' },
+        { type: 'strike' }, // triple strike
+        { type: 'underline' }, // triple underline
+        { type: 'code' }, // triple code
         { type: 'link', attrs: { href: 'https://example.com', title: 'Example' } },
         { type: 'link', attrs: { href: 'https://example.com', title: 'Example' } },
+        { type: 'link', attrs: { href: 'https://example.com', title: 'Example' } }, // triple identical link
       ],
     }
 
     const normalized = normalizeNodeMarks(structuredClone(sampleNode), schema)
     const types = normalized.marks?.map((m) => m.type)
-    expect(types).toEqual(['link', 'bold', 'italic', 'strike'])
+    // Ordered strictly by schema rank: link, bold, italic, strike, underline, code
+    expect(types).toEqual(['link', 'bold', 'italic', 'strike', 'underline', 'code'])
+    // Link attributes preserved accurately
+    expect(normalized.marks?.[0].type).toBe('link')
+    expect(normalized.marks?.[0].attrs?.href).toBe('https://example.com')
+    expect(normalized.marks?.[0].attrs?.title).toBe('Example')
 
     // Idempotent: normalize(normalize(x)) == normalize(x)
     const normalizedAgain = normalizeNodeMarks(structuredClone(normalized), schema)
     expect(normalizedAgain).toEqual(normalized)
 
-    // Conflicting links with different hrefs are preserved and will fail schema validation (not silently discarded)
+    // Conflicting links with different hrefs/titles are preserved and will fail schema validation (not silently discarded)
     const conflictingLinksNode: JSONContent = {
       type: 'text',
       text: 'conflict',
       marks: [
-        { type: 'link', attrs: { href: 'https://a.com', title: null } },
-        { type: 'link', attrs: { href: 'https://b.com', title: null } },
+        { type: 'link', attrs: { href: 'https://a.com', title: 'Title A' } },
+        { type: 'link', attrs: { href: 'https://b.com', title: 'Title B' } },
       ],
     }
     const normalizedConflict = normalizeNodeMarks(structuredClone(conflictingLinksNode), schema)
     expect(normalizedConflict.marks).toHaveLength(2)
+    expect(normalizedConflict.marks?.[0].attrs?.href).toBe('https://a.com')
+    expect(normalizedConflict.marks?.[0].attrs?.title).toBe('Title A')
+    expect(normalizedConflict.marks?.[1].attrs?.href).toBe('https://b.com')
+    expect(normalizedConflict.marks?.[1].attrs?.title).toBe('Title B')
+    // Creating a document node with conflicting marks fails schema validation
+    expect(() => {
+      const docNode = schema.nodeFromJSON({
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [normalizedConflict] }],
+      })
+      docNode.check()
+    }).toThrow(/Invalid collection of marks/)
 
     // Unknown mark throws error in schema resolution (does not swallow error)
     const unknownMarkNode: JSONContent = {
@@ -127,29 +155,55 @@ describe('redundant nested emphasis normalization (TACO-47)', () => {
       contentType: 'markdown',
     })
 
-    // 1. setContent
+    // 1. setContent: verify text, marks, HTML semantics, and doc.check
     editor.commands.setContent('**__set-content-bold__**', { contentType: 'markdown' })
     expect(() => editor.state.doc.check()).not.toThrow()
-    expect(editor.getHTML()).toContain('<strong>set-content-bold</strong>')
+    expect(editor.getText().trim()).toBe('set-content-bold')
+    expect(editor.getHTML()).toBe('<p><strong>set-content-bold</strong></p>')
+    editor.state.doc.descendants((node) => {
+      if (node.isText) {
+        expect(node.marks.map((m) => m.type.name)).toEqual(['bold'])
+      }
+    })
 
-    // 2. insertContent
+    // 2. insertContent: verify text, marks, HTML semantics, and doc.check
     editor.commands.insertContent(' ****insert-bold****', { contentType: 'markdown' })
     expect(() => editor.state.doc.check()).not.toThrow()
     expect(editor.getText()).toContain('insert-bold')
+    expect(editor.getHTML()).toContain('<strong>insert-bold</strong>')
+    let insertBoldMarks: string[] = []
+    editor.state.doc.descendants((node) => {
+      if (node.isText && node.text?.includes('insert-bold')) {
+        insertBoldMarks = node.marks.map((m) => m.type.name)
+      }
+    })
+    expect(insertBoldMarks).toEqual(['bold'])
 
-    // 3. insertContentAt
+    // 3. insertContentAt: verify text, marks, HTML semantics, and doc.check
     editor.commands.insertContentAt(editor.state.doc.content.size, ' *_insert-at-italic_*', { contentType: 'markdown' })
     expect(() => editor.state.doc.check()).not.toThrow()
     expect(editor.getText()).toContain('insert-at-italic')
+    expect(editor.getHTML()).toContain('<em>insert-at-italic</em>')
+    let insertItalicMarks: string[] = []
+    editor.state.doc.descendants((node) => {
+      if (node.isText && node.text?.includes('insert-at-italic')) {
+        insertItalicMarks = node.marks.map((m) => m.type.name)
+      }
+    })
+    expect(insertItalicMarks).toEqual(['italic'])
 
     // 4. public editor.markdown.parse and storage.markdown.manager.parse
     const parsedPublic = editor.markdown!.parse('**__public-parse__**')
     const textNodePublic = parsedPublic.content?.[0]?.content?.[0]
+    expect(textNodePublic?.text).toBe('public-parse')
     expect(textNodePublic?.marks).toEqual([{ type: 'bold' }])
+    expect(() => editor.schema.nodeFromJSON(parsedPublic).check()).not.toThrow()
 
     const parsedStorage = editor.storage.markdown.manager.parse('**__storage-parse__**')
     const textNodeStorage = parsedStorage.content?.[0]?.content?.[0]
+    expect(textNodeStorage?.text).toBe('storage-parse')
     expect(textNodeStorage?.marks).toEqual([{ type: 'bold' }])
+    expect(() => editor.schema.nodeFromJSON(parsedStorage).check()).not.toThrow()
 
     // 5. Nested containers: blockquote, list, table
     const nestedMarkdown = `
@@ -164,17 +218,46 @@ describe('redundant nested emphasis normalization (TACO-47)', () => {
 
     editor.commands.setContent(nestedMarkdown, { contentType: 'markdown' })
     expect(() => editor.state.doc.check()).not.toThrow()
-    expect(editor.getText()).toContain('nested blockquote')
-    expect(editor.getText()).toContain('nested list item')
-    expect(editor.getText()).toContain('nested table cell')
+    const html = editor.getHTML()
+    expect(html).toContain('<blockquote><p><strong>nested blockquote</strong></p></blockquote>')
+    expect(html).toContain('<li><p><strong>nested list item</strong></p></li>')
+    expect(html).toContain('<p><strong>nested table cell</strong></p></td>')
+    editor.state.doc.descendants((node) => {
+      if (node.isText) {
+        const markNames = node.marks.map((m) => m.type.name)
+        const unique = new Set(markNames)
+        expect(markNames.length).toBe(unique.size)
+        if (node.text?.includes('nested')) {
+          expect(markNames).toEqual(['bold'])
+        }
+      }
+    })
 
     // 6. Linked image: linked-image href/title and image semantics preserved
     const linkedImageMarkdown = '[![Alt text](image.png "Image Title")](https://example.com "Link Title")'
     editor.commands.setContent(linkedImageMarkdown, { contentType: 'markdown' })
     expect(() => editor.state.doc.check()).not.toThrow()
-    const html = editor.getHTML()
-    expect(html).toContain('data-taco-source="image.png"')
-    expect(html).toContain('href="https://example.com"')
+    const imageHtml = editor.getHTML()
+    expect(imageHtml).toContain('href="https://example.com"')
+    expect(imageHtml).toContain('title="Link Title"')
+    expect(imageHtml).toContain('data-taco-source="image.png"')
+    expect(imageHtml).toContain('alt="Alt text"')
+    expect(imageHtml).toContain('title="Image Title"')
+
+    // Check ProseMirror node structure directly
+    let foundImage = false
+    editor.state.doc.descendants((node) => {
+      if (node.type.name === 'image') {
+        foundImage = true
+        expect(node.attrs.alt).toBe('Alt text')
+        expect(node.attrs.title).toBe('Image Title')
+        const linkMark = node.marks.find((m) => m.type.name === 'link')
+        expect(linkMark).toBeDefined()
+        expect(linkMark?.attrs.href).toBe('https://example.com')
+        expect(linkMark?.attrs.title).toBe('Link Title')
+      }
+    })
+    expect(foundImage).toBe(true)
 
     editor.destroy()
   })
