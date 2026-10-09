@@ -862,7 +862,34 @@ export class FileBrowser {
       this.comments.captureSourceSelection(source, file)
     })
     if (message) {
-      host.replaceChildren(el('p', 'editor-error', `${this.t.editorFailed} ${file.path}: ${message}`), source.element)
+      const canWrite = bundleCanWrite(this.bundle)
+      const permissionText = canWrite ? this.t.editorFallbackEditable : this.t.editorFallbackReadOnly
+      const isInvalidMarks = message.includes('Invalid collection of marks')
+      const explanation = isInvalidMarks ? ` ${this.t.editorFallbackIncompatibleMarks}` : ''
+      const primaryNotice = `${this.t.editorFallbackNotice} (${permissionText})${explanation}`
+
+      const errorContainer = el('div', 'editor-error')
+      const primaryText = el('p', 'editor-error-primary', `${this.t.editorFailed} ${file.path}: ${primaryNotice}`)
+
+      const details = el('details', 'editor-error-details')
+      const summary = el('summary', 'editor-error-summary', this.t.editorFallbackDetails)
+      const detailContent = el('div', 'editor-error-body')
+
+      const pathLine = el('div', 'editor-error-item', `Path: ${file.path}`)
+      const errorLine = el('div', 'editor-error-item', `Error: ${message}`)
+      detailContent.append(pathLine, errorLine)
+
+      if (isInvalidMarks) {
+        const match = message.match(/Invalid collection of marks for node [^:]+:\s*(.*)/)
+        if (match?.[1]) {
+          const marksLine = el('div', 'editor-error-item', `Marks: ${match[1].trim()}`)
+          detailContent.append(marksLine)
+        }
+      }
+
+      details.append(summary, detailContent)
+      errorContainer.append(primaryText, details)
+      host.replaceChildren(errorContainer, source.element)
     } else {
       host.replaceChildren(source.element)
     }
