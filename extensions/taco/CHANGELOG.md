@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.14.3](https://github.com/Arcadia822/taco/compare/v0.14.2...v0.14.3) (2026-10-09)
+
+### Bug Fixes
+
+* **host**: guard session status emission after destroy (TACO-54) ([f1eb2a4](https://github.com/Arcadia822/taco/commit/f1eb2a4053c181558de079f0478e1c707e6515ad))
+* **host**: 同步 pendingHandoff 脏状态并在 unsupported 时销毁托管 session (TACO-54) ([97bedcc](https://github.com/Arcadia822/taco/commit/97bedcc58b8a7e6d3c8846bf58af3c9b4de26579))
+* **host**: 托管模式未保存指示器只反映未确认持久化 (TACO-54) ([73378ef](https://github.com/Arcadia822/taco/commit/73378ef38e66153996c0e10cf4f5f6c3c0800e9c))
+* **editor**: update shell artifacts and strengthen regression test suite ([3b9e167](https://github.com/Arcadia822/taco/commit/3b9e167043242b8356b9dce6636ce25a4cd339b0))
+* **editor**: markdown parser creates duplicate bold marks causing 'Invalid collection of marks for node text: bold,bold' ([f5c04c4](https://github.com/Arcadia822/taco/commit/f5c04c438cad20b3ef0f32e2e24afbd6ca825887))
+
+### Chores & Maintenance
+
+* chore: **release**: tacobin-v0.8.2 ([846db28](https://github.com/Arcadia822/taco/commit/846db285a33d601fcce6bc6378e2635a41ad0537))
+* Merge pull request #112 from Arcadia822/fix/taco-54-hosted-dirty-indicator ([f452115](https://github.com/Arcadia822/taco/commit/f452115498801ca4ca650ba8bb92a8eaa2b3ce96))
+* docs: **host**: record TACO-54 size measurements and refresh shell baselines (TACO-54) ([3ecf932](https://github.com/Arcadia822/taco/commit/3ecf932186ece73fc36881ad9db51442eade317b))
+* docs: **host**: let the release generator produce the TACO-54 changelog entry (TACO-54) ([e31758b](https://github.com/Arcadia822/taco/commit/e31758b92192dc77084bd00bb4cdcfd1eae52cd8))
+* Merge pull request #111 from Arcadia822/fix/taco-47-duplicate-bold-marks ([c2b0c3d](https://github.com/Arcadia822/taco/commit/c2b0c3d6a4d695678fe251801ec913714f9413f2))
+
 ## [0.14.2](https://github.com/Arcadia822/taco/compare/v0.14.1...v0.14.2) (2026-10-05)
 
 ### Features
