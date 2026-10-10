@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.14.4](https://github.com/Arcadia822/taco/compare/v0.14.3...v0.14.4) (2026-10-10)
+
+### Bug Fixes
+
+* **governance**: resolve review findings for lessons validator and evidence counts (TACO-66) ([0e61c3e](https://github.com/Arcadia822/taco/commit/0e61c3e6905f3d32bc0a388e2e2c453e8fe129ae))
+* **ci**: keep a CI verdict for every commit on main (TACO-63) ([0d7d30e](https://github.com/Arcadia822/taco/commit/0d7d30eeee2cf184c3aee7170efda559d50dabaa))
+
+### Chores & Maintenance
+
+* ci: **ui-preview**: add isolated PR screenshot pipeline ([969813b](https://github.com/Arcadia822/taco/commit/969813b1821ef031ff413b161f6e104bb600b8b5))
+* chore: **governance**: establish LESSONS.md and CI validation gate (TACO-66) ([d6177b0](https://github.com/Arcadia822/taco/commit/d6177b014869477a723dcfec77b9ce506ec12265))
+* ci: smoke-test the built Taco shell in Chromium ([c810975](https://github.com/Arcadia822/taco/commit/c810975d996c842c99dc2166fd669bcc0746021a))
+* docs: **spec**: correct main cancellation statistics and deviation (TACO-63) ([c893002](https://github.com/Arcadia822/taco/commit/c893002b0673e0d6e0751349eff2bdd3b8733ea3))
+* docs: **ci**: record main-branch CI cancellation evidence (TACO-63) ([0998efc](https://github.com/Arcadia822/taco/commit/0998efc6523205c3c94769b05fdaaf11bdc9dce9))
+
 ## [0.14.3](https://github.com/Arcadia822/taco/compare/v0.14.2...v0.14.3) (2026-10-09)
 
 ### Bug Fixes
