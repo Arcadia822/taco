@@ -8,9 +8,13 @@ on:
 permissions:
   contents: read
 
+# A main push keeps its verdict. cancel-in-progress true would kill an earlier
+# main push's run when two land close together (four such runs, 10-02 to
+# 10-09), leaving that commit with no pass/fail record. Branch and PR runs
+# still cancel. A third push in one burst still drops a queued run (TACO-63).
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   test-and-build:
