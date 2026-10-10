@@ -5,21 +5,23 @@ This document tracks high-frequency failure modes, architectural pitfalls, and r
 Guided by the principle **Encode Lessons in Structure**:
 
 1. When an error or unexpected friction occurs, record it here with concrete evidence and root causes.
-2. **Escalation Protocol**: Any lesson triggered **3 or more times** (`occurrences >= 3`) MUST be escalated to a structural mechanism:
+2. **Escalation Protocol**: Any lesson triggered **3 or more times** (`Occurrences >= 3`) MUST be escalated to a structural mechanism:
    - A hard CI static gate or pre-commit hook (e.g. `npm run check`, `package.json`, `.githooks/`), OR
    - A type-level impossibility (making illegal states unrepresentable), OR
    - A binding rule in `AGENTS.md`.
+
+`Status` tracks the mandatory trigger, not the guard. `open` means the lesson is tracked below the `Occurrences >= 3` threshold; `escalated` means the threshold was reached and the lesson must carry a structural guard; `archived` means the risk no longer applies. An `open` lesson may already carry a guard, because a guard can land earlier when the fix is cheap. The `Guard` column is the mechanism that exists today; the `check:lessons` gate rejects any lesson at `Occurrences >= 3` that is not `escalated`.
 
 ---
 
 ## Escalation Index
 
-| ID                                                                          | Title                                             | Occurrences |    Status     | Structural Mechanism                                                  |
-| :-------------------------------------------------------------------------- | :------------------------------------------------ | :---------: | :-----------: | :-------------------------------------------------------------------- |
-| [LESSON-001](#lesson-001-local-dependency-drift-pollutes-test-runs)         | Local Dependency Drift Pollutes Test Runs         |      3      | **Escalated** | Enforce clean lockfile check in CI (`npm ci`) & `npm run check`       |
-| [LESSON-002](#lesson-002-version-triples-desync-across-release-surfaces)    | Version Triples Desync Across Release Surfaces    |      3      | **Escalated** | `scripts/sync-skill-version.mjs` & `tests/agent-instructions.test.ts` |
-| [LESSON-003](#lesson-003-tiptap-prosemirror-crash-on-markdown-code-in-bold) | Tiptap ProseMirror Crash on Markdown Code-in-Bold |      2      |    Active     | Lexer markdown scanner / `tests/markdown-emphasis-code.test.ts`       |
-| [LESSON-004](#lesson-004-headless-mermaid-execution-fails-without-dom-mock) | Headless Mermaid Execution Fails Without DOM Mock |      2      |    Active     | `skills/taco/scripts/lint-mermaid.mjs` & DOM mock in headless lint    |
+| ID                                                                          | Title                                             | Occurrences |    Status     | Guard                                                                |
+| :-------------------------------------------------------------------------- | :------------------------------------------------ | :---------: | :-----------: | :------------------------------------------------------------------- |
+| [LESSON-001](#lesson-001-local-dependency-drift-pollutes-test-runs)         | Local Dependency Drift Pollutes Test Runs         |      1      |   **open**    | `package-lock.json`, `.github/workflows/ci.yml`                      |
+| [LESSON-002](#lesson-002-version-triples-desync-across-release-surfaces)    | Version Triples Desync Across Release Surfaces    |      2      |   **open**    | `scripts/sync-skill-version.mjs`, `tests/version.test.ts`            |
+| [LESSON-003](#lesson-003-tiptap-prosemirror-crash-on-markdown-code-in-bold) | Tiptap ProseMirror Crash on Markdown Code-in-Bold |      3      | **escalated** | `src/tiptap-editor.ts`, `tests/markdown-emphasis-code.test.ts`       |
+| [LESSON-004](#lesson-004-headless-mermaid-execution-fails-without-dom-mock) | Headless Mermaid Execution Fails Without DOM Mock |      1      |   **open**    | `skills/taco/scripts/lint-mermaid.mjs`, `tests/mermaid-lint.test.ts` |
 
 ---
 
@@ -29,9 +31,9 @@ Guided by the principle **Encode Lessons in Structure**:
 
 - **ID**: `LESSON-001`
 - **Category**: `dependencies`
-- **Occurrences**: 3
-- **Status**: `escalated`
-- **Enforcement**: `CI npm ci check & lockfile comparison`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: `package-lock.json`, `.github/workflows/ci.yml`
 
 #### Symptom
 
@@ -41,11 +43,15 @@ Local tests fail with unexpected errors (e.g. editor marks or sanitization failu
 
 Ad-hoc package installations (`npm install --no-save` or package additions without synchronized lockfiles) upgrade transitive dependencies in local `node_modules`, diverging from CI.
 
+#### Evidence
+
+- 2026-09-26 — PR #54: local dependency drift after ad-hoc package install caused image-sanitization and editor test failures resolved by `npm ci` (recorded in memory `fdc8fe3e`).
+
 #### Prevention & Escalation
 
 - Always restore clean lockfile state via `npm ci` before debugging local-only test regressions.
 - CI strictly uses `npm ci` without `--force` or `--legacy-peer-deps`.
-- Guard rule formalized in `AGENTS.md` and repository CI.
+- Guard rule formalized in `package-lock.json` lockfile enforcement and `.github/workflows/ci.yml`.
 
 ---
 
@@ -53,24 +59,27 @@ Ad-hoc package installations (`npm install --no-save` or package additions witho
 
 - **ID**: `LESSON-002`
 - **Category**: `release`
-- **Occurrences**: 3
-- **Status**: `escalated`
-- **Enforcement**: `scripts/sync-skill-version.mjs`, `packages/cli/src/help.ts dynamic import`, `tests/agent-instructions.test.ts`
+- **Occurrences**: 2
+- **Status**: `open`
+- **Guard**: `scripts/sync-skill-version.mjs`, `tests/version.test.ts`
 
 #### Symptom
 
-Release or build failures where `skills/taco/VERSION`, `package.json`, and CLI binaries report mismatched version strings.
+Release or build failures where `skills/taco/VERSION`, `package.json`, and CLI binaries report mismatched version strings, or manual edits to one surface fail to propagate to consumers.
 
 #### Root Cause
 
 Version numbers were previously maintained manually across disjoint configuration files (`package.json`, `packages/cli/package.json`, `skills/taco/VERSION`, `extensions/taco/extension.yml`).
 
+#### Evidence
+
+- 2026-09-27 — commit `881ac7e`: taco-cli `binaryVersion` desynced from package metadata, fixed by syncing `binaryVersion` with package.json automatically (PR #70).
+- 2026-09-28 — spec `012-skill-update-notice`: `skills/taco/VERSION` desync resolved by adding `scripts/sync-skill-version.mjs` build sync and assertion.
+
 #### Prevention & Escalation
 
-- `package.json` is the sole canonical version authority.
-- `scripts/sync-skill-version.mjs` runs during `npm run build` to keep `skills/taco/VERSION` identical.
-- CLI dynamically imports package metadata using JSON import attributes (`import pkg from '../package.json' with { type: 'json' }`).
-- Regression suite in `tests/agent-instructions.test.ts` asserts parity.
+- App, extension, and skill parity: root `package.json` is the authority for app/extension/skill versions; `scripts/sync-skill-version.mjs` keeps `skills/taco/VERSION` identical during build, and `tests/version.test.ts` asserts parity across `package.json`, `extensions/taco/extension.yml`, and `skills/taco/VERSION`.
+- CLI and package parity: `packages/cli/package.json` is independently versioned; `packages/cli/src/help.ts` imports its own `../package.json` manifest, and release CI smoke-tests the built CLI `binaryVersion`.
 
 ---
 
@@ -78,22 +87,29 @@ Version numbers were previously maintained manually across disjoint configuratio
 
 - **ID**: `LESSON-003`
 - **Category**: `editor`
-- **Occurrences**: 2
-- **Status**: `active`
-- **Enforcement**: `tests/markdown-emphasis-code.test.ts`
+- **Occurrences**: 3
+- **Status**: `escalated`
+- **Guard**: `src/tiptap-editor.ts`, `tests/markdown-emphasis-code.test.ts`
 
 #### Symptom
 
-Taco editor throws `Invalid collection of marks for node text: bold,code` and falls back to raw source mode when encountering inline code wrapped inside bold delimiters (e.g. `**\`--flag\`**`).
+Taco editor throws `Invalid collection of marks for node text: bold,code` and falls back to raw source mode when encountering inline code wrapped inside bold delimiters (e.g. `**\`--flag\`**`or`**\`code\`**`).
 
 #### Root Cause
 
-ProseMirror schema mark configuration excludes `code` marks inside `bold` marks, throwing an unhandled parse error when constructing document slices from markdown AST tokens.
+Default ProseMirror Code mark configuration excluded emphasis marks (`bold`, `italic`, etc.), making marked parser's nested output an illegal mark set on a single text node when parsing markdown tokens.
+
+#### Evidence
+
+- 2026-09-23 — TACO-10: spec review artifact opened in fallback source editor due to `Invalid collection of marks for node text: bold,code` on checkpoint bold code tokens (memory `c4ebcdce`).
+- 2026-09-28 — TACO-21: first failure when rendering inline code wrapped in bold delimiters during initial spec.md draft delivery (memory `2692c292`).
+- 2026-09-28 — TACO-21: second failure when re-editing spec.md introduced an uninspected bold code span that crashed headless Chromium verification (memory `2692c292`).
 
 #### Prevention & Escalation
 
-- Automated regression suite added in `tests/markdown-emphasis-code.test.ts`.
-- Authors and agents must avoid nesting inline code inside bold markup, or sanitize tokens prior to schema hydration.
+- Shipped preventive mechanism: `src/tiptap-editor.ts` configures `Code.extend({ excludes: 'code' })` so code marks self-exclude duplicate code marks without forbidding nesting inside bold or other emphasis marks.
+- Document and mark normalizer: `normalizeNodeMarks` deduplicates and sorts marks cleanly, and `tests/markdown-emphasis-code.test.ts` asserts round-trip support for valid GFM nested combinations such as `**bold with \`code\` inside**`.
+- Valid GFM emphasis and code combinations remain fully supported; never instruct authors or agents to strip or avoid supported syntax.
 
 ---
 
@@ -101,9 +117,9 @@ ProseMirror schema mark configuration excludes `code` marks inside `bold` marks,
 
 - **ID**: `LESSON-004`
 - **Category**: `rendering`
-- **Occurrences**: 2
-- **Status**: `active`
-- **Enforcement**: `skills/taco/scripts/lint-mermaid.mjs`, `tests/mermaid-lint.test.ts`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: `skills/taco/scripts/lint-mermaid.mjs`, `tests/mermaid-lint.test.ts`
 
 #### Symptom
 
@@ -112,6 +128,10 @@ Valid Mermaid diagrams fail parse validation with `TypeError: My.addHook is not 
 #### Root Cause
 
 `DOMPurify.sanitize()` unconditionally relies on DOM hooks (`addHook`). In headless environments without DOM emulation, DOMPurify stubs crash.
+
+#### Evidence
+
+- 2026-09-28 — TACO-19: headless Mermaid lint script crashed in Node environment without DOM mock, resolved in `specs/013-mermaid-editing-lint` / issue #51.
 
 #### Prevention & Escalation
 
