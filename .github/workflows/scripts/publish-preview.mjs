@@ -90,15 +90,22 @@ async function readAssetsTip(repo) {
 }
 
 async function createAssetsBranch(repo) {
-  const emptyTree = await ghFetch(`/repos/${repo}/git/trees`, {
+  const initialTree = await ghFetch(`/repos/${repo}/git/trees`, {
     method: 'POST',
-    body: JSON.stringify({ tree: [] }),
+    body: JSON.stringify({
+      tree: [{
+        path: 'README.md',
+        mode: '100644',
+        type: 'blob',
+        content: '# UI preview assets\n\nGenerated sanitized screenshots for pull request previews.\n',
+      }],
+    }),
   })
   const initialCommit = await ghFetch(`/repos/${repo}/git/commits`, {
     method: 'POST',
     body: JSON.stringify({
       message: 'chore(ci): initialize the ui-preview-assets branch',
-      tree: emptyTree.sha,
+      tree: initialTree.sha,
       parents: [],
     }),
   })
