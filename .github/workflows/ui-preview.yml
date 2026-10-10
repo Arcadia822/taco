@@ -124,6 +124,7 @@ jobs:
         with:
           artifact-ids: ${{ needs.detect.outputs.tools_artifact_id }}
           path: /tmp/trusted-tools
+          merge-multiple: true
 
       - name: Download the untrusted source archive anonymously
         env:
@@ -158,7 +159,7 @@ jobs:
           mkdir -p /tmp/sandbox-out
           chmod 0777 /tmp/sandbox-out
           docker volume create taco-preview-app
-          docker run --rm --user 0 --volume taco-preview-app:/app \
+          docker run --rm --user 0 --mount type=volume,src=taco-preview-app,dst=/app,volume-nocopy \
             mcr.microsoft.com/playwright:v1.56.1-noble chown -R 1000:1000 /app
 
       - name: Build the untrusted application in an isolated container
@@ -176,8 +177,9 @@ jobs:
             --memory "6g" \
             --cpus "2" \
             --env HOME=/home/pwuser \
+            --env npm_config_cache=/tmp/npm-cache \
             --env NEXT_TELEMETRY_DISABLED=1 \
-            --volume "taco-preview-app:/app" \
+            --mount type=volume,src=taco-preview-app,dst=/app,volume-nocopy \
             --volume "/tmp/source.tar.gz:/src/source.tar.gz:ro" \
             --workdir /app \
             mcr.microsoft.com/playwright:v1.56.1-noble bash -c '
@@ -218,7 +220,7 @@ jobs:
             --cpus "2" \
             --env HOME=/home/pwuser \
             --env NEXT_TELEMETRY_DISABLED=1 \
-            --volume "taco-preview-app:/app" \
+            --mount type=volume,src=taco-preview-app,dst=/app,volume-nocopy \
             --volume "/tmp/sandbox-out:/out" \
             --volume "/tmp/trusted-tools:/trusted-tools:ro" \
             --workdir /app \
@@ -322,6 +324,7 @@ jobs:
         with:
           artifact-ids: ${{ needs.record.outputs.previews_artifact_id }}
           path: downloaded-previews
+          merge-multiple: true
 
       - name: Publish the screenshots and update the pull request body
         env:

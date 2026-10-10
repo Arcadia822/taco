@@ -26,7 +26,11 @@ import {
 } from '../.github/workflows/scripts/validate-preview-png.mjs'
 import { FIXED_VIEWS, previewAssetPath } from '../.github/workflows/scripts/view-registry.mjs'
 import { captureViews } from '../.github/workflows/scripts/capture-preview.mjs'
-import { GitHubApiError, runPublisher } from '../.github/workflows/scripts/publish-preview.mjs'
+import {
+  ensureAssetsBranch,
+  GitHubApiError,
+  runPublisher,
+} from '../.github/workflows/scripts/publish-preview.mjs'
 
 const HEAD_SHA = '438d0844c07649feab04e738ef63c7bff8294660'
 const REPO = 'Arcadia822/taco'
@@ -367,6 +371,34 @@ describe('UI Preview: publisher', () => {
     await expect(runPublisher()).rejects.toBeInstanceOf(GitHubApiError)
     expect(calls.some((call) => call.path === '/repos/Arcadia822/taco/git/trees')).toBe(false)
     expect(calls.some((call) => call.path === '/repos/Arcadia822/taco/git/refs')).toBe(false)
+  })
+
+  it('bootstraps an absent assets branch with a valid orphan tree', async () => {
+    let createdTree: unknown
+    let createdCommit: unknown
+    installFetch((call) => {
+      if (call.path.endsWith('/git/ref/heads/ui-preview-assets')) return { status: 404, body: {} }
+      if (call.path.endsWith('/git/trees')) {
+        createdTree = call.body
+        if (asList(asRecord(call.body).tree).length === 0) {
+          return { status: 422, body: { message: 'Invalid tree info' } }
+        }
+        return { body: { sha: 'initial-tree' } }
+      }
+      if (call.path.endsWith('/git/commits')) {
+        createdCommit = call.body
+        return { body: { sha: 'initial-commit' } }
+      }
+      if (call.path.endsWith('/git/refs')) return { body: {} }
+      throw new Error(`Unexpected request: ${call.path}`)
+    })
+
+    expect(await ensureAssetsBranch(REPO)).toBe('initial-commit')
+    expect(asRecord(createdCommit)).toMatchObject({ tree: 'initial-tree', parents: [] })
+    const entries = asList(asRecord(createdTree).tree).map(asRecord)
+    expect(entries).toEqual([
+      expect.objectContaining({ path: 'README.md', mode: '100644', type: 'blob' }),
+    ])
   })
 
   it('resolves a create-ref race by re-reading the branch that won', async () => {

@@ -16,12 +16,15 @@ Guided by the principle **Encode Lessons in Structure**:
 
 ## Escalation Index
 
-| ID                                                                          | Title                                             | Occurrences |    Status     | Guard                                                                |
-| :-------------------------------------------------------------------------- | :------------------------------------------------ | :---------: | :-----------: | :------------------------------------------------------------------- |
-| [LESSON-001](#lesson-001-local-dependency-drift-pollutes-test-runs)         | Local Dependency Drift Pollutes Test Runs         |      1      |   **open**    | `package-lock.json`, `.github/workflows/ci.yml`                      |
-| [LESSON-002](#lesson-002-version-triples-desync-across-release-surfaces)    | Version Triples Desync Across Release Surfaces    |      2      |   **open**    | `scripts/sync-skill-version.mjs`, `tests/version.test.ts`            |
-| [LESSON-003](#lesson-003-tiptap-prosemirror-crash-on-markdown-code-in-bold) | Tiptap ProseMirror Crash on Markdown Code-in-Bold |      3      | **escalated** | `src/tiptap-editor.ts`, `tests/markdown-emphasis-code.test.ts`       |
-| [LESSON-004](#lesson-004-headless-mermaid-execution-fails-without-dom-mock) | Headless Mermaid Execution Fails Without DOM Mock |      1      |   **open**    | `skills/taco/scripts/lint-mermaid.mjs`, `tests/mermaid-lint.test.ts` |
+| ID                                                                          | Title                                             | Occurrences |    Status     | Guard                                                                                |
+| :-------------------------------------------------------------------------- | :------------------------------------------------ | :---------: | :-----------: | :----------------------------------------------------------------------------------- |
+| [LESSON-001](#lesson-001-local-dependency-drift-pollutes-test-runs)         | Local Dependency Drift Pollutes Test Runs         |      1      |   **open**    | `package-lock.json`, `.github/workflows/ci.yml`                                      |
+| [LESSON-002](#lesson-002-version-triples-desync-across-release-surfaces)    | Version Triples Desync Across Release Surfaces    |      2      |   **open**    | `scripts/sync-skill-version.mjs`, `tests/version.test.ts`                            |
+| [LESSON-003](#lesson-003-tiptap-prosemirror-crash-on-markdown-code-in-bold) | Tiptap ProseMirror Crash on Markdown Code-in-Bold |      3      | **escalated** | `src/tiptap-editor.ts`, `tests/markdown-emphasis-code.test.ts`                       |
+| [LESSON-004](#lesson-004-headless-mermaid-execution-fails-without-dom-mock) | Headless Mermaid Execution Fails Without DOM Mock |      1      |   **open**    | `skills/taco/scripts/lint-mermaid.mjs`, `tests/mermaid-lint.test.ts`                 |
+| [LESSON-005](#lesson-005-artifact-id-downloads-nest-the-consumed-files)     | Artifact-ID Downloads Nest the Consumed Files     |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
+| [LESSON-006](#lesson-006-empty-docker-volume-copy-up-overrides-ownership)   | Empty Docker Volume Copy-Up Overrides Ownership   |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
+| [LESSON-007](#lesson-007-github-rejects-empty-asset-bootstrap-trees)        | GitHub Rejects Empty Asset Bootstrap Trees        |      1      |   **open**    | `.github/workflows/scripts/publish-preview.mjs`, `tests/ui-preview-pipeline.test.ts` |
 
 ---
 
@@ -137,3 +140,86 @@ Valid Mermaid diagrams fail parse validation with `TypeError: My.addHook is not 
 
 - Specialized Mermaid lint tool (`skills/taco/scripts/lint-mermaid.mjs`) bypasses headless DOMPurify hook crashes by safely patching sanitization stubs.
 - Verifiable via `tests/mermaid-lint.test.ts`.
+
+---
+
+### LESSON-005: Artifact-ID Downloads Nest the Consumed Files
+
+- **ID**: `LESSON-005`
+- **Category**: `ci`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: `.github/workflows/ui-preview.yml`
+
+#### Symptom
+
+UI Preview passes local capture tests but fails on the runner with `ERR_MODULE_NOT_FOUND` for `/tmp/trusted-tools/view-registry.mjs`; screenshot publication is skipped.
+
+#### Root Cause
+
+`actions/download-artifact@v4` with `artifact-ids` defaults to `merge-multiple: false`, extracting files into an artifact-name subdirectory even for one selected artifact. Both tool imports and screenshot validation expect files at the destination root. Local tests of the scripts do not exercise this action behavior.
+
+#### Evidence
+
+- 2026-10-10 — disposable PR #127, [UI Preview run 38043585006](https://github.com/Arcadia822/taco/actions/runs/38043585006): download completed at `/tmp/trusted-tools/ui-preview-tools-38043585006`, then the root-level import failed.
+
+#### Prevention & Escalation
+
+- Set `merge-multiple: true` on both artifact-ID downloads when consumers expect the destination root; keep selecting only the exact trusted artifact ID.
+- Verify the runner workflow through capture, sanitization, asset publication, and PR body injection before claiming the preview pipeline works. Local script tests alone do not establish the Actions extraction contract.
+
+---
+
+### LESSON-006: Empty Docker Volume Copy-Up Overrides Ownership
+
+- **ID**: `LESSON-006`
+- **Category**: `ci`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: `.github/workflows/ui-preview.yml`
+
+#### Symptom
+
+The privileged setup container completes its volume ownership initialization, but the later UID 1000 build container cannot extract the source archive into `/app` and exits 2.
+
+#### Root Cause
+
+The application volume remains empty after `chown`; default volume population on a subsequent mount can copy the image's application directory metadata back over the prepared ownership. The observed failure is a writable-directory contract mismatch between setup and build.
+
+The image's pre-existing `/home/pwuser/.npm` cache is also root-owned: after disabling copy-up, npm itself rejected cache access. Non-root builds must use a fresh writable cache rather than inheriting image cache ownership.
+
+#### Evidence
+
+- 2026-10-10 — disposable PR #127, [repair probe 38044325874](https://github.com/Arcadia822/taco/actions/runs/38044325874): setup succeeded, then tar reported `Permission denied` for every source entry.
+
+#### Prevention & Escalation
+
+- Use `--mount type=volume,src=taco-preview-app,dst=/app,volume-nocopy` consistently during setup, build, and capture; initialize ownership once without populating the empty volume from an image. Keep untrusted build and capture at UID 1000 with dropped capabilities.
+- Set `npm_config_cache=/tmp/npm-cache` for the build container so npm can install without changing the image's ownership or running the untrusted build as root.
+
+---
+
+### LESSON-007: GitHub Rejects Empty Asset Bootstrap Trees
+
+- **ID**: `LESSON-007`
+- **Category**: `ci`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: `.github/workflows/scripts/publish-preview.mjs`, `tests/ui-preview-pipeline.test.ts`
+
+#### Symptom
+
+Capture, sanitization, validation, and upload succeed, but the first publisher run fails with GitHub API 422 `Invalid tree info`.
+
+#### Root Cause
+
+The absent assets branch bootstrap submitted `{ tree: [] }` to the Git Trees API, which rejects an empty tree. Existing mocks accepted that payload and never exercised first-publication API behavior.
+
+#### Evidence
+
+- 2026-10-10 — disposable PR #127, [repair probe 38044557106](https://github.com/Arcadia822/taco/actions/runs/38044557106): Record succeeded; Publish failed at `POST /git/trees`.
+
+#### Prevention & Escalation
+
+- Initialize the orphan branch with a valid tree containing its generated-assets README. Retain `parents: []` and the existing create-ref race handling.
+- The first-publication regression rejects empty tree requests and checks the orphan commit references the initialized tree.
