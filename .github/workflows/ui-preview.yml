@@ -1,0 +1,334 @@
+name: UI Preview
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled]
+
+permissions: {}
+
+concurrency:
+  group: ui-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    name: Detect Preview Triggers
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      run_preview: ${{ steps.decide.outputs.run_preview }}
+      pr_number: ${{ github.event.pull_request.number }}
+      head_sha: ${{ github.event.pull_request.head.sha }}
+      repository: ${{ github.repository }}
+      tools_artifact_id: ${{ steps.tools.outputs.artifact-id }}
+    steps:
+      - name: Check out the trusted base revision
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Evaluate labels and changed paths
+        id: decide
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          node -e '
+            import { writeFileSync } from "node:fs";
+            import { evaluatePreviewDecision, shouldTriggerFromLabels } from "./.github/workflows/scripts/detect-preview-paths.mjs";
+
+            const prNumber = process.env.PR_NUMBER;
+            const labels = (process.env.LABELS || "").split(",").filter(Boolean);
+            const token = process.env.GITHUB_TOKEN;
+
+            async function changedFiles() {
+              const files = [];
+              for (let page = 1; ; page += 1) {
+                const response = await fetch(
+                  `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/pulls/${prNumber}/files?per_page=100&page=${page}`,
+                  {
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                      Accept: "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                    },
+                  }
+                );
+                if (!response.ok) {
+                  throw new Error(`changed-file listing failed: ${response.status} ${response.statusText}`);
+                }
+                const batch = await response.json();
+                if (!Array.isArray(batch)) throw new Error("changed-file listing was not an array");
+                for (const entry of batch) {
+                  files.push(entry.filename);
+                  if (entry.previous_filename) files.push(entry.previous_filename);
+                }
+                if (batch.length < 100) return files;
+              }
+            }
+
+            async function main() {
+              const paths = shouldTriggerFromLabels(labels) ? [] : await changedFiles();
+              const decision = evaluatePreviewDecision({ paths, labels });
+              console.log(
+                `run_preview=${decision.run_preview} (label=${decision.label_triggered}, paths=${decision.paths_triggered})`
+              );
+              const output = [
+                `run_preview=${decision.run_preview}`,
+                `label_triggered=${decision.label_triggered}`,
+                `paths_triggered=${decision.paths_triggered}`,
+              ].join("\n") + "\n";
+              if (process.env.GITHUB_OUTPUT) writeFileSync(process.env.GITHUB_OUTPUT, output, { flag: "a" });
+            }
+
+            main().catch((error) => { console.error(error); process.exit(1); });
+          '
+
+      - name: Stage trusted tooling
+        run: |
+          mkdir -p /tmp/trusted-tools
+          cp .github/workflows/scripts/view-registry.mjs \
+             .github/workflows/scripts/capture-preview.mjs \
+             .github/workflows/scripts/validate-preview-png.mjs \
+             .github/workflows/scripts/sanitize-preview-png.py \
+             /tmp/trusted-tools/
+
+      - name: Upload trusted tooling
+        id: tools
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-preview-tools-${{ github.run_id }}
+          path: /tmp/trusted-tools
+          retention-days: 1
+
+  record:
+    name: Record UI Screenshots
+    needs: detect
+    if: needs.detect.outputs.run_preview == 'true'
+    runs-on: ubuntu-latest
+    permissions: {}
+    timeout-minutes: 30
+    outputs:
+      previews_artifact_id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - name: Download trusted tooling
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.detect.outputs.tools_artifact_id }}
+          path: /tmp/trusted-tools
+
+      - name: Download the untrusted source archive anonymously
+        env:
+          HEAD_SHA: ${{ needs.detect.outputs.head_sha }}
+          REPOSITORY: ${{ needs.detect.outputs.repository }}
+        run: |
+          curl --fail --silent --show-error --location --retry 3 --retry-all-errors \
+            --output /tmp/source.tar.gz \
+            "https://codeload.github.com/${REPOSITORY}/tar.gz/${HEAD_SHA}"
+
+      - name: Install the pinned Playwright module into trusted tooling
+        run: |
+          npm install --prefix /tmp/trusted-tools/playwright \
+            --no-audit --no-fund --ignore-scripts playwright@1.56.1
+
+      - name: Write the fixed view expectation file
+        run: |
+          node --input-type=module -e '
+            import { writeFileSync } from "node:fs";
+            const { FIXED_VIEWS } = await import("/tmp/trusted-tools/view-registry.mjs");
+            const views = FIXED_VIEWS.map((view) => ({
+              filename: view.filename,
+              width: view.viewport.width,
+              height: view.viewport.height,
+            }));
+            writeFileSync("/tmp/trusted-tools/expected.json", JSON.stringify({ views }, null, 2));
+            console.log(`Wrote expectations for ${views.length} fixed views.`);
+          '
+
+      - name: Prepare the capture volume and output directory
+        run: |
+          mkdir -p /tmp/sandbox-out
+          chmod 0777 /tmp/sandbox-out
+          docker volume create taco-preview-app
+          docker run --rm --user 0 --volume taco-preview-app:/app \
+            mcr.microsoft.com/playwright:v1.56.1-noble chown -R 1000:1000 /app
+
+      - name: Build the untrusted application in an isolated container
+        run: |
+          STOP_TOKEN="$(uuidgen 2>/dev/null || head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+          echo "::stop-commands::$STOP_TOKEN"
+
+          set +e
+          docker run --rm \
+            --name taco-preview-build \
+            --user "1000:1000" \
+            --security-opt "no-new-privileges:true" \
+            --cap-drop ALL \
+            --pids-limit 1024 \
+            --memory "6g" \
+            --cpus "2" \
+            --env HOME=/home/pwuser \
+            --env NEXT_TELEMETRY_DISABLED=1 \
+            --volume "taco-preview-app:/app" \
+            --volume "/tmp/source.tar.gz:/src/source.tar.gz:ro" \
+            --workdir /app \
+            mcr.microsoft.com/playwright:v1.56.1-noble bash -c '
+              set -euo pipefail
+              tar --extract --gzip --no-same-owner --no-same-permissions \
+                --file /src/source.tar.gz --directory /app --strip-components=1
+              npm ci --no-audit --no-fund
+              npm run build
+              npm run --prefix packages/host build
+            ' > /tmp/build.log 2>&1
+          status=$?
+          set -e
+
+          # The transcript comes from untrusted build scripts: only emit it while
+          # workflow command processing is disabled.
+          cat /tmp/build.log || true
+          echo "::$STOP_TOKEN::"
+
+          if [ "$status" -ne 0 ]; then
+            echo "::error::The isolated build container exited with status ${status}."
+            exit "$status"
+          fi
+
+      - name: Capture the fixed views in a network-disabled container
+        run: |
+          STOP_TOKEN="$(uuidgen 2>/dev/null || head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+          echo "::stop-commands::$STOP_TOKEN"
+
+          set +e
+          docker run --rm \
+            --name taco-preview-capture \
+            --network none \
+            --user "1000:1000" \
+            --security-opt "no-new-privileges:true" \
+            --cap-drop ALL \
+            --pids-limit 512 \
+            --memory "4g" \
+            --cpus "2" \
+            --env HOME=/home/pwuser \
+            --env NEXT_TELEMETRY_DISABLED=1 \
+            --volume "taco-preview-app:/app" \
+            --volume "/tmp/sandbox-out:/out" \
+            --volume "/tmp/trusted-tools:/trusted-tools:ro" \
+            --workdir /app \
+            mcr.microsoft.com/playwright:v1.56.1-noble bash -c '
+              set -euo pipefail
+              npm run --prefix packages/host start -- --hostname 127.0.0.1 --port 4174 &
+              HOST_PID=$!
+              trap "kill ${HOST_PID} 2>/dev/null || true" EXIT
+              node /trusted-tools/capture-preview.mjs \
+                --taco-file dist-single/Taco_Spec.taco.html \
+                --host-url http://127.0.0.1:4174 \
+                --out-dir /out \
+                --playwright-module /trusted-tools/playwright/node_modules/playwright \
+                --timeout 45000
+            ' > /tmp/capture.log 2>&1
+          status=$?
+          set -e
+
+          cat /tmp/capture.log || true
+          echo "::$STOP_TOKEN::"
+
+          if [ "$status" -ne 0 ]; then
+            echo "::error::The isolated capture container exited with status ${status}."
+            exit "$status"
+          fi
+
+      - name: Build the trusted sanitizer image
+        run: |
+          mkdir -p /tmp/sanitizer-context
+          printf '%s\n' \
+            'FROM python:3.12-slim' \
+            'RUN pip install --no-cache-dir --disable-pip-version-check Pillow==12.3.0' \
+            > /tmp/sanitizer-context/Dockerfile
+          docker build --tag taco-preview-sanitizer /tmp/sanitizer-context
+
+      - name: Sanitize the captured PNGs in a network-disabled container
+        run: |
+          STOP_TOKEN="$(uuidgen 2>/dev/null || head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+          echo "::stop-commands::$STOP_TOKEN"
+
+          set +e
+          docker run --rm \
+            --name taco-preview-sanitize \
+            --network none \
+            --user "1000:1000" \
+            --security-opt "no-new-privileges:true" \
+            --cap-drop ALL \
+            --pids-limit 128 \
+            --memory "1g" \
+            --cpus "1" \
+            --volume "/tmp/sandbox-out:/out" \
+            --volume "/tmp/trusted-tools:/trusted-tools:ro" \
+            --workdir /out \
+            taco-preview-sanitizer python3 /trusted-tools/sanitize-preview-png.py \
+              --dir /out \
+              --expected /trusted-tools/expected.json > /tmp/sanitize.log 2>&1
+          status=$?
+          set -e
+
+          cat /tmp/sanitize.log || true
+          echo "::$STOP_TOKEN::"
+
+          if [ "$status" -ne 0 ]; then
+            echo "::error::PNG sanitization failed with status ${status}."
+            exit "$status"
+          fi
+
+      - name: Validate the sanitized PNG set
+        run: node /tmp/trusted-tools/validate-preview-png.mjs --dir /tmp/sandbox-out
+
+      - name: Upload the validated screenshots
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-preview-${{ needs.detect.outputs.pr_number }}-${{ needs.detect.outputs.head_sha }}
+          path: /tmp/sandbox-out
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish UI Preview
+    needs: [detect, record]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    timeout-minutes: 15
+    steps:
+      - name: Check out the trusted base revision
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Download the sanitized screenshots
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.record.outputs.previews_artifact_id }}
+          path: downloaded-previews
+
+      - name: Publish the screenshots and update the pull request body
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ needs.detect.outputs.repository }}
+          PR_NUMBER: ${{ needs.detect.outputs.pr_number }}
+          HEAD_SHA: ${{ needs.detect.outputs.head_sha }}
+          ARTIFACTS_DIR: downloaded-previews
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: node .github/workflows/scripts/publish-preview.mjs
