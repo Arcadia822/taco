@@ -22,6 +22,7 @@ Guided by the principle **Encode Lessons in Structure**:
 | [LESSON-002](#lesson-002-version-triples-desync-across-release-surfaces)    | Version Triples Desync Across Release Surfaces    |      2      |   **open**    | `scripts/sync-skill-version.mjs`, `tests/version.test.ts`            |
 | [LESSON-003](#lesson-003-tiptap-prosemirror-crash-on-markdown-code-in-bold) | Tiptap ProseMirror Crash on Markdown Code-in-Bold |      3      | **escalated** | `src/tiptap-editor.ts`, `tests/markdown-emphasis-code.test.ts`       |
 | [LESSON-004](#lesson-004-headless-mermaid-execution-fails-without-dom-mock) | Headless Mermaid Execution Fails Without DOM Mock |      1      |   **open**    | `skills/taco/scripts/lint-mermaid.mjs`, `tests/mermaid-lint.test.ts` |
+| [LESSON-005](#lesson-005-artifact-id-downloads-nest-the-consumed-files)     | Artifact-ID Downloads Nest the Consumed Files     |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                   |
 
 ---
 
@@ -137,3 +138,30 @@ Valid Mermaid diagrams fail parse validation with `TypeError: My.addHook is not 
 
 - Specialized Mermaid lint tool (`skills/taco/scripts/lint-mermaid.mjs`) bypasses headless DOMPurify hook crashes by safely patching sanitization stubs.
 - Verifiable via `tests/mermaid-lint.test.ts`.
+
+---
+
+### LESSON-005: Artifact-ID Downloads Nest the Consumed Files
+
+- **ID**: `LESSON-005`
+- **Category**: `ci`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: `.github/workflows/ui-preview.yml`
+
+#### Symptom
+
+UI Preview passes local capture tests but fails on the runner with `ERR_MODULE_NOT_FOUND` for `/tmp/trusted-tools/view-registry.mjs`; screenshot publication is skipped.
+
+#### Root Cause
+
+`actions/download-artifact@v4` with `artifact-ids` defaults to `merge-multiple: false`, extracting files into an artifact-name subdirectory even for one selected artifact. Both tool imports and screenshot validation expect files at the destination root. Local tests of the scripts do not exercise this action behavior.
+
+#### Evidence
+
+- 2026-10-10 — disposable PR #127, [UI Preview run 38043585006](https://github.com/Arcadia822/taco/actions/runs/38043585006): download completed at `/tmp/trusted-tools/ui-preview-tools-38043585006`, then the root-level import failed.
+
+#### Prevention & Escalation
+
+- Set `merge-multiple: true` on both artifact-ID downloads when consumers expect the destination root; keep selecting only the exact trusted artifact ID.
+- Verify the runner workflow through capture, sanitization, asset publication, and PR body injection before claiming the preview pipeline works. Local script tests alone do not establish the Actions extraction contract.

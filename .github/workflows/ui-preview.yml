@@ -124,6 +124,7 @@ jobs:
         with:
           artifact-ids: ${{ needs.detect.outputs.tools_artifact_id }}
           path: /tmp/trusted-tools
+          merge-multiple: true
 
       - name: Download the untrusted source archive anonymously
         env:
@@ -322,6 +323,7 @@ jobs:
         with:
           artifact-ids: ${{ needs.record.outputs.previews_artifact_id }}
           path: downloaded-previews
+          merge-multiple: true
 
       - name: Publish the screenshots and update the pull request body
         env:

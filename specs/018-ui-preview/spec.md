@@ -85,6 +85,8 @@ Baselines below were measured against the revision this specification was writte
 2. **`record`** runs with `permissions: {}`. It never checks out the repository and never holds a repository token: the trusted scripts come from the detect artifact and the untrusted source tarball is fetched anonymously from `codeload.github.com` at the full head SHA. Build, capture, and sanitization all run inside Docker containers that are stopped before the next stage; the job then re-validates the sanitized set structurally and publishes only the screenshot artifact id.
 3. **`publish`** runs with `contents: write` and `pull-requests: write` on a fresh runner. It verifies that the live PR is open and still at the recorded head SHA, verifies the artifact is exactly the registered PNG set, commits the assets, then re-reads the PR and rewrites only the marked body region.
 
+Both artifact-ID downloads set `merge-multiple: true`: trusted tools must land directly in `/tmp/trusted-tools`, and sanitized screenshots directly in `downloaded-previews`. The default artifact-name subdirectory breaks the fixed imports and the publisher's exact-file-set validation.
+
 ### 3.2 Fixed View Registry
 
 The capture pipeline never accepts view definitions from pull request code. `.github/workflows/scripts/view-registry.mjs` is the single source of truth for view ids, filenames, targets, and viewports, and every later stage re-derives its expectations from it.
@@ -222,3 +224,11 @@ Measured with `npm run check`, file byte counts, and the local four-view capture
 `npm run check` passed all 635 tests across 55 files and built the production shells. The 21 preview tests cover marker preservation, stale heads, image structure, and publication errors. The capture script rendered all four registered views, and the same sanitizer script fully decoded and reencoded them locally. `actionlint` 1.7.12 accepted the workflow.
 
 No product runtime dependency or network behavior changes. CI downloads the pinned Playwright module, container images, and Pillow, and publishes images through GitHub APIs. Docker isolation and the actual GitHub publisher have not been exercised locally because this workstation has no running Docker daemon and the new trusted workflow is not yet on the default branch. These are review limitations, not successful verification claims.
+
+### 9.1 Artifact extraction layout repair
+
+PR #127 exposed the runner-only failure in [run 38043585006](https://github.com/Arcadia822/taco/actions/runs/38043585006): `download-artifact` extracted the trusted files into an artifact-name subdirectory, while the record step imported `/tmp/trusted-tools/view-registry.mjs`. The publish download had the same layout mismatch.
+
+Prepare estimate for this repair: two workflow inputs add 62 bytes to `.github/workflows/ui-preview.yml`; Complete/Lite products, skill directory, and release packages each grow 0 bytes. No new dependencies, permissions, or network behavior. Verification uses the existing disposable PR against the repair branch so `pull_request_target` executes the repaired trusted workflow before merge.
+
+Develop measurements after `npm run check`: workflow estimate +62 bytes / measured +62 bytes (12,714 -> 12,776; deviation 0). Complete product 2,846,082 bytes, Lite product 296,790 bytes, Complete skill shell 2,737,618 bytes, Lite skill shell 188,326 bytes, and skill directory 14,091,559 bytes all remain byte-size identical (estimate 0 / measured 0 / deviation 0). Release payload inputs are unchanged. Local verification passed 645 tests across 56 files and the built-shell Chromium smoke; 21 preview tests passed. LESSONS tests retain behavioral assertions while removing the fixed four-entry output expectations exposed by adding this incident.
