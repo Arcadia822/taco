@@ -59,6 +59,34 @@ npm run format:check
 
 The existing application source keeps its established style. A future whole-tree formatter migration should be proposed and reviewed separately rather than mixed into a functional change.
 
+## UI preview pipeline
+
+The `UI Preview` workflow (`.github/workflows/ui-preview.yml`) attaches screenshots of the complete Taco bundle and the host application to a pull request. It runs on `pull_request_target` and fires when a pull request changes `packages/host/**` or `specs/**`, or carries the `ui-preview` label.
+
+Because the rendered code comes from the pull request, the pipeline splits into three jobs: `detect` reads only trusted base-revision tooling, `record` runs the build, the browser, and the PNG sanitizer inside containers with no repository token, and `publish` is the only job with write permissions. Views are fixed in `.github/workflows/scripts/view-registry.mjs`; a pull request cannot add a URL, selector, viewport, or filename.
+
+To work on it locally:
+
+```bash
+# Decision logic for a branch
+node .github/workflows/scripts/detect-preview-paths.mjs --target origin/main --labels "ui-preview"
+
+# Real capture against a local build, using a pinned Playwright outside the repo
+npm run build
+npm run --prefix packages/host build
+npm run --prefix packages/host start -- --hostname 127.0.0.1 --port 4174 &
+npm install --prefix /tmp/taco64-playwright --no-audit --no-fund --ignore-scripts playwright@1.56.1
+/tmp/taco64-playwright/node_modules/.bin/playwright install chromium
+node .github/workflows/scripts/capture-preview.mjs \
+  --playwright-module /tmp/taco64-playwright/node_modules/playwright \
+  --taco-file dist-single/Taco_Spec.taco.html \
+  --host-url http://127.0.0.1:4174 \
+  --out-dir artifacts/previews
+node .github/workflows/scripts/validate-preview-png.mjs --dir artifacts/previews
+```
+
+`scripts` under `.github/workflows/scripts/` are trusted code: they run either on the base revision or inside a container next to untrusted input, so they must never read view definitions, URLs, selectors, or filenames from a pull request. The sanitizer (`.github/workflows/scripts/sanitize-preview-png.py`) needs the pinned Pillow build; the workflow installs it into a dedicated image. See [`specs/018-ui-preview/spec.md`](specs/018-ui-preview/spec.md) for the full design and the remaining limitations.
+
 ## Security reports
 
 Do not disclose a suspected vulnerability in a public issue. Follow [`SECURITY.md`](SECURITY.md) and use GitHub's private vulnerability-reporting flow.
