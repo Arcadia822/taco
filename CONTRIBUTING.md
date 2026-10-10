@@ -42,6 +42,15 @@ npm run relay:dev
 npm run test:relay
 ```
 
+The built shell smoke test opens `dist-single/Taco_Spec.taco.html` in headless Chromium. Install the browser once, then run the smoke test on the artifact produced by `npm run check`:
+
+```bash
+npx playwright install chromium
+npm run test:browser
+```
+
+The smoke test fails on an uncaught page error, on an embedded bundle that disagrees with the public `window.taco` API, or when the sidebar and Markdown reader never mount the selected file. On Linux CI, `npx playwright install --with-deps chromium` also installs the required system libraries.
+
 ## Generated artifacts
 
 `dist-single/Taco_Spec.taco.html` is ignored local build output. `extensions/taco/assets/taco-shell.html` is the tracked generated shell consumed directly by the Spec Kit integration, so source changes that affect the build must update it.

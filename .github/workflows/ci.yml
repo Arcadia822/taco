@@ -33,6 +33,12 @@ jobs:
       - name: Check formatting, tests, and build
         run: npm run check
 
+      - name: Install Chromium for the built-shell smoke
+        run: npx playwright install --with-deps chromium
+
+      - name: Smoke-test the built single-file shell
+        run: npm run test:browser
+
       - name: Verify committed build artifacts
         shell: bash
         run: |
