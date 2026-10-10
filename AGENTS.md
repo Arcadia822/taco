@@ -28,6 +28,16 @@ When a user asks an agent to install, use, package, or review Taco, read `README
 - Tacobin deploys only from a pushed `tacobin-v*` tag. `packages/host/vercel.json` disables Git-triggered Vercel deployments, and the tag drives the Deploy Tacobin workflow, which calls the project's Deploy Hook; a branch push, a pull request, or the tag by itself publishes nothing.
 - Issue 管理：需求、任务与缺陷一律用 `linctl` 在 Linear 团队 `TACO` 建 Issue，不手动建 GitHub Issue（Linear 会自动同步到 GitHub）。创建时补全上下文字段：状态 `Backlog`、Linear 内建 `priority`（不用 priority 标签代替）、已有语义 `labels`，以及适用的 `project`。
 
+# Agent 踩坑复盘与规则闭环 (LESSONS.md)
+
+仓库在根目录维护 `LESSONS.md`，用于沉淀与追踪 Agent 协作过程中的高频失误模式、环境与依赖陷阱及架构回归问题。
+
+- **记录原则**：当遇到测试偶发失败、依赖漂移、解析崩溃或工具环境不一致等问题时，在复盘时必须在 `LESSONS.md` 追加记录，写明 ID、类别、复现表象、根因与防范措施。
+- **升格机制 (Escalation Protocol)**：
+  - 任何失误模式如果累计发生 **3 次及以上**（`Occurrences >= 3`），必须从文本说明升级为**硬性结构阻断**（Structural Mechanism）；
+  - 升格载体：在 CI 中添加静态检查门禁（如 `npm run check:lessons` 或 pre-commit hook）、在类型系统建立不可表达状态约束，或提升为 `AGENTS.md` 的强制规范；
+  - `scripts/check-lessons.mjs` 会在 `npm run check` 中自动化校验 `LESSONS.md` 的格式完整性与 3 次升格标记状态，防止经验沉淀失效或滞后。
+
 # 体积与依赖预算（prepare 估算 / develop 实测）
 
 每个需求都必须给出体积与依赖影响，并在两个阶段各做一次，缺一不可：
