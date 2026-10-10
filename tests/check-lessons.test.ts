@@ -101,8 +101,8 @@ describe('check-lessons.mjs behavior regressions', () => {
   it('rejects nonexistent file path in Escalation Index Guard', () => {
     const base = readFileSync(repoLessons, 'utf8')
     const mutated = base.replace(
-      '| `package-lock.json`, `.github/workflows/ci.yml`                      |',
-      '| `nonexistent-index-guard.ts`                                         |',
+      /\| `package-lock\.json`, `\.github\/workflows\/ci\.yml`\s*\|/,
+      '| `nonexistent-index-guard.ts` |',
     )
     expect(mutated).not.toBe(base)
     const dir = createFixtureDir(mutated)
