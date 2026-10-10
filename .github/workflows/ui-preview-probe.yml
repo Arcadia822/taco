@@ -177,6 +177,7 @@ jobs:
             --memory "6g" \
             --cpus "2" \
             --env HOME=/home/pwuser \
+            --env npm_config_cache=/tmp/npm-cache \
             --env NEXT_TELEMETRY_DISABLED=1 \
             --mount type=volume,src=taco-preview-app,dst=/app,volume-nocopy \
             --volume "/tmp/source.tar.gz:/src/source.tar.gz:ro" \
