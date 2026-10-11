@@ -30,6 +30,7 @@ Guided by the principle **Encode Lessons in Structure**:
 | [LESSON-010](#lesson-010-revision-migrations-must-preserve-legacy-tables-and-event-order) | Revision Migrations Must Preserve Legacy Tables and Event Order |      1      |   **open**    | `packages/host/test/taco-60.test.ts`                                                 |
 | [LESSON-011](#lesson-011-dynamic-preview-boundary-discrepancies-and-marker-injection)     | Dynamic Preview Boundary Discrepancies & Marker Injection       |      1      |   **open**    | `.github/workflows/scripts/plan-schema.mjs`, `tests/dynamic-preview-plan.test.ts`    |
 | [LESSON-012](#lesson-012-nextjs-google-font-loader-crashes-on-non-extension-endpoints)    | Next.js Google Font Loader Crashes on Non-Extension Endpoints   |      1      |   **open**    | `packages/host/src/app/fonts/`, `packages/host/src/app/page.tsx`                     |
+| [LESSON-013](#lesson-013-green-vitest-does-not-prove-type-level-integrity)                | Green vitest Does Not Prove Type-Level Integrity                |      1      |   **open**    | `npm run check` (`tsc -b`), `scripts/build-shells.mjs`                               |
 
 ---
 
@@ -371,3 +372,30 @@ The public review model reused a legacy table name with incompatible required co
 - Seed missing baseline rows independently of the current pointer. Update the pointer only while null, and retain the initial event sequence of 1.
 - Persist Handoff snapshots and compare event sequences. A legacy null snapshot can use live state only when its acknowledged state version matches.
 - Runtime probes and regression tests must use valid `FilePatch` content and observe the saved edit before checking conflict rejection.
+
+---
+
+### LESSON-013: Green vitest Does Not Prove Type-Level Integrity
+
+- **ID**: `LESSON-013`
+- **Category**: `tooling`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: `npm run check` (`tsc -b`), `scripts/build-shells.mjs`
+
+#### Symptom
+
+A change reports a fully green test run while `tsc -b` fails: widening `FileKind` in `src/model.ts` left `Record<FileKind, IconName>` in `src/ui-primitives.ts` without the new `html` key (TS2741), and `tests/model.test.ts` used `TacoFile` without importing it (TS2304).
+
+#### Root Cause
+
+vitest transpiles TypeScript without type-checking, so exhaustiveness of `Record<union, …>` maps and missing type imports pass the test runner and surface only in the compiler step of `npm run build`.
+
+#### Evidence
+
+- 2026-10-11 — TACO-70: the inline-HTML slice extended `FileKind` with `html`; 57 test files / 663 tests passed, then `npm run build` failed on the icon map and the missing type import.
+
+#### Prevention & Escalation
+
+- Treat `tsc -b` (via `npm run check`) as the completion gate for any TypeScript change; a green test run alone is not verification.
+- When widening a union type, change its exhaustive `Record<…>` maps in the same edit and grep for other consumers.
