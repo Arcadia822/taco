@@ -4,7 +4,7 @@
 
 ### Features
 
-- **review**: refresh the same Taco after feedback, preserving its path, identity, comments, and Checkpoint state. Hosted rounds use `taco-cli update --base` at the existing reviewer URL.
+- **review**: refresh the same Taco after feedback, preserving its path, identity, comments, and Checkpoint state. Hosted rounds use `taco-cli update [--base <revisionId>]` at the existing reviewer URL, defaulting to the Host's active revision when `--base` is omitted.
 
 ## [0.14.5](https://github.com/Arcadia822/taco/compare/v0.14.4...v0.14.5) (2026-10-11)
 

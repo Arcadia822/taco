@@ -94,17 +94,7 @@ describe('taco-cli (Phase 1)', () => {
     expect(json.payloadBytes).toBeGreaterThan(0)
   })
 
-  it('executes update --dry-run validating base revision parameter', async () => {
-    // Missing base
-    const noBase = await runCli([
-      'update',
-      '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001',
-      FIXTURE_TACO,
-      '--dry-run',
-    ])
-    expect(noBase.exitCode).toBe(2)
-
-    // With base
+  it('includes an explicit base revision in a local update preview', async () => {
     const res = await runCli([
       'update',
       '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001',
@@ -170,7 +160,7 @@ describe('taco-cli (Phase 1)', () => {
     }
   })
 
-  it('returns conflict exit code on stale base revision without fallback to publish', async () => {
+  it.each([true, false])('returns conflict without retrying or publishing when explicit base is %s', async (explicitBase) => {
     const originalFetch = globalThis.fetch
     const requestedUrls: string[] = []
 
@@ -180,6 +170,7 @@ describe('taco-cli (Phase 1)', () => {
       if (url.endsWith('/state')) {
         return new Response(
           JSON.stringify({
+            revisionId: '993b05fd-2f80-48cc-aafd-1d7564781001',
             stateVersion: '5',
             commentsThroughSequence: '8',
             snapshot: { format: 'taco/files', version: 1, docId: 'doc1', title: 'Test', root: '', files: [] },
@@ -219,8 +210,7 @@ describe('taco-cli (Phase 1)', () => {
         'update',
         '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001',
         FIXTURE_TACO,
-        '--base',
-        'stale-base-uuid-1111',
+        ...(explicitBase ? ['--base', 'stale-base-uuid-1111'] : []),
         '--host',
         'https://host.example',
       ])
@@ -255,8 +245,6 @@ describe('taco-cli (Phase 1)', () => {
         'update',
         '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001',
         FIXTURE_TACO,
-        '--base',
-        '993b05fd-2f80-48cc-aafd-1d7564781001',
         '--dry-run',
         '--host',
         'https://host.example',
@@ -266,7 +254,7 @@ describe('taco-cli (Phase 1)', () => {
       const json = JSON.parse(res.stdout!)
       expect(json.command).toBe('update')
       expect(json.dryRun).toBe(true)
-      expect(json.baseRevisionId).toBe('993b05fd-2f80-48cc-aafd-1d7564781001')
+      expect(json.baseRevisionId).toBeUndefined()
       expect(json.contentHash).toMatch(/^sha256:[a-f0-9]{64}$/)
     } finally {
       globalThis.fetch = originalFetch

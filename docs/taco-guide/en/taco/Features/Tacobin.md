@@ -45,14 +45,14 @@ Commands the agent uses:
 | --- | --- |
 | `taco-cli publish <file.taco.html> --host <origin> --dry-run` | Local preflight: lists the files and size to be published, sends no request |
 | `taco-cli publish <file.taco.html> --host <origin>` | Publishes a new Taco and returns the reviewer `url` and the `tacoId` used afterwards |
-| `taco-cli update <tacoId> <file.taco.html> --base <revisionId> --host <origin>` | Pushes a replacement revision to the existing Taco under the same URL, preserving comments and checkpoints |
-| `taco-cli update <tacoId> <file.taco.html> --base <revisionId> --dry-run` | Validates a replacement revision locally against the base revision without sending requests |
+| `taco-cli update <tacoId> <file.taco.html> [--base <revisionId>] --host <origin>` | Pushes a replacement revision to the existing Taco under the same URL, preserving comments and checkpoints (uses Host current revision if `--base` omitted) |
+| `taco-cli update <tacoId> <file.taco.html> [--base <revisionId>] --dry-run` | Checks the local revision payload without network access; includes a base revision only when specified |
 | `taco-cli subscribe <tacoId> --host <origin>` | Waits for Handoff: ignores ordinary comments and edits, exits after `review.handed_off` |
 | `taco-cli subscribe <tacoId> --stream` | Receives every event continuously |
 | `taco-cli handoff <tacoId> <handoffId> --host <origin>` | Reads the immutable snapshot of that handoff |
 | `taco-cli events <tacoId> --after <sequence>` | Catches up after a disconnect; handoffs made while nobody listened are still retrievable |
 
-Initial publication creates a new Taco (`POST /v1/tacos`) with an immutable baseline. Subsequent review rounds update the existing Taco in-place via `taco-cli update <tacoId> <file.taco.html> --base <revisionId>` to preserve the stable reviewer URL, advance revision history, and retain comment threads and Checkpoint statuses. If an installed CLI lacks network update support, it reports an unsupported error; it never silently falls back to `publish`.
+Initial publication creates a new Taco (`POST /v1/tacos`) with an immutable baseline. Subsequent review rounds update the existing Taco in-place via `taco-cli update <tacoId> <file.taco.html> [--base <revisionId>]` to preserve the stable reviewer URL, advance revision history, and retain comment threads and Checkpoint statuses. If `--base` is omitted, the CLI automatically uses the current revision from the Host; if provided, it strictly asserts that expected revision. If an installed CLI lacks network update support, it reports an unsupported error; it never silently falls back to `publish`.
 
 ## Security
 

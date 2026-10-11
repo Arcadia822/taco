@@ -25,9 +25,9 @@ Guided by the principle **Encode Lessons in Structure**:
 | [LESSON-005](#lesson-005-artifact-id-downloads-nest-the-consumed-files)                   | Artifact-ID Downloads Nest the Consumed Files                   |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
 | [LESSON-006](#lesson-006-empty-docker-volume-copy-up-overrides-ownership)                 | Empty Docker Volume Copy-Up Overrides Ownership                 |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
 | [LESSON-007](#lesson-007-github-rejects-empty-asset-bootstrap-trees)                      | GitHub Rejects Empty Asset Bootstrap Trees                      |      1      |   **open**    | `.github/workflows/scripts/publish-preview.mjs`, `tests/ui-preview-pipeline.test.ts` |
-| [LESSON-008](#lesson-008-occupied-preview-port-serves-another-worktree) | Occupied Preview Port Serves Another Worktree | 1 | **open** | Unique preview ports and rendered workflow verification |
-| [LESSON-009](#lesson-009-legacy-service-tests-do-not-prove-production-routes) | Legacy Service Tests Do Not Prove Production Routes | 1 | **open** | CLI-to-Next runtime smoke |
-| [LESSON-010](#lesson-010-revision-migrations-must-preserve-legacy-tables-and-event-order) | Revision Migrations Must Preserve Legacy Tables and Event Order | 1 | **open** | `packages/host/test/taco-60.test.ts` |
+| [LESSON-008](#lesson-008-occupied-preview-port-serves-another-worktree)                   | Occupied Preview Port Serves Another Worktree                   |      1      |   **open**    | Unique preview ports and rendered workflow verification                              |
+| [LESSON-009](#lesson-009-legacy-service-tests-do-not-prove-production-routes)             | Legacy Service Tests Do Not Prove Production Routes             |      1      |   **open**    | CLI-to-Next runtime smoke                                                            |
+| [LESSON-010](#lesson-010-revision-migrations-must-preserve-legacy-tables-and-event-order) | Revision Migrations Must Preserve Legacy Tables and Event Order |      1      |   **open**    | `packages/host/test/taco-60.test.ts`                                                 |
 
 ---
 
