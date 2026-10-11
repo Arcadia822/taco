@@ -158,12 +158,30 @@ export function validateDirectory(dirPath) {
     throw new PngValidationError(`Directory does not exist: ${resolvedDir}`, 'ERR_DIR_MISSING')
   }
 
-  const expectedNames = FIXED_VIEWS.map((view) => view.filename)
+  let expectedNames = FIXED_VIEWS.map((view) => view.filename)
+  let manifest = null
+  const manifestPath = join(resolvedDir, 'manifest.json')
+
+  if (existsSync(manifestPath)) {
+    try {
+      manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
+      if (manifest.scenes && Array.isArray(manifest.scenes)) {
+        expectedNames = []
+        for (const scene of manifest.scenes) {
+          for (const shot of scene.screenshots || []) {
+            expectedNames.push(shot.filename)
+          }
+        }
+      }
+    } catch (e) {
+      throw new PngValidationError(`Invalid manifest.json: ${e.message}`, 'ERR_MANIFEST')
+    }
+  }
+
   const entries = readdirSync(resolvedDir)
-  const unexpected = entries.filter((entry) => !expectedNames.includes(entry))
+  const allowedEntries = new Set([...expectedNames, 'manifest.json'])
+  const unexpected = entries.filter((entry) => !allowedEntries.has(entry))
   if (unexpected.length > 0) {
-    // Entry names come from the untrusted capture: escape control characters so
-    // they cannot start a line in the workflow log.
     throw new PngValidationError(
       `Unexpected files in the preview directory: ${unexpected
         .map((name) =>
@@ -179,15 +197,15 @@ export function validateDirectory(dirPath) {
 
   const results = []
   let totalBytes = 0
-  for (const view of FIXED_VIEWS) {
-    const filePath = join(resolvedDir, view.filename)
+  for (const filename of expectedNames) {
+    const filePath = join(resolvedDir, filename)
     if (!existsSync(filePath)) {
       throw new PngValidationError(
-        `Required view screenshot missing: ${view.filename}`,
+        `Required view screenshot missing: ${filename}`,
         'ERR_MISSING_FILE',
       )
     }
-    const info = validateSinglePng(filePath, view.filename)
+    const info = validateSinglePng(filePath, filename)
     totalBytes += info.size
     results.push(info)
   }
@@ -199,7 +217,7 @@ export function validateDirectory(dirPath) {
     )
   }
 
-  return { valid: true, totalBytes, views: results }
+  return { valid: true, totalBytes, views: results, manifest }
 }
 
 function parseArgs(argv) {

@@ -141,25 +141,19 @@ function installFetch(handler: FetchHandler): FetchCall[] {
 }
 
 describe('UI Preview: view registry', () => {
-  it('pins exactly the four fixed views including both mobile targets', () => {
+  it('pins exactly the desktop views (desktop-only)', () => {
     expect(FIXED_VIEWS.map((view) => view.id)).toEqual([
       'taco-desktop',
-      'taco-mobile',
       'host-desktop',
-      'host-mobile',
     ])
     expect(FIXED_VIEWS.map((view) => view.filename)).toEqual([
       'taco-desktop.png',
-      'taco-mobile.png',
       'host-desktop.png',
-      'host-mobile.png',
     ])
-    expect(FIXED_VIEWS.map((view) => view.target)).toEqual(['taco', 'taco', 'host', 'host'])
-    expect(
-      FIXED_VIEWS.filter((view) => view.viewport.isMobile).map((view) => view.viewport),
-    ).toEqual([
-      { width: 375, height: 812, isMobile: true, hasTouch: true },
-      { width: 375, height: 812, isMobile: true, hasTouch: true },
+    expect(FIXED_VIEWS.map((view) => view.target)).toEqual(['taco', 'host'])
+    expect(FIXED_VIEWS.map((view) => view.viewport)).toEqual([
+      { width: 1280, height: 800 },
+      { width: 1280, height: 800 },
     ])
   })
 
@@ -167,8 +161,8 @@ describe('UI Preview: view registry', () => {
     expect(previewAssetPath(FIXED_VIEWS[0], 119, HEAD_SHA)).toBe(
       `previews/pr-119/taco-desktop-${HEAD_SHA}.png`,
     )
-    expect(previewAssetPath(FIXED_VIEWS[3], 119, HEAD_SHA)).toBe(
-      `previews/pr-119/host-mobile-${HEAD_SHA}.png`,
+    expect(previewAssetPath(FIXED_VIEWS[1], 119, HEAD_SHA)).toBe(
+      `previews/pr-119/host-desktop-${HEAD_SHA}.png`,
     )
   })
 })
@@ -240,7 +234,7 @@ describe('UI Preview: pull request body markers', () => {
 
     const base = `https://raw.githubusercontent.com/${REPO}/${ASSETS_SHA}/previews/pr-119`
     expect(markdown).toContain('### 🌮 UI Preview (commit `438d084`)')
-    for (const viewId of ['taco-desktop', 'taco-mobile', 'host-desktop', 'host-mobile']) {
+    for (const viewId of ['taco-desktop', 'host-desktop']) {
       expect(markdown).toContain(`${base}/${viewId}-${HEAD_SHA}.png`)
     }
     expect(markdown).toContain('[998877](https://github.com/Arcadia822/taco/actions/runs/998877)')
@@ -258,9 +252,7 @@ describe('UI Preview: structural PNG validation', () => {
     expect(result.valid).toBe(true)
     expect(result.views.map((view) => view.filename)).toEqual([
       'taco-desktop.png',
-      'taco-mobile.png',
       'host-desktop.png',
-      'host-mobile.png',
     ])
     expect(result.totalBytes).toBeGreaterThan(0)
   })
@@ -268,9 +260,9 @@ describe('UI Preview: structural PNG validation', () => {
   it('rejects a missing view, an extra file, and a dimension mismatch', () => {
     const missing = makeTempDir('taco-preview-missing-')
     writeArtifactSet(missing)
-    unlinkSync(join(missing, 'host-mobile.png'))
+    unlinkSync(join(missing, 'host-desktop.png'))
     expect(() => validateDirectory(missing)).toThrow(
-      /Required view screenshot missing: host-mobile\.png/,
+      /Required view screenshot missing: host-desktop\.png/,
     )
 
     const extra = makeTempDir('taco-preview-extra-')
@@ -282,15 +274,15 @@ describe('UI Preview: structural PNG validation', () => {
 
     const wrong = makeTempDir('taco-preview-wrong-')
     writeArtifactSet(wrong)
-    writeFileSync(join(wrong, 'host-mobile.png'), cleanPng(800, 600))
-    expect(() => validateDirectory(wrong)).toThrow(/Dimension mismatch for host-mobile\.png/)
+    writeFileSync(join(wrong, 'host-desktop.png'), cleanPng(800, 600))
+    expect(() => validateDirectory(wrong)).toThrow(/Dimension mismatch for host-desktop\.png/)
   })
 
   it('rejects hard links, ancillary chunks, trailing bytes, and non-RGB layouts', () => {
     const linked = makeTempDir('taco-preview-link-')
     writeArtifactSet(linked)
-    unlinkSync(join(linked, 'taco-mobile.png'))
-    linkSync(join(linked, 'taco-desktop.png'), join(linked, 'taco-mobile.png'))
+    unlinkSync(join(linked, 'host-desktop.png'))
+    linkSync(join(linked, 'taco-desktop.png'), join(linked, 'host-desktop.png'))
     expect(() => validateSinglePng(join(linked, 'taco-desktop.png'), 'taco-desktop.png')).toThrow(
       /hard links/,
     )
@@ -528,9 +520,7 @@ describe('UI Preview: publisher', () => {
     const treeEntries = asList(treeBody.tree).map((entry) => asRecord(entry))
     expect(treeEntries.map((entry) => entry.path)).toEqual([
       `previews/pr-119/taco-desktop-${HEAD_SHA}.png`,
-      `previews/pr-119/taco-mobile-${HEAD_SHA}.png`,
       `previews/pr-119/host-desktop-${HEAD_SHA}.png`,
-      `previews/pr-119/host-mobile-${HEAD_SHA}.png`,
     ])
     expect(treeBody.base_tree).toBe('tree-a')
     expect(
@@ -562,7 +552,7 @@ describe('UI Preview: publisher', () => {
     expect(published).toContain('Edited by a human mid-run.')
     expect(published).not.toContain('stale block text')
     expect(published).toContain(
-      `https://raw.githubusercontent.com/${REPO}/${ASSETS_SHA}/previews/pr-119/host-mobile-${HEAD_SHA}.png`,
+      `https://raw.githubusercontent.com/${REPO}/${ASSETS_SHA}/previews/pr-119/host-desktop-${HEAD_SHA}.png`,
     )
     expect(published.match(/<!-- taco:ui-preview:start -->/g)).toHaveLength(1)
     expect(published.match(/<!-- taco:ui-preview:end -->/g)).toHaveLength(1)

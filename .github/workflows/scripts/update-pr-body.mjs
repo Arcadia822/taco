@@ -68,8 +68,7 @@ export function updatePrBodyWithBlock(currentBody, blockContent) {
 }
 
 /**
- * Renders the published block from the trusted view registry so the links can
- * never drift from the paths the publisher writes.
+ * Renders the published block from the manifest or fallback fixed views.
  */
 export function generatePreviewBlockMarkdown({
   headSha,
@@ -78,39 +77,57 @@ export function generatePreviewBlockMarkdown({
   assetCommitSha,
   runId = null,
   timestamp = null,
+  manifest = null,
 }) {
   const shortSha = headSha.slice(0, 7)
   const isoTime = timestamp ?? new Date().toISOString()
   const baseUrl = `https://raw.githubusercontent.com/${repo}/${assetCommitSha}`
 
-  const cell = (view) => {
-    if (!view) return '-'
-    const url = `${baseUrl}/${previewAssetPath(view, prNumber, headSha)}`
-    return `[![${view.title}](${url})](${url})`
+  let markdown = `### 🌮 UI Preview (commit \`${shortSha}\`)\n\n`
+
+  if (manifest && manifest.scenes && manifest.scenes.length > 0) {
+    const statusEmoji =
+      manifest.status === 'passed' ? '✅' : manifest.status === 'failed' ? '❌' : 'ℹ️'
+    markdown += `**Status:** ${statusEmoji} ${manifest.status.toUpperCase()} (${manifest.planSource})\n`
+    markdown += `**Summary:** ${manifest.summary}\n\n`
+
+    if (manifest.mismatch) {
+      markdown += `> ⚠️ **Mismatch:** ${manifest.mismatch}\n\n`
+    }
+    if (manifest.unseen) {
+      markdown += `> ℹ️ **Unseen:** ${manifest.unseen}\n\n`
+    }
+
+    markdown += '| Scene | Status | Caption | Preview (Desktop 1280x800) |\n'
+    markdown += '| :--- | :---: | :--- | :---: |\n'
+
+    for (const scene of manifest.scenes) {
+      for (const shot of scene.screenshots || []) {
+        const assetPath = `previews/pr-${prNumber}/${shot.filename.replace(/\.png$/, '')}-${headSha}.png`
+        const url = `${baseUrl}/${assetPath}`
+        const shotStatus = shot.status === 'passed' ? 'Passed' : 'Failed'
+        const imgCell = `[![${shot.caption || shot.name}](${url})](${url})`
+        markdown += `| **${scene.title}** | ${shotStatus} | ${shot.caption || '-'} | ${imgCell} |\n`
+      }
+    }
+    markdown += '\n'
+  } else {
+    // Fixed desktop views fallback
+    const cell = (view) => {
+      if (!view) return '-'
+      const url = `${baseUrl}/${previewAssetPath(view, prNumber, headSha)}`
+      return `[![${view.title}](${url})](${url})`
+    }
+
+    markdown += '| Surface | Desktop (1280x800) |\n'
+    markdown += '| :--- | :---: |\n'
+    for (const view of FIXED_VIEWS) {
+      const label = TARGET_LABELS[view.target] ?? view.target
+      markdown += `| ${label} | ${cell(view)} |\n`
+    }
+    markdown += '\n'
   }
 
-  const desktopView = FIXED_VIEWS.find((view) => !view.viewport.isMobile)
-  const mobileView = FIXED_VIEWS.find((view) => view.viewport.isMobile)
-  const rows = new Map()
-  for (const view of FIXED_VIEWS) {
-    if (!rows.has(view.target)) rows.set(view.target, [])
-    rows.get(view.target).push(view)
-  }
-
-  const lines = [
-    `### 🌮 UI Preview (commit \`${shortSha}\`)`,
-    '',
-    `| Surface | Desktop (${desktopView.viewport.width}x${desktopView.viewport.height}) | Mobile (${mobileView.viewport.width}x${mobileView.viewport.height}) |`,
-    '| :--- | :---: | :---: |',
-  ]
-  for (const [target, views] of rows) {
-    const label = TARGET_LABELS[target] ?? target
-    const desktop = views.find((view) => !view.viewport.isMobile)
-    const mobile = views.find((view) => view.viewport.isMobile)
-    lines.push(`| ${label} | ${cell(desktop)} | ${cell(mobile)} |`)
-  }
-
-  let markdown = `${lines.join('\n')}\n\n`
   markdown += `*Updated at ${isoTime} for commit \`${shortSha}\`.`
   markdown += runId
     ? ` Actions run [${runId}](https://github.com/${repo}/actions/runs/${runId})*`

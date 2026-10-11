@@ -96,9 +96,14 @@ jobs:
         run: |
           mkdir -p /tmp/trusted-tools
           cp .github/workflows/scripts/view-registry.mjs \
-             .github/workflows/scripts/capture-preview.mjs \
+             .github/workflows/scripts/plan-schema.mjs \
+             .github/workflows/scripts/dom-outline.mjs \
+             .github/workflows/scripts/collect-outlines.mjs \
+             .github/workflows/scripts/plan-preview.mjs \
+             .github/workflows/scripts/execute-preview.mjs \
              .github/workflows/scripts/validate-preview-png.mjs \
              .github/workflows/scripts/sanitize-preview-png.py \
+             .github/workflows/scripts/update-pr-body.mjs \
              /tmp/trusted-tools/
 
       - name: Upload trusted tooling
@@ -108,7 +113,6 @@ jobs:
           name: ui-preview-tools-${{ github.run_id }}
           path: /tmp/trusted-tools
           retention-days: 1
-
   record:
     name: Record UI Screenshots
     needs: detect
@@ -140,24 +144,10 @@ jobs:
           npm install --prefix /tmp/trusted-tools/playwright \
             --no-audit --no-fund --ignore-scripts playwright@1.56.1
 
-      - name: Write the fixed view expectation file
+      - name: Prepare capture volume and output directories
         run: |
-          node --input-type=module -e '
-            import { writeFileSync } from "node:fs";
-            const { FIXED_VIEWS } = await import("/tmp/trusted-tools/view-registry.mjs");
-            const views = FIXED_VIEWS.map((view) => ({
-              filename: view.filename,
-              width: view.viewport.width,
-              height: view.viewport.height,
-            }));
-            writeFileSync("/tmp/trusted-tools/expected.json", JSON.stringify({ views }, null, 2));
-            console.log(`Wrote expectations for ${views.length} fixed views.`);
-          '
-
-      - name: Prepare the capture volume and output directory
-        run: |
-          mkdir -p /tmp/sandbox-out
-          chmod 0777 /tmp/sandbox-out
+          mkdir -p /tmp/sandbox-out /tmp/outlines-out
+          chmod 0777 /tmp/sandbox-out /tmp/outlines-out
           docker volume create taco-preview-app
           docker run --rm --user 0 --mount type=volume,src=taco-preview-app,dst=/app,volume-nocopy \
             mcr.microsoft.com/playwright:v1.56.1-noble chown -R 1000:1000 /app
@@ -203,7 +193,69 @@ jobs:
             exit "$status"
           fi
 
-      - name: Capture the fixed views in a network-disabled container
+      - name: Extract DOM Outlines in a network-disabled container (Stage 1)
+        run: |
+          STOP_TOKEN="$(uuidgen 2>/dev/null || head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+          echo "::stop-commands::$STOP_TOKEN"
+
+          set +e
+          docker run --rm \
+            --name taco-preview-outlines \
+            --network none \
+            --user "1000:1000" \
+            --security-opt "no-new-privileges:true" \
+            --cap-drop ALL \
+            --pids-limit 512 \
+            --memory "4g" \
+            --cpus "2" \
+            --env HOME=/home/pwuser \
+            --env NEXT_TELEMETRY_DISABLED=1 \
+            --mount type=volume,src=taco-preview-app,dst=/app,volume-nocopy \
+            --volume "/tmp/outlines-out:/outlines" \
+            --volume "/tmp/trusted-tools:/trusted-tools:ro" \
+            --workdir /app \
+            mcr.microsoft.com/playwright:v1.56.1-noble bash -c '
+              set -euo pipefail
+              npm run --prefix packages/host start -- --hostname 127.0.0.1 --port 4174 &
+              HOST_PID=$!
+              trap "kill ${HOST_PID} 2>/dev/null || true" EXIT
+              node /trusted-tools/collect-outlines.mjs \
+                --taco-file dist-single/Taco_Spec.taco.html \
+                --host-url http://127.0.0.1:4174 \
+                --out-path /outlines/outlines.json \
+                --playwright-module /trusted-tools/playwright/node_modules/playwright \
+                --timeout 45000
+            ' > /tmp/outlines.log 2>&1
+          status=$?
+          set -e
+
+          cat /tmp/outlines.log || true
+          echo "::$STOP_TOKEN::"
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Extracting DOM Outlines failed with status ${status}."
+            exit "$status"
+          fi
+
+      - name: Download PR diff anonymously
+        env:
+          PR_NUMBER: ${{ needs.detect.outputs.pr_number }}
+          REPOSITORY: ${{ needs.detect.outputs.repository }}
+        run: |
+          curl --fail --silent --show-error --location --retry 3 \
+            -H "Accept: application/vnd.github.v3.diff" \
+            --output /tmp/pr.diff \
+            "https://api.github.com/repos/${REPOSITORY}/pulls/${PR_NUMBER}" || touch /tmp/pr.diff
+
+      - name: Compute Dynamic Preview Plan (Stage 2 - Controlled Network, NO untrusted execution)
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          node /tmp/trusted-tools/plan-preview.mjs \
+            --diff-file /tmp/pr.diff \
+            --outlines-file /tmp/outlines-out/outlines.json \
+            --out-plan /tmp/trusted-tools/preview-plan.json
+
+      - name: Execute Dynamic Preview Plan in a network-disabled container (Stage 3)
         run: |
           STOP_TOKEN="$(uuidgen 2>/dev/null || head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
           echo "::stop-commands::$STOP_TOKEN"
@@ -229,7 +281,8 @@ jobs:
               npm run --prefix packages/host start -- --hostname 127.0.0.1 --port 4174 &
               HOST_PID=$!
               trap "kill ${HOST_PID} 2>/dev/null || true" EXIT
-              node /trusted-tools/capture-preview.mjs \
+              node /trusted-tools/execute-preview.mjs \
+                --plan-file /trusted-tools/preview-plan.json \
                 --taco-file dist-single/Taco_Spec.taco.html \
                 --host-url http://127.0.0.1:4174 \
                 --out-dir /out \
@@ -246,7 +299,6 @@ jobs:
             echo "::error::The isolated capture container exited with status ${status}."
             exit "$status"
           fi
-
       - name: Build the trusted sanitizer image
         run: |
           mkdir -p /tmp/sanitizer-context
@@ -276,7 +328,7 @@ jobs:
             --workdir /out \
             taco-preview-sanitizer python3 /trusted-tools/sanitize-preview-png.py \
               --dir /out \
-              --expected /trusted-tools/expected.json > /tmp/sanitize.log 2>&1
+              --expected /out/manifest.json > /tmp/sanitize.log 2>&1
           status=$?
           set -e
 

@@ -11,11 +11,8 @@ export interface FixedView {
   /** Which surface the view renders: the standalone bundle or the host app. */
   target: 'taco' | 'host'
   viewport: {
-    width: number
-    height: number
-    /** Present only for the narrow, touch-emulated views. */
-    isMobile?: boolean
-    hasTouch?: boolean
+    width: 1280
+    height: 800
   }
 }
 
@@ -26,4 +23,10 @@ export declare const previewAssetPath: (
   view: FixedView,
   prNumber: string | number,
   headSha: string,
+) => string
+
+export declare const dynamicPreviewAssetPath: (
+  prNumber: string | number,
+  headSha: string,
+  filename: string,
 ) => string

@@ -1,0 +1,124 @@
+/**
+ * plan-schema.mjs
+ *
+ * Runtime validation and guards for plan-schema.
+ * Enforces boundary discipline: all untrusted plans, steps, and scenes are validated
+ * before execution.
+ */
+
+export const DESKTOP_VIEWPORT = Object.freeze({ width: 1280, height: 800 })
+
+export const MAX_SCENES = 3
+export const MAX_STEPS_PER_SCENE = 12
+export const MAX_SHOT_NAME_LENGTH = 64
+export const VALID_SHOT_NAME = /^[a-z0-9][a-z0-9_-]*$/
+export const FORBIDDEN_TEXT_OR_TARGET =
+  /退出|quit|删除|delete|remove|移除|更新到|update to|restart|重启|sign out|登出|卸载|uninstall/i
+
+export class PlanValidationError extends Error {
+  constructor(message) {
+    super(message)
+    this.name = 'PlanValidationError'
+  }
+}
+
+/**
+ * Validates a plan object against the strict budget and rules.
+ *
+ * @param {unknown} plan
+ * @returns {import('./plan-schema.d.mts').PreviewPlan}
+ */
+export function validatePreviewPlan(plan) {
+  if (!plan || typeof plan !== 'object') {
+    throw new PlanValidationError('Plan must be a non-null object')
+  }
+
+  const p = /** @type {Record<string, any>} */ (plan)
+  if (p.version !== 1) {
+    throw new PlanValidationError(`Unsupported plan version: ${p.version}`)
+  }
+  if (p.source !== 'deepseek-planner' && p.source !== 'human-fixture') {
+    throw new PlanValidationError(`Invalid plan source: ${p.source}`)
+  }
+  if (typeof p.ui_change !== 'boolean') {
+    throw new PlanValidationError('Plan must contain boolean ui_change')
+  }
+  if (typeof p.summary !== 'string' || !p.summary.trim()) {
+    throw new PlanValidationError('Plan must contain non-empty summary')
+  }
+  if (!Array.isArray(p.scenes)) {
+    throw new PlanValidationError('Plan scenes must be an array')
+  }
+  if (p.ui_change && p.scenes.length === 0) {
+    throw new PlanValidationError('Plan with ui_change=true must have at least 1 scene')
+  }
+  if (p.scenes.length > MAX_SCENES) {
+    throw new PlanValidationError(
+      `Plan scenes length ${p.scenes.length} exceeds maximum ${MAX_SCENES}`,
+    )
+  }
+
+  const seenSceneIds = new Set()
+  const seenFilenames = new Set()
+
+  for (let sceneIdx = 0; sceneIdx < p.scenes.length; sceneIdx += 1) {
+    const scene = p.scenes[sceneIdx]
+    if (!scene || typeof scene !== 'object') {
+      throw new PlanValidationError(`Scene [${sceneIdx}] must be an object`)
+    }
+    if (typeof scene.id !== 'string' || !VALID_SHOT_NAME.test(scene.id)) {
+      throw new PlanValidationError(`Scene [${sceneIdx}] invalid id: ${scene.id}`)
+    }
+    if (seenSceneIds.has(scene.id)) {
+      throw new PlanValidationError(`Duplicate scene id: ${scene.id}`)
+    }
+    seenSceneIds.add(scene.id)
+
+    if (scene.target !== 'taco' && scene.target !== 'host') {
+      throw new PlanValidationError(`Scene [${scene.id}] invalid target: ${scene.target}`)
+    }
+    if (!Array.isArray(scene.steps)) {
+      throw new PlanValidationError(`Scene [${scene.id}] steps must be an array`)
+    }
+    if (scene.steps.length > MAX_STEPS_PER_SCENE) {
+      throw new PlanValidationError(
+        `Scene [${scene.id}] has ${scene.steps.length} steps, exceeding maximum ${MAX_STEPS_PER_SCENE}`,
+      )
+    }
+
+    for (let stepIdx = 0; stepIdx < scene.steps.length; stepIdx += 1) {
+      const step = scene.steps[stepIdx]
+      if (!step || typeof step !== 'object') {
+        throw new PlanValidationError(`Scene [${scene.id}] step [${stepIdx}] must be an object`)
+      }
+      const validActions = ['click', 'hover', 'shot', 'wait', 'scroll', 'open-file']
+      if (!validActions.includes(step.do)) {
+        throw new PlanValidationError(
+          `Scene [${scene.id}] step [${stepIdx}] invalid action: ${step.do}`,
+        )
+      }
+      if (step.target && FORBIDDEN_TEXT_OR_TARGET.test(step.target)) {
+        throw new PlanValidationError(
+          `Scene [${scene.id}] step [${stepIdx}] target contains forbidden words: ${step.target}`,
+        )
+      }
+      if (step.text && FORBIDDEN_TEXT_OR_TARGET.test(step.text)) {
+        throw new PlanValidationError(
+          `Scene [${scene.id}] step [${stepIdx}] text contains forbidden words: ${step.text}`,
+        )
+      }
+      if (step.do === 'shot') {
+        if (!step.name || !VALID_SHOT_NAME.test(step.name)) {
+          throw new PlanValidationError(`Scene [${scene.id}] shot invalid name: ${step.name}`)
+        }
+        const filename = `${scene.id}-${step.name}.png`
+        if (seenFilenames.has(filename)) {
+          throw new PlanValidationError(`Duplicate shot filename generated: ${filename}`)
+        }
+        seenFilenames.add(filename)
+      }
+    }
+  }
+
+  return /** @type {import('./plan-schema.d.mts').PreviewPlan} */ (p)
+}
