@@ -246,10 +246,9 @@ Transformation of fixed UI preview into dynamic PR-diff and DOM-outline-driven d
 
 - **Added npm runtime dependencies**: 0
 - **Added npm dev dependencies**: 0
-- **Workflow additions**: Independent planner job with isolated `DEEPSEEK_API_KEY`, zero-credential network-none capture executor, estimated workflow increase ~3,000 bytes.
+- **Workflow additions**: Independent planner job with isolated `PREVIEW_API_KEY` (compatible with `DEEPSEEK_API_KEY`), configurable `PREVIEW_API_BASE_URL` and `PREVIEW_MODEL`, zero-credential network-none capture executor, estimated workflow increase ~3,000 bytes.
 - **Product byte growth**: Complete shell: 0 bytes; Lite shell: 0 bytes; skill directory: 0 bytes; release package: 0 bytes.
-- **Network behavior**: Outbound network strictly confined to `plan` stage via DeepSeek chat completions API (`https://api.deepseek.com/v1/chat/completions`) and GitHub diff/blob/tree/ref APIs in `publish`. Capture and outline extraction containers are `--network none`.
-
+- **Network behavior**: Outbound network strictly confined to `plan` stage via configured OpenAI-compatible chat completions API (defaulting to DeepSeek or user-configured Command Code router `https://api.commandcode.ai/provider/v1`) and GitHub diff/blob/tree/ref APIs in `publish`. Capture and outline extraction containers are `--network none`.
 #### Actual Measurements (Develop)
 
 - **Complete shell** (`dist-single/Taco_Spec.taco.html`): 2,846,082 bytes (Delta: 0 bytes, deviation: 0)
@@ -263,6 +262,6 @@ Transformation of fixed UI preview into dynamic PR-diff and DOM-outline-driven d
 #### Trust Boundary & Failure Hardening
 
 1. **Playwright resolution**: Resolves via `createRequire.resolve` entry to prevent Node ESM `ERR_UNSUPPORTED_DIR_IMPORT`.
-2. **Isolated planner job**: `plan` job runs independently from PR code runners; `DEEPSEEK_API_KEY` is never mounted or accessible in untrusted build/capture containers.
+2. **Isolated planner job**: `plan` job runs independently from PR code runners; `PREVIEW_API_KEY` (or legacy `DEEPSEEK_API_KEY`) is never mounted or accessible in untrusted build/capture containers.
 3. **Strict schema enforcement**: `validatePreviewPlan` enforces action operands (`click.target`, `scroll.to`, `open-file.path`, bounded `wait.ms` 50-10000ms), and forbids empty shot lists.
 4. **No fake fallback**: Missing keys, planner errors, or step execution errors explicitly produce `unavailable` or `failed` statuses without injecting fake homepage screenshots.

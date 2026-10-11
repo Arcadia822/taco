@@ -308,7 +308,9 @@ jobs:
 
       - name: Compute Dynamic Preview Plan via Model API
         env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          PREVIEW_API_KEY: ${{ secrets.PREVIEW_API_KEY || secrets.DEEPSEEK_API_KEY }}
+          PREVIEW_API_BASE_URL: ${{ vars.PREVIEW_API_BASE_URL || 'https://api.commandcode.ai/provider/v1' }}
+          PREVIEW_MODEL: ${{ vars.PREVIEW_MODEL || 'deepseek/deepseek-v4.1-flash' }}
         run: |
           mkdir -p /tmp/plan-out
           node /tmp/trusted-tools/plan-preview.mjs \

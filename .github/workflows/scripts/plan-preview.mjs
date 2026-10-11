@@ -8,14 +8,15 @@
  * Inputs:
  *   - PR Diff file
  *   - DOM Outlines JSON (from network-none outline step)
- *   - DEEPSEEK_API_KEY (env)
+ *   - PREVIEW_API_KEY / DEEPSEEK_API_KEY (env)
+ *   - PREVIEW_API_BASE_URL (env, optional)
+ *   - PREVIEW_MODEL / PLAN_MODEL (env, optional)
  *
  * Outputs:
  *   - preview-plan.json (strict plan schema)
  *
- * If DEEPSEEK_API_KEY is missing or the planner fails:
+ * If API key is missing or the planner fails:
  *   - Does NOT invent an AI plan or fallback to happy path claiming success.
- *   - Writes plan with ui_change=false or marks status as unavailable/error so
  *     the PR clearly reports that the dynamic plan could not be computed.
  */
 
@@ -23,9 +24,17 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { validatePreviewPlan } from './plan-schema.mjs'
-
-const MODEL = process.env.PLAN_MODEL || 'deepseek-chat'
+const DEFAULT_BASE_URL = 'https://api.deepseek.com/v1'
+const DEFAULT_MODEL = 'deepseek-chat'
 const DEFAULT_TIMEOUT_MS = 60000
+
+export function resolvePlannerConfig(env = process.env) {
+  const apiKey = env.PREVIEW_API_KEY || env.DEEPSEEK_API_KEY || ''
+  const rawBaseUrl = env.PREVIEW_API_BASE_URL || DEFAULT_BASE_URL
+  const baseUrl = rawBaseUrl.replace(/\/+$/, '')
+  const model = env.PREVIEW_MODEL || env.PLAN_MODEL || DEFAULT_MODEL
+  return { apiKey, baseUrl, model }
+}
 
 const PLANNER_SYSTEM_PROMPT = `You are a UI Preview Planner for Taco, a single-file specification review workspace.
 You plan a short sequence of interactive desktop scenes (1280x800) demonstrating what the PR changes.
@@ -50,7 +59,7 @@ Rules:
 {
   "version": 1,
   "source": "deepseek-planner",
-  "model": "${MODEL}",
+  "model": "model-identifier",
   "ui_change": true,
   "summary": "Short summary of what changed in the UI",
   "mismatch": "Any discrepancy between PR claim and diff",
@@ -65,16 +74,17 @@ Rules:
   ]
 }
 `
-
-export async function requestDeepseekPlan(messages, apiKey) {
-  const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+export async function requestPlannerPlan(messages, config) {
+  const { apiKey, baseUrl, model } = config
+  const endpoint = `${baseUrl}/chat/completions`
+  const res = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: MODEL,
+      model,
       messages,
       response_format: { type: 'json_object' },
       max_tokens: 4000,
@@ -84,7 +94,7 @@ export async function requestDeepseekPlan(messages, apiKey) {
 
   if (!res.ok) {
     const errText = await res.text()
-    throw new Error(`DeepSeek API error ${res.status}: ${errText.slice(0, 300)}`)
+    throw new Error(`Planner API error ${res.status}: ${errText.slice(0, 300)}`)
   }
 
   const json = await res.json()
@@ -92,15 +102,28 @@ export async function requestDeepseekPlan(messages, apiKey) {
   return JSON.parse(content.replace(/^```(?:json)?\s*|\s*```$/g, ''))
 }
 
+export async function requestDeepseekPlan(messages, apiKey) {
+  return requestPlannerPlan(messages, {
+    apiKey,
+    baseUrl: DEFAULT_BASE_URL,
+    model: DEFAULT_MODEL,
+  })
+}
 export async function planPreview(options = {}) {
   const {
     diffFile,
     outlinesFile,
     outPlanFile,
-    apiKey = process.env.DEEPSEEK_API_KEY,
+    apiKey: explicitApiKey,
+    baseUrl: explicitBaseUrl,
+    model: explicitModel,
     fixturePlanFile,
   } = options
 
+  const resolved = resolvePlannerConfig(process.env)
+  const apiKey = explicitApiKey !== undefined ? explicitApiKey : resolved.apiKey
+  const baseUrl = (explicitBaseUrl !== undefined ? explicitBaseUrl : resolved.baseUrl).replace(/\/+$/, '')
+  const model = explicitModel !== undefined ? explicitModel : resolved.model
   // If a pre-validated fixture plan is explicitly provided (for offline reproduction/tests)
   if (fixturePlanFile && existsSync(fixturePlanFile)) {
     console.log(`[plan-preview] Using human-provided fixture plan from ${fixturePlanFile}`)
@@ -112,12 +135,12 @@ export async function planPreview(options = {}) {
   }
 
   if (!apiKey) {
-    console.warn('[plan-preview] DEEPSEEK_API_KEY is not set. Marking plan as unavailable.')
+    console.warn('[plan-preview] PREVIEW_API_KEY/DEEPSEEK_API_KEY is not set. Marking plan as unavailable.')
     const emptyPlan = {
       version: 1,
       source: 'deepseek-planner',
       ui_change: false,
-      summary: 'DEEPSEEK_API_KEY is unavailable in this environment; dynamic planning skipped.',
+      summary: 'Preview planner API key is unavailable in this environment; dynamic planning skipped.',
       scenes: [],
     }
     writeFileSync(outPlanFile, JSON.stringify(emptyPlan, null, 2), 'utf-8')
@@ -137,7 +160,7 @@ ${outlinesData.slice(0, 20000)}
 Please inspect the diff and available DOM elements (including SVG Mermaid nodes and navigation elements), and generate the preview plan.
 `
 
-  console.log(`[plan-preview] Requesting dynamic plan from DeepSeek (${MODEL})...`)
+  console.log(`[plan-preview] Requesting dynamic plan from ${model} at ${baseUrl}...`)
   const messages = [
     { role: 'system', content: PLANNER_SYSTEM_PROMPT },
     { role: 'user', content: userPrompt },
@@ -145,9 +168,9 @@ Please inspect the diff and available DOM elements (including SVG Mermaid nodes 
 
   let rawPlan
   try {
-    rawPlan = await requestDeepseekPlan(messages, apiKey)
+    rawPlan = await requestPlannerPlan(messages, { apiKey, baseUrl, model })
   } catch (err) {
-    console.error(`[plan-preview] DeepSeek call failed:`, err.message)
+    console.error(`[plan-preview] Planner call failed:`, err.message)
     const failedPlan = {
       version: 1,
       source: 'deepseek-planner',
@@ -163,7 +186,7 @@ Please inspect the diff and available DOM elements (including SVG Mermaid nodes 
   try {
     rawPlan.version = 1
     rawPlan.source = 'deepseek-planner'
-    rawPlan.model = MODEL
+    rawPlan.model = model
     if (Array.isArray(rawPlan.scenes)) {
       rawPlan.scenes = rawPlan.scenes.slice(0, 3)
       for (const sc of rawPlan.scenes) {
@@ -202,8 +225,12 @@ function parseArgs(argv) {
     else if (argv[i] === '--outlines-file' && argv[i + 1]) options.outlinesFile = argv[++i]
     else if (argv[i] === '--out-plan' && argv[i + 1]) options.outPlanFile = argv[++i]
     else if (argv[i] === '--fixture-plan' && argv[i + 1]) options.fixturePlanFile = argv[++i]
+    else if (argv[i] === '--api-key' && argv[i + 1]) options.apiKey = argv[++i]
+    else if (argv[i] === '--base-url' && argv[i + 1]) options.baseUrl = argv[++i]
+    else if (argv[i] === '--model' && argv[i + 1]) options.model = argv[++i]
   }
   return options
+
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
