@@ -313,3 +313,48 @@ The failure handling and boundary enforcement paths were exercised and verified 
 5. **Pillow image sanitization and validation (`/tmp/taco-evidence/live-record-out`)**: All 4 captured screenshots (2 passed scenes + 1 graceful failure scene) were sanitized using pinned `Pillow==12.3.0` and validated across dimensions (1280x800) and byte budgets (273,833 total bytes) with 0 errors.
 
 The final remote run [38135648472](https://github.com/Arcadia822/taco/actions/runs/38135648472) failed while building Host, before screenshot capture. `next/font` raised `TypeError: Cannot read properties of null (reading '1')` in the Google font loader for `src/app/page.tsx`. This run uses the trusted main workflow and does not verify the candidate dynamic planner. The PR remains Draft; local verification is not a green remote pipeline verdict.
+
+### 9.4 Host Offline Font Migration & Build Resilience (TACO-68, PR #132)
+
+#### Background & Failure Analysis
+
+In remote run [38135648472](https://github.com/Arcadia822/taco/actions/runs/38135648472), the containerized Host build (`npm run --prefix packages/host build`) aborted during Next.js compilation of `packages/host/src/app/page.tsx`:
+
+```text
+TypeError: Cannot read properties of null (reading '1')
+    at .../node_modules/next/dist/compiled/@next/font/dist/google/loader.js:122:78
+```
+
+Inspection of `@next/font/dist/google/loader.js` revealed that the loader extracts URLs from Google Fonts `@font-face` declarations via `/src: url\((.+?)\)/` and unconditionally executes `/\.(woff|woff2|eot|ttf|otf)$/.exec(googleFontFileUrl)[1]`. In environments where Google Fonts endpoints serve dynamic subset URLs or alternative routing without a standard font file extension at the path terminus, `.exec()` returns `null`, throwing a fatal `TypeError`.
+
+To achieve 100% build reproducibility and eliminate network brittleness, `packages/host` was migrated from `next/font/google` to `next/font/local` using self-contained official variable WOFF2 fonts stored in `packages/host/src/app/fonts/`.
+
+#### Budget Estimation (Prepare) vs Actual Measurements (Develop)
+
+| Metric / Artifact                                           | Baseline Before | Prepare Estimate | Actual Measured | Deviation / Attribution                                              |
+| :---------------------------------------------------------- | --------------: | ---------------: | --------------: | :------------------------------------------------------------------- |
+| Complete product shell (`dist-single/Taco_Spec.taco.html`)  | 2,846,650 bytes |          0 bytes | 2,846,650 bytes | 0 bytes; Host font migration does not modify product shells          |
+| Lite product shell (`dist-single/Taco_Spec_Lite.taco.html`) |   297,311 bytes |          0 bytes |   297,311 bytes | 0 bytes; Host font migration does not modify product shells          |
+| Skill Complete shell (`skills/taco/taco-shell.html`)        | 2,738,186 bytes |          0 bytes | 2,738,186 bytes | 0 bytes; skill distribution untouched                                |
+| Skill Lite shell (`skills/taco/taco-shell-lite.html`)       |   188,847 bytes |          0 bytes |   188,847 bytes | 0 bytes; skill distribution untouched                                |
+| Host font assets (`packages/host/src/app/fonts/*.woff2`)    |         0 bytes |       ~185,000 B |       182,740 B | -2,260 bytes; official variable full fonts (Geist 69.6K, Fira 113K)  |
+| Added npm runtime dependencies                              |      0 packages |       0 packages |      0 packages | 0 added dependencies; uses existing `next/font/local`                |
+| Added npm dev dependencies                                  |      0 packages |       0 packages |      0 packages | 0 added dependencies                                                 |
+| External Google Fonts build-time HTTP requests              |      2 requests |      -2 requests |      0 requests | Completely eliminated; Next.js builds are 100% offline-deterministic |
+| Host build output size & compile delta                      |      Unmeasured |       Unmeasured |  Pending Parent | Parent agent records actual build output metrics upon post-merge CI  |
+
+#### Font Provenance & Glyph Coverage Parity
+
+1. **Geist Sans Variable (`Geist-Variable.woff2`)**:
+   - **Version & Upstream**: Vercel Geist Font `v1.7.2` (`geist-font/Geist/webfonts/Geist[wght].woff2`).
+   - **Size & Hash**: 69,652 bytes, SHA-256 `a369fcf5628ea2aa4e1b9e2ec6a5b3624e365bda588e1f0f2f12b564f728fbb8`.
+   - **Weight Axis & Subsets**: Variable `wght 100-900` (retains weights 400, 500, 600, 700). Covers complete Latin, Latin Extended, Cyrillic, Vietnamese, and general currency/punctuation.
+   - **License**: SIL Open Font License 1.1 ([`OFL-Geist.txt`](../../packages/host/src/app/fonts/OFL-Geist.txt)).
+2. **Fira Code Variable (`FiraCode-Variable.woff2`)**:
+   - **Version & Upstream**: Nikita Prokopov Fira Code `6.2` (`woff2/FiraCode-VF.woff2`).
+   - **Size & Hash**: 113,088 bytes, SHA-256 `408e876a202f15ea6ee307a70a65cf40ceb222c589a0b17e0a3a371db96dd49f`.
+   - **Weight Axis & Subsets**: Variable `wght 300-700` (retains weights 400, 500, 600, 700). Covers complete Latin, Latin Extended, Cyrillic, Greek, programming ligatures, and box/technical symbols.
+   - **License**: SIL Open Font License 1.1 ([`OFL-FiraCode.txt`](../../packages/host/src/app/fonts/OFL-FiraCode.txt)).
+3. **CSS Variable & Fallback Metrics Parity**:
+   - Injects identical `--font-geist` and `--font-fira-code` CSS custom properties, leaving `packages/host/src/app/home.css` consumers completely untouched.
+   - `next/font/local` reads font tables via `fontkit` and calculates fallback metrics for `Arial`: Geist (`ascentOverride: 94.56%`, `descentOverride: 27.76%`, `sizeAdjust: 106.28%`), Fira Code (`ascentOverride: 68.45%`, `descentOverride: 22.82%`, `sizeAdjust: 134.86%`), closely matching prior Google Fonts override tables and avoiding layout shifts.

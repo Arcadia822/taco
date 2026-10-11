@@ -16,16 +16,17 @@ Guided by the principle **Encode Lessons in Structure**:
 
 ## Escalation Index
 
-| ID                                                                                    | Title                                                     | Occurrences |    Status     | Guard                                                                                |
-| :------------------------------------------------------------------------------------ | :-------------------------------------------------------- | :---------: | :-----------: | :----------------------------------------------------------------------------------- |
-| [LESSON-001](#lesson-001-local-dependency-drift-pollutes-test-runs)                   | Local Dependency Drift Pollutes Test Runs                 |      1      |   **open**    | `package-lock.json`, `.github/workflows/ci.yml`                                      |
-| [LESSON-002](#lesson-002-version-triples-desync-across-release-surfaces)              | Version Triples Desync Across Release Surfaces            |      2      |   **open**    | `scripts/sync-skill-version.mjs`, `tests/version.test.ts`                            |
-| [LESSON-003](#lesson-003-tiptap-prosemirror-crash-on-markdown-code-in-bold)           | Tiptap ProseMirror Crash on Markdown Code-in-Bold         |      3      | **escalated** | `src/tiptap-editor.ts`, `tests/markdown-emphasis-code.test.ts`                       |
-| [LESSON-004](#lesson-004-headless-mermaid-execution-fails-without-dom-mock)           | Headless Mermaid Execution Fails Without DOM Mock         |      1      |   **open**    | `skills/taco/scripts/lint-mermaid.mjs`, `tests/mermaid-lint.test.ts`                 |
-| [LESSON-005](#lesson-005-artifact-id-downloads-nest-the-consumed-files)               | Artifact-ID Downloads Nest the Consumed Files             |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
-| [LESSON-006](#lesson-006-empty-docker-volume-copy-up-overrides-ownership)             | Empty Docker Volume Copy-Up Overrides Ownership           |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
-| [LESSON-007](#lesson-007-github-rejects-empty-asset-bootstrap-trees)                  | GitHub Rejects Empty Asset Bootstrap Trees                |      1      |   **open**    | `.github/workflows/scripts/publish-preview.mjs`, `tests/ui-preview-pipeline.test.ts` |
-| [LESSON-008](#lesson-008-dynamic-preview-boundary-discrepancies-and-marker-injection) | Dynamic Preview Boundary Discrepancies & Marker Injection |      1      |   **open**    | `.github/workflows/scripts/plan-schema.mjs`, `tests/dynamic-preview-plan.test.ts`    |
+| ID                                                                                     | Title                                                         | Occurrences |    Status     | Guard                                                                                |
+| :------------------------------------------------------------------------------------- | :------------------------------------------------------------ | :---------: | :-----------: | :----------------------------------------------------------------------------------- |
+| [LESSON-001](#lesson-001-local-dependency-drift-pollutes-test-runs)                    | Local Dependency Drift Pollutes Test Runs                     |      1      |   **open**    | `package-lock.json`, `.github/workflows/ci.yml`                                      |
+| [LESSON-002](#lesson-002-version-triples-desync-across-release-surfaces)               | Version Triples Desync Across Release Surfaces                |      2      |   **open**    | `scripts/sync-skill-version.mjs`, `tests/version.test.ts`                            |
+| [LESSON-003](#lesson-003-tiptap-prosemirror-crash-on-markdown-code-in-bold)            | Tiptap ProseMirror Crash on Markdown Code-in-Bold             |      3      | **escalated** | `src/tiptap-editor.ts`, `tests/markdown-emphasis-code.test.ts`                       |
+| [LESSON-004](#lesson-004-headless-mermaid-execution-fails-without-dom-mock)            | Headless Mermaid Execution Fails Without DOM Mock             |      1      |   **open**    | `skills/taco/scripts/lint-mermaid.mjs`, `tests/mermaid-lint.test.ts`                 |
+| [LESSON-005](#lesson-005-artifact-id-downloads-nest-the-consumed-files)                | Artifact-ID Downloads Nest the Consumed Files                 |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
+| [LESSON-006](#lesson-006-empty-docker-volume-copy-up-overrides-ownership)              | Empty Docker Volume Copy-Up Overrides Ownership               |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
+| [LESSON-007](#lesson-007-github-rejects-empty-asset-bootstrap-trees)                   | GitHub Rejects Empty Asset Bootstrap Trees                    |      1      |   **open**    | `.github/workflows/scripts/publish-preview.mjs`, `tests/ui-preview-pipeline.test.ts` |
+| [LESSON-008](#lesson-008-dynamic-preview-boundary-discrepancies-and-marker-injection)  | Dynamic Preview Boundary Discrepancies & Marker Injection     |      1      |   **open**    | `.github/workflows/scripts/plan-schema.mjs`, `tests/dynamic-preview-plan.test.ts`    |
+| [LESSON-012](#lesson-012-nextjs-google-font-loader-crashes-on-non-extension-endpoints) | Next.js Google Font Loader Crashes on Non-Extension Endpoints |      1      |   **open**    | `packages/host/src/app/fonts/`, `packages/host/src/app/page.tsx`                     |
 
 ---
 
@@ -254,3 +255,32 @@ Contract drift between untrusted model planning and downstream validator expecta
 - Guarantee execution startup failures write valid diagnostic manifests, and register failure screenshots only when disk writes succeed.
 - Sanitize dynamic text before markdown table/alt interpolation and validate the final PR body retains exactly one marker pair.
 - Provide isolated pinned `Pillow==12.3.0` virtual environments for local sanitization runs when Docker daemon is not active.
+
+---
+
+### LESSON-012: Next.js Google Font Loader Crashes on Non-Extension Endpoints
+
+- **ID**: `LESSON-012`
+- **Category**: `ci`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: `packages/host/src/app/fonts/`, `packages/host/src/app/page.tsx`
+
+#### Symptom
+
+Containerized Host application build (`npm run --prefix packages/host build`) fails abruptly during Next.js page compilation with `TypeError: Cannot read properties of null (reading '1') at loader.js:122:78`, aborting the preview workflow before UI capture begins.
+
+#### Root Cause
+
+Next.js `@next/font/google` loader (`loader.js:122`) relies on an unverified regular expression assumption: after extracting font resource URLs from Google Fonts `@font-face` CSS declarations, it executes `/\.(woff|woff2|eot|ttf|otf)$/.exec(googleFontFileUrl)[1]`. When Google Fonts returns dynamically routed or edge-cached endpoint URLs that do not end with a standard font file extension at the URL terminus, `.exec()` evaluates to `null`. Indexing `[1]` on `null` triggers an uncaught `TypeError`. Furthermore, ad-hoc build flags such as `NEXT_FONT_GOOGLE_MOCKED=1` are unsupported by Next.js and fail to bypass the loader.
+
+#### Evidence
+
+- 2026-10-11 — PR #132 UI preview run [38135648472](https://github.com/Arcadia822/taco/actions/runs/38135648472): `taco-preview-build` container exited status 1 during `next build` on `src/app/page.tsx` due to `TypeError: Cannot read properties of null (reading '1')` in `next/dist/compiled/@next/font/dist/google/loader.js:122:78`.
+
+#### Prevention & Escalation
+
+- Eliminate external build-time font network requests by migrating `packages/host` to `next/font/local`.
+- Bundle self-contained, official variable WOFF2 fonts (`Geist-Variable.woff2` and `FiraCode-Variable.woff2`) under OFL-1.1 with full subset/glyph coverage.
+- Preserve identical CSS custom properties (`--font-geist` and `--font-fira-code`) and font metrics to prevent visual regressions and layout shifts.
+- Never rely on fake Google font mocks or suppressing loader errors.

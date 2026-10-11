@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { Fira_Code, Geist } from 'next/font/google'
+import localFont from 'next/font/local'
 import './home.css'
 import { AgentTerminal, type AgentRun } from '../components/agent-terminal'
 import { TacoPixelBackground } from '../components/taco-pixel-background'
@@ -10,8 +10,18 @@ import {
   TACO_CLI_INSTALL_COMMAND,
 } from '../install-commands.ts'
 
-const geist = Geist({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-geist' })
-const firaCode = Fira_Code({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-fira-code' })
+const geist = localFont({
+  src: './fonts/Geist-Variable.woff2',
+  variable: '--font-geist',
+  display: 'swap',
+  weight: '400 700',
+})
+const firaCode = localFont({
+  src: './fonts/FiraCode-Variable.woff2',
+  variable: '--font-fira-code',
+  display: 'swap',
+  weight: '400 700',
+})
 
 // 与 Taco 代码块复制按钮一致（src/tiptap-code-block.ts：iconPaths / codeBlockIcon / copyText）
 const COPY_ICON_PATHS = {
