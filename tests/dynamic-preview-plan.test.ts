@@ -158,4 +158,27 @@ describe('Dynamic Preview: Plan Schema Validation', () => {
     }
     expect(() => validatePreviewPlan(tooManyScenes)).toThrow(/exceeds maximum/)
   })
+
+  it('validates plan with shot before click for failure state reproduction', () => {
+    const plan = {
+      version: 1,
+      source: 'deepseek-planner',
+      ui_change: true,
+      summary: 'Failure test plan',
+      scenes: [
+        {
+          id: 'scene-fail',
+          title: 'Scene with Expected Failure',
+          target: 'taco',
+          steps: [
+            { do: 'open-file', path: 'spec.md' },
+            { do: 'shot', name: 'before-click', caption: 'Document rendered' },
+            { do: 'click', target: 'non-existent-button' },
+          ],
+        },
+      ],
+    }
+    const validated = validatePreviewPlan(plan)
+    expect(validated.scenes[0].steps).toHaveLength(3)
+  })
 })

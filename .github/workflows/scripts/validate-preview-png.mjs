@@ -162,17 +162,6 @@ export function validateDirectory(dirPath, options = {}) {
   let manifest = null
   const manifestPath = join(resolvedDir, 'manifest.json')
 
-  if (plan && plan.scenes && Array.isArray(plan.scenes)) {
-    // Derive expected screenshots from the TRUSTED plan
-    for (const scene of plan.scenes) {
-      for (const step of scene.steps || []) {
-        if (step.do === 'shot' && step.name) {
-          expectedNames.push(`${scene.id}-${step.name}.png`)
-        }
-      }
-    }
-  }
-
   if (existsSync(manifestPath)) {
     try {
       manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
@@ -202,6 +191,26 @@ export function validateDirectory(dirPath, options = {}) {
                   `Manifest scene [${expectedScene.id}] shot count mismatch: expected ${expectedShots.length}, got ${actualShots.length}`,
                   'ERR_SHOT_COUNT',
                 )
+              }
+              for (const shot of actualShots) {
+                expectedNames.push(shot.filename)
+              }
+            } else if (actualScene.status === 'failed') {
+              // For failed scenes, allow shots executed prior to failure plus the trusted failure shot
+              const allowedShots = new Set(
+                (expectedScene.steps || [])
+                  .filter((st) => st.do === 'shot')
+                  .map((st) => `${expectedScene.id}-${st.name}.png`),
+              )
+              allowedShots.add(`${expectedScene.id}-failure.png`)
+              for (const shot of actualScene.screenshots || []) {
+                if (!allowedShots.has(shot.filename)) {
+                  throw new PngValidationError(
+                    `Manifest scene [${expectedScene.id}] contains unauthorized shot: ${shot.filename}`,
+                    'ERR_UNAUTHORIZED_SHOT',
+                  )
+                }
+                expectedNames.push(shot.filename)
               }
             }
           }

@@ -636,4 +636,81 @@ describe('UI Preview: publisher', () => {
     unlinkSync(join(dir, shotName))
     expect(() => validateDirectory(dir)).toThrow(PngValidationError)
   })
+
+  it('validates failed scenes with prior shots and failure shot against trusted plan', () => {
+    const dir = makeTempDir('dynamic-failed-scene-')
+    const priorShot = 'scene-a-prior.png'
+    const failureShot = 'scene-a-failure.png'
+    writeFileSync(join(dir, priorShot), cleanPng(1280, 800))
+    writeFileSync(join(dir, failureShot), cleanPng(1280, 800))
+
+    const trustedPlan = {
+      version: 1,
+      source: 'deepseek-planner',
+      ui_change: true,
+      summary: 'Test with failure',
+      scenes: [
+        {
+          id: 'scene-a',
+          title: 'Scene A',
+          steps: [
+            { do: 'shot', name: 'prior' },
+            { do: 'click', target: 'button#missing' },
+            { do: 'shot', name: 'after' },
+          ],
+        },
+      ],
+    }
+
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'failed',
+        summary: 'Step failed',
+        scenes: [
+          {
+            id: 'scene-a',
+            title: 'Scene A',
+            status: 'failed',
+            screenshots: [
+              { filename: priorShot, name: 'prior', caption: 'Prior view', status: 'passed' },
+              { filename: failureShot, name: 'failure-state', caption: 'Error occurred', status: 'failed' },
+            ],
+          },
+        ],
+      }),
+    )
+
+    const res = validateDirectory(dir, { plan: trustedPlan })
+    expect(res.valid).toBe(true)
+    expect(res.views).toHaveLength(2)
+    expect(res.views.map((v) => v.filename)).toEqual([priorShot, failureShot])
+
+    // Rejects unauthorized shot in failed scene
+    const badShot = 'scene-a-arbitrary.png'
+    writeFileSync(join(dir, badShot), cleanPng(1280, 800))
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'failed',
+        summary: 'Step failed',
+        scenes: [
+          {
+            id: 'scene-a',
+            title: 'Scene A',
+            status: 'failed',
+            screenshots: [
+              { filename: priorShot, name: 'prior', caption: 'Prior view', status: 'passed' },
+              { filename: badShot, name: 'arbitrary', caption: 'Bad shot', status: 'failed' },
+            ],
+          },
+        ],
+      }),
+    )
+    expect(() => validateDirectory(dir, { plan: trustedPlan })).toThrow(/unauthorized shot/)
+  })
 })
