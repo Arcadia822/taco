@@ -326,11 +326,12 @@ export const runCli = async (
 
   if (primaryCmd === 'update') {
     const [tacoId, filePath] = positionals
-    const baseRevisionId = options['base']
-    if (!tacoId || !filePath || typeof baseRevisionId !== 'string') {
+    const baseOption = options['base']
+    const baseRevisionId = typeof baseOption === 'string' ? baseOption : undefined
+    if (!tacoId || !filePath || (baseOption !== undefined && typeof baseOption !== 'string')) {
       const error = makeCliError(
         'VALIDATION_ERROR',
-        'update requires <tacoId> <file> --base <revisionId>',
+        'update requires <tacoId> <file>; --base optionally specifies the expected revision',
       )
       return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
     }

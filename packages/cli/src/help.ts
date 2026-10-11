@@ -231,9 +231,9 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
       {
         name: '--base',
         type: 'uuid',
-        required: true,
+        required: false,
         default: null,
-        description: 'Base revision UUID expected to be currently active',
+        description: 'Expected active revision UUID; defaults to the current revision fetched from the Host',
       },
       {
         name: '--dry-run',
@@ -275,12 +275,16 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
     ],
     examples: [
       {
-        invocation: 'taco-cli update <tacoId> design.taco.html --base <revisionId>',
+        invocation: 'taco-cli update <tacoId> design.taco.html',
         purpose: 'Publish a replacement revision to the existing Taco URL',
       },
       {
-        invocation: 'taco-cli update <tacoId> design.taco.html --base <revisionId> --dry-run',
-        purpose: 'Project the proposed revision locally against the stated base without network access',
+        invocation: 'taco-cli update <tacoId> design.taco.html --dry-run',
+        purpose: 'Project the proposed revision locally without network access',
+      },
+      {
+        invocation: 'taco-cli update <tacoId> design.taco.html --base <revisionId>',
+        purpose: 'Require a specific active revision when publishing the replacement',
       },
     ],
   },

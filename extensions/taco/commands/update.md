@@ -47,7 +47,7 @@ Whenever you modify any canonical artifact inside a Spec Kit feature directory o
 
 ## Hosted round-trip (optional)
 
-This command never publishes. When the same feature Taco is also hosted on a Tacobin Host, the review round-trip after this in-place refresh is `taco-cli update <tacoId> <file.taco.html> --base <revisionId> --host <origin>`, which pushes the refreshed bundle to the same hosted Taco and reviewer URL and records the new `revisionId`. Do not re-publish a new Taco for a subsequent review round, and do not mint a new `docId`. If the installed binary does not implement network update, report that update is unsupported by the installed CLI rather than falling back to `publish`.
+This command never publishes. When the same feature Taco is also hosted on a Tacobin Host, the review round-trip after this in-place refresh is `taco-cli update <tacoId> <file.taco.html> [--base <revisionId>] --host <origin>`, which pushes the refreshed bundle to the same hosted Taco and reviewer URL and records the new `revisionId`. When `--base` is omitted, the CLI uses the Host's active revision automatically; pass explicit `--base <revisionId>` to assert a specific expected base. Do not re-publish a new Taco for a subsequent review round, and do not mint a new `docId`. If the installed binary does not implement network update, report that update is unsupported by the installed CLI rather than falling back to `publish`.
 
 ## Constraints
 

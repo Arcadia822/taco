@@ -68,7 +68,7 @@ export class TacoClient {
 
   async update(
     tacoId: string,
-    options: { rawHtml: string; baseRevisionId: string },
+    options: { rawHtml: string; baseRevisionId?: string },
   ): Promise<UpdateResult> {
     let rawBundle: Record<string, unknown>
     try {
@@ -128,6 +128,12 @@ export class TacoClient {
       stateVersion: string
       commentsThroughSequence: string
     }
+    const baseRevisionId = options.baseRevisionId ?? stateData.revisionId
+    if (!baseRevisionId) {
+      const error = new Error('Host state does not expose a revisionId; specify --base or update the Host') as Error & { code?: string }
+      error.code = 'VALIDATION_ERROR'
+      throw error
+    }
 
     // Omit Origin per non-browser CSRF check (Next normalizes loopback origin)
     const headers: Record<string, string> = {
@@ -142,7 +148,7 @@ export class TacoClient {
     }
 
     const revisionPayload = {
-      baseRevisionId: options.baseRevisionId,
+      baseRevisionId,
       expectedStateVersion: stateData.stateVersion,
       expectedCommentsThroughSequence: stateData.commentsThroughSequence,
       snapshot: validated.payload.snapshot,

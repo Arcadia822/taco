@@ -59,6 +59,7 @@ paths:
         最近成功 Handoff 后尚未处理的正文、标题、navigation 或 Checkpoint 定义编辑拒绝覆盖。
         现有评论历史及 Checkpoint 状态保留，评论锚点按新正文重定位。
         revisionId 为不可变修订 UUID，独立于 autosave stateVersion 和十分钟历史窗口。
+        CLI 的 --base 可选；省略时从 GET /state 取得当前 revisionId 并填入本请求的 baseRevisionId。
       parameters:
         - $ref: '#/components/parameters/TacoId'
         - $ref: '#/components/parameters/IdempotencyKey'
