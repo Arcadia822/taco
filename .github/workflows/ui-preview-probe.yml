@@ -16,10 +16,10 @@ jobs:
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v4
-
       - name: Install Playwright in trusted tooling
         run: |
           mkdir -p /tmp/trusted-tools /tmp/outlines-out /tmp/sandbox-out
+          chmod 0777 /tmp/outlines-out /tmp/sandbox-out
           cp .github/workflows/scripts/*.mjs .github/workflows/scripts/*.py /tmp/trusted-tools/
           npm install --prefix /tmp/trusted-tools/playwright \
             --no-audit --no-fund --ignore-scripts playwright@1.56.1
