@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import mermaid from 'mermaid'
 import { sanitizeMermaidSvg } from '../src/security.ts'
-import { ensureMermaidConfig, extractMermaidThemeFromCode, updateMermaidCodeTheme, updateMermaidDirection } from '../src/mermaid.ts'
+import { createMermaidPreview, ensureMermaidConfig, extractMermaidThemeFromCode, MermaidRuntime, updateMermaidCodeTheme, updateMermaidDirection, type MermaidApi } from '../src/mermaid.ts'
 import { parse as parseYaml } from 'yaml'
 
 const documents = [
@@ -105,5 +105,81 @@ describe('embedded technical diagrams', () => {
     const source = '%%{init: {"theme": "forest", "themeVariables": } }%%\nflowchart LR\nA --> B'
     expect(ensureMermaidConfig(source)).toBe(source)
     expect(updateMermaidCodeTheme(source, 'dark')).toBe(source)
+  })
+
+  it('enables interactive nodes and applies neo theme styling on sequenceDiagram', async () => {
+    const svgPrototype = SVGElement.prototype as unknown as {
+      getBBox?: () => { x: number; y: number; width: number; height: number }
+      getComputedTextLength?: () => number
+    }
+    const originalBox = svgPrototype.getBBox
+    const originalLength = svgPrototype.getComputedTextLength
+    Object.defineProperty(svgPrototype, 'getBBox', {
+      configurable: true,
+      value: () => ({ x: 0, y: 0, width: 100, height: 20 }),
+    })
+    Object.defineProperty(svgPrototype, 'getComputedTextLength', {
+      configurable: true,
+      value(this: SVGElement) { return (this.textContent?.length ?? 0) * 8 },
+    })
+
+    try {
+      const seqCode = [
+        '---',
+        'config:',
+        '  theme: neo',
+        '---',
+        'sequenceDiagram',
+        '  participant G as 飞书群',
+        '  participant B as Bridge',
+        '  G->>B: hi',
+      ].join('\n')
+
+      const runtime = new MermaidRuntime(async () => mermaid as unknown as MermaidApi)
+      const preview = createMermaidPreview(seqCode, {
+        source: 'Source',
+        hidePreview: 'Preview',
+        zoom: 'Zoom',
+        zoomIn: 'Zoom in',
+        zoomOut: 'Zoom out',
+        resetZoom: 'Reset',
+        zoomLevel: 'Zoom level',
+        close: 'Close',
+        previewTitle: 'Diagram',
+        copy: 'Copy',
+        copied: 'Copied',
+        copyFailed: 'Copy failed',
+        comment: 'Comment',
+        auto: 'Auto',
+        plainText: 'Plain text',
+        loading: 'Loading',
+        error: 'Error',
+      }, undefined, runtime)
+      document.body.append(preview)
+
+      await vi.waitFor(() => {
+        const svg = preview.querySelector('svg')
+        expect(svg).not.toBeNull()
+      })
+
+      const svg = preview.querySelector('svg')!
+      const interactiveNodes = svg.querySelectorAll('.interactive-mermaid-node')
+      expect(interactiveNodes.length).toBeGreaterThanOrEqual(2)
+
+      const nodeG = svg.querySelector<SVGElement>('[data-node-id="G"]')
+      expect(nodeG).not.toBeNull()
+      expect(nodeG?.getAttribute('role')).toBe('button')
+
+      // Neo theme should have gradient definition and apply it to participant stroke
+      const gradient = svg.querySelector('linearGradient[id$="-gradient"]')
+      expect(gradient).not.toBeNull()
+      const actorRect = svg.querySelector<SVGElement>('rect.actor-top')
+      expect(actorRect?.style.stroke).toContain('url(#')
+    } finally {
+      if (originalBox) Object.defineProperty(svgPrototype, 'getBBox', { configurable: true, value: originalBox })
+      else Reflect.deleteProperty(svgPrototype, 'getBBox')
+      if (originalLength) Object.defineProperty(svgPrototype, 'getComputedTextLength', { configurable: true, value: originalLength })
+      else Reflect.deleteProperty(svgPrototype, 'getComputedTextLength')
+    }
   })
 })
