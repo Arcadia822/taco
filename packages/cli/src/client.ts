@@ -1,6 +1,5 @@
+import { randomUUID } from 'node:crypto'
 import {
-  canonicalizeJson,
-  computeSnapshotContentHash,
   projectLocalBundleToUploadContent,
   validateStagedUploadContent,
 } from '@taco/protocol'
@@ -15,6 +14,20 @@ export interface PublishResult {
   contentHash: string
   url: string
   createdAt: string
+  revisionId?: string
+}
+
+export interface UpdateResult {
+  command: 'update'
+  tacoId: string
+  revisionId: string
+  url: string
+  stateVersion: string
+  createdAt: string
+  contentHash: string
+  host?: string
+  baseRevisionId?: string
+  title?: string
 }
 
 export class TacoClient {
@@ -51,6 +64,126 @@ export class TacoClient {
     }
 
     return (await res.json()) as PublishResult
+  }
+
+  async update(
+    tacoId: string,
+    options: { rawHtml: string; baseRevisionId: string },
+  ): Promise<UpdateResult> {
+    let rawBundle: Record<string, unknown>
+    try {
+      rawBundle = extractTacoBundleFromHtml(options.rawHtml)
+    } catch (err) {
+      const error = new Error((err as Error).message) as Error & { code?: string }
+      error.code = 'VALIDATION_ERROR'
+      throw error
+    }
+
+    const projected = projectLocalBundleToUploadContent(rawBundle)
+    if (!projected.ok) {
+      const error = new Error(`Local projection failed: ${projected.err}`) as Error & { code?: string }
+      error.code = 'VALIDATION_ERROR'
+      throw error
+    }
+
+    const validated = validateStagedUploadContent(projected.content)
+    if (!validated.ok) {
+      const error = new Error(`Protocol validation failed: ${validated.err}`) as Error & { code?: string }
+      error.code = 'VALIDATION_ERROR'
+      throw error
+    }
+
+    const stateRes = await fetch(`${this.hostUrl}/v1/tacos/${tacoId}/state`)
+    if (!stateRes.ok) {
+      const rawErrorText = await stateRes.text()
+      let errorBody:
+        | { error?: { code?: string; message?: string; details?: Record<string, unknown> } }
+        | undefined
+      try {
+        errorBody = JSON.parse(rawErrorText) as {
+          error?: { code?: string; message?: string; details?: Record<string, unknown> }
+        }
+      } catch {}
+      const msg = errorBody?.error?.message || `Fetch state failed (HTTP ${stateRes.status}): ${rawErrorText}`
+      const code =
+        errorBody?.error?.code || (stateRes.status === 404 ? 'NOT_FOUND' : 'LOCAL_IO_ERROR')
+      const err = new Error(msg) as Error & {
+        statusCode?: number
+        code?: string
+        errorDetails?: unknown
+      }
+      err.statusCode = stateRes.status
+      err.code = code
+      err.errorDetails = errorBody
+      throw err
+    }
+
+    const csrfToken = stateRes.headers.get('x-taco-csrf') || stateRes.headers.get('X-Taco-CSRF')
+    const rawSetCookie = stateRes.headers.get('set-cookie') || ''
+    const tacoCsrfMatch = rawSetCookie.match(/(?:^|;\s*)taco_csrf=([^;]+)/)
+    const tacoCsrfCookie = tacoCsrfMatch ? tacoCsrfMatch[1] : undefined
+
+    const stateData = (await stateRes.json()) as {
+      revisionId?: string
+      stateVersion: string
+      commentsThroughSequence: string
+    }
+
+    // Omit Origin per non-browser CSRF check (Next normalizes loopback origin)
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': randomUUID(),
+    }
+    if (csrfToken) {
+      headers['X-Taco-CSRF'] = csrfToken
+    }
+    if (tacoCsrfCookie) {
+      headers['Cookie'] = `taco_csrf=${tacoCsrfCookie}`
+    }
+
+    const revisionPayload = {
+      baseRevisionId: options.baseRevisionId,
+      expectedStateVersion: stateData.stateVersion,
+      expectedCommentsThroughSequence: stateData.commentsThroughSequence,
+      snapshot: validated.payload.snapshot,
+    }
+
+    const res = await fetch(`${this.hostUrl}/v1/tacos/${tacoId}/revisions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(revisionPayload),
+    })
+
+    if (!res.ok) {
+      const rawErrorText = await res.text()
+      let errorBody:
+        | { error?: { code?: string; message?: string; details?: Record<string, unknown> } }
+        | undefined
+      try {
+        errorBody = JSON.parse(rawErrorText) as {
+          error?: { code?: string; message?: string; details?: Record<string, unknown> }
+        }
+      } catch {}
+      const msg = errorBody?.error?.message || `Update failed (HTTP ${res.status}): ${rawErrorText}`
+      const code =
+        errorBody?.error?.code ||
+        (res.status === 409
+          ? 'CONFLICT_ERROR'
+          : res.status === 404
+            ? 'NOT_FOUND'
+            : 'LOCAL_IO_ERROR')
+      const err = new Error(msg) as Error & {
+        statusCode?: number
+        code?: string
+        errorDetails?: unknown
+      }
+      err.statusCode = res.status
+      err.code = code
+      err.errorDetails = errorBody
+      throw err
+    }
+
+    return (await res.json()) as UpdateResult
   }
 
   async getEvents(tacoId: string, options?: { after?: string; through?: string; limit?: number }): Promise<unknown> {

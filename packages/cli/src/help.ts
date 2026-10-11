@@ -140,7 +140,7 @@ export const ROOT_HELP: CommandHelpOutput = {
     { name: 'publish', summary: 'Validate, project, and publish a local Taco to the Host' },
     {
       name: 'update',
-      summary: 'Validate a replacement revision locally; network update is not implemented',
+      summary: 'Publish a replacement revision for an existing Taco, preserving URL and comments',
     },
     { name: 'subscribe', summary: 'Stream realtime events via Server-Sent Events' },
     { name: 'events', summary: 'Page the persistent event log' },
@@ -217,7 +217,7 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
     schema: CLI_SCHEMA_HELP,
     binaryVersion: CLI_BINARY_VERSION,
     command: ['update'],
-    summary: 'Validate a replacement revision locally; network update is not implemented',
+    summary: 'Publish a replacement revision for an existing Taco, preserving URL and comments',
     positionals: [
       { name: 'tacoId', type: 'uuid', required: true, description: 'Target Taco UUID' },
       {
@@ -240,7 +240,7 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
         type: 'boolean',
         required: false,
         default: false,
-        description: 'Required: only the local projection check is implemented',
+        description: 'Preview the projected revision payload locally without network access',
       },
       {
         name: '--host',
@@ -252,7 +252,7 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
     ],
     environment: GLOBAL_ENV,
     output: {
-      stdout: 'Local projection summary for the proposed revision',
+      stdout: 'Single JSON object containing the revision receipt (or projection summary on dry-run)',
       stderr: 'ErrorResponse JSON on failure',
       streaming: false,
     },
@@ -260,13 +260,27 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
       {
         code: 'VALIDATION_ERROR',
         exitCode: 2,
-        recovery: 'Pass --dry-run; a network update is rejected as not implemented',
+        recovery: 'Check tacoId, file path, or --base revisionId UUID parameter',
+      },
+      {
+        code: 'LOCAL_IO_ERROR',
+        exitCode: 1,
+        recovery: 'Verify local file exists and Host is reachable',
+      },
+      {
+        code: 'CONFLICT_ERROR',
+        exitCode: 4,
+        recovery: 'The specified --base revision is stale or state version conflicted; pull latest state',
       },
     ],
     examples: [
       {
+        invocation: 'taco-cli update <tacoId> design.taco.html --base <revisionId>',
+        purpose: 'Publish a replacement revision to the existing Taco URL',
+      },
+      {
         invocation: 'taco-cli update <tacoId> design.taco.html --base <revisionId> --dry-run',
-        purpose: 'Project the proposed revision locally against the stated base',
+        purpose: 'Project the proposed revision locally against the stated base without network access',
       },
     ],
   },

@@ -1,4 +1,6 @@
-import { resolve } from 'node:path'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { runCli } from '../src/runner.ts'
 
@@ -167,10 +169,147 @@ describe('taco-cli (Phase 1)', () => {
       else process.env.TACO_HOST_URL = originalEnv
     }
   })
+
+  it('returns conflict exit code on stale base revision without fallback to publish', async () => {
+    const originalFetch = globalThis.fetch
+    const requestedUrls: string[] = []
+
+    globalThis.fetch = async (input: Parameters<typeof fetch>[0]): Promise<Response> => {
+      const url = String(input)
+      requestedUrls.push(url)
+      if (url.endsWith('/state')) {
+        return new Response(
+          JSON.stringify({
+            stateVersion: '5',
+            commentsThroughSequence: '8',
+            snapshot: { format: 'taco/files', version: 1, docId: 'doc1', title: 'Test', root: '', files: [] },
+          }),
+          {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Taco-CSRF': 'csrf_token_stale',
+              'Set-Cookie': 'taco_csrf=nonce_stale',
+            },
+          },
+        )
+      }
+
+      if (url.endsWith('/revisions')) {
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: 'REVISION_CONFLICT',
+              message: 'Base revision is no longer current',
+              details: { currentRevisionId: 'rev_latest_999' },
+            },
+          }),
+          {
+            status: 409,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        )
+      }
+
+      return new Response('Not Found', { status: 404 })
+    }
+
+    try {
+      const res = await runCli([
+        'update',
+        '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001',
+        FIXTURE_TACO,
+        '--base',
+        'stale-base-uuid-1111',
+        '--host',
+        'https://host.example',
+      ])
+      expect(res.exitCode).toBe(4)
+      const err = JSON.parse(res.stderr!)
+      expect(err.error.code).toBe('REVISION_CONFLICT')
+      expect(err.error.message).toContain('Base revision is no longer current')
+      expect(err.error.details.currentRevisionId).toBe('rev_latest_999')
+
+      // Requested paths must hit state and revisions only, never falling back to /v1/tacos publish
+      expect(requestedUrls).toEqual([
+        'https://host.example/v1/tacos/8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001/state',
+        'https://host.example/v1/tacos/8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001/revisions',
+      ])
+      expect(requestedUrls.some((u) => u === 'https://host.example/v1/tacos')).toBe(false)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('executes update --dry-run purely locally without making any network calls', async () => {
+    const originalFetch = globalThis.fetch
+    let fetchCalled = false
+
+    globalThis.fetch = async (): Promise<Response> => {
+      fetchCalled = true
+      throw new Error('fetch should not be called in dry-run mode')
+    }
+
+    try {
+      const res = await runCli([
+        'update',
+        '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001',
+        FIXTURE_TACO,
+        '--base',
+        '993b05fd-2f80-48cc-aafd-1d7564781001',
+        '--dry-run',
+        '--host',
+        'https://host.example',
+      ])
+      expect(res.exitCode).toBe(0)
+      expect(fetchCalled).toBe(false)
+      const json = JSON.parse(res.stdout!)
+      expect(json.command).toBe('update')
+      expect(json.dryRun).toBe(true)
+      expect(json.baseRevisionId).toBe('993b05fd-2f80-48cc-aafd-1d7564781001')
+      expect(json.contentHash).toMatch(/^sha256:[a-f0-9]{64}$/)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('returns validation exit code 2 and makes no network calls when updating malformed input', async () => {
+    const originalFetch = globalThis.fetch
+    let fetchCalled = false
+
+    globalThis.fetch = async (): Promise<Response> => {
+      fetchCalled = true
+      throw new Error('fetch should not be called when input is malformed')
+    }
+
+    const tempDir = mkdtempSync(join(tmpdir(), 'taco-cli-test-'))
+    const malformedPath = join(tempDir, 'malformed.taco.html')
+    writeFileSync(malformedPath, '<html><body>Not a valid taco container</body></html>', 'utf8')
+
+    try {
+      const res = await runCli([
+        'update',
+        '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001',
+        malformedPath,
+        '--base',
+        '993b05fd-2f80-48cc-aafd-1d7564781001',
+        '--host',
+        'https://host.example',
+      ])
+      expect(res.exitCode).toBe(2)
+      expect(fetchCalled).toBe(false)
+      const err = JSON.parse(res.stderr!)
+      expect(err.error.code).toBe('VALIDATION_ERROR')
+      expect(err.error.message).toContain('missing <script id="taco-document"> container')
+    } finally {
+      globalThis.fetch = originalFetch
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
   it('carries the requested resume cursor to the Host stream URL', async () => {
     const originalFetch = globalThis.fetch
     let requestedUrl = ''
-    globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
+    globalThis.fetch = async (input: Parameters<typeof fetch>[0]): Promise<Response> => {
       requestedUrl = String(input)
       const body = new ReadableStream<Uint8Array>({
         start(controller) {
@@ -288,7 +427,7 @@ describe('taco-cli (Phase 1)', () => {
     const recordedHeaders: Headers[] = []
     let callCount = 0
 
-    globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    globalThis.fetch = async (_input: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> => {
       callCount += 1
       const headers = new Headers(init?.headers)
       recordedHeaders.push(headers)
@@ -417,7 +556,7 @@ describe('taco-cli (Phase 1)', () => {
     const requestedUrls: string[] = []
     let connectionAttempt = 0
 
-    globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
+    globalThis.fetch = async (input: Parameters<typeof fetch>[0]): Promise<Response> => {
       requestedUrls.push(String(input))
       connectionAttempt += 1
 
@@ -788,7 +927,7 @@ describe('taco-cli (Phase 1)', () => {
       },
     }
 
-    globalThis.fetch = async (input: RequestInfo | URL): Promise<Response> => {
+    globalThis.fetch = async (input: Parameters<typeof fetch>[0]): Promise<Response> => {
       const url = String(input)
       if (url.includes('/handoffs/99999999-4cad-43d2-a5f6-4f56bcb0a001')) {
         return new Response(JSON.stringify(handoffRecord), {
@@ -871,7 +1010,7 @@ describe('taco-cli (Phase 1)', () => {
     const originalFetch = globalThis.fetch
     const recordedHeaders: Headers[] = []
 
-    globalThis.fetch = async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    globalThis.fetch = async (_input: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> => {
       const headers = new Headers(init?.headers)
       recordedHeaders.push(headers)
       const body = new ReadableStream<Uint8Array>({
