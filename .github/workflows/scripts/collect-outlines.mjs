@@ -75,14 +75,34 @@ export async function collectOutlines(options = {}) {
     await pageTaco.waitForFunction(() => !document.getElementById('taco-splash'), { timeout })
     await pageTaco.waitForTimeout(1000)
 
-    const tacoResult = await pageTaco.evaluate(extractDomOutline)
+    const tacoInitial = await pageTaco.evaluate(extractDomOutline)
     outlines.push({
       view: 'taco',
-      title: 'Complete Taco Desktop',
+      title: 'Complete Taco Desktop (Initial)',
       url: tacoUrl,
-      outline: tacoResult.outline,
-      interactiveElements: tacoResult.interactiveElements,
+      outline: tacoInitial.outline,
+      interactiveElements: tacoInitial.interactiveElements,
     })
+
+    // Walk through files in sidebar (e.g. spec.md or others) to extract deeper outlines
+    const fileButtons = await pageTaco
+      .locator('button.sidebar-row.file-row:not(.is-selected)')
+      .all()
+    for (let fIdx = 0; fIdx < Math.min(fileButtons.length, 3); fIdx += 1) {
+      const btn = fileButtons[fIdx]
+      const filePath = await btn.getAttribute('data-path')
+      await btn.click()
+      await pageTaco.waitForTimeout(600)
+      const fileOutline = await pageTaco.evaluate(extractDomOutline)
+      outlines.push({
+        view: 'taco',
+        title: `Complete Taco - ${filePath}`,
+        url: tacoUrl,
+        filePath,
+        outline: fileOutline.outline,
+        interactiveElements: fileOutline.interactiveElements,
+      })
+    }
     await pageTaco.close()
 
     // 2. Host view
