@@ -6,6 +6,8 @@ import {
   PlanValidationError,
   MAX_SCENES,
   MAX_STEPS_PER_SCENE,
+  MAX_SCENE_ID_LENGTH,
+  RESERVED_SHOT_NAMES,
 } from '../.github/workflows/scripts/plan-schema.mjs'
 import {
   resolvePlannerConfig,
@@ -266,6 +268,123 @@ describe('Dynamic Preview: Plan Schema Validation', () => {
       } finally {
         vi.unstubAllGlobals()
       }
+    })
+  })
+
+  describe('Defect Regression Tests (7 Review Defect Groups)', () => {
+    it('canonical ui_change=false requires scenes: [] and rejects non-empty scenes', () => {
+      const planWithScenes = {
+        version: 1,
+        source: 'deepseek-planner',
+        ui_change: false,
+        summary: 'No UI change intended',
+        scenes: [
+          {
+            id: 'unneeded-scene',
+            title: 'Unneeded Scene',
+            target: 'taco',
+            steps: [{ do: 'shot', name: 'overview' }],
+          },
+        ],
+      }
+      expect(() => validatePreviewPlan(planWithScenes)).toThrow(PlanValidationError)
+      expect(() => validatePreviewPlan(planWithScenes)).toThrow(/scenes=\[\]/)
+
+      const canonicalPlan = {
+        version: 1,
+        source: 'deepseek-planner',
+        ui_change: false,
+        summary: 'Clean backend change',
+        scenes: [],
+      }
+      const validated = validatePreviewPlan(canonicalPlan)
+      expect(validated.ui_change).toBe(false)
+      expect(validated.scenes).toEqual([])
+    })
+
+    it('rejects reserved failure shot names to prevent collision with automated failure shots', () => {
+      for (const reserved of RESERVED_SHOT_NAMES) {
+        const reservedPlan = {
+          version: 1,
+          source: 'deepseek-planner',
+          ui_change: true,
+          summary: 'Testing reserved names',
+          scenes: [
+            {
+              id: 'my-scene',
+              title: 'Scene',
+              target: 'taco',
+              steps: [{ do: 'shot', name: reserved }],
+            },
+          ],
+        }
+        expect(() => validatePreviewPlan(reservedPlan)).toThrow(PlanValidationError)
+        expect(() => validatePreviewPlan(reservedPlan)).toThrow(/reserved for execution failure/)
+      }
+    })
+
+    it('bounds scene.id length and generated screenshot filename length', () => {
+      const longId = 'a'.repeat(MAX_SCENE_ID_LENGTH + 1)
+      const overlongScenePlan = {
+        version: 1,
+        source: 'deepseek-planner',
+        ui_change: true,
+        summary: 'Overlong scene ID',
+        scenes: [
+          {
+            id: longId,
+            title: 'Long ID Scene',
+            target: 'taco',
+            steps: [{ do: 'shot', name: 'shot-one' }],
+          },
+        ],
+      }
+      expect(() => validatePreviewPlan(overlongScenePlan)).toThrow(PlanValidationError)
+      expect(() => validatePreviewPlan(overlongScenePlan)).toThrow(/exceeds maximum length/)
+
+      const validScenePlan = {
+        version: 1,
+        source: 'deepseek-planner',
+        ui_change: true,
+        summary: 'Valid scene ID',
+        scenes: [
+          {
+            id: 'a'.repeat(MAX_SCENE_ID_LENGTH),
+            title: 'Bounded ID Scene',
+            target: 'taco',
+            steps: [{ do: 'shot', name: 'bounded' }],
+          },
+        ],
+      }
+      expect(validatePreviewPlan(validScenePlan).scenes[0].id).toBe('a'.repeat(MAX_SCENE_ID_LENGTH))
+    })
+    it('rejects normal shot names that collide with another scene failure filename (P2 collision)', () => {
+      const collidingPlan = {
+        version: 1,
+        source: 'deepseek-planner',
+        ui_change: true,
+        summary: 'Collision test',
+        scenes: [
+          {
+            id: 'scene-a',
+            title: 'Scene A',
+            target: 'taco',
+            // shot name 'b-failure' generates 'scene-a-b-failure.png'
+            steps: [{ do: 'shot', name: 'b-failure' }],
+          },
+          {
+            // scene id 'scene-a-b' has reserved failure shot 'scene-a-b-failure.png'
+            id: 'scene-a-b',
+            title: 'Scene A-B',
+            target: 'taco',
+            steps: [{ do: 'shot', name: 'overview' }],
+          },
+        ],
+      }
+      expect(() => validatePreviewPlan(collidingPlan)).toThrow(PlanValidationError)
+      expect(() => validatePreviewPlan(collidingPlan)).toThrow(
+        /collides with a reserved failure screenshot filename/,
+      )
     })
   })
 })

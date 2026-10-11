@@ -102,12 +102,14 @@ export interface PreviewManifest {
 }
 
 export declare const DESKTOP_VIEWPORT: DesktopViewport
-export declare const MAX_SCENES: number
-export declare const MAX_STEPS_PER_SCENE: number
-export declare const MAX_SHOT_NAME_LENGTH: number
-export declare const VALID_SHOT_NAME: RegExp
-export declare const FORBIDDEN_TEXT_OR_TARGET: RegExp
-
+export const MAX_SCENES: number
+export const MAX_STEPS_PER_SCENE: number
+export const MAX_SCENE_ID_LENGTH: number
+export const MAX_SHOT_NAME_LENGTH: number
+export const MAX_GENERATED_FILENAME_LENGTH: number
+export const VALID_SHOT_NAME: RegExp
+export const RESERVED_SHOT_NAMES: ReadonlySet<string>
+export const FORBIDDEN_TEXT_OR_TARGET: RegExp
 export declare class PlanValidationError extends Error {
   constructor(message: string)
 }

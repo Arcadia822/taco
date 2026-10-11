@@ -37,9 +37,7 @@ export async function collectOutlines(options = {}) {
   if (!tacoFile || !existsSync(tacoFile)) {
     throw new Error(`Complete Taco bundle not found at ${tacoFile}`)
   }
-  if (!hostUrl) {
-    throw new Error('Host URL is required')
-  }
+  // hostUrl is optional: if omitted, collect Taco views only
   if (!outPath) {
     throw new Error('Output path is required')
   }
@@ -65,8 +63,17 @@ export async function collectOutlines(options = {}) {
   }
   const { chromium } = playwright.default || playwright
 
-  await waitForServer(hostUrl, timeout)
-
+  let hasHost = false
+  if (hostUrl) {
+    try {
+      await waitForServer(hostUrl, Math.min(timeout, 3000))
+      hasHost = true
+    } catch {
+      console.warn(
+        `[collect-outlines] Host at ${hostUrl} not responsive, collecting Taco views only.`,
+      )
+    }
+  }
   const browser = await chromium.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
@@ -98,13 +105,14 @@ export async function collectOutlines(options = {}) {
       interactiveElements: tacoInitial.interactiveElements,
     })
 
-    // Snapshot file paths from sidebar first to avoid dynamic DOM shift on selection
+    // Prioritize files containing Mermaid diagrams or spec files first so prompt 20k window captures sequence/flowchart diagrams
     const candidatePaths = await pageTaco.evaluate(() => {
-      return Array.from(document.querySelectorAll('button.sidebar-row.file-row'))
+      const allPaths = Array.from(document.querySelectorAll('button.sidebar-row.file-row'))
         .map((btn) => btn.getAttribute('data-path'))
         .filter(Boolean)
+      const isPriority = (p) => /spec\.md|plan\.md|mermaid|\.mmd/i.test(p)
+      return [...allPaths.filter(isPriority), ...allPaths.filter((p) => !isPriority(p))]
     })
-
     for (let fIdx = 0; fIdx < Math.min(candidatePaths.length, 5); fIdx += 1) {
       const filePath = candidatePaths[fIdx]
       const btn = pageTaco.locator(`button.sidebar-row.file-row[data-path="${filePath}"]`).first()
@@ -124,21 +132,23 @@ export async function collectOutlines(options = {}) {
     }
     await pageTaco.close()
 
-    // 2. Host view
-    const pageHost = await context.newPage()
-    await pageHost.goto(hostUrl, { waitUntil: 'load', timeout })
-    await pageHost.waitForSelector('header, .home-root, body', { timeout })
-    await pageHost.waitForTimeout(1000)
+    // 2. Host view (if host is available)
+    if (hasHost && hostUrl) {
+      const pageHost = await context.newPage()
+      await pageHost.goto(hostUrl, { waitUntil: 'load', timeout })
+      await pageHost.waitForSelector('header, .home-root, body', { timeout })
+      await pageHost.waitForTimeout(1000)
 
-    const hostResult = await pageHost.evaluate(extractDomOutline)
-    outlines.push({
-      view: 'host',
-      title: 'Host Demo Desktop',
-      url: hostUrl,
-      outline: hostResult.outline,
-      interactiveElements: hostResult.interactiveElements,
-    })
-    await pageHost.close()
+      const hostResult = await pageHost.evaluate(extractDomOutline)
+      outlines.push({
+        view: 'host',
+        title: 'Host Demo Desktop',
+        url: hostUrl,
+        outline: hostResult.outline,
+        interactiveElements: hostResult.interactiveElements,
+      })
+      await pageHost.close()
+    }
   } finally {
     await browser.close()
   }

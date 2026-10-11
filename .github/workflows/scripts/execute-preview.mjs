@@ -42,6 +42,14 @@ async function locateElement(page, step) {
   if (!step.target) throw new Error(`Step ${step.do} is missing a target selector`)
   let loc = page.locator(step.target)
   if (step.text) loc = loc.filter({ hasText: step.text })
+
+  // Wait up to 5000ms for element to become attached and visible
+  try {
+    await loc.first().waitFor({ state: 'visible', timeout: 5000 })
+  } catch {
+    // Let the loop check below fail with explicit message
+  }
+
   const count = await loc.count()
   for (let i = 0; i < count; i += 1) {
     const el = loc.nth(i)
@@ -68,14 +76,14 @@ export async function executePlan(options = {}) {
   if (!tacoFile || !existsSync(tacoFile)) {
     throw new Error(`Taco bundle not found: ${tacoFile}`)
   }
-  if (!hostUrl) throw new Error('Host URL is required')
   if (!outDir) throw new Error('Output directory is required')
 
   mkdirSync(outDir, { recursive: true })
 
   const rawPlan = JSON.parse(readFileSync(planFile, 'utf-8'))
   const plan = validatePreviewPlan(rawPlan)
-
+  const requiresHost = plan.scenes.some((sc) => sc.target === 'host')
+  if (requiresHost && !hostUrl) throw new Error('Host URL is required for host target scenes')
   const manifest = {
     version: 1,
     planSource: plan.source,
@@ -95,41 +103,57 @@ export async function executePlan(options = {}) {
     writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf-8')
     return manifest
   }
-
-  // Load Playwright via entry resolution to prevent ERR_UNSUPPORTED_DIR_IMPORT
-  let playwright
-  const requested = playwrightModule || process.env.PLAYWRIGHT_MODULE_PATH || null
-  if (requested) {
-    const asPath = requested.startsWith('file://') ? fileURLToPath(requested) : requested
-    let entry
-    try {
-      entry = require.resolve(resolve(asPath))
-    } catch (err) {
-      throw new Error(`Could not resolve the Playwright module at ${requested}: ${err.message}`)
-    }
-    playwright = await import(pathToFileURL(entry).href)
-  } else {
-    try {
-      playwright = await import(pathToFileURL(require.resolve('playwright')).href)
-    } catch (err) {
-      playwright = await import('playwright')
-    }
-  }
-  const { chromium } = playwright.default || playwright
-
-  await waitForServer(hostUrl, timeout)
-
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
-  })
-
-  const context = await browser.newContext({
-    viewport: DESKTOP_VIEWPORT,
-    deviceScaleFactor: 1,
-  })
-
   const tacoUrl = pathToFileURL(resolve(tacoFile)).href
+
+  let browser = null
+  try {
+    // Load Playwright via entry resolution to prevent ERR_UNSUPPORTED_DIR_IMPORT
+    let playwright
+    const requested = playwrightModule || process.env.PLAYWRIGHT_MODULE_PATH || null
+    if (requested) {
+      const asPath = requested.startsWith('file://') ? fileURLToPath(requested) : requested
+      let entry
+      try {
+        entry = require.resolve(resolve(asPath))
+      } catch (err) {
+        throw new Error(`Could not resolve the Playwright module at ${requested}: ${err.message}`)
+      }
+      playwright = await import(pathToFileURL(entry).href)
+    } else {
+      try {
+        playwright = await import(pathToFileURL(require.resolve('playwright')).href)
+      } catch (err) {
+        playwright = await import('playwright')
+      }
+    }
+    const { chromium } = playwright.default || playwright
+
+    if (requiresHost) {
+      await waitForServer(hostUrl, timeout)
+    }
+
+    browser = await chromium.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
+    })
+  } catch (startupErr) {
+    console.error(`[execute-preview] Environment startup failed:`, startupErr.message)
+    manifest.status = 'failed'
+    manifest.errors.push(`Environment startup failed: ${startupErr.message}`)
+    // Populate all expected scenes as failed without screenshots
+    for (const sc of plan.scenes) {
+      manifest.scenes.push({
+        id: sc.id,
+        title: sc.title,
+        status: 'failed',
+        error: `Environment startup failed: ${startupErr.message}`,
+        steps: [],
+        screenshots: [],
+      })
+    }
+    writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf-8')
+    return manifest
+  }
 
   try {
     for (const scene of plan.scenes) {
@@ -142,8 +166,15 @@ export async function executePlan(options = {}) {
         screenshots: [],
       }
 
-      const page = await context.newPage()
+      let context = null
+      let page = null
       try {
+        // Isolate each scene in an independent BrowserContext to prevent state leakage (locale, theme, etc.)
+        context = await browser.newContext({
+          viewport: DESKTOP_VIEWPORT,
+          deviceScaleFactor: 1,
+        })
+        page = await context.newPage()
         const targetUrl = scene.target === 'taco' ? tacoUrl : hostUrl
         await page.goto(targetUrl, { waitUntil: 'load', timeout })
         if (scene.target === 'taco') {
@@ -244,15 +275,32 @@ export async function executePlan(options = {}) {
             sceneResult.status = 'failed'
             sceneResult.error = `Step ${i} (${step.do}) failed: ${stepErr.message}`
 
-            // If a shot step failed or failure occurred before shot, capture failure state
+            // If a step failed, attempt to capture failure state screenshot
             const errFilename = `${scene.id}-failure.png`
-            await page.screenshot({ path: join(outDir, errFilename) }).catch(() => {})
-            sceneResult.screenshots.push({
-              filename: errFilename,
-              name: 'failure-state',
-              caption: `[EXECUTION FAILED] ${stepErr.message}`,
-              status: 'failed',
-            })
+            const errShotPath = join(outDir, errFilename)
+            let shotWritten = false
+            try {
+              await page.screenshot({ path: errShotPath })
+              if (existsSync(errShotPath)) {
+                shotWritten = true
+              }
+            } catch (shotErr) {
+              console.warn(
+                `[execute-preview] Failure screenshot could not be captured for Scene ${scene.id}:`,
+                shotErr.message,
+              )
+            }
+
+            if (shotWritten) {
+              sceneResult.screenshots.push({
+                filename: errFilename,
+                name: 'failure-state',
+                caption: `[EXECUTION FAILED] ${stepErr.message}`,
+                status: 'failed',
+              })
+            } else {
+              sceneResult.error += ' (Failure screenshot capture was unavailable)'
+            }
             sceneResult.steps.push(stepRecord)
             break
           }
@@ -264,7 +312,9 @@ export async function executePlan(options = {}) {
         sceneResult.status = 'failed'
         sceneResult.error = sceneErr.message
       } finally {
-        await page.close()
+        if (context) {
+          await context.close().catch(() => {})
+        }
       }
 
       manifest.scenes.push(sceneResult)
@@ -274,11 +324,15 @@ export async function executePlan(options = {}) {
       }
     }
   } finally {
-    await browser.close()
+    if (browser) {
+      await browser.close().catch((closeErr) => {
+        console.warn('[execute-preview] Browser close warning:', closeErr.message)
+      })
+    }
+    writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf-8')
+    console.log(`[execute-preview] Execution complete. Overall status: ${manifest.status}`)
   }
 
-  writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf-8')
-  console.log(`[execute-preview] Execution complete. Overall status: ${manifest.status}`)
   return manifest
 }
 

@@ -52,9 +52,9 @@ Rules:
 4. Special capability:
    - Taco renders Mermaid diagrams (flowchart and sequenceDiagram).
    - In Taco, files in the sidebar have exact data-path attributes, e.g. "button.sidebar-row.file-row[data-path='demo-spec/spec.md']". Use "open-file" with the exact path!
-   - SVG Mermaid nodes have selectors like "g.node" or "[data-id]" and clicking a node activates the source editor line and the comment toolbar (".mermaid-comment-toolbar" or ".tiptap-code-block-button").
+   - SVG Mermaid nodes have selectors like "g.node", "[data-id]", or "rect.actor", "text.actor". Clicking a diagram node activates the source editor and the node toolbar (".mermaid-node-toolbar").
+   - Inspect the provided DOM Outlines to see the actual tags and classes before picking a selector!
    - You can click Mermaid diagram nodes or code buttons to demonstrate interactions!
-5. Never click dangerous items (delete, remove, restart, quit, sign out).
 6. Return JSON only conforming to the plan schema:
 {
   "version": 1,
@@ -185,13 +185,16 @@ Please inspect the diff and available DOM elements (including SVG Mermaid nodes 
     rawPlan.version = 1
     rawPlan.source = 'deepseek-planner'
     rawPlan.model = model
+    // Strictly preserve plan bounds: do not re-order or synthesize fake steps
     if (Array.isArray(rawPlan.scenes)) {
-      rawPlan.scenes = rawPlan.scenes.slice(0, 3)
+      if (rawPlan.scenes.length > 3) {
+        throw new Error(`Plan scenes length ${rawPlan.scenes.length} exceeds maximum 3`)
+      }
       for (const sc of rawPlan.scenes) {
         if (Array.isArray(sc.steps) && sc.steps.length > 12) {
-          const shots = sc.steps.filter((st) => st.do === 'shot')
-          const nonShots = sc.steps.filter((st) => st.do !== 'shot')
-          sc.steps = [...nonShots.slice(0, 10), ...shots.slice(-2)].slice(0, 12)
+          throw new Error(
+            `Scene [${sc.id || 'unnamed'}] has ${sc.steps.length} steps, exceeding maximum 12`,
+          )
         }
       }
     }

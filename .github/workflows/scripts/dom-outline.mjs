@@ -18,6 +18,12 @@ export function extractDomOutline() {
       .join(' ')
       .replace(/\s+/g, ' ')
       .slice(0, 80)
+  const safeEscape = (str) => {
+    if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+      return CSS.escape(str)
+    }
+    return String(str).replace(/[!"#$%&'()*+,.\/:;<=>?@[\\\]^`{|}~]/g, '\\$&')
+  }
 
   const isVisible = (el) => {
     const r = el.getBoundingClientRect()
@@ -25,7 +31,6 @@ export function extractDomOutline() {
     const s = window.getComputedStyle(el)
     return s.visibility !== 'hidden' && s.display !== 'none' && parseFloat(s.opacity) !== 0
   }
-
   // 1. Process SVG Mermaid diagrams specially
   const mermaidContainers = document.querySelectorAll(
     '.mermaid, .mermaid-preview-svg, svg[id^="mermaid-"], svg[id^="taco-mermaid-"], svg.flowchart',
@@ -33,25 +38,42 @@ export function extractDomOutline() {
   for (const svg of mermaidContainers) {
     if (!isVisible(svg)) continue
 
-    // Find flowchart nodes
+    // Find flowchart nodes with accurate selectors
     const fcNodes = svg.querySelectorAll('g.node, g[class*="node"]')
     for (const node of fcNodes) {
       const text = node.textContent?.trim().replace(/\s+/g, ' ') || ''
-      const id = node.id || node.getAttribute('data-id') || ''
+      const dataId = node.getAttribute('data-id')
+      let selector = 'svg g.node'
+      if (node.id) {
+        selector = `#${safeEscape(node.id)}`
+      } else if (dataId) {
+        selector = `g.node[data-id="${safeEscape(dataId)}"]`
+      }
       interactiveElements.push({
-        selector: id ? `#${id}` : `svg g.node`,
+        selector,
         description: `Mermaid flowchart node: "${text}"`,
         kind: 'flowchart-node',
-        nodeId: id,
+        nodeId: node.id || dataId || '',
       })
     }
 
-    // Find sequence diagram actors
+    // Find sequence diagram actors with accurate, real element selectors
     const actors = svg.querySelectorAll('g.actor, rect.actor, [data-actor], text.actor, .actor')
     for (const actor of actors) {
       const text = actor.textContent?.trim().replace(/\s+/g, ' ') || ''
+      const aTag = actor.tagName.toLowerCase()
+      let selector = ''
+      if (actor.id) {
+        selector = `#${safeEscape(actor.id)}`
+      } else if (actor.hasAttribute('data-actor')) {
+        selector = `${aTag}[data-actor="${safeEscape(actor.getAttribute('data-actor') || '')}"]`
+      } else if (actor.classList.contains('actor')) {
+        selector = `${aTag}.actor`
+      } else {
+        selector = aTag
+      }
       interactiveElements.push({
-        selector: actor.id ? `#${actor.id}` : `.actor`,
+        selector,
         description: `Mermaid sequence actor: "${text}"`,
         kind: 'sequence-actor',
       })
@@ -69,25 +91,28 @@ export function extractDomOutline() {
     if (tag === 'svg') {
       const isMermaid =
         el.closest('.mermaid') ||
+        el.closest('.taco-mermaid-render') ||
         el.classList.contains('mermaid') ||
         el.classList.contains('flowchart') ||
         el.id.startsWith('mermaid-') ||
         el.id.startsWith('taco-mermaid-')
       const rect = el.getBoundingClientRect()
       const idAttr = el.id ? `#${el.id}` : ''
-      const clsAttr = isMermaid ? '.mermaid' : ''
+      const realClasses = [...el.classList].map((c) => `.${c}`).join('')
+      const annotation = isMermaid ? ' (Mermaid diagram)' : ''
       lines.push(
-        `${'  '.repeat(Math.min(depth, 12))}svg${idAttr}${clsAttr}[width="${Math.round(rect.width)}"][height="${Math.round(rect.height)}"]`,
+        `${'  '.repeat(Math.min(depth, 12))}svg${idAttr}${realClasses}[width="${Math.round(rect.width)}"][height="${Math.round(rect.height)}"]${annotation}`,
       )
 
-      // Expand nodes inside mermaid
+      // Expand nodes inside mermaid with real tag name and classes
       if (isMermaid) {
         const nodes = el.querySelectorAll('g.node, .actor')
         for (const n of nodes) {
           const text = n.textContent?.trim().replace(/\s+/g, ' ') || ''
+          const nTag = n.tagName.toLowerCase()
           const nId = n.id ? `#${n.id}` : ''
           const cls = [...n.classList].map((c) => `.${c}`).join('')
-          lines.push(`${'  '.repeat(Math.min(depth + 1, 12))}g${nId}${cls} "${text}"`)
+          lines.push(`${'  '.repeat(Math.min(depth + 1, 12))}${nTag}${nId}${cls} "${text}"`)
         }
       }
       return

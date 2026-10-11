@@ -16,15 +16,16 @@ Guided by the principle **Encode Lessons in Structure**:
 
 ## Escalation Index
 
-| ID                                                                          | Title                                             | Occurrences |    Status     | Guard                                                                                |
-| :-------------------------------------------------------------------------- | :------------------------------------------------ | :---------: | :-----------: | :----------------------------------------------------------------------------------- |
-| [LESSON-001](#lesson-001-local-dependency-drift-pollutes-test-runs)         | Local Dependency Drift Pollutes Test Runs         |      1      |   **open**    | `package-lock.json`, `.github/workflows/ci.yml`                                      |
-| [LESSON-002](#lesson-002-version-triples-desync-across-release-surfaces)    | Version Triples Desync Across Release Surfaces    |      2      |   **open**    | `scripts/sync-skill-version.mjs`, `tests/version.test.ts`                            |
-| [LESSON-003](#lesson-003-tiptap-prosemirror-crash-on-markdown-code-in-bold) | Tiptap ProseMirror Crash on Markdown Code-in-Bold |      3      | **escalated** | `src/tiptap-editor.ts`, `tests/markdown-emphasis-code.test.ts`                       |
-| [LESSON-004](#lesson-004-headless-mermaid-execution-fails-without-dom-mock) | Headless Mermaid Execution Fails Without DOM Mock |      1      |   **open**    | `skills/taco/scripts/lint-mermaid.mjs`, `tests/mermaid-lint.test.ts`                 |
-| [LESSON-005](#lesson-005-artifact-id-downloads-nest-the-consumed-files)     | Artifact-ID Downloads Nest the Consumed Files     |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
-| [LESSON-006](#lesson-006-empty-docker-volume-copy-up-overrides-ownership)   | Empty Docker Volume Copy-Up Overrides Ownership   |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
-| [LESSON-007](#lesson-007-github-rejects-empty-asset-bootstrap-trees)        | GitHub Rejects Empty Asset Bootstrap Trees        |      1      |   **open**    | `.github/workflows/scripts/publish-preview.mjs`, `tests/ui-preview-pipeline.test.ts` |
+| ID                                                                                    | Title                                                     | Occurrences |    Status     | Guard                                                                                |
+| :------------------------------------------------------------------------------------ | :-------------------------------------------------------- | :---------: | :-----------: | :----------------------------------------------------------------------------------- |
+| [LESSON-001](#lesson-001-local-dependency-drift-pollutes-test-runs)                   | Local Dependency Drift Pollutes Test Runs                 |      1      |   **open**    | `package-lock.json`, `.github/workflows/ci.yml`                                      |
+| [LESSON-002](#lesson-002-version-triples-desync-across-release-surfaces)              | Version Triples Desync Across Release Surfaces            |      2      |   **open**    | `scripts/sync-skill-version.mjs`, `tests/version.test.ts`                            |
+| [LESSON-003](#lesson-003-tiptap-prosemirror-crash-on-markdown-code-in-bold)           | Tiptap ProseMirror Crash on Markdown Code-in-Bold         |      3      | **escalated** | `src/tiptap-editor.ts`, `tests/markdown-emphasis-code.test.ts`                       |
+| [LESSON-004](#lesson-004-headless-mermaid-execution-fails-without-dom-mock)           | Headless Mermaid Execution Fails Without DOM Mock         |      1      |   **open**    | `skills/taco/scripts/lint-mermaid.mjs`, `tests/mermaid-lint.test.ts`                 |
+| [LESSON-005](#lesson-005-artifact-id-downloads-nest-the-consumed-files)               | Artifact-ID Downloads Nest the Consumed Files             |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
+| [LESSON-006](#lesson-006-empty-docker-volume-copy-up-overrides-ownership)             | Empty Docker Volume Copy-Up Overrides Ownership           |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
+| [LESSON-007](#lesson-007-github-rejects-empty-asset-bootstrap-trees)                  | GitHub Rejects Empty Asset Bootstrap Trees                |      1      |   **open**    | `.github/workflows/scripts/publish-preview.mjs`, `tests/ui-preview-pipeline.test.ts` |
+| [LESSON-008](#lesson-008-dynamic-preview-boundary-discrepancies-and-marker-injection) | Dynamic Preview Boundary Discrepancies & Marker Injection |      1      |   **open**    | `.github/workflows/scripts/plan-schema.mjs`, `tests/dynamic-preview-plan.test.ts`    |
 
 ---
 
@@ -222,4 +223,33 @@ The absent assets branch bootstrap submitted `{ tree: [] }` to the Git Trees API
 #### Prevention & Escalation
 
 - Initialize the orphan branch with a valid tree containing its generated-assets README. Retain `parents: []` and the existing create-ref race handling.
-- The first-publication regression rejects empty tree requests and checks the orphan commit references the initialized tree.
+
+---
+
+### LESSON-008: Dynamic Preview Boundary Discrepancies and Marker Injection
+
+- **ID**: `LESSON-008`
+- **Category**: `ci`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: `.github/workflows/scripts/plan-schema.mjs`, `tests/dynamic-preview-plan.test.ts`
+
+#### Symptom
+
+Dynamic preview runs produced unexpected failures across 7 defect clusters: unescaped marker literals in model summaries duplicated PR body delimiters and broke subsequent updates with `PrBodyMarkerError`; synthetic SVG tags (`g.actor.actor-box` instead of `rect.actor`/`text.actor`) caused locateElement failures; phantom failure shots registered without successful disk writes triggered `ERR_MISSING_FILE`; `ui_change=false` with non-empty scenes passed plan schema but failed directory validation with `ERR_SCENE_COUNT`; environment startup failures did not write diagnostic manifests; and over-budget plans reordered steps destructively.
+
+#### Root Cause
+
+Contract drift between untrusted model planning and downstream validator expectations. Specifically, SVG outline generation assumed `g` container tags for all child nodes, schema validation permitted contradictory `ui_change=false` scenes and unreserved failure shot names, execution error handlers unconditionally registered screenshot artifacts without verifying filesystem persistence, and PR body markdown interpolation lacked escaping for table pipes, brackets, and demarcated boundary markers. Furthermore, model evaluations confirmed CommandCode Jev (`typesafe/jev200`) provides typed decision probabilities rather than text/selector generation, reaffirming that deepseek-v4.1-flash remains the appropriate dynamic planner default while strict boundary validation must reject malformed inputs.
+
+#### Evidence
+
+- 2026-10-11 — Independent PR Review, Security, and Architecture audits on PR #132 (freeze head `dbda425`, worktree `feat/taco-62-dynamic-preview`); repro of duplicate markers via `updatePrBodyWithBlock`, phantom screenshot failure under browser abort, and `g.actor.actor-box` locator mismatch.
+
+#### Prevention & Escalation
+
+- Enforce exact SVG tag and class preservation in `dom-outline.mjs`.
+- Strictly reserve failure shot names (`failure`, `failure-state`, `error`) and enforce 48-char scene IDs and 128-char generated filenames in `plan-schema.mjs`.
+- Ensure `ui_change: false` canonically requires `scenes: []` across plan schema, execution, and PNG validation.
+- Guarantee execution startup failures write valid diagnostic manifests, and register failure screenshots only when disk writes succeed.
+- Sanitize dynamic text before markdown table/alt interpolation and validate the final PR body retains exactly one marker pair.

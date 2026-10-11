@@ -221,7 +221,69 @@ describe('UI Preview: pull request body markers', () => {
     ).toThrow(PrBodyMarkerError)
     expect(validateMarkers('plain body').hasBlock).toBe(false)
   })
+  it('escapes marker literals in dynamic summary and preserves exactly one marker pair across repeated updates', () => {
+    const initialBody = 'Intro text before preview.\n'
+    const maliciousSummary =
+      'Summary with <!-- taco:ui-preview:end --> injection and <!-- taco:ui-preview:start --> repeat'
+    const firstBlock = `**Summary:** ${maliciousSummary}`
 
+    const updatedFirst = updatePrBodyWithBlock(initialBody, firstBlock)
+    expect(updatedFirst).toContain('Intro text before preview.')
+    expect(updatedFirst.match(/<!-- taco:ui-preview:start -->/g)).toHaveLength(1)
+    expect(updatedFirst.match(/<!-- taco:ui-preview:end -->/g)).toHaveLength(1)
+
+    // Subsequent update must not throw PrBodyMarkerError
+    const secondBlock = '**Summary:** Second clean update'
+    const updatedSecond = updatePrBodyWithBlock(updatedFirst, secondBlock)
+    expect(updatedSecond).toContain('Intro text before preview.')
+    expect(updatedSecond).toContain('Second clean update')
+    expect(updatedSecond.match(/<!-- taco:ui-preview:start -->/g)).toHaveLength(1)
+    expect(updatedSecond.match(/<!-- taco:ui-preview:end -->/g)).toHaveLength(1)
+  })
+
+  it('sanitizes markdown table pipes and alt text brackets in dynamic manifest render', () => {
+    const rendered = generatePreviewBlockMarkdown({
+      headSha: HEAD_SHA,
+      prNumber: 119,
+      repo: REPO,
+      assetCommitSha: ASSETS_SHA,
+      manifest: {
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'passed',
+        summary: 'Mermaid | Pipe and [Bracket] in summary',
+        scenes: [
+          {
+            id: 'pipe-scene',
+            title: 'Scene with | Pipe and \n Newline',
+            status: 'passed',
+            steps: [],
+            screenshots: [
+              {
+                filename: 'pipe-scene-shot.png',
+                name: 'shot',
+                caption: 'Caption with | pipe and [bracket] and \n newline',
+                status: 'passed',
+              },
+            ],
+          },
+        ],
+      },
+    })
+
+    // Parse table row structure: verify exactly 4 columns per row
+    const lines = rendered.split('\n')
+    const tableRows = lines.filter((line) => line.startsWith('|') && !line.includes(':---'))
+    expect(tableRows.length).toBeGreaterThan(1)
+    for (const row of tableRows) {
+      // Splitting by unescaped pipe (?<!\\)\| must produce exactly 6 parts (| col1 | col2 | col3 | col4 |)
+      const cells = row.split(/(?<!\\)\|/).slice(1, -1)
+      expect(cells.length).toBe(4)
+    }
+    expect(rendered).toContain('Scene with \\| Pipe and   Newline')
+    expect(rendered).toContain('Caption with \\| pipe and \\[bracket\\] and   newline')
+    expect(rendered).toContain('[![Caption with \\| pipe and \\[bracket\\] and   newline]')
+  })
   it('renders all four raw links at the full head sha', () => {
     const markdown = generatePreviewBlockMarkdown({
       headSha: HEAD_SHA,
@@ -712,5 +774,180 @@ describe('UI Preview: publisher', () => {
       }),
     )
     expect(() => validateDirectory(dir, { plan: trustedPlan })).toThrow(/unauthorized shot/)
+  })
+
+  it('cross-validates passed shot filenames against trusted plan shots', () => {
+    const dir = makeTempDir('dynamic-passed-identity-')
+    const expectedShot = 'scene-b-step1.png'
+    writeFileSync(join(dir, expectedShot), cleanPng(1280, 800))
+
+    const trustedPlan = {
+      version: 1,
+      source: 'deepseek-planner',
+      ui_change: true,
+      summary: 'Test passed identity',
+      scenes: [
+        {
+          id: 'scene-b',
+          title: 'Scene B',
+          steps: [{ do: 'shot', name: 'step1' }],
+        },
+      ],
+    }
+
+    // Valid manifest matching trusted plan
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'passed',
+        summary: 'Passed cleanly',
+        scenes: [
+          {
+            id: 'scene-b',
+            title: 'Scene B',
+            status: 'passed',
+            screenshots: [
+              { filename: expectedShot, name: 'step1', caption: 'Step 1', status: 'passed' },
+            ],
+          },
+        ],
+      }),
+    )
+
+    expect(validateDirectory(dir, { plan: trustedPlan }).valid).toBe(true)
+
+    // Reject mismatching filename even if shot count matches
+    const wrongShot = 'scene-b-unrelated.png'
+    writeFileSync(join(dir, wrongShot), cleanPng(1280, 800))
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'passed',
+        summary: 'Passed cleanly',
+        scenes: [
+          {
+            id: 'scene-b',
+            title: 'Scene B',
+            status: 'passed',
+            screenshots: [
+              { filename: wrongShot, name: 'step1', caption: 'Step 1', status: 'passed' },
+            ],
+          },
+        ],
+      }),
+    )
+    expect(() => validateDirectory(dir, { plan: trustedPlan })).toThrow(/filename mismatch/)
+  })
+
+  it('rejects manifest status contradictions between scenes and overall status', () => {
+    const dir = makeTempDir('dynamic-status-contradiction-')
+    const shot = 'scene-c-one.png'
+    writeFileSync(join(dir, shot), cleanPng(1280, 800))
+
+    const trustedPlan = {
+      version: 1,
+      source: 'deepseek-planner',
+      ui_change: true,
+      summary: 'Status check',
+      scenes: [
+        {
+          id: 'scene-c',
+          title: 'Scene C',
+          steps: [{ do: 'shot', name: 'one' }],
+        },
+      ],
+    }
+
+    // Overall passed but scene failed
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'passed',
+        summary: 'Contradictory manifest',
+        scenes: [
+          {
+            id: 'scene-c',
+            title: 'Scene C',
+            status: 'failed',
+            screenshots: [],
+          },
+        ],
+      }),
+    )
+    expect(() => validateDirectory(dir, { plan: trustedPlan })).toThrow(/contains failed scenes/)
+  })
+
+  it('validates canonical unavailable manifest when ui_change=false', () => {
+    const dir = makeTempDir('dynamic-unavailable-')
+    const trustedPlan = {
+      version: 1,
+      source: 'deepseek-planner',
+      ui_change: false,
+      summary: 'No UI change',
+      scenes: [],
+    }
+
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'unavailable',
+        summary: 'No UI change',
+        scenes: [],
+      }),
+    )
+
+    const res = validateDirectory(dir, { plan: trustedPlan })
+    expect(res.valid).toBe(true)
+    expect(res.views).toHaveLength(0)
+  })
+
+  it('validates failed scenes without screenshots when execution error occurred', () => {
+    const dir = makeTempDir('dynamic-failed-no-screenshot-')
+    const trustedPlan = {
+      version: 1,
+      source: 'deepseek-planner',
+      ui_change: true,
+      summary: 'Startup fail test',
+      scenes: [
+        {
+          id: 'scene-d',
+          title: 'Scene D',
+          steps: [{ do: 'shot', name: 'init' }],
+        },
+      ],
+    }
+
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'failed',
+        summary: 'Startup failure',
+        scenes: [
+          {
+            id: 'scene-d',
+            title: 'Scene D',
+            status: 'failed',
+            error: 'Browser crashed before screenshot',
+            steps: [],
+            screenshots: [],
+          },
+        ],
+        errors: ['Browser crashed before screenshot'],
+      }),
+    )
+
+    const res = validateDirectory(dir, { plan: trustedPlan })
+    expect(res.valid).toBe(true)
+    expect(res.views).toHaveLength(0)
   })
 })

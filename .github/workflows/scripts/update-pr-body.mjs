@@ -19,6 +19,47 @@ export const MARKER_END = '<!-- taco:ui-preview:end -->'
 
 const TARGET_LABELS = Object.freeze({ taco: 'Complete Taco', host: 'Host / Demo' })
 
+/**
+ * Escapes text for general Markdown rendering and disarms reserved HTML markers.
+ */
+export function sanitizeMarkdownText(text) {
+  if (!text) return ''
+  return String(text)
+    .replace(/<!--\s*taco:ui-preview:start\s*-->/gi, '&lt;!-- taco:ui-preview:start --&gt;')
+    .replace(/<!--\s*taco:ui-preview:end\s*-->/gi, '&lt;!-- taco:ui-preview:end --&gt;')
+}
+
+/**
+ * Escapes text for placement inside a Markdown table cell:
+ * Replaces pipe '|' with '\|' and replaces newlines with spaces.
+ */
+export function sanitizeTableCell(text) {
+  if (!text) return ''
+  const disarmed = sanitizeMarkdownText(text)
+  return disarmed
+    .replace(/\r?\n+/g, ' ')
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    .trim()
+}
+
+/**
+ * Escapes text for placement inside a Markdown image alt attribute:
+ * Replaces square brackets '[' and ']' and replaces newlines with spaces.
+ */
+export function sanitizeImageAlt(text) {
+  if (!text) return ''
+  const disarmed = sanitizeMarkdownText(text)
+  return disarmed
+    .replace(/\r?\n+/g, ' ')
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    .trim()
+}
 export class PrBodyMarkerError extends Error {
   constructor(message) {
     super(message)
@@ -54,17 +95,27 @@ export function validateMarkers(body) {
 
 export function updatePrBodyWithBlock(currentBody, blockContent) {
   const safeBody = currentBody ?? ''
-  const fullBlock = `${MARKER_START}\n${blockContent.trim()}\n${MARKER_END}`
+  const sanitizedBlock = sanitizeMarkdownText(blockContent.trim())
+  const fullBlock = `${MARKER_START}\n${sanitizedBlock}\n${MARKER_END}`
 
   const markers = validateMarkers(safeBody)
+  let nextBody
   if (!markers.hasBlock) {
-    if (!safeBody) return fullBlock
-    return `${safeBody}\n\n${fullBlock}\n`
+    if (!safeBody) nextBody = fullBlock
+    else nextBody = `${safeBody}\n\n${fullBlock}\n`
+  } else {
+    const before = safeBody.slice(0, markers.startIndex)
+    const after = safeBody.slice(markers.endIndex)
+    nextBody = `${before}${fullBlock}${after}`
   }
 
-  const before = safeBody.slice(0, markers.startIndex)
-  const after = safeBody.slice(markers.endIndex)
-  return `${before}${fullBlock}${after}`
+  // Invariant check: The resulting body MUST have exactly one valid marker pair!
+  const resultValidation = validateMarkers(nextBody)
+  if (!resultValidation.hasBlock) {
+    throw new PrBodyMarkerError('Final body does not contain a valid marker pair')
+  }
+
+  return nextBody
 }
 
 /**
@@ -88,20 +139,20 @@ export function generatePreviewBlockMarkdown({
   if (manifest) {
     const statusEmoji =
       manifest.status === 'passed' ? '✅' : manifest.status === 'failed' ? '❌' : 'ℹ️'
-    markdown += `**Status:** ${statusEmoji} ${manifest.status.toUpperCase()} (${manifest.planSource})\n`
-    markdown += `**Summary:** ${manifest.summary}\n\n`
+    markdown += `**Status:** ${statusEmoji} ${manifest.status.toUpperCase()} (${sanitizeMarkdownText(manifest.planSource)})\n`
+    markdown += `**Summary:** ${sanitizeMarkdownText(manifest.summary)}\n\n`
 
     if (manifest.mismatch) {
-      markdown += `> ⚠️ **Mismatch:** ${manifest.mismatch}\n\n`
+      markdown += `> ⚠️ **Mismatch:** ${sanitizeMarkdownText(manifest.mismatch)}\n\n`
     }
     if (manifest.unseen) {
-      markdown += `> ℹ️ **Unseen:** ${manifest.unseen}\n\n`
+      markdown += `> ℹ️ **Unseen:** ${sanitizeMarkdownText(manifest.unseen)}\n\n`
     }
 
     if (manifest.errors && manifest.errors.length > 0) {
       markdown += `> ❌ **Errors:**\n`
       for (const err of manifest.errors) {
-        markdown += `> - ${err}\n`
+        markdown += `> - ${sanitizeMarkdownText(err)}\n`
       }
       markdown += '\n'
     }
@@ -116,8 +167,11 @@ export function generatePreviewBlockMarkdown({
           const assetPath = `previews/pr-${prNumber}/${shot.filename.replace(/\.png$/, '')}-${headSha}.png`
           const url = `${baseUrl}/${assetPath}`
           const shotStatus = shot.status === 'passed' ? 'Passed' : 'Failed'
-          const imgCell = `[![${shot.caption || shot.name}](${url})](${url})`
-          markdown += `| **${scene.title}** | ${shotStatus} | ${shot.caption || '-'} | ${imgCell} |\n`
+          const altText = sanitizeImageAlt(shot.caption || shot.name || 'preview')
+          const imgCell = `[![${altText}](${url})](${url})`
+          const sceneTitle = sanitizeTableCell(scene.title)
+          const shotCaption = sanitizeTableCell(shot.caption || '-')
+          markdown += `| **${sceneTitle}** | ${shotStatus} | ${shotCaption} | ${imgCell} |\n`
         }
       }
       markdown += '\n'

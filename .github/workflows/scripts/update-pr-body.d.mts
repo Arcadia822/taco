@@ -15,10 +15,14 @@ export interface PreviewBlockInput {
   runId?: string | null
   /** ISO timestamp; injected so tests can pin the rendered output. */
   timestamp?: string | null
+  manifest?: any
 }
 
 export declare const MARKER_START: string
 export declare const MARKER_END: string
+export declare function sanitizeMarkdownText(text: string | null | undefined): string
+export declare function sanitizeTableCell(text: string | null | undefined): string
+export declare function sanitizeImageAlt(text: string | null | undefined): string
 
 export declare class PrBodyMarkerError extends Error {}
 
