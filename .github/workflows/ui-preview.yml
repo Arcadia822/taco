@@ -199,9 +199,26 @@ jobs:
           echo "::stop-commands::$STOP_TOKEN"
 
           set +e
+          docker run -d \
+            --name taco-preview-app-server-collect \
+            --network none \
+            --user "1000:1000" \
+            --security-opt "no-new-privileges:true" \
+            --cap-drop ALL \
+            --pids-limit 256 \
+            --memory "2g" \
+            --cpus "1" \
+            --env HOME=/home/pwuser \
+            --env NEXT_TELEMETRY_DISABLED=1 \
+            --mount type=volume,src=taco-preview-app,dst=/app,volume-nocopy,readonly \
+            --workdir /app \
+            mcr.microsoft.com/playwright:v1.56.1-noble \
+            npm run --prefix packages/host start -- --hostname 127.0.0.1 --port 4174
+
+          set +e
           docker run --rm \
             --name taco-preview-outlines \
-            --network none \
+            --network container:taco-preview-app-server-collect \
             --user "1000:1000" \
             --security-opt "no-new-privileges:true" \
             --cap-drop ALL \
@@ -210,15 +227,12 @@ jobs:
             --cpus "2" \
             --env HOME=/home/pwuser \
             --env NEXT_TELEMETRY_DISABLED=1 \
-            --mount type=volume,src=taco-preview-app,dst=/app,volume-nocopy \
+            --mount type=volume,src=taco-preview-app,dst=/app,volume-nocopy,readonly \
             --volume "/tmp/outlines-out:/outlines" \
             --volume "/tmp/trusted-tools:/trusted-tools:ro" \
             --workdir /app \
             mcr.microsoft.com/playwright:v1.56.1-noble bash -c '
               set -euo pipefail
-              useradd -u 1001 appserver 2>/dev/null || true
-              su -s /bin/bash appserver -c "npm run --prefix packages/host start -- --hostname 127.0.0.1 --port 4174" &
-              HOST_PID=$!
               TACO_FILE="demo-spec/demo-spec.taco.html"
               node /trusted-tools/collect-outlines.mjs \
                 --taco-file "$TACO_FILE" \
@@ -228,6 +242,10 @@ jobs:
                 --timeout 45000
             ' > /tmp/outlines.log 2>&1
           status=$?
+          set -e
+
+          docker stop -t 2 taco-preview-app-server-collect 2>/dev/null || true
+          docker rm -f taco-preview-app-server-collect 2>/dev/null || true
           set -e
 
           cat /tmp/outlines.log || true
@@ -397,9 +415,26 @@ jobs:
           echo "::stop-commands::$STOP_TOKEN"
 
           set +e
+          docker run -d \
+            --name taco-preview-app-server-capture \
+            --network none \
+            --user "1000:1000" \
+            --security-opt "no-new-privileges:true" \
+            --cap-drop ALL \
+            --pids-limit 256 \
+            --memory "2g" \
+            --cpus "1" \
+            --env HOME=/home/pwuser \
+            --env NEXT_TELEMETRY_DISABLED=1 \
+            --mount type=volume,src=taco-preview-app,dst=/app,volume-nocopy,readonly \
+            --workdir /app \
+            mcr.microsoft.com/playwright:v1.56.1-noble \
+            npm run --prefix packages/host start -- --hostname 127.0.0.1 --port 4174
+
+          set +e
           docker run --rm \
             --name taco-preview-capture \
-            --network none \
+            --network container:taco-preview-app-server-capture \
             --user "1000:1000" \
             --security-opt "no-new-privileges:true" \
             --cap-drop ALL \
@@ -408,16 +443,13 @@ jobs:
             --cpus "2" \
             --env HOME=/home/pwuser \
             --env NEXT_TELEMETRY_DISABLED=1 \
-            --mount type=volume,src=taco-preview-app,dst=/app,volume-nocopy \
+            --mount type=volume,src=taco-preview-app,dst=/app,volume-nocopy,readonly \
             --volume "/tmp/sandbox-out:/out" \
             --volume "/tmp/trusted-tools:/trusted-tools:ro" \
             --volume "/tmp/plan:/plan:ro" \
             --workdir /app \
             mcr.microsoft.com/playwright:v1.56.1-noble bash -c '
               set -euo pipefail
-              useradd -u 1001 appserver 2>/dev/null || true
-              su -s /bin/bash appserver -c "npm run --prefix packages/host start -- --hostname 127.0.0.1 --port 4174" &
-              HOST_PID=$!
               TACO_FILE="demo-spec/demo-spec.taco.html"
               node /trusted-tools/execute-preview.mjs \
                 --plan-file /plan/preview-plan.json \
@@ -428,6 +460,10 @@ jobs:
                 --timeout 45000
             ' > /tmp/capture.log 2>&1
           status=$?
+          set -e
+
+          docker stop -t 2 taco-preview-app-server-capture 2>/dev/null || true
+          docker rm -f taco-preview-app-server-capture 2>/dev/null || true
           set -e
 
           cat /tmp/capture.log || true
