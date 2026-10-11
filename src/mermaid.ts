@@ -389,6 +389,18 @@ const bindSvgNodeInteractions = (
     if ((event.target as Element).closest('.interactive-mermaid-node, .interactive-mermaid-edge, .mermaid-edge-hit-area')) event.preventDefault()
   })
   const nodeElements = Array.from(svgRoot.querySelectorAll<SVGGElement>('.node, .classGroup, g.node'))
+  for (const actorEl of svgRoot.querySelectorAll<SVGElement>('.actor-top, .actor-bottom')) {
+    const container = (actorEl.tagName.toLowerCase() === 'g' ? actorEl : actorEl.parentElement) as SVGGElement | null
+    if (container && !nodeElements.includes(container)) nodeElements.push(container)
+  }
+  const isNeoTheme = /^(?:neo|neo-dark)$/.test(host.dataset.mermaidTheme ?? '')
+  const neoGradientId = `${svgRoot.id}-gradient`
+  if (isNeoTheme && !svgRoot.querySelector(`#${neoGradientId}`)) {
+    const start = typeof themeVariables?.gradientStart === 'string' ? themeVariables.gradientStart : '#0042eb'
+    const stop = typeof themeVariables?.gradientStop === 'string' ? themeVariables.gradientStop : '#eb0042'
+    const defs = svgRoot.querySelector('defs') ?? svgRoot.insertBefore(document.createElementNS('http://www.w3.org/2000/svg', 'defs'), svgRoot.firstChild)
+    defs.insertAdjacentHTML('beforeend', `<linearGradient id="${neoGradientId}" gradientUnits="objectBoundingBox" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="${start}" stop-opacity="1"/><stop offset="100%" stop-color="${stop}" stop-opacity="1"/></linearGradient>`)
+  }
   const borders = themeVariables?.borderColorArray
   const backgrounds = themeVariables?.bkgColorArray
   const colorTheme = /^(?:redux-color|redux-dark-color)$/.test(host.dataset.mermaidTheme ?? '')
@@ -407,6 +419,11 @@ const bindSvgNodeInteractions = (
             : `color-mix(in srgb, ${border.trim()} 18%, ${typeof themeVariables?.background === 'string' ? themeVariables.background : '#111113'})`
         })
       }
+    } else if (isNeoTheme && nodeEl.querySelector('.actor')) {
+      nodeEl.querySelectorAll<SVGElement>('rect.actor, circle, path').forEach((shape) => {
+        shape.style.stroke = `url(#${neoGradientId})`
+        shape.style.strokeWidth = '2px'
+      })
     }
     const shape = nodeEl.querySelector<SVGElement>('rect, polygon, circle, ellipse, path')
     if (shape) {
@@ -414,7 +431,8 @@ const bindSvgNodeInteractions = (
       if (color && color !== 'none') nodeEl.style.setProperty('--mermaid-node-color', color)
     }
     const rawId = nodeEl.id.replace(/^taco-mermaid-\d+-/, '')
-    const candidate = rawId.match(/^(?:flowchart|classId|state)-(.+)-\d+$/)?.[1] ?? rawId
+    const candidate = rawId.match(/^(?:flowchart|classId|state)-(.+)-\d+$/)?.[1]
+      ?? (nodeEl.getAttribute('data-id') || nodeEl.querySelector('rect.actor')?.getAttribute('name') || (rawId.startsWith('root-') ? undefined : rawId))
     const matchedId = candidate || undefined
 
     if (matchedId) {
