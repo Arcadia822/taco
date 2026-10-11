@@ -11,7 +11,7 @@ input: |-
 
 ## 1. Background & Goals
 
-When contributors or automated agents submit pull requests touching Taco specifications (`specs/**`), the web host application (`packages/host/**`), or explicitly ask for visual verification via the `ui-preview` label, reviewers need immediate visual evidence of how changes affect both the standalone Taco experience and the hosted environment across desktop and mobile form factors.
+When contributors or automated agents submit pull requests touching Taco specifications (`specs/**`), the web host application (`packages/host/**`), or explicitly ask for visual verification via the `ui-preview` label, reviewers need immediate visual evidence of how changes affect both the standalone Taco experience and the hosted environment on the standard 1280x800 desktop viewport.
 
 Existing CI (`.github/workflows/ci.yml`) validates formatting, tests, and shell synchronization, but does not render or snapshot UI artifacts. Running browser automation and preview rendering on pull requests requires stringent security boundaries: PR branches from public forks may contain untrusted code. Direct execution of untrusted fork code in a privileged `pull_request_target` runner risks leaking repository tokens (`GITHUB_TOKEN` with write permissions) or Actions environment credentials.
 
@@ -94,9 +94,7 @@ The capture pipeline never accepts view definitions from pull request code. `.gi
 | View ID        | Filename           | Target               | Viewport   | Purpose                                           |
 | :------------- | :----------------- | :------------------- | :--------- | :------------------------------------------------ |
 | `taco-desktop` | `taco-desktop.png` | Complete Taco bundle | 1280 x 800 | Desktop reader, navigation, and sidebar rendering |
-| `taco-mobile`  | `taco-mobile.png`  | Complete Taco bundle | 375 x 812  | Narrow responsive layout and touch targets        |
 | `host-desktop` | `host-desktop.png` | Host application     | 1280 x 800 | Hosted document loading, header, and toolbar      |
-| `host-mobile`  | `host-mobile.png`  | Host application     | 375 x 812  | Hosted narrow layout and touch targets            |
 
 ### 3.3 Container Isolation
 
@@ -125,10 +123,10 @@ The publisher replaces only the region between the markers:
 
 ### 🌮 UI Preview (commit `{short_sha}`)
 
-| Surface       |            Desktop (1280x800)             |            Mobile (375x812)             |
-| :------------ | :---------------------------------------: | :-------------------------------------: |
-| Complete Taco | ![{taco_desktop}]({raw_url_taco_desktop}) | ![{taco_mobile}]({raw_url_taco_mobile}) |
-| Host / Demo   | ![{host_desktop}]({raw_url_host_desktop}) | ![{host_mobile}]({raw_url_host_mobile}) |
+| Surface       |            Desktop (1280x800)             |
+| :------------ | :---------------------------------------: |
+| Complete Taco | ![{taco_desktop}]({raw_url_taco_desktop}) |
+| Host / Demo   | ![{host_desktop}]({raw_url_host_desktop}) |
 
 _Updated at {iso_timestamp} for commit `{short_sha}`. Actions run [{run_id}](https://github.com/{repo}/actions/runs/{run_id})_
 <!-- taco:ui-preview:end -->
@@ -240,3 +238,133 @@ The next probe [38044453203](https://github.com/Arcadia822/taco/actions/runs/380
 The third probe [38044557106](https://github.com/Arcadia822/taco/actions/runs/38044557106) completed all Docker build, capture, sanitization, validation, and screenshot upload steps. First publication then failed because GitHub rejects `{ tree: [] }` with 422 `Invalid tree info`. The assets bootstrap now creates a README tree with `parents: []`; estimate +250 bytes of CI publisher source / measured +240 bytes (8,433 -> 8,673; -10 bytes due to formatting), with 0 bytes added to product/skill/release payloads. A first-publication regression models the API's empty-tree rejection. Product build and Chromium smoke passed after this change. A separate existing local update-check test failed to report its temporary CLI version; the previous complete local suite and remote CI passed, and this environment failure is being investigated separately.
 
 Final live probe [38044802162](https://github.com/Arcadia822/taco/actions/runs/38044802162) passed detect, isolated Docker build/capture, PNG sanitization/validation/upload, and GitHub publication. PR #127 received four immutable image links from assets commit `066ebb456f00dd0fba182bbde6fdf03d5a553173`; all four URLs returned PNGs at the registered dimensions, totaling 291,231 bytes. Desktop Taco and mobile Host images were visually inspected. This proves the repaired jobs through a same-repository disposable `pull_request` entry; the production `pull_request_target` event still requires the fix to reach main.
+
+### 9.2 Dynamic Desktop UI Preview with Isolated Planner and Execution (TACO-68, TACO-62)
+
+Transformation of fixed UI preview into dynamic PR-diff and DOM-outline-driven desktop preview.
+
+#### Budget Estimation (Prepare)
+
+- **Added npm runtime dependencies**: 0
+- **Added npm dev dependencies**: 0
+- **Workflow additions**: Independent planner job with isolated `PREVIEW_API_KEY` (compatible with `DEEPSEEK_API_KEY`), configurable `PREVIEW_API_BASE_URL` and `PREVIEW_MODEL`, zero-credential network-none capture executor, estimated workflow increase ~3,000 bytes.
+- **Product byte growth**: Complete shell: 0 bytes; Lite shell: 0 bytes; skill directory: 0 bytes; release package: 0 bytes.
+- **Network behavior**: Outbound network strictly confined to `plan` stage via configured OpenAI-compatible chat completions API (defaulting to DeepSeek or user-configured Command Code router `https://api.commandcode.ai/provider/v1`) and GitHub diff/blob/tree/ref APIs in `publish`. Capture and outline extraction containers are `--network none`.
+
+#### Actual Measurements (Develop)
+
+- **Complete shell** (`dist-single/Taco_Spec.taco.html`): 2,846,082 bytes (Delta: 0 bytes, deviation: 0)
+- **Lite shell** (`dist-single/Taco_Spec_Lite.taco.html`): 296,789 bytes (Delta: 0 bytes, deviation: 0)
+- **Skill complete shell** (`skills/taco/taco-shell.html`): 2,737,618 bytes (Delta: 0 bytes, deviation: 0)
+- **Skill lite shell** (`skills/taco/taco-shell-lite.html`): 188,325 bytes (Delta: 0 bytes, deviation: 0)
+- **Skill directory** (`skills/taco/`): 14,091,559 bytes (Delta: 0 bytes, deviation: 0)
+- **Workflow** (`.github/workflows/ui-preview.yml`): 16,423 bytes (Estimated ~15,900 bytes, deviation +523 bytes due to 5-job security segmentation)
+- **Unit & regression tests**: 653 tests across 57 files passing cleanly (`npm test`).
+
+#### Trust Boundary & Failure Hardening
+
+1. **Playwright resolution**: Resolves via `createRequire.resolve` entry to prevent Node ESM `ERR_UNSUPPORTED_DIR_IMPORT`.
+2. **Isolated planner job**: `plan` job runs independently from PR code runners; `PREVIEW_API_KEY` (or legacy `DEEPSEEK_API_KEY`) is never mounted or accessible in untrusted build/capture containers.
+3. **Strict schema enforcement**: `validatePreviewPlan` enforces action operands (`click.target`, `scroll.to`, `open-file.path`, bounded `wait.ms` 50-10000ms), and forbids empty shot lists.
+4. **No fake fallback**: Missing keys, planner errors, or step execution errors explicitly produce `unavailable` or `failed` statuses without injecting fake homepage screenshots.
+
+### 9.3 Review Defect Remediation & Model Routing Evaluation (TACO-68, PR #132)
+
+Following independent review findings across correctness, security, and architecture, 7 defect groups were systematically remediated:
+
+1. **DOM Outline Tag and Class Fidelity**: Replaced synthetic `g` wrapping in SVG traversal with actual element tag names (`rect.actor`, `text.actor`) and true DOM class lists. Disarmed fictional `g.actor.actor-box` references in favor of verified `rect.actor` and `text.actor` targets.
+2. **Failure Screenshot Namespace and Disk Verification**: Reserved failure-related shot names (`failure`, `failure-state`) and enforced global reservation of all-scene failure filenames (`<scene-id>-failure.png`) against normal shot filenames in `plan-schema.mjs` to eliminate collisions with planned shots. Hardened `execute-preview.mjs` to register screenshot entries only when image files are successfully written to disk, ensuring failure manifests remain valid and publishable even when screenshots fail.
+3. **Execution Environment Startup Resilience**: Enclosed environment readiness checks and Playwright launches in diagnostic error handlers that output structured failed manifests. Evaluated target requirements so taco-only plans do not block on host server readiness.
+4. **Cross-Field Manifest Validation**: Enforced strict status enums (`passed`, `failed`, `unavailable`), validated shot filenames and duplicates against trusted plan expectations, and rejected contradictory states (such as failed scenes under an overall passed manifest).
+5. **Canonical No-UI-Change Representation**: Aligned plan schema, execution, and validation so `ui_change: false` canonically requires `scenes: []`, eliminating `ERR_SCENE_COUNT` validation failures.
+6. **Strict Budget Rejection Without Step Reordering**: Over-budget plans exceeding 12 steps or 3 scenes are strictly rejected as unavailable rather than reordering steps, preserving chronological interaction-caption alignment.
+7. **Markdown Delimiter and Table Sanitization**: Disarmed boundary marker literals (`<!-- taco:ui-preview:start/end -->`) in dynamic summaries and captions, and escaped table pipes (`|`) and alt brackets (`[]`) in table cells and image alts, guaranteeing that updated PR bodies maintain exactly one valid marker pair without splitting table columns.
+
+#### Budget Estimation (Prepare) vs Actual Measurements (Develop)
+
+Artifact comparisons below use the repository's declared 2026-10-09 product baseline. The tracked skill shells are byte-identical to commit `907dd8b`; their reported growth predates this repair. This repair changes CI tooling and documentation, not the product runtime. Release archives were not packaged in this verification.
+
+| Artifact                                                   | Estimated increase | Measured increase vs declared baseline |  Final bytes | Attribution                                                                             |
+| :--------------------------------------------------------- | -----------------: | -------------------------------------: | -----------: | :-------------------------------------------------------------------------------------- |
+| Complete product (`dist-single/Taco_Spec.taco.html`)       |                  0 |                                   +568 |    2,846,650 | Existing product baseline drift; not caused by this repair                              |
+| Lite product (`dist-single/Taco_Spec_Lite.taco.html`)      |                  0 |                                   +522 |      297,311 | Existing product baseline drift; not caused by this repair                              |
+| Skill Complete shell (`skills/taco/taco-shell.html`)       |                  0 |                                   +568 |    2,738,186 | 0 bytes versus `907dd8b`                                                                |
+| Skill Lite shell (`skills/taco/taco-shell-lite.html`)      |                  0 |                                   +522 |      188,847 | 0 bytes versus `907dd8b`                                                                |
+| Skill directory (`skills/taco/`)                           |                  0 |                                 +3,361 |   14,094,920 | Comparison to earlier recorded directory size; not attributed to this repair            |
+| Release package                                            |                  0 |                           Not measured | Not packaged | No dependency or packaging inputs changed                                               |
+| CI scripts and declarations (`.github/workflows/scripts/`) |                  0 |                   +11,768 vs `907dd8b` |      120,172 | Estimate omitted CI source growth; declarations and validation account for the increase |
+| Added npm runtime dependencies                             |                  0 |                                      0 |            0 | Zero added runtime dependencies                                                         |
+| Added network requests in build / capture                  |                  0 |                                      0 |            0 | Zero network requests; capture containers remain `--network none`                       |
+
+#### Model Routing Evaluation: CommandCode Jev & Live Verification
+
+Evaluation of CommandCode's `typesafe/jev` (`https://commandcode.ai/models/jev`) confirmed that Jev is a specialized fast classification model providing decision probabilities rather than generative text, selectors, or action sequences. While effective for category routing, it cannot generate dynamic UI interaction plans or Mermaid DOM navigation sequences. Accordingly, the pipeline retains `deepseek/deepseek-v4.1-flash` via the CommandCode OpenAI-compatible proxy (`https://api.commandcode.ai/provider/v1`) as the default dynamic planner, protected by the strict schema and validation boundaries detailed above.
+
+In live execution of the model plan against the real TACO-67 change, 2 scenes passed (flowchart node selection and sequence diagram actor toolbar activation with verified screenshots) and 1 scene failed (`g.node[data-id="Bob"]` not found). Local sanitization, validation, and report rendering retained the failed diagnosis and failure screenshot. These images were not published to GitHub. The neo-gradient style remains unverified; the model reported it as `unseen`.
+
+#### Verified Failure Resilience Paths
+
+The failure handling and boundary enforcement paths were exercised and verified against real failure conditions:
+
+1. **Playwright context launch abort (`/tmp/taco-68-context-failure`)**: When browser context creation fails, a structured failed diagnostic manifest (`status: "failed"`, 0 screenshots) is output and validated cleanly by `validate-preview-png.mjs` (`valid: true`).
+2. **Screenshot write failure (`/tmp/taco-68-screenshot-failure`)**: When screenshot operations throw or fail to write, no phantom files are registered (`screenshots: []`), disk consistency is preserved, and the diagnostic manifest validates cleanly.
+3. **Startup host unavailability for Taco-only scenes (`/tmp/taco-68-startup-after`)**: Preflight checks verify target requirements so Taco-only scenes do not block on external host servers, generating a valid passed manifest and verified screenshot (`taco-only-overview.png`).
+4. **No-UI-change / unavailable plan (`/tmp/taco-68-unavailable-final`)**: Over-budget, invalid, or no-UI-change plans are rejected cleanly with canonical `status: "unavailable"` and `scenes: []`, producing valid manifests and safe PR comments without fake fallbacks.
+5. **Pillow image sanitization and validation (`/tmp/taco-evidence/live-record-out`)**: All 4 captured screenshots (2 passed scenes + 1 graceful failure scene) were sanitized using pinned `Pillow==12.3.0` and validated across dimensions (1280x800) and byte budgets (273,833 total bytes) with 0 errors.
+
+The final remote run [38135648472](https://github.com/Arcadia822/taco/actions/runs/38135648472) failed while building Host, before screenshot capture. `next/font` raised `TypeError: Cannot read properties of null (reading '1')` in the Google font loader for `src/app/page.tsx`. This run uses the trusted main workflow and does not verify the candidate dynamic planner. The PR remains Draft; local verification is not a green remote pipeline verdict.
+
+### 9.4 Host Offline Font Migration & Build Resilience (TACO-68, PR #132)
+
+#### Background & Failure Analysis
+
+In remote run [38135648472](https://github.com/Arcadia822/taco/actions/runs/38135648472), the containerized Host build (`npm run --prefix packages/host build`) aborted during Next.js compilation of `packages/host/src/app/page.tsx`:
+
+```text
+TypeError: Cannot read properties of null (reading '1')
+    at .../node_modules/next/dist/compiled/@next/font/dist/google/loader.js:122:78
+```
+
+Inspection of `@next/font/dist/google/loader.js` revealed that the loader extracts URLs from Google Fonts `@font-face` declarations via `/src: url\((.+?)\)/` and unconditionally executes `/\.(woff|woff2|eot|ttf|otf)$/.exec(googleFontFileUrl)[1]`. In environments where Google Fonts endpoints serve dynamic subset URLs or alternative routing without a standard font file extension at the path terminus, `.exec()` returns `null`, throwing a fatal `TypeError`.
+
+To remove the external font response from the build inputs, `packages/host` was migrated from `next/font/google` to `next/font/local` using official variable WOFF2 fonts stored in `packages/host/src/app/fonts/`.
+
+#### Budget Estimation (Prepare) vs Actual Measurements (Develop)
+
+| Metric / Artifact                                           |                      Baseline Before |                         Prepare Estimate |                     Actual Measured | Deviation / Attribution                                                                             |
+| :---------------------------------------------------------- | -----------------------------------: | ---------------------------------------: | ----------------------------------: | :-------------------------------------------------------------------------------------------------- |
+| Complete product shell (`dist-single/Taco_Spec.taco.html`)  |                      2,846,650 bytes |                                  0 bytes |                     2,846,650 bytes | 0 bytes; Host font migration does not modify product shells                                         |
+| Lite product shell (`dist-single/Taco_Spec_Lite.taco.html`) |                        297,311 bytes |                                  0 bytes |                       297,311 bytes | 0 bytes; Host font migration does not modify product shells                                         |
+| Skill Complete shell (`skills/taco/taco-shell.html`)        |                      2,738,186 bytes |                                  0 bytes |                     2,738,186 bytes | 0 bytes; skill distribution untouched                                                               |
+| Skill Lite shell (`skills/taco/taco-shell-lite.html`)       |                        188,847 bytes |                                  0 bytes |                       188,847 bytes | 0 bytes; skill distribution untouched                                                               |
+| Host font assets (`packages/host/src/app/fonts/*.woff2`)    |                              0 bytes |                               ~185,000 B |                           182,740 B | -2,260 bytes; official variable full fonts (Geist 69.6K, Fira 113K)                                 |
+| Added npm runtime dependencies                              |                           0 packages |                               0 packages |                          0 packages | 0 added dependencies; uses existing `next/font/local`                                               |
+| Added npm dev dependencies                                  |                           0 packages |                               0 packages |                          0 packages | 0 added dependencies                                                                                |
+| External Google Fonts CSS build requests                    |       2 requests plus font downloads | -2 CSS requests and their font downloads |                          0 requests | Production build passed with outbound network denied; browser loaded both fonts from the local Host |
+| Host production route `/`                                   | Not compared across main integration |                       0 new dependencies | 58.1 kB route; 161 kB first-load JS | Next.js production build output; upstream main changes were also synchronized                       |
+
+#### Font Provenance & Glyph Coverage Parity
+
+1. **Geist Sans Variable (`Geist-Variable.woff2`)**:
+   - **Version & Upstream**: Vercel Geist Font `v1.7.2` (`geist-font/Geist/webfonts/Geist[wght].woff2`).
+   - **Size & Hash**: 69,652 bytes, SHA-256 `a369fcf5628ea2aa4e1b9e2ec6a5b3624e365bda588e1f0f2f12b564f728fbb8`.
+   - **Weight Axis & Subsets**: Variable `wght 100-900` (retains weights 400, 500, 600, 700). Covers complete Latin, Latin Extended, Cyrillic, Vietnamese, and general currency/punctuation.
+   - **License**: SIL Open Font License 1.1 ([`OFL-Geist.txt`](../../packages/host/src/app/fonts/OFL-Geist.txt)).
+2. **Fira Code Variable (`FiraCode-Variable.woff2`)**:
+   - **Version & Upstream**: Nikita Prokopov Fira Code `6.2` (`woff2/FiraCode-VF.woff2`).
+   - **Size & Hash**: 113,088 bytes, SHA-256 `408e876a202f15ea6ee307a70a65cf40ceb222c589a0b17e0a3a371db96dd49f`.
+   - **Weight Axis & Subsets**: Variable `wght 300-700` (retains weights 400, 500, 600, 700). Covers complete Latin, Latin Extended, Cyrillic, Greek, programming ligatures, and box/technical symbols.
+   - **License**: SIL Open Font License 1.1 ([`OFL-FiraCode.txt`](../../packages/host/src/app/fonts/OFL-FiraCode.txt)).
+3. **CSS Variable & Fallback Metrics Parity**:
+   - Injects identical `--font-geist` and `--font-fira-code` CSS custom properties, leaving `packages/host/src/app/home.css` consumers completely untouched.
+   - `next/font/local` reads font tables via Next.js's bundled `fontkit` and calculates fallback metrics for Arial to reduce layout shifts; measured CLS parity is not claimed.
+
+#### Verification of the CI Font Repair
+
+- Restored the lockfile environment with `npm ci --no-audit --no-fund` after integrating `main` (`2693d13`). The only merge conflict was `LESSONS.md`; retained both histories and assigned the dynamic-preview entry `LESSON-011` and the font incident `LESSON-012`.
+- `npm run check`: 679 tests across 59 files passed, TypeScript and all shell builds passed, and the 12 lesson entries validated.
+- `sandbox-exec -p '(version 1) (allow default) (deny network-outbound)' env NEXT_TELEMETRY_DISABLED=1 npm run --prefix packages/host build`: passed, including production prerendering, with outgoing network denied.
+- Production Host browser smoke at `http://127.0.0.1:32272`: both local variable fonts loaded at weights 400–700, no Google Fonts requests, and no browser errors. Homepage screenshot inspected.
+- `npm run test:browser`: 14 files loaded, 7 warnings, 0 errors. Complete/Lite product and skill shell bytes stayed unchanged from the repair baseline shown above.
+- New font binaries total 182,740 bytes versus the 185,000-byte estimate (-2,260 bytes). The prior local build's 12 cached font subsets totaled 186,068 bytes; that cache comparison is not a controlled production before/after measurement. The full font files are both preloaded, increasing Latin-only first-load font transfer versus the prior two Latin subsets (65,628 bytes).
+- No new npm dependencies or skill instructions. The Host README and font provenance record document the local-font contract; removed the unsupported `NEXT_FONT_GOOGLE_MOCKED` flags from both candidate workflow build jobs.

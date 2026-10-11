@@ -34,4 +34,7 @@ export declare const validateSinglePng: (
   filePath: string,
   expectedFilename: string,
 ) => ValidatedView
-export declare const validateDirectory: (dirPath: string) => DirectoryValidation
+export declare const validateDirectory: (
+  dirPath: string,
+  options?: { plan?: any },
+) => DirectoryValidation & { manifest?: any }

@@ -141,25 +141,19 @@ function installFetch(handler: FetchHandler): FetchCall[] {
 }
 
 describe('UI Preview: view registry', () => {
-  it('pins exactly the four fixed views including both mobile targets', () => {
+  it('pins exactly the desktop views (desktop-only)', () => {
     expect(FIXED_VIEWS.map((view) => view.id)).toEqual([
       'taco-desktop',
-      'taco-mobile',
       'host-desktop',
-      'host-mobile',
     ])
     expect(FIXED_VIEWS.map((view) => view.filename)).toEqual([
       'taco-desktop.png',
-      'taco-mobile.png',
       'host-desktop.png',
-      'host-mobile.png',
     ])
-    expect(FIXED_VIEWS.map((view) => view.target)).toEqual(['taco', 'taco', 'host', 'host'])
-    expect(
-      FIXED_VIEWS.filter((view) => view.viewport.isMobile).map((view) => view.viewport),
-    ).toEqual([
-      { width: 375, height: 812, isMobile: true, hasTouch: true },
-      { width: 375, height: 812, isMobile: true, hasTouch: true },
+    expect(FIXED_VIEWS.map((view) => view.target)).toEqual(['taco', 'host'])
+    expect(FIXED_VIEWS.map((view) => view.viewport)).toEqual([
+      { width: 1280, height: 800 },
+      { width: 1280, height: 800 },
     ])
   })
 
@@ -167,8 +161,8 @@ describe('UI Preview: view registry', () => {
     expect(previewAssetPath(FIXED_VIEWS[0], 119, HEAD_SHA)).toBe(
       `previews/pr-119/taco-desktop-${HEAD_SHA}.png`,
     )
-    expect(previewAssetPath(FIXED_VIEWS[3], 119, HEAD_SHA)).toBe(
-      `previews/pr-119/host-mobile-${HEAD_SHA}.png`,
+    expect(previewAssetPath(FIXED_VIEWS[1], 119, HEAD_SHA)).toBe(
+      `previews/pr-119/host-desktop-${HEAD_SHA}.png`,
     )
   })
 })
@@ -227,7 +221,69 @@ describe('UI Preview: pull request body markers', () => {
     ).toThrow(PrBodyMarkerError)
     expect(validateMarkers('plain body').hasBlock).toBe(false)
   })
+  it('escapes marker literals in dynamic summary and preserves exactly one marker pair across repeated updates', () => {
+    const initialBody = 'Intro text before preview.\n'
+    const maliciousSummary =
+      'Summary with <!-- taco:ui-preview:end --> injection and <!-- taco:ui-preview:start --> repeat'
+    const firstBlock = `**Summary:** ${maliciousSummary}`
 
+    const updatedFirst = updatePrBodyWithBlock(initialBody, firstBlock)
+    expect(updatedFirst).toContain('Intro text before preview.')
+    expect(updatedFirst.match(/<!-- taco:ui-preview:start -->/g)).toHaveLength(1)
+    expect(updatedFirst.match(/<!-- taco:ui-preview:end -->/g)).toHaveLength(1)
+
+    // Subsequent update must not throw PrBodyMarkerError
+    const secondBlock = '**Summary:** Second clean update'
+    const updatedSecond = updatePrBodyWithBlock(updatedFirst, secondBlock)
+    expect(updatedSecond).toContain('Intro text before preview.')
+    expect(updatedSecond).toContain('Second clean update')
+    expect(updatedSecond.match(/<!-- taco:ui-preview:start -->/g)).toHaveLength(1)
+    expect(updatedSecond.match(/<!-- taco:ui-preview:end -->/g)).toHaveLength(1)
+  })
+
+  it('sanitizes markdown table pipes and alt text brackets in dynamic manifest render', () => {
+    const rendered = generatePreviewBlockMarkdown({
+      headSha: HEAD_SHA,
+      prNumber: 119,
+      repo: REPO,
+      assetCommitSha: ASSETS_SHA,
+      manifest: {
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'passed',
+        summary: 'Mermaid | Pipe and [Bracket] in summary',
+        scenes: [
+          {
+            id: 'pipe-scene',
+            title: 'Scene with | Pipe and \n Newline',
+            status: 'passed',
+            steps: [],
+            screenshots: [
+              {
+                filename: 'pipe-scene-shot.png',
+                name: 'shot',
+                caption: 'Caption with | pipe and [bracket] and \n newline',
+                status: 'passed',
+              },
+            ],
+          },
+        ],
+      },
+    })
+
+    // Parse table row structure: verify exactly 4 columns per row
+    const lines = rendered.split('\n')
+    const tableRows = lines.filter((line) => line.startsWith('|') && !line.includes(':---'))
+    expect(tableRows.length).toBeGreaterThan(1)
+    for (const row of tableRows) {
+      // Splitting by unescaped pipe (?<!\\)\| must produce exactly 6 parts (| col1 | col2 | col3 | col4 |)
+      const cells = row.split(/(?<!\\)\|/).slice(1, -1)
+      expect(cells.length).toBe(4)
+    }
+    expect(rendered).toContain('Scene with \\| Pipe and   Newline')
+    expect(rendered).toContain('Caption with \\| pipe and \\[bracket\\] and   newline')
+    expect(rendered).toContain('[![Caption with \\| pipe and \\[bracket\\] and   newline]')
+  })
   it('renders all four raw links at the full head sha', () => {
     const markdown = generatePreviewBlockMarkdown({
       headSha: HEAD_SHA,
@@ -240,7 +296,7 @@ describe('UI Preview: pull request body markers', () => {
 
     const base = `https://raw.githubusercontent.com/${REPO}/${ASSETS_SHA}/previews/pr-119`
     expect(markdown).toContain('### 🌮 UI Preview (commit `438d084`)')
-    for (const viewId of ['taco-desktop', 'taco-mobile', 'host-desktop', 'host-mobile']) {
+    for (const viewId of ['taco-desktop', 'host-desktop']) {
       expect(markdown).toContain(`${base}/${viewId}-${HEAD_SHA}.png`)
     }
     expect(markdown).toContain('[998877](https://github.com/Arcadia822/taco/actions/runs/998877)')
@@ -258,9 +314,7 @@ describe('UI Preview: structural PNG validation', () => {
     expect(result.valid).toBe(true)
     expect(result.views.map((view) => view.filename)).toEqual([
       'taco-desktop.png',
-      'taco-mobile.png',
       'host-desktop.png',
-      'host-mobile.png',
     ])
     expect(result.totalBytes).toBeGreaterThan(0)
   })
@@ -268,9 +322,9 @@ describe('UI Preview: structural PNG validation', () => {
   it('rejects a missing view, an extra file, and a dimension mismatch', () => {
     const missing = makeTempDir('taco-preview-missing-')
     writeArtifactSet(missing)
-    unlinkSync(join(missing, 'host-mobile.png'))
+    unlinkSync(join(missing, 'host-desktop.png'))
     expect(() => validateDirectory(missing)).toThrow(
-      /Required view screenshot missing: host-mobile\.png/,
+      /Required view screenshot missing: host-desktop\.png/,
     )
 
     const extra = makeTempDir('taco-preview-extra-')
@@ -282,15 +336,15 @@ describe('UI Preview: structural PNG validation', () => {
 
     const wrong = makeTempDir('taco-preview-wrong-')
     writeArtifactSet(wrong)
-    writeFileSync(join(wrong, 'host-mobile.png'), cleanPng(800, 600))
-    expect(() => validateDirectory(wrong)).toThrow(/Dimension mismatch for host-mobile\.png/)
+    writeFileSync(join(wrong, 'host-desktop.png'), cleanPng(800, 600))
+    expect(() => validateDirectory(wrong)).toThrow(/Dimension mismatch for host-desktop\.png/)
   })
 
   it('rejects hard links, ancillary chunks, trailing bytes, and non-RGB layouts', () => {
     const linked = makeTempDir('taco-preview-link-')
     writeArtifactSet(linked)
-    unlinkSync(join(linked, 'taco-mobile.png'))
-    linkSync(join(linked, 'taco-desktop.png'), join(linked, 'taco-mobile.png'))
+    unlinkSync(join(linked, 'host-desktop.png'))
+    linkSync(join(linked, 'taco-desktop.png'), join(linked, 'host-desktop.png'))
     expect(() => validateSinglePng(join(linked, 'taco-desktop.png'), 'taco-desktop.png')).toThrow(
       /hard links/,
     )
@@ -528,9 +582,7 @@ describe('UI Preview: publisher', () => {
     const treeEntries = asList(treeBody.tree).map((entry) => asRecord(entry))
     expect(treeEntries.map((entry) => entry.path)).toEqual([
       `previews/pr-119/taco-desktop-${HEAD_SHA}.png`,
-      `previews/pr-119/taco-mobile-${HEAD_SHA}.png`,
       `previews/pr-119/host-desktop-${HEAD_SHA}.png`,
-      `previews/pr-119/host-mobile-${HEAD_SHA}.png`,
     ])
     expect(treeBody.base_tree).toBe('tree-a')
     expect(
@@ -562,7 +614,7 @@ describe('UI Preview: publisher', () => {
     expect(published).toContain('Edited by a human mid-run.')
     expect(published).not.toContain('stale block text')
     expect(published).toContain(
-      `https://raw.githubusercontent.com/${REPO}/${ASSETS_SHA}/previews/pr-119/host-mobile-${HEAD_SHA}.png`,
+      `https://raw.githubusercontent.com/${REPO}/${ASSETS_SHA}/previews/pr-119/host-desktop-${HEAD_SHA}.png`,
     )
     expect(published.match(/<!-- taco:ui-preview:start -->/g)).toHaveLength(1)
     expect(published.match(/<!-- taco:ui-preview:end -->/g)).toHaveLength(1)
@@ -603,5 +655,299 @@ describe('UI Preview: publisher', () => {
     expect(calls.some((call) => call.path.endsWith('/pulls/119') && call.method === 'PATCH')).toBe(
       false,
     )
+  })
+
+  it('validates dynamic manifest with custom screenshots and rejects empty passed manifest', () => {
+    const dir = makeTempDir('dynamic-manifest-')
+    const shotName = 'flowchart-node.png'
+    writeFileSync(join(dir, shotName), cleanPng(1280, 800))
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'passed',
+        summary: 'Mermaid node clicked',
+        scenes: [
+          {
+            id: 'mermaid-flowchart',
+            title: 'Flowchart',
+            status: 'passed',
+            screenshots: [{ filename: shotName, name: 'node', caption: 'Clicked node', status: 'passed' }],
+          },
+        ],
+      }),
+    )
+
+    const res = validateDirectory(dir)
+    expect(res.valid).toBe(true)
+    expect(res.views).toHaveLength(1)
+    expect(res.views[0].filename).toBe(shotName)
+
+    // Rejects manifest claiming passed with 0 screenshots
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'passed',
+        summary: 'Fake success',
+        scenes: [{ id: 'fake', title: 'Fake', screenshots: [] }],
+      }),
+    )
+    unlinkSync(join(dir, shotName))
+    expect(() => validateDirectory(dir)).toThrow(PngValidationError)
+  })
+
+  it('validates failed scenes with prior shots and failure shot against trusted plan', () => {
+    const dir = makeTempDir('dynamic-failed-scene-')
+    const priorShot = 'scene-a-prior.png'
+    const failureShot = 'scene-a-failure.png'
+    writeFileSync(join(dir, priorShot), cleanPng(1280, 800))
+    writeFileSync(join(dir, failureShot), cleanPng(1280, 800))
+
+    const trustedPlan = {
+      version: 1,
+      source: 'deepseek-planner',
+      ui_change: true,
+      summary: 'Test with failure',
+      scenes: [
+        {
+          id: 'scene-a',
+          title: 'Scene A',
+          steps: [
+            { do: 'shot', name: 'prior' },
+            { do: 'click', target: 'button#missing' },
+            { do: 'shot', name: 'after' },
+          ],
+        },
+      ],
+    }
+
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'failed',
+        summary: 'Step failed',
+        scenes: [
+          {
+            id: 'scene-a',
+            title: 'Scene A',
+            status: 'failed',
+            screenshots: [
+              { filename: priorShot, name: 'prior', caption: 'Prior view', status: 'passed' },
+              { filename: failureShot, name: 'failure-state', caption: 'Error occurred', status: 'failed' },
+            ],
+          },
+        ],
+      }),
+    )
+
+    const res = validateDirectory(dir, { plan: trustedPlan })
+    expect(res.valid).toBe(true)
+    expect(res.views).toHaveLength(2)
+    expect(res.views.map((v) => v.filename)).toEqual([priorShot, failureShot])
+
+    // Rejects unauthorized shot in failed scene
+    const badShot = 'scene-a-arbitrary.png'
+    writeFileSync(join(dir, badShot), cleanPng(1280, 800))
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'failed',
+        summary: 'Step failed',
+        scenes: [
+          {
+            id: 'scene-a',
+            title: 'Scene A',
+            status: 'failed',
+            screenshots: [
+              { filename: priorShot, name: 'prior', caption: 'Prior view', status: 'passed' },
+              { filename: badShot, name: 'arbitrary', caption: 'Bad shot', status: 'failed' },
+            ],
+          },
+        ],
+      }),
+    )
+    expect(() => validateDirectory(dir, { plan: trustedPlan })).toThrow(/unauthorized shot/)
+  })
+
+  it('cross-validates passed shot filenames against trusted plan shots', () => {
+    const dir = makeTempDir('dynamic-passed-identity-')
+    const expectedShot = 'scene-b-step1.png'
+    writeFileSync(join(dir, expectedShot), cleanPng(1280, 800))
+
+    const trustedPlan = {
+      version: 1,
+      source: 'deepseek-planner',
+      ui_change: true,
+      summary: 'Test passed identity',
+      scenes: [
+        {
+          id: 'scene-b',
+          title: 'Scene B',
+          steps: [{ do: 'shot', name: 'step1' }],
+        },
+      ],
+    }
+
+    // Valid manifest matching trusted plan
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'passed',
+        summary: 'Passed cleanly',
+        scenes: [
+          {
+            id: 'scene-b',
+            title: 'Scene B',
+            status: 'passed',
+            screenshots: [
+              { filename: expectedShot, name: 'step1', caption: 'Step 1', status: 'passed' },
+            ],
+          },
+        ],
+      }),
+    )
+
+    expect(validateDirectory(dir, { plan: trustedPlan }).valid).toBe(true)
+
+    // Reject mismatching filename even if shot count matches
+    const wrongShot = 'scene-b-unrelated.png'
+    writeFileSync(join(dir, wrongShot), cleanPng(1280, 800))
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'passed',
+        summary: 'Passed cleanly',
+        scenes: [
+          {
+            id: 'scene-b',
+            title: 'Scene B',
+            status: 'passed',
+            screenshots: [
+              { filename: wrongShot, name: 'step1', caption: 'Step 1', status: 'passed' },
+            ],
+          },
+        ],
+      }),
+    )
+    expect(() => validateDirectory(dir, { plan: trustedPlan })).toThrow(/filename mismatch/)
+  })
+
+  it('rejects manifest status contradictions between scenes and overall status', () => {
+    const dir = makeTempDir('dynamic-status-contradiction-')
+    const shot = 'scene-c-one.png'
+    writeFileSync(join(dir, shot), cleanPng(1280, 800))
+
+    const trustedPlan = {
+      version: 1,
+      source: 'deepseek-planner',
+      ui_change: true,
+      summary: 'Status check',
+      scenes: [
+        {
+          id: 'scene-c',
+          title: 'Scene C',
+          steps: [{ do: 'shot', name: 'one' }],
+        },
+      ],
+    }
+
+    // Overall passed but scene failed
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'passed',
+        summary: 'Contradictory manifest',
+        scenes: [
+          {
+            id: 'scene-c',
+            title: 'Scene C',
+            status: 'failed',
+            screenshots: [],
+          },
+        ],
+      }),
+    )
+    expect(() => validateDirectory(dir, { plan: trustedPlan })).toThrow(/contains failed scenes/)
+  })
+
+  it('validates canonical unavailable manifest when ui_change=false', () => {
+    const dir = makeTempDir('dynamic-unavailable-')
+    const trustedPlan = {
+      version: 1,
+      source: 'deepseek-planner',
+      ui_change: false,
+      summary: 'No UI change',
+      scenes: [],
+    }
+
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'unavailable',
+        summary: 'No UI change',
+        scenes: [],
+      }),
+    )
+
+    const res = validateDirectory(dir, { plan: trustedPlan })
+    expect(res.valid).toBe(true)
+    expect(res.views).toHaveLength(0)
+  })
+
+  it('validates failed scenes without screenshots when execution error occurred', () => {
+    const dir = makeTempDir('dynamic-failed-no-screenshot-')
+    const trustedPlan = {
+      version: 1,
+      source: 'deepseek-planner',
+      ui_change: true,
+      summary: 'Startup fail test',
+      scenes: [
+        {
+          id: 'scene-d',
+          title: 'Scene D',
+          steps: [{ do: 'shot', name: 'init' }],
+        },
+      ],
+    }
+
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'failed',
+        summary: 'Startup failure',
+        scenes: [
+          {
+            id: 'scene-d',
+            title: 'Scene D',
+            status: 'failed',
+            error: 'Browser crashed before screenshot',
+            steps: [],
+            screenshots: [],
+          },
+        ],
+        errors: ['Browser crashed before screenshot'],
+      }),
+    )
+
+    const res = validateDirectory(dir, { plan: trustedPlan })
+    expect(res.valid).toBe(true)
+    expect(res.views).toHaveLength(0)
   })
 })

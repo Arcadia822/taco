@@ -129,15 +129,14 @@ export function validateSinglePng(filePath, expectedFilename) {
   }
 
   const expectedView = getViewByFilename(expectedFilename)
-  if (!expectedView) {
-    throw new PngValidationError(`Unknown view filename: ${expectedFilename}`, 'ERR_UNKNOWN_VIEW')
-  }
+  const targetWidth = expectedView ? expectedView.viewport.width : 1280
+  const targetHeight = expectedView ? expectedView.viewport.height : 800
 
   const buffer = readFileSync(filePath)
   const ihdr = parsePngIhdr(buffer)
-  if (ihdr.width !== expectedView.viewport.width || ihdr.height !== expectedView.viewport.height) {
+  if (ihdr.width !== targetWidth || ihdr.height !== targetHeight) {
     throw new PngValidationError(
-      `Dimension mismatch for ${expectedFilename}: expected ${expectedView.viewport.width}x${expectedView.viewport.height}, got ${ihdr.width}x${ihdr.height}`,
+      `Dimension mismatch for ${expectedFilename}: expected ${targetWidth}x${targetHeight}, got ${ihdr.width}x${ihdr.height}`,
       'ERR_DIMENSION_MISMATCH',
     )
   }
@@ -152,18 +151,203 @@ export function validateSinglePng(filePath, expectedFilename) {
   }
 }
 
-export function validateDirectory(dirPath) {
+export function validateDirectory(dirPath, options = {}) {
+  const { plan = null } = options
   const resolvedDir = resolve(dirPath)
   if (!existsSync(resolvedDir)) {
     throw new PngValidationError(`Directory does not exist: ${resolvedDir}`, 'ERR_DIR_MISSING')
   }
 
-  const expectedNames = FIXED_VIEWS.map((view) => view.filename)
+  let expectedNames = []
+  let manifest = null
+  const manifestPath = join(resolvedDir, 'manifest.json')
+
+  if (existsSync(manifestPath)) {
+    try {
+      manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
+      // Overall manifest status validation
+      const validManifestStatuses = ['passed', 'failed', 'unavailable']
+      if (!validManifestStatuses.includes(manifest.status)) {
+        throw new PngValidationError(
+          `Invalid manifest status: ${manifest.status}`,
+          'ERR_MANIFEST_STATUS',
+        )
+      }
+
+      if (plan) {
+        // Strict structural cross-validation against the trusted plan
+        if (plan.source && manifest.planSource !== plan.source) {
+          throw new PngValidationError(`Manifest planSource mismatch`, 'ERR_PLAN_SOURCE')
+        }
+
+        if (!plan.ui_change) {
+          // Canonical unavailable plan: manifest must be unavailable and have 0 scenes
+          if (manifest.status !== 'unavailable') {
+            throw new PngValidationError(
+              `Manifest status must be unavailable when plan.ui_change is false`,
+              'ERR_MANIFEST_STATUS',
+            )
+          }
+          if (Array.isArray(manifest.scenes) && manifest.scenes.length > 0) {
+            throw new PngValidationError(
+              `Manifest scenes must be empty when plan.ui_change is false`,
+              'ERR_SCENE_COUNT',
+            )
+          }
+        } else if (Array.isArray(plan.scenes)) {
+          // When plan.ui_change is true, manifest status must be either passed or failed (never unavailable)
+          if (manifest.status !== 'passed' && manifest.status !== 'failed') {
+            throw new PngValidationError(
+              `Manifest status must be 'passed' or 'failed' when plan.ui_change is true, got ${manifest.status}`,
+              'ERR_MANIFEST_STATUS',
+            )
+          }
+          if (!Array.isArray(manifest.scenes) || manifest.scenes.length !== plan.scenes.length) {
+            throw new PngValidationError(`Manifest scene count mismatch`, 'ERR_SCENE_COUNT')
+          }
+          let hasFailedScene = false
+          for (let sIdx = 0; sIdx < plan.scenes.length; sIdx += 1) {
+            const expectedScene = plan.scenes[sIdx]
+            const actualScene = manifest.scenes[sIdx]
+            if (!actualScene || actualScene.id !== expectedScene.id) {
+              throw new PngValidationError(
+                `Manifest scene [${sIdx}] ID mismatch: expected ${expectedScene.id}`,
+                'ERR_SCENE_ID',
+              )
+            }
+
+            if (actualScene.status !== 'passed' && actualScene.status !== 'failed') {
+              throw new PngValidationError(
+                `Manifest scene [${expectedScene.id}] invalid status: ${actualScene.status}`,
+                'ERR_SCENE_STATUS',
+              )
+            }
+            if (actualScene.status === 'failed') {
+              hasFailedScene = true
+            }
+
+            if (actualScene.status === 'passed') {
+              const expectedShots = (expectedScene.steps || []).filter((st) => st.do === 'shot')
+              const actualShots = actualScene.screenshots || []
+              if (actualShots.length !== expectedShots.length) {
+                throw new PngValidationError(
+                  `Manifest scene [${expectedScene.id}] shot count mismatch: expected ${expectedShots.length}, got ${actualShots.length}`,
+                  'ERR_SHOT_COUNT',
+                )
+              }
+              const seenSceneFiles = new Set()
+              for (let shotIdx = 0; shotIdx < expectedShots.length; shotIdx += 1) {
+                const expShot = expectedShots[shotIdx]
+                const actShot = actualShots[shotIdx]
+                const expectedFilename = `${expectedScene.id}-${expShot.name}.png`
+                if (!actShot || actShot.filename !== expectedFilename) {
+                  throw new PngValidationError(
+                    `Manifest scene [${expectedScene.id}] shot [${shotIdx}] filename mismatch: expected ${expectedFilename}, got ${actShot?.filename}`,
+                    'ERR_SHOT_IDENTITY',
+                  )
+                }
+                if (actShot.status !== 'passed') {
+                  throw new PngValidationError(
+                    `Manifest scene [${expectedScene.id}] shot [${actShot.filename}] status must be 'passed', got ${actShot.status}`,
+                    'ERR_SHOT_STATUS',
+                  )
+                }
+                if (seenSceneFiles.has(actShot.filename)) {
+                  throw new PngValidationError(
+                    `Duplicate shot filename in scene [${expectedScene.id}]: ${actShot.filename}`,
+                    'ERR_DUPLICATE_SHOT',
+                  )
+                }
+                seenSceneFiles.add(actShot.filename)
+                expectedNames.push(actShot.filename)
+              }
+            } else if (actualScene.status === 'failed') {
+              // For failed scenes, allow shots executed prior to failure plus the trusted failure shot
+              const allowedShots = new Set(
+                (expectedScene.steps || [])
+                  .filter((st) => st.do === 'shot')
+                  .map((st) => `${expectedScene.id}-${st.name}.png`),
+              )
+              const reservedFailureShot = `${expectedScene.id}-failure.png`
+              allowedShots.add(reservedFailureShot)
+              const seenFailSceneFiles = new Set()
+              for (const shot of actualScene.screenshots || []) {
+                if (!allowedShots.has(shot.filename)) {
+                  throw new PngValidationError(
+                    `Manifest scene [${expectedScene.id}] contains unauthorized shot: ${shot.filename}`,
+                    'ERR_UNAUTHORIZED_SHOT',
+                  )
+                }
+                // Verify shot status: normal shots must be 'passed', reserved failure shot must be 'failed'
+                if (shot.filename === reservedFailureShot) {
+                  if (shot.status !== 'failed') {
+                    throw new PngValidationError(
+                      `Reserved failure shot [${shot.filename}] must have status 'failed', got ${shot.status}`,
+                      'ERR_SHOT_STATUS',
+                    )
+                  }
+                } else if (shot.status !== 'passed') {
+                  throw new PngValidationError(
+                    `Prior shot [${shot.filename}] in failed scene must have status 'passed', got ${shot.status}`,
+                    'ERR_SHOT_STATUS',
+                  )
+                }
+                if (seenFailSceneFiles.has(shot.filename)) {
+                  throw new PngValidationError(
+                    `Duplicate shot filename in failed scene [${expectedScene.id}]: ${shot.filename}`,
+                    'ERR_DUPLICATE_SHOT',
+                  )
+                }
+                seenFailSceneFiles.add(shot.filename)
+                expectedNames.push(shot.filename)
+              }
+            }
+          }
+
+          // Cross-field status consistency check
+          if (hasFailedScene && manifest.status === 'passed') {
+            throw new PngValidationError(
+              'Manifest claims passed status but contains failed scenes',
+              'ERR_STATUS_CONTRADICTION',
+            )
+          }
+          if (
+            !hasFailedScene &&
+            manifest.status === 'failed' &&
+            (!manifest.errors || manifest.errors.length === 0)
+          ) {
+            throw new PngValidationError(
+              'Manifest claims failed status but all scenes passed with no errors',
+              'ERR_STATUS_CONTRADICTION',
+            )
+          }
+        }
+      }
+
+      if (expectedNames.length === 0 && manifest.scenes && Array.isArray(manifest.scenes)) {
+        for (const scene of manifest.scenes) {
+          for (const shot of scene.screenshots || []) {
+            expectedNames.push(shot.filename)
+          }
+        }
+      }
+      if (manifest.status === 'passed' && expectedNames.length === 0) {
+        throw new PngValidationError(
+          'Manifest claims passed status but contains 0 screenshots',
+          'ERR_EMPTY_SCREENSHOTS',
+        )
+      }
+    } catch (e) {
+      if (e instanceof PngValidationError) throw e
+      throw new PngValidationError(`Invalid manifest.json: ${e.message}`, 'ERR_MANIFEST')
+    }
+  } else if (expectedNames.length === 0) {
+    expectedNames = FIXED_VIEWS.map((view) => view.filename)
+  }
   const entries = readdirSync(resolvedDir)
-  const unexpected = entries.filter((entry) => !expectedNames.includes(entry))
+  const allowedEntries = new Set([...expectedNames, 'manifest.json'])
+  const unexpected = entries.filter((entry) => !allowedEntries.has(entry))
   if (unexpected.length > 0) {
-    // Entry names come from the untrusted capture: escape control characters so
-    // they cannot start a line in the workflow log.
     throw new PngValidationError(
       `Unexpected files in the preview directory: ${unexpected
         .map((name) =>
@@ -179,15 +363,15 @@ export function validateDirectory(dirPath) {
 
   const results = []
   let totalBytes = 0
-  for (const view of FIXED_VIEWS) {
-    const filePath = join(resolvedDir, view.filename)
+  for (const filename of expectedNames) {
+    const filePath = join(resolvedDir, filename)
     if (!existsSync(filePath)) {
       throw new PngValidationError(
-        `Required view screenshot missing: ${view.filename}`,
+        `Required view screenshot missing: ${filename}`,
         'ERR_MISSING_FILE',
       )
     }
-    const info = validateSinglePng(filePath, view.filename)
+    const info = validateSinglePng(filePath, filename)
     totalBytes += info.size
     results.push(info)
   }
@@ -199,14 +383,17 @@ export function validateDirectory(dirPath) {
     )
   }
 
-  return { valid: true, totalBytes, views: results }
+  return { valid: true, totalBytes, views: results, manifest }
 }
 
 function parseArgs(argv) {
-  const options = { dir: '', json: false }
+  const options = { dir: '', json: false, planFile: '' }
   for (let index = 0; index < argv.length; index += 1) {
     if (argv[index] === '--dir' && argv[index + 1]) {
       options.dir = argv[index + 1]
+      index += 1
+    } else if (argv[index] === '--plan' && argv[index + 1]) {
+      options.planFile = argv[index + 1]
       index += 1
     } else if (argv[index] === '--json') {
       options.json = true
@@ -214,7 +401,6 @@ function parseArgs(argv) {
   }
   return options
 }
-
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const options = parseArgs(process.argv.slice(2))
   if (!options.dir) {
@@ -223,7 +409,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   }
 
   try {
-    const result = validateDirectory(options.dir)
+    let plan = null
+    if (options.planFile && existsSync(options.planFile)) {
+      plan = JSON.parse(readFileSync(options.planFile, 'utf-8'))
+    }
+    const result = validateDirectory(options.dir, { plan })
     if (options.json) {
       console.log(JSON.stringify(result, null, 2))
     } else {

@@ -17,7 +17,7 @@
  *   GITHUB_RUN_ID          optional Actions run id
  */
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { validateDirectory } from './validate-preview-png.mjs'
@@ -134,16 +134,36 @@ export async function ensureAssetsBranch(repo) {
   return await createAssetsBranch(repo)
 }
 
-async function createBlobs(repo, artifactsDir, prNumber, headSha) {
+async function createBlobs(repo, artifactsDir, prNumber, headSha, manifest = null) {
   const tree = []
-  for (const view of FIXED_VIEWS) {
-    const content = readFileSync(join(artifactsDir, view.filename)).toString('base64')
+  let filesToUpload = []
+
+  if (manifest && manifest.scenes && Array.isArray(manifest.scenes)) {
+    for (const scene of manifest.scenes) {
+      for (const shot of scene.screenshots || []) {
+        const baseName = shot.filename.replace(/\.png$/, '')
+        filesToUpload.push({
+          filename: shot.filename,
+          assetPath: `previews/pr-${prNumber}/${baseName}-${headSha}.png`,
+        })
+      }
+    }
+  } else {
+    filesToUpload = FIXED_VIEWS.map((v) => ({
+      filename: v.filename,
+      assetPath: previewAssetPath(v, prNumber, headSha),
+    }))
+  }
+  for (const item of filesToUpload) {
+    const filePath = join(artifactsDir, item.filename)
+    if (!existsSync(filePath)) continue
+    const content = readFileSync(filePath).toString('base64')
     const blob = await ghFetch(`/repos/${repo}/git/blobs`, {
       method: 'POST',
       body: JSON.stringify({ content, encoding: 'base64' }),
     })
     tree.push({
-      path: previewAssetPath(view, prNumber, headSha),
+      path: item.assetPath,
       mode: '100644',
       type: 'blob',
       sha: blob.sha,
@@ -158,10 +178,10 @@ export async function uploadAssetsAndCommit({
   headSha,
   artifactsDir,
   maxAttempts = 4,
+  manifest = null,
 }) {
   const dir = resolve(artifactsDir)
-  const tree = await createBlobs(repo, dir, prNumber, headSha)
-
+  const tree = await createBlobs(repo, dir, prNumber, headSha, manifest)
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const parentSha = await ensureAssetsBranch(repo)
     const parentCommit = await ghFetch(`/repos/${repo}/git/commits/${parentSha}`)
@@ -207,8 +227,16 @@ export async function updatePrDescription({
   assetCommitSha,
   currentBody,
   runId,
+  manifest = null,
 }) {
-  const block = generatePreviewBlockMarkdown({ headSha, prNumber, repo, assetCommitSha, runId })
+  const block = generatePreviewBlockMarkdown({
+    headSha,
+    prNumber,
+    repo,
+    assetCommitSha,
+    runId,
+    manifest,
+  })
   await ghFetch(`/repos/${repo}/pulls/${prNumber}`, {
     method: 'PATCH',
     body: JSON.stringify({ body: updatePrBodyWithBlock(currentBody, block) }),
@@ -220,6 +248,7 @@ export async function runPublisher() {
   const prNumber = process.env.PR_NUMBER
   const headSha = process.env.HEAD_SHA
   const artifactsDir = process.env.ARTIFACTS_DIR || './artifacts/previews'
+  const planFile = process.env.PLAN_FILE || null
   const runId = process.env.GITHUB_RUN_ID || null
 
   if (!repo || !prNumber || !headSha) {
@@ -229,10 +258,20 @@ export async function runPublisher() {
   const initial = await checkLivePrHeadSha(repo, prNumber, headSha)
   if (!initial.canPublish) return { skipped: true, reason: initial.reason }
 
-  validateDirectory(artifactsDir)
+  let plan = null
+  if (planFile && existsSync(planFile)) {
+    plan = JSON.parse(readFileSync(planFile, 'utf-8'))
+  }
 
-  const assetCommitSha = await uploadAssetsAndCommit({ repo, prNumber, headSha, artifactsDir })
+  const validation = validateDirectory(artifactsDir, { plan })
 
+  const assetCommitSha = await uploadAssetsAndCommit({
+    repo,
+    prNumber,
+    headSha,
+    artifactsDir,
+    manifest: validation.manifest,
+  })
   // The capture can run for minutes and the body can change at any time. Re-read
   // identity and body immediately before mutating so a human edit made during
   // publication is preserved rather than clobbered by a stale snapshot.
@@ -248,6 +287,7 @@ export async function runPublisher() {
     assetCommitSha,
     currentBody: beforePatch.body,
     runId,
+    manifest: validation.manifest,
   })
 
   return { success: true, assetCommitSha }

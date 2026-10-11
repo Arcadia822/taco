@@ -19,6 +19,47 @@ export const MARKER_END = '<!-- taco:ui-preview:end -->'
 
 const TARGET_LABELS = Object.freeze({ taco: 'Complete Taco', host: 'Host / Demo' })
 
+/**
+ * Escapes text for general Markdown rendering and disarms reserved HTML markers.
+ */
+export function sanitizeMarkdownText(text) {
+  if (!text) return ''
+  return String(text)
+    .replace(/<!--\s*taco:ui-preview:start\s*-->/gi, '&lt;!-- taco:ui-preview:start --&gt;')
+    .replace(/<!--\s*taco:ui-preview:end\s*-->/gi, '&lt;!-- taco:ui-preview:end --&gt;')
+}
+
+/**
+ * Escapes text for placement inside a Markdown table cell:
+ * Replaces pipe '|' with '\|' and replaces newlines with spaces.
+ */
+export function sanitizeTableCell(text) {
+  if (!text) return ''
+  const disarmed = sanitizeMarkdownText(text)
+  return disarmed
+    .replace(/\r?\n+/g, ' ')
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    .trim()
+}
+
+/**
+ * Escapes text for placement inside a Markdown image alt attribute:
+ * Replaces square brackets '[' and ']' and replaces newlines with spaces.
+ */
+export function sanitizeImageAlt(text) {
+  if (!text) return ''
+  const disarmed = sanitizeMarkdownText(text)
+  return disarmed
+    .replace(/\r?\n+/g, ' ')
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    .trim()
+}
 export class PrBodyMarkerError extends Error {
   constructor(message) {
     super(message)
@@ -54,22 +95,31 @@ export function validateMarkers(body) {
 
 export function updatePrBodyWithBlock(currentBody, blockContent) {
   const safeBody = currentBody ?? ''
-  const fullBlock = `${MARKER_START}\n${blockContent.trim()}\n${MARKER_END}`
+  const sanitizedBlock = sanitizeMarkdownText(blockContent.trim())
+  const fullBlock = `${MARKER_START}\n${sanitizedBlock}\n${MARKER_END}`
 
   const markers = validateMarkers(safeBody)
+  let nextBody
   if (!markers.hasBlock) {
-    if (!safeBody) return fullBlock
-    return `${safeBody}\n\n${fullBlock}\n`
+    if (!safeBody) nextBody = fullBlock
+    else nextBody = `${safeBody}\n\n${fullBlock}\n`
+  } else {
+    const before = safeBody.slice(0, markers.startIndex)
+    const after = safeBody.slice(markers.endIndex)
+    nextBody = `${before}${fullBlock}${after}`
   }
 
-  const before = safeBody.slice(0, markers.startIndex)
-  const after = safeBody.slice(markers.endIndex)
-  return `${before}${fullBlock}${after}`
+  // Invariant check: The resulting body MUST have exactly one valid marker pair!
+  const resultValidation = validateMarkers(nextBody)
+  if (!resultValidation.hasBlock) {
+    throw new PrBodyMarkerError('Final body does not contain a valid marker pair')
+  }
+
+  return nextBody
 }
 
 /**
- * Renders the published block from the trusted view registry so the links can
- * never drift from the paths the publisher writes.
+ * Renders the published block from the manifest or fallback fixed views.
  */
 export function generatePreviewBlockMarkdown({
   headSha,
@@ -78,39 +128,73 @@ export function generatePreviewBlockMarkdown({
   assetCommitSha,
   runId = null,
   timestamp = null,
+  manifest = null,
 }) {
   const shortSha = headSha.slice(0, 7)
   const isoTime = timestamp ?? new Date().toISOString()
   const baseUrl = `https://raw.githubusercontent.com/${repo}/${assetCommitSha}`
 
-  const cell = (view) => {
-    if (!view) return '-'
-    const url = `${baseUrl}/${previewAssetPath(view, prNumber, headSha)}`
-    return `[![${view.title}](${url})](${url})`
+  let markdown = `### 🌮 UI Preview (commit \`${shortSha}\`)\n\n`
+
+  if (manifest) {
+    const statusEmoji =
+      manifest.status === 'passed' ? '✅' : manifest.status === 'failed' ? '❌' : 'ℹ️'
+    markdown += `**Status:** ${statusEmoji} ${manifest.status.toUpperCase()} (${sanitizeMarkdownText(manifest.planSource)})\n`
+    markdown += `**Summary:** ${sanitizeMarkdownText(manifest.summary)}\n\n`
+
+    if (manifest.mismatch) {
+      markdown += `> ⚠️ **Mismatch:** ${sanitizeMarkdownText(manifest.mismatch)}\n\n`
+    }
+    if (manifest.unseen) {
+      markdown += `> ℹ️ **Unseen:** ${sanitizeMarkdownText(manifest.unseen)}\n\n`
+    }
+
+    if (manifest.errors && manifest.errors.length > 0) {
+      markdown += `> ❌ **Errors:**\n`
+      for (const err of manifest.errors) {
+        markdown += `> - ${sanitizeMarkdownText(err)}\n`
+      }
+      markdown += '\n'
+    }
+
+    const hasScreenshots = (manifest.scenes || []).some((s) => (s.screenshots || []).length > 0)
+    if (hasScreenshots) {
+      markdown += '| Scene | Status | Caption | Preview (Desktop 1280x800) |\n'
+      markdown += '| :--- | :---: | :--- | :---: |\n'
+
+      for (const scene of manifest.scenes || []) {
+        for (const shot of scene.screenshots || []) {
+          const assetPath = `previews/pr-${prNumber}/${shot.filename.replace(/\.png$/, '')}-${headSha}.png`
+          const url = `${baseUrl}/${assetPath}`
+          const shotStatus = shot.status === 'passed' ? 'Passed' : 'Failed'
+          const altText = sanitizeImageAlt(shot.caption || shot.name || 'preview')
+          const imgCell = `[![${altText}](${url})](${url})`
+          const sceneTitle = sanitizeTableCell(scene.title)
+          const shotCaption = sanitizeTableCell(shot.caption || '-')
+          markdown += `| **${sceneTitle}** | ${shotStatus} | ${shotCaption} | ${imgCell} |\n`
+        }
+      }
+      markdown += '\n'
+    } else {
+      markdown += `*No UI preview screenshots were captured for this revision.*\n\n`
+    }
+  } else {
+    // When no manifest is supplied at all (e.g. fixed legacy views test), render registered desktop views
+    const cell = (view) => {
+      if (!view) return '-'
+      const url = `${baseUrl}/${previewAssetPath(view, prNumber, headSha)}`
+      return `[![${view.title}](${url})](${url})`
+    }
+
+    markdown += '| Surface | Desktop (1280x800) |\n'
+    markdown += '| :--- | :---: |\n'
+    for (const view of FIXED_VIEWS) {
+      const label = TARGET_LABELS[view.target] ?? view.target
+      markdown += `| ${label} | ${cell(view)} |\n`
+    }
+    markdown += '\n'
   }
 
-  const desktopView = FIXED_VIEWS.find((view) => !view.viewport.isMobile)
-  const mobileView = FIXED_VIEWS.find((view) => view.viewport.isMobile)
-  const rows = new Map()
-  for (const view of FIXED_VIEWS) {
-    if (!rows.has(view.target)) rows.set(view.target, [])
-    rows.get(view.target).push(view)
-  }
-
-  const lines = [
-    `### 🌮 UI Preview (commit \`${shortSha}\`)`,
-    '',
-    `| Surface | Desktop (${desktopView.viewport.width}x${desktopView.viewport.height}) | Mobile (${mobileView.viewport.width}x${mobileView.viewport.height}) |`,
-    '| :--- | :---: | :---: |',
-  ]
-  for (const [target, views] of rows) {
-    const label = TARGET_LABELS[target] ?? target
-    const desktop = views.find((view) => !view.viewport.isMobile)
-    const mobile = views.find((view) => view.viewport.isMobile)
-    lines.push(`| ${label} | ${cell(desktop)} | ${cell(mobile)} |`)
-  }
-
-  let markdown = `${lines.join('\n')}\n\n`
   markdown += `*Updated at ${isoTime} for commit \`${shortSha}\`.`
   markdown += runId
     ? ` Actions run [${runId}](https://github.com/${repo}/actions/runs/${runId})*`

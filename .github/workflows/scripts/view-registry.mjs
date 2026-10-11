@@ -17,25 +17,11 @@ export const FIXED_VIEWS = Object.freeze([
     viewport: Object.freeze({ width: 1280, height: 800 }),
   }),
   Object.freeze({
-    id: 'taco-mobile',
-    filename: 'taco-mobile.png',
-    title: 'Complete Taco Mobile',
-    target: 'taco',
-    viewport: Object.freeze({ width: 375, height: 812, isMobile: true, hasTouch: true }),
-  }),
-  Object.freeze({
     id: 'host-desktop',
     filename: 'host-desktop.png',
     title: 'Host Demo Desktop',
     target: 'host',
     viewport: Object.freeze({ width: 1280, height: 800 }),
-  }),
-  Object.freeze({
-    id: 'host-mobile',
-    filename: 'host-mobile.png',
-    title: 'Host Demo Mobile',
-    target: 'host',
-    viewport: Object.freeze({ width: 375, height: 812, isMobile: true, hasTouch: true }),
   }),
 ])
 
@@ -49,4 +35,12 @@ export function getViewByFilename(filename) {
  */
 export function previewAssetPath(view, prNumber, headSha) {
   return `previews/pr-${prNumber}/${view.id}-${headSha}.png`
+}
+
+/**
+ * Dynamic preview asset path generator for arbitrary planned scenes/shots.
+ */
+export function dynamicPreviewAssetPath(prNumber, headSha, filename) {
+  const baseName = filename.replace(/\.png$/, '')
+  return `previews/pr-${prNumber}/${baseName}-${headSha}.png`
 }

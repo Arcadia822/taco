@@ -28,6 +28,8 @@ Guided by the principle **Encode Lessons in Structure**:
 | [LESSON-008](#lesson-008-occupied-preview-port-serves-another-worktree)                   | Occupied Preview Port Serves Another Worktree                   |      1      |   **open**    | Unique preview ports and rendered workflow verification                              |
 | [LESSON-009](#lesson-009-legacy-service-tests-do-not-prove-production-routes)             | Legacy Service Tests Do Not Prove Production Routes             |      1      |   **open**    | CLI-to-Next runtime smoke                                                            |
 | [LESSON-010](#lesson-010-revision-migrations-must-preserve-legacy-tables-and-event-order) | Revision Migrations Must Preserve Legacy Tables and Event Order |      1      |   **open**    | `packages/host/test/taco-60.test.ts`                                                 |
+| [LESSON-011](#lesson-011-dynamic-preview-boundary-discrepancies-and-marker-injection)     | Dynamic Preview Boundary Discrepancies & Marker Injection       |      1      |   **open**    | `.github/workflows/scripts/plan-schema.mjs`, `tests/dynamic-preview-plan.test.ts`    |
+| [LESSON-012](#lesson-012-nextjs-google-font-loader-crashes-on-non-extension-endpoints)    | Next.js Google Font Loader Crashes on Non-Extension Endpoints   |      1      |   **open**    | `packages/host/src/app/fonts/`, `packages/host/src/app/page.tsx`                     |
 
 ---
 
@@ -226,6 +228,66 @@ The absent assets branch bootstrap submitted `{ tree: [] }` to the Git Trees API
 
 - Initialize the orphan branch with a valid tree containing its generated-assets README. Retain `parents: []` and the existing create-ref race handling.
 - The first-publication regression rejects empty tree requests and checks the orphan commit references the initialized tree.
+
+---
+
+### LESSON-011: Dynamic Preview Boundary Discrepancies and Marker Injection
+
+- **ID**: `LESSON-011`
+- **Category**: `ci`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: `.github/workflows/scripts/plan-schema.mjs`, `tests/dynamic-preview-plan.test.ts`
+
+#### Symptom
+
+Dynamic preview runs produced unexpected failures across 7 defect clusters: unescaped marker literals in model summaries duplicated PR body delimiters and broke subsequent updates with `PrBodyMarkerError`; synthetic SVG tags (`g.actor.actor-box` instead of `rect.actor`/`text.actor`) caused locateElement failures; phantom failure shots registered without successful disk writes triggered `ERR_MISSING_FILE`; `ui_change=false` with non-empty scenes passed plan schema but failed directory validation with `ERR_SCENE_COUNT`; environment startup failures did not write diagnostic manifests; and over-budget plans reordered steps destructively.
+
+#### Root Cause
+
+Contract drift between untrusted model planning and downstream validator expectations. Specifically, SVG outline generation assumed `g` container tags for all child nodes, schema validation permitted contradictory `ui_change=false` scenes and unreserved failure shot names, execution error handlers unconditionally registered screenshot artifacts without verifying filesystem persistence, and PR body markdown interpolation lacked escaping for table pipes, brackets, and demarcated boundary markers. Furthermore, model evaluations confirmed CommandCode Jev (`typesafe/jev`) provides typed decision probabilities rather than text/selector generation, reaffirming that deepseek-v4.1-flash remains the appropriate dynamic planner default while strict boundary validation guards execution. Additionally, local environments lacking pre-installed Pillow (`PIL`) require an isolated pinned virtual environment (`Pillow==12.3.0`) for image sanitization during developer verification.
+
+#### Evidence
+
+- 2026-10-11 — Independent PR Review, Security, and Architecture audits on PR #132 (freeze head `dbda425`, worktree `feat/taco-62-dynamic-preview`); repro of duplicate markers via `updatePrBodyWithBlock`, phantom screenshot failure under browser abort, locator mismatch, and local environment missing PIL module.
+
+#### Prevention & Escalation
+
+- Enforce exact SVG tag and class preservation in `dom-outline.mjs`.
+- Strictly reserve failure shot names (`failure`, `failure-state`) and globally reserve all-scene failure filenames (`<scene-id>-failure.png`) in `plan-schema.mjs`.
+- Ensure `ui_change: false` canonically requires `scenes: []` across plan schema, execution, and PNG validation.
+- Guarantee execution startup failures write valid diagnostic manifests, and register failure screenshots only when disk writes succeed.
+- Sanitize dynamic text before markdown table/alt interpolation and validate the final PR body retains exactly one marker pair.
+- Provide isolated pinned `Pillow==12.3.0` virtual environments for local sanitization runs when Docker daemon is not active.
+
+---
+
+### LESSON-012: Next.js Google Font Loader Crashes on Non-Extension Endpoints
+
+- **ID**: `LESSON-012`
+- **Category**: `ci`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: `packages/host/src/app/fonts/`, `packages/host/src/app/page.tsx`
+
+#### Symptom
+
+Containerized Host application build (`npm run --prefix packages/host build`) fails abruptly during Next.js page compilation with `TypeError: Cannot read properties of null (reading '1') at loader.js:122:78`, aborting the preview workflow before UI capture begins.
+
+#### Root Cause
+
+Next.js `@next/font/google` loader (`loader.js:122`) relies on an unverified regular expression assumption: after extracting font resource URLs from Google Fonts `@font-face` CSS declarations, it executes `/\.(woff|woff2|eot|ttf|otf)$/.exec(googleFontFileUrl)[1]`. When Google Fonts returns dynamically routed or edge-cached endpoint URLs that do not end with a standard font file extension at the URL terminus, `.exec()` evaluates to `null`. Indexing `[1]` on `null` triggers an uncaught `TypeError`. Furthermore, ad-hoc build flags such as `NEXT_FONT_GOOGLE_MOCKED=1` are unsupported by Next.js and fail to bypass the loader.
+
+#### Evidence
+
+- 2026-10-11 — PR #132 UI preview run [38135648472](https://github.com/Arcadia822/taco/actions/runs/38135648472): `taco-preview-build` container exited status 1 during `next build` on `src/app/page.tsx` due to `TypeError: Cannot read properties of null (reading '1')` in `next/dist/compiled/@next/font/dist/google/loader.js:122:78`.
+
+#### Prevention & Escalation
+
+- Eliminate external build-time font network requests by migrating `packages/host` to `next/font/local`.
+- Bundle self-contained, official variable WOFF2 fonts (`Geist-Variable.woff2` and `FiraCode-Variable.woff2`) under OFL-1.1 with full subset/glyph coverage.
+- Preserve identical CSS custom properties (`--font-geist` and `--font-fira-code`) and font metrics to prevent visual regressions and layout shifts.
+- Never rely on fake Google font mocks or suppressing loader errors.
 
 ---
 

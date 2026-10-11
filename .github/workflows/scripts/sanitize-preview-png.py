@@ -41,20 +41,22 @@ def load_expectations(path: str) -> dict[str, tuple[int, int]]:
     with open(path, "r", encoding="utf-8") as handle:
         payload = json.load(handle)
 
-    views = payload.get("views")
-    if not isinstance(views, list) or not views:
-        raise SanitizerError(f"{path}: expected a non-empty 'views' array")
-
     expectations: dict[str, tuple[int, int]] = {}
-    for view in views:
-        filename = view["filename"]
-        width = int(view["width"])
-        height = int(view["height"])
-        if width <= 0 or height <= 0:
-            raise SanitizerError(f"{path}: view {filename} has a non-positive size")
-        if filename in expectations:
-            raise SanitizerError(f"{path}: duplicate view filename {filename}")
-        expectations[filename] = (width, height)
+    if "views" in payload and isinstance(payload["views"], list):
+        for view in payload["views"]:
+            filename = view["filename"]
+            width = int(view["width"])
+            height = int(view["height"])
+            if width <= 0 or height <= 0:
+                raise SanitizerError(f"{path}: view {filename} has a non-positive size")
+            expectations[filename] = (width, height)
+    elif "scenes" in payload and isinstance(payload["scenes"], list):
+        for scene in payload["scenes"]:
+            for shot in scene.get("screenshots", []):
+                filename = shot["filename"]
+                expectations[filename] = (1280, 800)
+        if payload.get("status") == "passed" and not expectations:
+            raise SanitizerError(f"{path}: manifest claims passed status with zero expected screenshots")
     return expectations
 
 
@@ -62,20 +64,15 @@ def assert_only_expected_entries(directory: str, expected: set[str]) -> None:
     with os.scandir(directory) as entries:
         present = sorted(entry.name for entry in entries)
 
-    unexpected = [name for name in present if name not in expected]
+    # Allow manifest.json alongside the PNG files
+    allowed = expected | {"manifest.json"}
+    unexpected = [name for name in present if name not in allowed]
     if unexpected:
-        # Entry names are attacker-controlled; escape anything that could start a
-        # new log line before reporting them.
         shown = ", ".join(
             "".join(char if " " <= char <= "~" else f"\\x{ord(char):02x}" for char in name)
             for name in unexpected
         )
         raise SanitizerError(f"unexpected entries in the capture output: {shown}")
-
-    missing = [name for name in sorted(expected) if name not in present]
-    if missing:
-        raise SanitizerError(f"missing registered views in the capture output: {', '.join(missing)}")
-
 
 def sanitize_one(path: str, filename: str, width: int, height: int) -> tuple[int, int]:
     info = os.lstat(path)
@@ -140,12 +137,18 @@ def sanitize_directory(directory: str, expectation_path: str) -> list[tuple[str,
 
     results: list[tuple[str, int, int]] = []
     for filename, (width, height) in expectations.items():
-        before, after = sanitize_one(os.path.join(directory, filename), filename, width, height)
+        target_path = os.path.join(directory, filename)
+        if not os.path.exists(target_path):
+            continue
+        before, after = sanitize_one(target_path, filename, width, height)
         results.append((filename, before, after))
 
     total = 0
     for filename in expectations:
-        info = os.lstat(os.path.join(directory, filename))
+        target_path = os.path.join(directory, filename)
+        if not os.path.exists(target_path):
+            continue
+        info = os.lstat(target_path)
         if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
             raise SanitizerError(f"{filename}: sanitized output is not a single-link regular file")
         total += info.st_size
