@@ -217,4 +217,44 @@ describe('validateDocument', () => {
 
     expect(codes(target)).toContain('duplicate-file-id')
   })
+  it('skips comment anchor staleness checks for html files', () => {
+    const target = bundle({
+      files: [
+        {
+          path: 'docs/page.html',
+          mediaType: 'text/html',
+          content: '<!doctype html><title>Page</title>',
+        },
+      ],
+      comments: [
+        thread({
+          anchor: {
+            path: 'docs/page.html',
+            position: { start: 10, end: 20 },
+            quote: { exact: 'Nonexistent text', prefix: '', suffix: '' },
+          },
+        }),
+      ],
+    })
+
+    const result = validateDocument(target)
+    expect(result.findings.map((f) => f.code)).not.toContain('comment-anchor-stale')
+  })
+
+  it('passes cross-document markdown link to a bundled html file', () => {
+    const target = bundle({
+      files: [
+        markdown('docs/spec.md', '# Spec\n\nSee [the report](report.html).\n'),
+        {
+          path: 'docs/report.html',
+          mediaType: 'text/html',
+          content: '<!doctype html><title>Report</title>',
+        },
+      ],
+    })
+
+    const result = validateDocument(target)
+    expect(result.findings.map((f) => f.code)).not.toContain('markdown-link-missing')
+    expect(result.ok).toBe(true)
+  })
 })

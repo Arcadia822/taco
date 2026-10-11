@@ -58,6 +58,7 @@ const mediaTypeOf = (path) => {
   if (lower.endsWith('.json')) return 'application/json'
   if (lower.endsWith('.mmd')) return 'text/plain'
   if (lower.endsWith('.png')) return 'image/png'
+  if (/\.html?$/i.test(lower)) return 'text/html'
   return 'text/plain'
 }
 
@@ -171,11 +172,6 @@ const collectFiles = async (featureDir, rootPath, existingByPath, ignorePatterns
       if (!entry.isFile()) {
         throw new Error(
           `Unsupported filesystem entry in document directory: ${relativePathKey}; exclude it with --ignore`,
-        )
-      }
-      if (/\.html?$/i.test(entry.name)) {
-        throw new Error(
-          `HTML source files are not supported: ${relativePathKey}; exclude it with --ignore`,
         )
       }
       const mediaType = mediaTypeOf(relativePathKey)
@@ -415,8 +411,8 @@ const validateBundle = (raw) => {
     if (value.sourceHash !== undefined && (typeof value.sourceHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.sourceHash))) {
       fail(`file sourceHash is invalid: ${value.path}`)
     }
-    if (value.mediaType === 'text/html' || /\.html?$/i.test(value.path)) {
-      fail(`HTML source files are not supported: ${value.path}`)
+    if (value.path.toLowerCase().endsWith('.taco.html')) {
+      fail(`bundle file path must not end in .taco.html: ${value.path}`)
     }
     if ('sourceUrl' in value) fail(`sourceUrl is no longer supported: ${value.path}`)
     if (value.blocks !== undefined && (!Array.isArray(value.blocks) || !value.blocks.every(isBlock))) {

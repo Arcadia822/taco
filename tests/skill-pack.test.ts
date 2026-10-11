@@ -369,4 +369,36 @@ describe('skill packer', () => {
     const { parsed } = readBundle(artifact)
     expect(parsed.ok).toBe(true)
   })
+  it('packs a directory containing page.html as text/html and parses cleanly', () => {
+    const directory = fixtureDir()
+    write(join(directory, 'index.md'), '# Index\n')
+    write(join(directory, 'page.html'), '<!doctype html><html><head><title>Page</title></head><body><h1>Hello</h1></body></html>\n')
+
+    pack(['--dir', directory, '--title', 'HTML Pack Test'])
+    const artifact = join(directory, 'HTML_Pack_Test.taco.html')
+    const { parsed } = readBundle(artifact)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    const htmlFile = parsed.bundle.files.find((f) => f.path.endsWith('page.html'))
+    expect(htmlFile).toBeDefined()
+    expect(htmlFile?.mediaType).toBe('text/html')
+    expect(htmlFile?.content).toContain('<h1>Hello</h1>')
+  })
+
+  it('rejects a bundle carrying an x.taco.html file path', () => {
+    const directory = freeFormDirectory()
+    pack(['--dir', directory, '--title', 'Roguelike Tactics Research'])
+    const artifact = join(directory, 'Roguelike_Tactics_Research.taco.html')
+
+    writeBundle(artifact, (bundle) => {
+      const files = bundle.files as Array<Record<string, unknown>>
+      files.push({
+        path: `${bundle.root}/sub/nested.taco.html`,
+        mediaType: 'text/html',
+        content: '<!doctype html><title>Nested</title>',
+      })
+    })
+
+    expect(() => pack(['verify', artifact])).toThrow(/bundle file path must not end in \.taco\.html/)
+  })
 })
