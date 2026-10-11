@@ -240,16 +240,17 @@ Dynamic preview runs produced unexpected failures across 7 defect clusters: unes
 
 #### Root Cause
 
-Contract drift between untrusted model planning and downstream validator expectations. Specifically, SVG outline generation assumed `g` container tags for all child nodes, schema validation permitted contradictory `ui_change=false` scenes and unreserved failure shot names, execution error handlers unconditionally registered screenshot artifacts without verifying filesystem persistence, and PR body markdown interpolation lacked escaping for table pipes, brackets, and demarcated boundary markers. Furthermore, model evaluations confirmed CommandCode Jev (`typesafe/jev200`) provides typed decision probabilities rather than text/selector generation, reaffirming that deepseek-v4.1-flash remains the appropriate dynamic planner default while strict boundary validation must reject malformed inputs.
+Contract drift between untrusted model planning and downstream validator expectations. Specifically, SVG outline generation assumed `g` container tags for all child nodes, schema validation permitted contradictory `ui_change=false` scenes and unreserved failure shot names, execution error handlers unconditionally registered screenshot artifacts without verifying filesystem persistence, and PR body markdown interpolation lacked escaping for table pipes, brackets, and demarcated boundary markers. Furthermore, model evaluations confirmed CommandCode Jev (`typesafe/jev`) provides typed decision probabilities rather than text/selector generation, reaffirming that deepseek-v4.1-flash remains the appropriate dynamic planner default while strict boundary validation guards execution. Additionally, local environments lacking pre-installed Pillow (`PIL`) require an isolated pinned virtual environment (`Pillow==12.3.0`) for image sanitization during developer verification.
 
 #### Evidence
 
-- 2026-10-11 — Independent PR Review, Security, and Architecture audits on PR #132 (freeze head `dbda425`, worktree `feat/taco-62-dynamic-preview`); repro of duplicate markers via `updatePrBodyWithBlock`, phantom screenshot failure under browser abort, and `g.actor.actor-box` locator mismatch.
+- 2026-10-11 — Independent PR Review, Security, and Architecture audits on PR #132 (freeze head `dbda425`, worktree `feat/taco-62-dynamic-preview`); repro of duplicate markers via `updatePrBodyWithBlock`, phantom screenshot failure under browser abort, locator mismatch, and local environment missing PIL module.
 
 #### Prevention & Escalation
 
 - Enforce exact SVG tag and class preservation in `dom-outline.mjs`.
-- Strictly reserve failure shot names (`failure`, `failure-state`, `error`) and enforce 48-char scene IDs and 128-char generated filenames in `plan-schema.mjs`.
+- Strictly reserve failure shot names (`failure`, `failure-state`) and globally reserve all-scene failure filenames (`<scene-id>-failure.png`) in `plan-schema.mjs`.
 - Ensure `ui_change: false` canonically requires `scenes: []` across plan schema, execution, and PNG validation.
 - Guarantee execution startup failures write valid diagnostic manifests, and register failure screenshots only when disk writes succeed.
 - Sanitize dynamic text before markdown table/alt interpolation and validate the final PR body retains exactly one marker pair.
+- Provide isolated pinned `Pillow==12.3.0` virtual environments for local sanitization runs when Docker daemon is not active.

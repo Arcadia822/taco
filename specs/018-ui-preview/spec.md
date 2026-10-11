@@ -272,13 +272,39 @@ Transformation of fixed UI preview into dynamic PR-diff and DOM-outline-driven d
 Following independent review findings across correctness, security, and architecture, 7 defect groups were systematically remediated:
 
 1. **DOM Outline Tag and Class Fidelity**: Replaced synthetic `g` wrapping in SVG traversal with actual element tag names (`rect.actor`, `text.actor`) and true DOM class lists. Disarmed fictional `g.actor.actor-box` references in favor of verified `rect.actor` and `text.actor` targets.
-2. **Failure Screenshot Namespace and Disk Verification**: Reserved failure-related shot names (`failure`, `failure-state`, `error`) in `plan-schema.mjs` to eliminate collisions with planned shots. Hardened `execute-preview.mjs` to register screenshot entries only when image files are successfully written to disk, ensuring failure manifests remain valid and publishable even when screenshots fail.
+2. **Failure Screenshot Namespace and Disk Verification**: Reserved failure-related shot names (`failure`, `failure-state`) and enforced global reservation of all-scene failure filenames (`<scene-id>-failure.png`) against normal shot filenames in `plan-schema.mjs` to eliminate collisions with planned shots. Hardened `execute-preview.mjs` to register screenshot entries only when image files are successfully written to disk, ensuring failure manifests remain valid and publishable even when screenshots fail.
 3. **Execution Environment Startup Resilience**: Enclosed environment readiness checks and Playwright launches in diagnostic error handlers that output structured failed manifests. Evaluated target requirements so taco-only plans do not block on host server readiness.
 4. **Cross-Field Manifest Validation**: Enforced strict status enums (`passed`, `failed`, `unavailable`), validated shot filenames and duplicates against trusted plan expectations, and rejected contradictory states (such as failed scenes under an overall passed manifest).
 5. **Canonical No-UI-Change Representation**: Aligned plan schema, execution, and validation so `ui_change: false` canonically requires `scenes: []`, eliminating `ERR_SCENE_COUNT` validation failures.
 6. **Strict Budget Rejection Without Step Reordering**: Over-budget plans exceeding 12 steps or 3 scenes are strictly rejected as unavailable rather than reordering steps, preserving chronological interaction-caption alignment.
-7. **Markdown Delimiter and Table Sanitization**: Escaped PR preview markers (`<!-- taco:ui-preview:start/end -->`), table pipes (`|`), and alt brackets in dynamic summaries and captions, guaranteeing that updated PR bodies maintain exactly one valid marker pair.
+7. **Markdown Delimiter and Table Sanitization**: Disarmed boundary marker literals (`<!-- taco:ui-preview:start/end -->`) in dynamic summaries and captions, and escaped table pipes (`|`) and alt brackets (`[]`) in table cells and image alts, guaranteeing that updated PR bodies maintain exactly one valid marker pair without splitting table columns.
 
-#### Model Routing Evaluation: CommandCode Jev
+#### Budget Estimation (Prepare) vs Actual Measurements (Develop)
 
-Evaluation of CommandCode's `typesafe/jev200` (`https://commandcode.ai/models/jev`) confirmed that Jev is a specialized fast classification model providing decision probabilities rather than generative text, selectors, or action sequences. While effective for category routing, it cannot generate dynamic UI interaction plans or Mermaid DOM navigation sequences. Accordingly, the pipeline retains `deepseek/deepseek-v4.1-flash` via the CommandCode OpenAI-compatible proxy (`https://api.commandcode.ai/provider/v1`) as the default dynamic planner, protected by the strict schema and validation boundaries detailed above.
+| Artifact | Estimated increase | Measured increase | Final bytes | Difference / Cause |
+| :--- | :---: | :---: | :---: | :--- |
+| Complete shell (`dist-single/Taco_Spec.taco.html`) | 0 | +568 | 2,846,650 | +568 bytes from updated documentation payload in bundled spec |
+| Lite shell (`dist-single/Taco_Spec_Lite.taco.html`) | 0 | +522 | 297,311 | +522 bytes from updated documentation payload in bundled spec |
+| Skill complete shell (`skills/taco/taco-shell.html`) | 0 | +568 | 2,738,186 | +568 bytes from documentation payload in bundled spec |
+| Skill lite shell (`skills/taco/taco-shell-lite.html`) | 0 | +522 | 188,847 | +522 bytes from documentation payload in bundled spec |
+| Skill directory (`skills/taco/`) | 0 | +3,361 | 14,094,920 | +3,361 bytes from updated skill shells and doc files |
+| Release package | 0 | 0 | 0 | 0 new release dependencies or distribution changes |
+| CI scripts & declarations (`.github/workflows/scripts/`) | 0 (runtime) | +11,768 (vs 907dd8b) | 120,172 | +11,768 bytes across review remediation, type definitions, and schema boundary guards |
+| Added npm runtime dependencies | 0 | 0 | 0 | Zero added runtime dependencies |
+| Added network requests in build / capture | 0 | 0 | 0 | Zero network requests; capture containers remain `--network none` |
+
+#### Model Routing Evaluation: CommandCode Jev & Live Verification
+
+Evaluation of CommandCode's `typesafe/jev` (`https://commandcode.ai/models/jev`) confirmed that Jev is a specialized fast classification model providing decision probabilities rather than generative text, selectors, or action sequences. While effective for category routing, it cannot generate dynamic UI interaction plans or Mermaid DOM navigation sequences. Accordingly, the pipeline retains `deepseek/deepseek-v4.1-flash` via the CommandCode OpenAI-compatible proxy (`https://api.commandcode.ai/provider/v1`) as the default dynamic planner, protected by the strict schema and validation boundaries detailed above.
+
+In live execution of the model plan against the real TACO-67 change, 2 scenes passed (flowchart node selection and sequence diagram actor toolbar activation with verified screenshots) and 1 scene failed gracefully (`g.node[data-id="Bob"]` not found, publishing a valid failed diagnosis and failure screenshot without fake fallback). The neo-gradient style was accurately reported by the model as `unseen` because theme switching is outside the sandbox interaction action set.
+
+#### Verified Failure Resilience Paths
+
+The failure handling and boundary enforcement paths were exercised and verified against real failure conditions:
+
+1. **Playwright context launch abort (`/tmp/taco-68-context-failure`)**: When browser context creation fails, a structured failed diagnostic manifest (`status: "failed"`, 0 screenshots) is output and validated cleanly by `validate-preview-png.mjs` (`valid: true`).
+2. **Screenshot write failure (`/tmp/taco-68-screenshot-failure`)**: When screenshot operations throw or fail to write, no phantom files are registered (`screenshots: []`), disk consistency is preserved, and the diagnostic manifest validates cleanly.
+3. **Startup host unavailability for Taco-only scenes (`/tmp/taco-68-startup-after`)**: Preflight checks verify target requirements so Taco-only scenes do not block on external host servers, generating a valid passed manifest and verified screenshot (`taco-only-overview.png`).
+4. **No-UI-change / unavailable plan (`/tmp/taco-68-unavailable-final`)**: Over-budget, invalid, or no-UI-change plans are rejected cleanly with canonical `status: "unavailable"` and `scenes: []`, producing valid manifests and safe PR comments without fake fallbacks.
+5. **Pillow image sanitization and validation (`/tmp/taco-evidence/live-record-out`)**: All 4 captured screenshots (2 passed scenes + 1 graceful failure scene) were sanitized using pinned `Pillow==12.3.0` and validated across dimensions (1280x800) and byte budgets (273,833 total bytes) with 0 errors.

@@ -14,7 +14,7 @@ export const MAX_SCENE_ID_LENGTH = 48
 export const MAX_SHOT_NAME_LENGTH = 64
 export const MAX_GENERATED_FILENAME_LENGTH = 128
 export const VALID_SHOT_NAME = /^[a-z0-9][a-z0-9_-]*$/
-export const RESERVED_SHOT_NAMES = new Set(['failure', 'failure-state', 'error'])
+export const RESERVED_SHOT_NAMES = new Set(['failure', 'failure-state'])
 export const FORBIDDEN_TEXT_OR_TARGET =
   /退出|quit|删除|delete|remove|移除|更新到|update to|restart|重启|sign out|登出|卸载|uninstall/i
 
