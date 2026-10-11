@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.14.5](https://github.com/Arcadia822/taco/compare/v0.14.4...v0.14.5) (2026-10-11)
+
+### Bug Fixes
+
+* **cli**: default Host to official Tacobin site ([264fc79](https://github.com/Arcadia822/taco/commit/264fc793be842cbcb21c68e4dadf5df74c0a5f11))
+* **mermaid**: enable sequenceDiagram node interactions and neo gradient styling (TACO-67) ([89ba2e7](https://github.com/Arcadia822/taco/commit/89ba2e76f78ff3464afbb10f385628bb984675eb))
+* **ci**: repair UI preview artifact and container paths (#128) ([d8a867c](https://github.com/Arcadia822/taco/commit/d8a867c5590df51b5c88cda824fdaceab22e43c4))
+
+### Chores & Maintenance
+
+* chore: **release**: tacobin-v0.8.3 ([0f634bc](https://github.com/Arcadia822/taco/commit/0f634bc4cfd2040b4a78586004c2df38a8a1a34a))
+* chore: **release**: taco-cli v0.4.2 ([ee36475](https://github.com/Arcadia822/taco/commit/ee36475dacebb2f0a2a3153f1c1c654690574a1d))
+* Revert "chore(agents): default to poteto mode for new issue development" ([c5b7642](https://github.com/Arcadia822/taco/commit/c5b7642e7acbe7fb7c9f6cd560cd4940c1781099))
+* chore: **agents**: default to poteto mode for new issue development ([791424a](https://github.com/Arcadia822/taco/commit/791424ac6b1af645b96fc227d5ffce741dcca488))
+* test: **mermaid**: add regression test for sequenceDiagram interaction and neo theme (TACO-67) ([f3c1664](https://github.com/Arcadia822/taco/commit/f3c1664f85a9adf98cd7a1620218f80e5e444c7f))
+
 ## [0.14.4](https://github.com/Arcadia822/taco/compare/v0.14.3...v0.14.4) (2026-10-10)
 
 ### Bug Fixes
