@@ -8,8 +8,8 @@ The Host web application uses `next/font/local` to serve self-contained WOFF2 fo
 
 - **Zero build-time network requests**: Eliminates external HTTP fetches to Google Fonts APIs (`fonts.googleapis.com` / `fonts.gstatic.com`) during `next build`.
 - **Immunity to CDN/loader defects**: Bypasses the Next.js Google font loader regular expression failure (`/\\.(woff|woff2|eot|ttf|otf)$/.exec(...)` throwing `TypeError` when dynamic subset URLs lack file extensions).
-- **Offline & air-gapped reproducibility**: Containerized CI environments and offline developer builds succeed deterministically without network access.
-- **Full glyph and subset coverage**: Uses official variable font releases providing full character set coverage (Latin, Latin Extended, Cyrillic, Greek, Vietnamese, programming symbols and ligatures) matching or exceeding original Google Fonts subsets.
+- **Offline font compilation**: Once dependencies are installed, font compilation uses only the bundled files. The production build passed with outbound network access denied.
+- **Upstream glyph coverage**: Uses complete official variable font releases, rather than retaining only Latin cache subsets.
 
 ---
 
@@ -51,7 +51,7 @@ The Host web application uses `next/font/local` to serve self-contained WOFF2 fo
 
 ## Fallback Metrics
 
-`next/font/local` automatically inspects font tables via `fontkit` and computes `@font-face` fallback metrics to prevent layout shifts (CLS) when fallback fonts (Arial) load:
+`next/font/local` inspects font tables via Next.js's bundled `fontkit` and computes `@font-face` fallback metrics to reduce layout shifts while the web fonts load:
 
 - **Geist**: `ascentOverride: 94.56%`, `descentOverride: 27.76%`, `lineGapOverride: 0.00%`, `sizeAdjust: 106.28%`, fallback: `Arial`
 - **Fira Code**: `ascentOverride: 68.45%`, `descentOverride: 22.82%`, `lineGapOverride: 0.00%`, `sizeAdjust: 134.86%`, fallback: `Arial`

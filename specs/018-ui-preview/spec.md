@@ -327,21 +327,21 @@ TypeError: Cannot read properties of null (reading '1')
 
 Inspection of `@next/font/dist/google/loader.js` revealed that the loader extracts URLs from Google Fonts `@font-face` declarations via `/src: url\((.+?)\)/` and unconditionally executes `/\.(woff|woff2|eot|ttf|otf)$/.exec(googleFontFileUrl)[1]`. In environments where Google Fonts endpoints serve dynamic subset URLs or alternative routing without a standard font file extension at the path terminus, `.exec()` returns `null`, throwing a fatal `TypeError`.
 
-To achieve 100% build reproducibility and eliminate network brittleness, `packages/host` was migrated from `next/font/google` to `next/font/local` using self-contained official variable WOFF2 fonts stored in `packages/host/src/app/fonts/`.
+To remove the external font response from the build inputs, `packages/host` was migrated from `next/font/google` to `next/font/local` using official variable WOFF2 fonts stored in `packages/host/src/app/fonts/`.
 
 #### Budget Estimation (Prepare) vs Actual Measurements (Develop)
 
-| Metric / Artifact                                           | Baseline Before | Prepare Estimate | Actual Measured | Deviation / Attribution                                              |
-| :---------------------------------------------------------- | --------------: | ---------------: | --------------: | :------------------------------------------------------------------- |
-| Complete product shell (`dist-single/Taco_Spec.taco.html`)  | 2,846,650 bytes |          0 bytes | 2,846,650 bytes | 0 bytes; Host font migration does not modify product shells          |
-| Lite product shell (`dist-single/Taco_Spec_Lite.taco.html`) |   297,311 bytes |          0 bytes |   297,311 bytes | 0 bytes; Host font migration does not modify product shells          |
-| Skill Complete shell (`skills/taco/taco-shell.html`)        | 2,738,186 bytes |          0 bytes | 2,738,186 bytes | 0 bytes; skill distribution untouched                                |
-| Skill Lite shell (`skills/taco/taco-shell-lite.html`)       |   188,847 bytes |          0 bytes |   188,847 bytes | 0 bytes; skill distribution untouched                                |
-| Host font assets (`packages/host/src/app/fonts/*.woff2`)    |         0 bytes |       ~185,000 B |       182,740 B | -2,260 bytes; official variable full fonts (Geist 69.6K, Fira 113K)  |
-| Added npm runtime dependencies                              |      0 packages |       0 packages |      0 packages | 0 added dependencies; uses existing `next/font/local`                |
-| Added npm dev dependencies                                  |      0 packages |       0 packages |      0 packages | 0 added dependencies                                                 |
-| External Google Fonts build-time HTTP requests              |      2 requests |      -2 requests |      0 requests | Completely eliminated; Next.js builds are 100% offline-deterministic |
-| Host build output size & compile delta                      |      Unmeasured |       Unmeasured |  Pending Parent | Parent agent records actual build output metrics upon post-merge CI  |
+| Metric / Artifact                                           |                      Baseline Before |                         Prepare Estimate |                     Actual Measured | Deviation / Attribution                                                                             |
+| :---------------------------------------------------------- | -----------------------------------: | ---------------------------------------: | ----------------------------------: | :-------------------------------------------------------------------------------------------------- |
+| Complete product shell (`dist-single/Taco_Spec.taco.html`)  |                      2,846,650 bytes |                                  0 bytes |                     2,846,650 bytes | 0 bytes; Host font migration does not modify product shells                                         |
+| Lite product shell (`dist-single/Taco_Spec_Lite.taco.html`) |                        297,311 bytes |                                  0 bytes |                       297,311 bytes | 0 bytes; Host font migration does not modify product shells                                         |
+| Skill Complete shell (`skills/taco/taco-shell.html`)        |                      2,738,186 bytes |                                  0 bytes |                     2,738,186 bytes | 0 bytes; skill distribution untouched                                                               |
+| Skill Lite shell (`skills/taco/taco-shell-lite.html`)       |                        188,847 bytes |                                  0 bytes |                       188,847 bytes | 0 bytes; skill distribution untouched                                                               |
+| Host font assets (`packages/host/src/app/fonts/*.woff2`)    |                              0 bytes |                               ~185,000 B |                           182,740 B | -2,260 bytes; official variable full fonts (Geist 69.6K, Fira 113K)                                 |
+| Added npm runtime dependencies                              |                           0 packages |                               0 packages |                          0 packages | 0 added dependencies; uses existing `next/font/local`                                               |
+| Added npm dev dependencies                                  |                           0 packages |                               0 packages |                          0 packages | 0 added dependencies                                                                                |
+| External Google Fonts CSS build requests                    |       2 requests plus font downloads | -2 CSS requests and their font downloads |                          0 requests | Production build passed with outbound network denied; browser loaded both fonts from the local Host |
+| Host production route `/`                                   | Not compared across main integration |                       0 new dependencies | 58.1 kB route; 161 kB first-load JS | Next.js production build output; upstream main changes were also synchronized                       |
 
 #### Font Provenance & Glyph Coverage Parity
 
@@ -357,4 +357,14 @@ To achieve 100% build reproducibility and eliminate network brittleness, `packag
    - **License**: SIL Open Font License 1.1 ([`OFL-FiraCode.txt`](../../packages/host/src/app/fonts/OFL-FiraCode.txt)).
 3. **CSS Variable & Fallback Metrics Parity**:
    - Injects identical `--font-geist` and `--font-fira-code` CSS custom properties, leaving `packages/host/src/app/home.css` consumers completely untouched.
-   - `next/font/local` reads font tables via `fontkit` and calculates fallback metrics for `Arial`: Geist (`ascentOverride: 94.56%`, `descentOverride: 27.76%`, `sizeAdjust: 106.28%`), Fira Code (`ascentOverride: 68.45%`, `descentOverride: 22.82%`, `sizeAdjust: 134.86%`), closely matching prior Google Fonts override tables and avoiding layout shifts.
+   - `next/font/local` reads font tables via Next.js's bundled `fontkit` and calculates fallback metrics for Arial to reduce layout shifts; measured CLS parity is not claimed.
+
+#### Verification of the CI Font Repair
+
+- Restored the lockfile environment with `npm ci --no-audit --no-fund` after integrating `main` (`2693d13`). The only merge conflict was `LESSONS.md`; retained both histories and assigned the dynamic-preview entry `LESSON-011` and the font incident `LESSON-012`.
+- `npm run check`: 679 tests across 59 files passed, TypeScript and all shell builds passed, and the 12 lesson entries validated.
+- `sandbox-exec -p '(version 1) (allow default) (deny network-outbound)' env NEXT_TELEMETRY_DISABLED=1 npm run --prefix packages/host build`: passed, including production prerendering, with outgoing network denied.
+- Production Host browser smoke at `http://127.0.0.1:32272`: both local variable fonts loaded at weights 400–700, no Google Fonts requests, and no browser errors. Homepage screenshot inspected.
+- `npm run test:browser`: 14 files loaded, 7 warnings, 0 errors. Complete/Lite product and skill shell bytes stayed unchanged from the repair baseline shown above.
+- New font binaries total 182,740 bytes versus the 185,000-byte estimate (-2,260 bytes). The prior local build's 12 cached font subsets totaled 186,068 bytes; that cache comparison is not a controlled production before/after measurement. The full font files are both preloaded, increasing Latin-only first-load font transfer versus the prior two Latin subsets (65,628 bytes).
+- No new npm dependencies or skill instructions. The Host README and font provenance record document the local-font contract; removed the unsupported `NEXT_FONT_GOOGLE_MOCKED` flags from both candidate workflow build jobs.
