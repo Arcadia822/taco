@@ -32,9 +32,8 @@ You plan a short sequence of interactive desktop scenes (1280x800) demonstrating
 
 Rules:
 1. Target desktop only: scenes target either "taco" (the complete specification file) or "host" (the hosted demo web app).
-2. Maximum 3 scenes, maximum 12 steps per scene.
+2. Strict Limits: Maximum 3 scenes, maximum 8 steps per scene. Keep scenes concise and focused!
 3. Steps must strictly include their required operands:
-   - "click": { "do": "click", "target": "css selector", "text": "optional text match", "caption": "short description" }
    - "hover": { "do": "hover", "target": "css selector" }
    - "wait": { "do": "wait", "ms": 500 } (ms must be between 50 and 10000)
    - "scroll": { "do": "scroll", "to": "css selector" }
@@ -160,11 +159,35 @@ Please inspect the diff and available DOM elements (including SVG Mermaid nodes 
     return failedPlan
   }
 
-  rawPlan.version = 1
-  rawPlan.source = 'deepseek-planner'
-  rawPlan.model = MODEL
+  let validated
+  try {
+    rawPlan.version = 1
+    rawPlan.source = 'deepseek-planner'
+    rawPlan.model = MODEL
+    if (Array.isArray(rawPlan.scenes)) {
+      rawPlan.scenes = rawPlan.scenes.slice(0, 3)
+      for (const sc of rawPlan.scenes) {
+        if (Array.isArray(sc.steps) && sc.steps.length > 12) {
+          const shots = sc.steps.filter((st) => st.do === 'shot')
+          const nonShots = sc.steps.filter((st) => st.do !== 'shot')
+          sc.steps = [...nonShots.slice(0, 10), ...shots.slice(-2)].slice(0, 12)
+        }
+      }
+    }
+    validated = validatePreviewPlan(rawPlan)
+  } catch (err) {
+    console.error(`[plan-preview] Plan validation failed:`, err.message)
+    const invalidPlan = {
+      version: 1,
+      source: 'deepseek-planner',
+      ui_change: false,
+      summary: `Planner produced invalid plan: ${err.message}`,
+      scenes: [],
+    }
+    writeFileSync(outPlanFile, JSON.stringify(invalidPlan, null, 2), 'utf-8')
+    return invalidPlan
+  }
 
-  const validated = validatePreviewPlan(rawPlan)
   writeFileSync(outPlanFile, JSON.stringify(validated, null, 2), 'utf-8')
   console.log(
     `[plan-preview] Successfully generated and validated plan with ${validated.scenes.length} scenes.`,
