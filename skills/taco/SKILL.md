@@ -1,6 +1,6 @@
 ---
 name: taco
-description: Use when the user asks to create or refresh a .taco.html, make a Taco, prepare technical documents for review, or handle Taco edits and comments — and proactively when you are about to deliver a multi-part design, plan, RFC, or spec that needs human review or decisions. Not for quick answers, exploratory chat, or self-contained changes nobody needs to review. Works in ordinary documentation directories and Spec Kit projects without installing a CLI.
+description: Turns a Markdown doc directory into one portable .taco.html that a human reviews, edits, and comments in the browser, then hands back for you to apply to the canonical files. Use when asked to make or refresh a Taco, "打包成 Taco", prepare documents for human review (spec, plan, RFC, ADR, API reference), or handle Taco edits, comments, and Handoff — and proactively when a multi-part design or plan needs a human to decide or sign off before it lands ("规划一下", "出个方案", "评审一下这个方案", "design this", "RFC", "which approach"). Not for quick answers, exploratory chat, or self-contained changes nobody needs to review.
 ---
 
 # Taco: human-agent document review in one file
