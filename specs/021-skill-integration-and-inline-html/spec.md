@@ -6,7 +6,7 @@ status: 'Implemented'
 
 ## 范围
 
-本设计覆盖 TACO-70 的 WP1–WP4（WP5 模板库 `prd/`、`interaction/` 为后续批次，见「后续批次」）。承接 TACO-36、TACO-49、TACO-57、TACO-58 的验收点；输入为两份 TACO-49 调研（用户旅程 J01–J09/用户故事 US01–US09；pstack/gstack/superpowers/spec-kit 兼容调研）与 2026-10-11 人类提供的 pstack × Taco 集成建议。
+本设计覆盖 TACO-70 的 WP1–WP5。承接 TACO-36、TACO-49、TACO-57、TACO-58 的验收点；输入为两份 TACO-49 调研（用户旅程 J01–J09/用户故事 US01–US09；pstack/gstack/superpowers/spec-kit 兼容调研）与 2026-10-11 人类提供的 pstack × Taco 集成建议。
 
 ## 行为
 
@@ -53,9 +53,10 @@ status: 'Implemented'
 4. 产物生成类 skill 的产出按通用范式落目录、进 bundle、正文可跳转。
 5. skill 与 extension 镜像一致（J09）；`npm run check` 通过；体积与依赖预算给出实测。
 
-## 后续批次（本 Issue WP5，非本次交付）
+## WP5 · 模板库补齐（2026-10-11 交付）
 
-- `prd/`、`interaction/` 模板包（extensions 正本 + skills 生成镜像）与轻/中/重选用示例，按 TACO-49 J05/AC05 验收。
+- 新增 `extensions/taco/templates/prd/`（PRD 需求层：问题/目标指标/非目标/场景/优先级需求/风险/待决决策项/验收）与 `extensions/taco/templates/interaction/`（交互层：角色入口/主流程/异常/状态/原型要求/待决决策项/验收 + `diagrams/flow.mmd` 示例），各含 `README.md`、`template.md`、`bundle.json`，`empty.taco.html` 由 `scripts/build-template-htmls.mjs` 生成，`skills/taco/templates/` 为生成镜像（J09）。
+- 轻/中/重选用说明落在 `SKILL.md` 模板段与各包 README（light 不用包，medium 用 `interaction/`，heavy 用 `prd/` + `interaction/` + `architecture/` + `api-reference/`），按 TACO-49 J05/AC05 验收。
 
 ## 体积与依赖预算
 
@@ -67,14 +68,18 @@ prepare 估算基于 AGENTS.md 基线节（2026-10-09）；实测与估算同工
 | Lite shell `skills/taco/taco-shell-lite.html` | 188325 | +2048–6144 | 189406 | +1081 | 低于预估，同上 |
 | Complete `.taco.html` 产物 | 2846082 | +2048–6144 | 2847102 | +1020 | 与 shell 同源，同因 |
 | Lite `.taco.html` 产物 | 296789 | +2048–6144 | 297870 | +1081 | 与 shell 同源，同因 |
-| `skills/taco/`（含 shells、模板镜像与文档） | 14094920 | +10240–24576 | 14117033 | +22113 | 落在区间内：`references/integrations.md` 约 11.8 KB + `SKILL.md` 约 +5 KB + shells 约 +2.1 KB + 模板 `empty.taco.html` 同步重建约 +4 KB + 2026-10-11 口径修订约 +0.8 KB，减去 `pack.mjs` 删除的旧校验 |
+| WP1–WP4 小计 `skills/taco/`（含 shells、模板镜像与文档） | 14094920 | +10240–24576 | 14117033 | +22113 | 落在区间内：`references/integrations.md` 约 11.8 KB + `SKILL.md` 约 +5 KB + shells 约 +2.1 KB + 模板 `empty.taco.html` 同步重建约 +4 KB + 口径修订约 +0.8 KB，减去 `pack.mjs` 删除的旧校验 |
+| WP5 模板包 `prd/` + `interaction/` | 0 | 约 5,490,000（按构造推算：每包 `empty.taco.html` ≈ Complete shell 2.74 MB，文本约 6 KB） | 5491801 | +5491801 | 与既有 4 包同构，`skills/taco/templates/` 为生成镜像 |
+| `skills/taco/` 合计 | 14094920 | — | 19608834 | +5513914 | shell 零增长，增量全部来自 WP5 两个生成的模板 `empty.taco.html` |
 
 - 新增依赖：无。联网行为：无新增；内嵌 HTML 渲染为离线沙箱（CSP 禁外联），`check-update.mjs` 与 Lite CDN 行为不变。
-- 阈值判断：最大相对增长为 Lite skill shell +0.57%（其余 ≤0.04%），绝对增量 ≤1081 B，均远低于「较大增大」阈值（≥1% 或 ≥32 KB），不触发告知义务；数字仍按规范在此列出。`extensions/taco/assets/`、`extensions/taco/templates/`、`packages/host/assets/` 为同源镜像/重建产物，增量同量级。
+- 阈值判断：shell 零增长（2,738,638 / 189,406 与 WP1–WP4 实测一致），不触发「较大增大」告知义务。`skills/taco/` 合计 +5,513,914 B 全部来自 WP5 两个生成的模板 `empty.taco.html`（各约 2.74 MB，内嵌 Complete shell，与既有 4 包同构），文档与脚本合计约 +22 KB。
 
 ## 实现验证
 
 - `npm run check` 通过：`format:check`、`check:lessons`、vitest 57 个测试文件 / 663 项测试全通过、`tsc -b` + `build-shells` + `refresh-host-demo` 构建通过。
+- WP5 模板包验证：`pack.mjs verify` 对 `prd/empty.taco.html` 与 `interaction/empty.taco.html` 结构干净（各 2 files、导航分组正确）；`lint-mermaid.mjs` 对 `flow.mmd` 1 unit / 0 diagnostics；`tests/templates.test.ts` 覆盖新包（packs 列表 + 必备文件 + bundle 可解析 + 镜像一致）。
+- 触发路由探针（writing-skills 压力测试法，4 个模拟路由判定，针对新 description 与触发段）：TACO-58 badcase（复杂规划）判 taco yes 且交付 canonical Markdown + `.taco.html` + 待决点摘要；一体成型小功能判 taco no；纯探索头脑风暴判 taco no；点名 pstack 但未安装判 taco yes 且一句说明跳过、不阻断。注意这是模拟判定而非真实调度（本机安装副本仍是旧 description），真实回放需先同步 `~/.agents/skills/taco/`。
 - 新增/修改回归测试：`tests/embedded-html.test.ts`（doctype/片段/BOM、CSP 注入位置、sandbox 常量无 `allow-same-origin`）、`tests/model.test.ts`（`text/html` 接受与分类、参数化 media type、扩展名回退、`*.taco.html` 拒绝）、`tests/skill-pack.test.ts`（pack 接受 `.html`→`text/html`、拒绝容器路径）、`tests/validation.test.ts`（html 文件跳过锚点校验、Markdown→`.html` 跨文档链接通过）、`tests/file-browser.test.ts`（iframe srcdoc/sandbox 渲染）。
 - 浏览器实测（Playwright/Chromium，对构建产物 `tmp/TACO-70_Inline_HTML.taco.html`）10/10 通过：Markdown 链接内嵌打开且不发生本地跳转；`sandbox` 含 `allow-scripts` 且无 `allow-same-origin`；srcdoc 注入 CSP 且禁外联；内联脚本执行；`parent.document` 访问被拦（opaque origin）；外链图片被 CSP 拦截；html 文件不挂载编辑器；`window.taco.validate()` 返回 `ok: true`、0 error / 0 warning。
 - `node skills/taco/scripts/pack.mjs verify` 结构干净；`node scripts/smoke-built-shell.mjs tmp/TACO-70_Inline_HTML.taco.html` 通过（2 files, 0 warnings）。
@@ -86,3 +91,4 @@ TACO-70 在 skill 内落地集成模块（SDD 引擎分层/探测/优先级/语�
 
 2026-10-11 人类修正两条口径：① SDD 引擎缺失从不阻断——未安装即跳过流程集成、Taco 照常工作（原「报缺失并停」作废）；② Taco 只在需要人审阅/拍板时使用，一体成型无需人看的小功能不产出 Taco。
 2026-10-11 二次修正：`description` 改为三段式路由文本并内嵌中英触发短语（能力陈述 / Use when / Not for），消除「只按字面请求触发」的残余风险（TACO-58 的根因）。
+2026-10-11 三次修正：`description` 按 writing-skills SDO 改为纯触发条件文本（去掉流程摘要，避免 Agent 走捷径跳过正文）；WP5 模板包（`prd/`、`interaction/`）交付；触发路由探针 4/4 符合预期。

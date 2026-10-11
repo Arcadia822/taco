@@ -1,0 +1,37 @@
+{
+  "format": "taco/files",
+  "version": 1,
+  "docId": "interaction-template",
+  "title": "Interaction Design",
+  "root": "interaction",
+  "files": [
+    {
+      "id": "interaction-md",
+      "path": "interaction/interaction.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '[FEATURE NAME] Interaction'\ncreated: '[DATE]'\nstatus: 'Draft'\n---\n\n## 1. Background & Goal\n\n[What interaction problem this solves and what a good experience looks like.]\n\n## 2. Roles & Entry Points\n\n- **Role**: [who acts]\n- **Entry**: [where the flow starts: screen, command, link]\n\n## 3. Main Flow\n\nSee [flow diagram](diagrams/flow.mmd).\n\n1. [Step: action → visible result]\n2. [Step: action → visible result]\n\n## 4. Exceptions & Edge Cases\n\n- [Failure or empty state, and what the user sees and can do]\n\n## 5. States & Transitions\n\n| State | Entered by | Leaves by |\n| --- | --- | --- |\n| [state] | [trigger] | [trigger] |\n\n## 6. Key Interactions\n\n[Decisions the reviewer must confirm: defaults, confirmations, undo, keyboard, mobile.]\n\n## 7. Prototype Requirements\n\n[Fidelity needed (sketch / high fidelity), who confirms it, and what question the prototype answers.]\n\n## 8. Pending Decisions\n\n### [Decision title]\n\n- **Background**: [why this fork exists]\n- **Options**: A) [option with trade-off] · B) [option with trade-off]\n- **Recommendation**: [and why]\n- **Blocks**: [which later work depends on this]\n\n## 9. Acceptance\n\n1. **Given** [state], **When** [action], **Then** [observable result]\n"
+    },
+    {
+      "id": "flow-mmd",
+      "path": "interaction/diagrams/flow.mmd",
+      "mediaType": "text/plain",
+      "content": "flowchart TD\n    A[Entry: user opens the flow] --> B{Signed in?}\n    B -- no --> C[Sign in]\n    C --> D\n    B -- yes --> D[Main action]\n    D --> E{Action succeeded?}\n    E -- yes --> F[Show result]\n    E -- no --> G[Show error with retry]\n    G --> D\n"
+    }
+  ],
+  "navigation": {
+    "version": 1,
+    "entry": "interaction/interaction.md",
+    "groups": [
+      {
+        "id": "group-interaction",
+        "title": "Interaction",
+        "paths": ["interaction/interaction.md"]
+      },
+      {
+        "id": "group-diagrams",
+        "title": "Diagrams",
+        "paths": ["interaction/diagrams/flow.mmd"]
+      }
+    ]
+  }
+}
