@@ -16,16 +16,18 @@ Guided by the principle **Encode Lessons in Structure**:
 
 ## Escalation Index
 
-| ID                                                                          | Title                                             | Occurrences |    Status     | Guard                                                                                |
-| :-------------------------------------------------------------------------- | :------------------------------------------------ | :---------: | :-----------: | :----------------------------------------------------------------------------------- |
-| [LESSON-001](#lesson-001-local-dependency-drift-pollutes-test-runs)         | Local Dependency Drift Pollutes Test Runs         |      1      |   **open**    | `package-lock.json`, `.github/workflows/ci.yml`                                      |
-| [LESSON-002](#lesson-002-version-triples-desync-across-release-surfaces)    | Version Triples Desync Across Release Surfaces    |      2      |   **open**    | `scripts/sync-skill-version.mjs`, `tests/version.test.ts`                            |
-| [LESSON-003](#lesson-003-tiptap-prosemirror-crash-on-markdown-code-in-bold) | Tiptap ProseMirror Crash on Markdown Code-in-Bold |      3      | **escalated** | `src/tiptap-editor.ts`, `tests/markdown-emphasis-code.test.ts`                       |
-| [LESSON-004](#lesson-004-headless-mermaid-execution-fails-without-dom-mock) | Headless Mermaid Execution Fails Without DOM Mock |      1      |   **open**    | `skills/taco/scripts/lint-mermaid.mjs`, `tests/mermaid-lint.test.ts`                 |
-| [LESSON-005](#lesson-005-artifact-id-downloads-nest-the-consumed-files)     | Artifact-ID Downloads Nest the Consumed Files     |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
-| [LESSON-006](#lesson-006-empty-docker-volume-copy-up-overrides-ownership)   | Empty Docker Volume Copy-Up Overrides Ownership   |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
-| [LESSON-007](#lesson-007-github-rejects-empty-asset-bootstrap-trees)        | GitHub Rejects Empty Asset Bootstrap Trees        |      1      |   **open**    | `.github/workflows/scripts/publish-preview.mjs`, `tests/ui-preview-pipeline.test.ts` |
-| [LESSON-008](#lesson-008-occupied-preview-port-serves-another-worktree)     | Occupied Preview Port Serves Another Worktree     |      1      |   **open**    | Unique preview ports and rendered workflow verification                              |
+| ID                                                                                        | Title                                                           | Occurrences |    Status     | Guard                                                                                |
+| :---------------------------------------------------------------------------------------- | :-------------------------------------------------------------- | :---------: | :-----------: | :----------------------------------------------------------------------------------- |
+| [LESSON-001](#lesson-001-local-dependency-drift-pollutes-test-runs)                       | Local Dependency Drift Pollutes Test Runs                       |      1      |   **open**    | `package-lock.json`, `.github/workflows/ci.yml`                                      |
+| [LESSON-002](#lesson-002-version-triples-desync-across-release-surfaces)                  | Version Triples Desync Across Release Surfaces                  |      2      |   **open**    | `scripts/sync-skill-version.mjs`, `tests/version.test.ts`                            |
+| [LESSON-003](#lesson-003-tiptap-prosemirror-crash-on-markdown-code-in-bold)               | Tiptap ProseMirror Crash on Markdown Code-in-Bold               |      3      | **escalated** | `src/tiptap-editor.ts`, `tests/markdown-emphasis-code.test.ts`                       |
+| [LESSON-004](#lesson-004-headless-mermaid-execution-fails-without-dom-mock)               | Headless Mermaid Execution Fails Without DOM Mock               |      1      |   **open**    | `skills/taco/scripts/lint-mermaid.mjs`, `tests/mermaid-lint.test.ts`                 |
+| [LESSON-005](#lesson-005-artifact-id-downloads-nest-the-consumed-files)                   | Artifact-ID Downloads Nest the Consumed Files                   |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
+| [LESSON-006](#lesson-006-empty-docker-volume-copy-up-overrides-ownership)                 | Empty Docker Volume Copy-Up Overrides Ownership                 |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
+| [LESSON-007](#lesson-007-github-rejects-empty-asset-bootstrap-trees)                      | GitHub Rejects Empty Asset Bootstrap Trees                      |      1      |   **open**    | `.github/workflows/scripts/publish-preview.mjs`, `tests/ui-preview-pipeline.test.ts` |
+| [LESSON-008](#lesson-008-occupied-preview-port-serves-another-worktree) | Occupied Preview Port Serves Another Worktree | 1 | **open** | Unique preview ports and rendered workflow verification |
+| [LESSON-009](#lesson-009-legacy-service-tests-do-not-prove-production-routes) | Legacy Service Tests Do Not Prove Production Routes | 1 | **open** | CLI-to-Next runtime smoke |
+| [LESSON-010](#lesson-010-revision-migrations-must-preserve-legacy-tables-and-event-order) | Revision Migrations Must Preserve Legacy Tables and Event Order | 1 | **open** | `packages/host/test/taco-60.test.ts` |
 
 ---
 
@@ -251,3 +253,59 @@ The readiness port was already occupied by a different Next process. Port availa
 
 - Assign a unique port to each worktree preview and launch from the package directory.
 - Verify a changed rendered element before treating readiness as proof. Report readiness mismatches to the tool owner.
+
+---
+
+### LESSON-009: Legacy Service Tests Do Not Prove Production Routes
+
+- **ID**: `LESSON-009`
+- **Category**: `architecture`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: CLI-to-Next runtime smoke
+
+#### Symptom
+
+TACO-60 has a revision implementation in the legacy `TacoHostService`, while the actual CLI reports `Network update is not implemented` and the production Next routes do not expose revisions.
+
+#### Root Cause
+
+The authenticated staged-upload service and the public Next review routes use different persistence paths. Service tests alone cannot establish that a feature exists in the running Host.
+
+#### Evidence
+
+- 2026-10-11 — TACO-60: actual CLI update against the local Next Host exited 2 before implementation. Production mapping found no revision pointer in `TacoDb` despite the legacy service revision method.
+
+#### Prevention & Escalation
+
+- Trace the command through its HTTP route and active database adapter before reusing a legacy implementation.
+- Exercise the built CLI against the running Next Host and inspect the served document and persisted review state.
+
+---
+
+### LESSON-010: Revision Migrations Must Preserve Legacy Tables and Event Order
+
+- **ID**: `LESSON-010`
+- **Category**: `architecture`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: `packages/host/test/taco-60.test.ts`
+
+#### Symptom
+
+TACO-60 revision initialization collided with the legacy authenticated `revisions` table. A local Host update also failed a foreign-key check after a development singleton retained a revision pointer without its new revision row.
+
+#### Root Cause
+
+The public review model reused a legacy table name with incompatible required columns. Migration initially seeded only null pointers. Timestamp ordering and using the current event cursor as the baseline revision sequence also made acknowledged Handoffs unreliable.
+
+#### Evidence
+
+- 2026-10-11 — TACO-60 runtime smoke: built CLI returned `FOREIGN KEY constraint failed`; after migration and restart, two updates preserved identity and review state. An actual content patch followed by update returned conflict exit code 4.
+
+#### Prevention & Escalation
+
+- Store public snapshots in `published_revisions`, preserving the legacy `revisions` table and its consumers.
+- Seed missing baseline rows independently of the current pointer. Update the pointer only while null, and retain the initial event sequence of 1.
+- Persist Handoff snapshots and compare event sequences. A legacy null snapshot can use live state only when its acknowledged state version matches.
+- Runtime probes and regression tests must use valid `FilePatch` content and observe the saved edit before checking conflict rejection.

@@ -56,7 +56,7 @@ Contract:
 
 ### Optional hosted review
 
-Local assembly and Handoff never require `taco-cli` or a Host. When explicitly publishing a Taco to a Host, read `references/publishing.md` first; when consuming hosted review events, read `references/reviewing.md` first. Both references are part of this same skill, not a second CLI-only guide. A hosted publication is public by default; inspect the payload and credential boundary with `--dry-run` before sending it. Publishing establishes an immutable baseline; public visitors can edit and comment under self-reported names with real-time autosave. Comments and autosaves do not wake the agent session or signal review completion: only an explicit human **Handoff** emits `review.handed_off`. Clicking Handoff checks for active agent listeners; if none are connected, the Host blocks handoff without emitting an event and prompts with install instructions for the Taco skill and taco-cli plus `taco-cli subscribe`. The agent subscribes or replays events via `taco-cli`, retrieves the immutable handoff snapshot, verifies it against canonical files for conflicts, and applies changes.
+Local assembly and Handoff never require `taco-cli` or a Host. When explicitly publishing a Taco to a Host, read `references/publishing.md` first; when consuming hosted review events, read `references/reviewing.md` first. Both references are part of this same skill, not a second CLI-only guide. A hosted publication is public by default; inspect the payload and credential boundary with `--dry-run` before sending it. Publishing creates that Taco's baseline revision; a later review round updates the same Taco in place with `taco-cli update <tacoId> <file> --base <revisionId>`, keeping the same reviewer URL and preserving existing comments and Checkpoints, rather than re-publishing a new document. Public visitors can edit and comment under self-reported names with real-time autosave. Comments and autosaves do not wake the agent session or signal review completion: only an explicit human **Handoff** emits `review.handed_off`. Clicking Handoff checks for active agent listeners; if none are connected, the Host blocks handoff without emitting an event and prompts with install instructions for the Taco skill and taco-cli plus `taco-cli subscribe`. The agent subscribes or replays events via `taco-cli`, retrieves the immutable handoff snapshot, verifies it against canonical files for conflicts, and applies changes.
 
 ### Choosing the right artifact for design content
 
@@ -202,7 +202,7 @@ Decide and state the presentation before writing anything. This is where an unex
 
 You are authoring one document model — the bundle. A directory of Markdown is one input that fills `files[]`; so is a Handoff, so is an existing Taco. The shell is only the carrier, and the block is yours to write: read the shell into memory, build and escape the block, parse the exact string you are about to insert, then replace the file atomically. `references/bundle-format.md` is the authority for that contract; `references/output-path.md` decides where the file goes.
 
-1. If a `.taco.html` already exists at the destination, **read its bundle and shell variant first** — before you copy or overwrite anything, or you will read your own fresh copy instead of the reviewed document. Preserve Complete/Lite on refresh unless the user explicitly requested conversion.
+1. If a `.taco.html` already exists at the destination, **read its bundle and shell variant first** — before you copy or overwrite anything, or you will read your own fresh copy instead of the reviewed document. Same Issue or review rounds must update the exact same `.taco.html` path and retain `docId` in place; never reinitialize from a template or create a second file even when research notes or titles change. Preserve Complete/Lite on refresh unless the user explicitly requested conversion.
 2. Build the block yourself, in this order (authority: `references/bundle-format.md`):
 
    - enumerate the directory: UTF-8 regular files plus validated PNGs; exclude hidden paths and every `*.taco.html`, and report the exclusions;
@@ -254,7 +254,18 @@ Then:
 
 ### 5. Refresh: rebuild after canonical edits
 
-After canonical edits, refresh the same Taco only when pending direct review edits are handled. If any edits remain conflicted or unavailable, preserve the reviewed file unchanged and report the blocker. Otherwise repeat assembly (step 1) with the same script and present/open the result. Verify the path, review history, and **entire Checkpoint definition and status table** are preserved; runtime comment normalization may change serialization but not meaning. Do not reinitialize statuses from a template or infer them from document content.
+After canonical edits, review feedback triggers an in-place refresh of the exact same Issue Taco path (`.taco.html`) and stable `docId`. Never reinitialize from a template, mint a new `docId`, or create a second file even if research files are added or the document title changes. Only refresh when pending direct review edits are handled. If any edits remain conflicted or unavailable, preserve the reviewed file unchanged and report the blocker.
+
+Otherwise repeat assembly (step 1) with the same script and present/open the result. Retain in-place:
+
+- the exact local file path and `docId`;
+- all `files[].id` mappings so comment anchors remain stable;
+- all comments and open review threads without fabricated resolutions;
+- all `navigation` entries and unknown bundle fields;
+- the **entire Checkpoint definition and status table** (including existing frozen, in-progress, or complete statuses; never reinitialize statuses from a template or infer them from document content);
+- pending human edits applied cleanly to canonical source files.
+
+Verify the path, review history, and Checkpoint statuses are preserved; runtime comment normalization may change serialization but not meaning.
 
 ## Invariants
 

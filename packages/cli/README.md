@@ -36,6 +36,8 @@ taco-cli publish specs/feature.taco.html
 # Publish to a local development Host explicitly
 taco-cli publish specs/feature.taco.html --host http://localhost:32167
 
+# Update an existing hosted Taco in-place to the same URL (preserves comments and checkpoints)
+taco-cli update <tacoId> specs/feature.taco.html --base <revisionId> --host https://taco.arcadia-han.com
 # Wait for Handoff, then exit with code 0 (metadata is self-reported)
 taco-cli subscribe <tacoId> \
   --host https://taco.arcadia-han.com \
@@ -58,6 +60,12 @@ taco-cli skills read taco
 ```
 
 ## Commands & Options
+
+### `taco-cli publish <file.taco.html>`
+Publishes a new Taco to a Host, returning its reviewer `url` and `tacoId`. Always represents initial creation. Never use `publish` as a silent fallback when an update was intended.
+
+### `taco-cli update <tacoId> <file.taco.html> --base <revisionId>`
+Pushes a replacement revision to an existing hosted Taco under the same URL (`<origin>/t/<tacoId>`), recording the new `revisionId`. Preserves hosted comment threads and Checkpoint statuses. `--base <revisionId>` must name the revision the CLI believes is active; a mismatch is reported as a revision conflict instead of overwriting. Pass `--dry-run` to validate the projection locally without making a network request. If an older installed binary lacks network update support, it reports an unsupported error; it never silently falls back to `publish`.
 
 ### `taco-cli subscribe <tacoId>`
 Waits for `review.handed_off` over SSE, emits NDJSON, and exits with code 0 after Handoff. Comments and autosaves keep the listener online but do not finish the review. The Host page requires an active listener to hand off; otherwise it shows installation and subscription commands. Use `--stream` (or `--follow`) to keep receiving all `ready`, `event`, and `checkpoint` frames.

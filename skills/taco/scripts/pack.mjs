@@ -837,7 +837,7 @@ const pack = async ({ options, multi, flags }) => {
 
   const title = options.get('title') ?? priorBundle?.title ?? portableTitleBase(rootPath)
   const expectedStem = portableTitleBase(title)
-  if (tacoFileBase(outputPath) !== expectedStem) {
+  if (!priorBundle && tacoFileBase(outputPath) !== expectedStem) {
     throw new Error(`Taco title requires filename ${expectedStem}.taco.html, not ${basename(outputPath)}`)
   }
 
