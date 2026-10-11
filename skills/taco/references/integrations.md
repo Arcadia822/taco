@@ -47,8 +47,8 @@ Apply per question ("what to design first", "which documents", "which template a
 
 Missing-but-requested and absent-by-default are different outcomes and must never blur:
 
-- P0/P1 explicitly requires an engine or template that is **not available** → report exactly what is missing and stop the affected part. Never substitute silently, never claim compliance.
-- Nothing was requested and nothing is installed → proceed with the P3 default, silently and smoothly. Never report "template/engine missing" for a project that has no SDLC conventions.
+- A missing engine is never a blocker: when nothing is installed, just skip the process integration and run Taco's normal workflow — no error, no "template missing" noise, no stop. Taco never requires an SDD skill set.
+- When the user explicitly named an engine or playbook that is not available, say so in one line and continue with Taco's normal workflow. Never claim you followed a tool that did not run, and never hold the review hostage to it.
 
 ### 1.4 Where the work lands (integration points)
 
@@ -105,6 +105,6 @@ Examples: `answer-me-with-html` (dense single-page HTML), Mermaid/diagram skills
 
 ## 3. Conflict rules (both families)
 
-- If the user names an engine or generator skill and it is missing: report it and stop that part. Do not fall back silently.
+- If the user names an engine or generator skill and it is missing: say so in one line and continue without that integration. The review never stops for a missing optional skill, and the named tool is never pretended to have run.
 - If project guidance and an installed engine disagree: project guidance (P1) wins; say so and cite the file.
 - If a generated artifact conflicts with canonical content (prose says A, page shows B): fix the source and regenerate; never edit the artifact to match the prose by hand, and never present contradictory facts to the reviewer.

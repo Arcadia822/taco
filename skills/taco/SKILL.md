@@ -1,6 +1,6 @@
 ---
 name: taco
-description: Use when the user asks to create or refresh a .taco.html, make a Taco, prepare technical documents for review, or handle Taco edits and comments — and proactively when you are about to deliver a multi-part design, plan, RFC, or spec that needs human review or decisions (planning, architecture, migration, or phased work with open questions). Not for quick answers or exploratory chat. Works in ordinary documentation directories and Spec Kit projects without installing a CLI.
+description: Use when the user asks to create or refresh a .taco.html, make a Taco, prepare technical documents for review, or handle Taco edits and comments — and proactively when you are about to deliver a multi-part design, plan, RFC, or spec that needs human review or decisions. Not for quick answers, exploratory chat, or self-contained changes nobody needs to review. Works in ordinary documentation directories and Spec Kit projects without installing a CLI.
 ---
 
 # Taco: human-agent document review in one file
@@ -19,11 +19,19 @@ Nothing to install. A `.taco.html` is plain HTML with one plaintext JSON data bl
 - No project scaffolding is required. Taco works in any repository or sandbox on a plain directory.
 - Spec Kit projects: if the project already has the Taco Spec Kit extension installed (`.specify/extensions/taco/` and the `taco-speckit` skill), use that flow. Otherwise this skill handles a Spec Kit feature directory exactly the same way — installing the extension is an optional deeper integration, never a requirement.
 
-### Trigger judgment: formal review vs exploration
+### Trigger judgment: when a human needs to look
 
-Use this skill **proactively**: the request rarely says "Taco" or "review". Trigger when the deliverable is a multi-part design, plan, RFC, or spec that needs human judgment — it spans modules or phases, carries decision points the human must make, or contains contracts, migrations, or irreversible choices. Signals: "规划一下", "出个方案", "design this", "RFC", "which approach", a phased roadmap, a data model, an API contract.
+**Taco exists for human review — that is the trigger.** Pack one only when the result needs a person to review it, decide something, or sign off — one human judgment per document is the point. If nobody needs to look, do not make a Taco: answer or ship in the conversation and the repository.
 
-Do **not** trigger for a one-sentence answer, a single-point bug fix, a copy edit, or open-ended brainstorming whose shape is still being discovered: keep those in the conversation. Early requirement refinement is exploration — stay in the conversation until there is a review contract (something to confirm, decide, or sign off); do not turn every message into a document edit or a comment task. When exploration settles into a proposal that needs human sign-off, that proposal is the Taco.
+Needs a human → use this skill proactively (the request rarely says "Taco" or "review"):
+
+- a multi-part design, plan, RFC, or spec with decision points, contracts, migrations, or irreversible choices ("规划一下", "出个方案", "design this", "RFC", "which approach", a phased roadmap, a data model, an API contract);
+- the project's review contract, checkpoint, or sign-off convention calls for a review;
+- the user asks to review, edit, or comment on documents.
+
+Does not need a human → no Taco: a one-sentence answer, a single-point fix, a copy edit, open-ended brainstorming still taking shape, and any self-contained change you can implement and verify alone — **even when it spans several files or would make a long write-up**. Size and length are not reasons for a Taco; a document nobody reads is noise.
+
+Early requirement refinement is exploration: stay in the conversation until there is something to confirm, decide, or sign off; do not turn every message into a document edit or a comment task. When exploration settles into a proposal that needs a human decision, that proposal is the Taco.
 
 When you do trigger, the chat reply carries only the summary, the open decisions, and the file entry point; the canonical Markdown and the `.taco.html` carry the work.
 
@@ -99,7 +107,7 @@ small task "fix-pagination-copy"
 
 ## How much to design and write
 
-Choose depth from the task, not from a template directory. Apply precedence **per question** — what to design first, which documents, which template and whether to ask — and say which level applied:
+Once the trigger above says a review is actually needed, choose depth from the task, not from a template directory. Apply precedence **per question** — what to design first, which documents, which template and whether to ask — and say which level applied:
 
 1. **P0** the user's explicit instruction in this request;
 2. **P1** project guidance (the loaded `AGENTS.md`, project skills, `.sdlc/`, `.specify/`, `docs/templates/`);
@@ -108,7 +116,7 @@ Choose depth from the task, not from a template directory. Apply precedence **pe
 
 P3 depth ladder:
 
-- **light** — fix, copy change, local refactor: one `spec.md` with background, goal, scope, and Given/When/Then. No user-story document, no PRD, no diagrams.
+- **light** — a fix, copy change, or local refactor that still needs sign-off: one `spec.md` with background, goal, scope, and Given/When/Then. No user-story document, no PRD, no diagrams.
 - **medium** — standalone feature: `spec.md` + `interaction.md` or `diagrams/flow.mmd`; confirm the user flow before interface and storage design. Add `architecture.md` only for real multi-store or complex-chain impact.
 - **heavy** — cross-platform or multi-module system: align goal and metrics → journey and interaction → architecture and data flow → contracts and task breakdown, each layer reviewed before the next is called decided (PRD + IxD + Architecture + Contracts).
 
@@ -126,7 +134,7 @@ Presentation minimums:
 
 `references/integrations.md` is the authority for combining Taco with other installed skills; read it before you run another skill's design process or call a generator skill.
 
-- **SDD process skill sets** (pstack, gstack, superpowers, spec-kit): they own the method — investigate, design, plan, verify. Taco owns the review container: the engine's design and plan land in the Checkpoint node files, humans review them there, and a Handoff returns feedback, never authorization to implement. Detect installed engines by file signals and apply the P0–P3 precedence above; explicitly requested but missing → report and stop; nothing installed → proceed without one and say nothing about missing tools.
+- **SDD process skill sets** (pstack, gstack, superpowers, spec-kit): they own the method — investigate, design, plan, verify. Taco owns the review container: the engine's design and plan land in the Checkpoint node files, humans review them there, and a Handoff returns feedback, never authorization to implement. Detect installed engines by file signals and apply the P0–P3 precedence above; when nothing is installed, skip the process integration and run Taco's normal workflow — a missing engine never blocks Taco. If the user explicitly named a missing engine, say so in one line and continue.
 - **Artifact-generating skills** (`answer-me-with-html`, Mermaid/diagram, infographic, image skills): have the installed skill produce the file into the document folder and link it from the prose. Markdown stays canonical; the artifact is regenerated when its source changes. Single-page HTML packs as `text/html` and renders inline in a sandbox.
 
 ## Locate the shell
