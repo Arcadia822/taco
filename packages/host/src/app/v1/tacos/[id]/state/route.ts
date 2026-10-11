@@ -38,6 +38,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       {
         stateVersion: shared.stateVersion,
         commentsThroughSequence: shared.commentsThroughSequence,
+        revisionId: shared.revisionId,
         snapshot: shared.snapshot,
       },
       { status: 200 },

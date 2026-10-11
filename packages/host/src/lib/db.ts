@@ -4,6 +4,7 @@ import type {
   ChangedFile,
   CheckpointChange,
   CheckpointDefinitionDelta,
+  CheckpointsState,
   CommentThread,
   DocumentSnapshot,
   FilePatch,
@@ -14,7 +15,7 @@ import type {
   SnapshotFile,
   TextAnchor,
 } from '@taco/protocol'
-import { isSafePath, validateCheckpoints, validateDocumentSnapshot } from '@taco/protocol'
+import { canonicalizeJson, isSafePath, validateCheckpoints, validateDocumentSnapshot } from '@taco/protocol'
 import pg from 'pg'
 import { createUnifiedDiff } from './diff'
 
@@ -63,6 +64,7 @@ export class GoneError extends Error {
 export interface SharedStateResult {
   stateVersion: string
   commentsThroughSequence: string
+  revisionId: string
   snapshot: DocumentSnapshot
 }
 
@@ -110,10 +112,31 @@ export interface StoredEvent {
   data: unknown
 }
 
+export interface RevisionCommit {
+  tacoId: string
+  revisionId: string
+  baseRevisionId: string
+  title: string
+  stateVersion: string
+  createdAt: string
+  contentHash: string
+  event: StoredEvent
+}
+
 export interface TacoDb {
-  publishTaco(tacoId: string, title: string, snapshot: DocumentSnapshot): Promise<{ tacoId: string; stateVersion: string }>
-  getTaco(tacoId: string): Promise<{ id: string; title: string; status: string; lastSequence: string } | null>
+  publishTaco(tacoId: string, title: string, snapshot: DocumentSnapshot): Promise<{ tacoId: string; revisionId: string; stateVersion: string }>
+  getTaco(tacoId: string): Promise<{ id: string; title: string; currentRevisionId?: string; status: string; lastSequence: string } | null>
   getSharedState(tacoId: string): Promise<SharedStateResult | null>
+  createRevision(
+    tacoId: string,
+    payload: {
+      baseRevisionId: string
+      expectedStateVersion: string
+      expectedCommentsThroughSequence: string
+      snapshot: DocumentSnapshot
+    },
+    idempotencyKey: string,
+  ): Promise<RevisionCommit>
   autosaveSharedState(tacoId: string, patch: AutoSavePatch, idempotencyKey: string): Promise<{ stateVersion: string; savedAt: string; historyWindowId: string }>
   listHistory(tacoId: string): Promise<HistoryVersionSummary[]>
   getHistoryVersion(tacoId: string, windowId: string): Promise<HistoryVersionDetail | null>
@@ -154,6 +177,7 @@ const PG_SCHEMA = `
 CREATE TABLE IF NOT EXISTS tacos (
   id UUID PRIMARY KEY,
   title TEXT NOT NULL,
+  current_revision_id UUID NULL,
   status TEXT NOT NULL CHECK (status IN ('open', 'closed', 'expired', 'deleted')) DEFAULT 'open',
   last_sequence BIGINT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -243,6 +267,7 @@ CREATE TABLE IF NOT EXISTS handoffs (
   payload_hash TEXT NOT NULL,
   comments_through_sequence TEXT NOT NULL,
   payload_json JSONB NOT NULL,
+  snapshot_json JSONB NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_handoffs_taco ON handoffs(taco_id, created_at ASC);
@@ -251,6 +276,7 @@ CREATE TABLE IF NOT EXISTS events (
   id TEXT PRIMARY KEY,
   sequence BIGINT NOT NULL,
   taco_id UUID NOT NULL REFERENCES tacos(id) ON DELETE RESTRICT,
+  revision_id UUID NULL,
   type TEXT NOT NULL,
   occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   actor JSONB NOT NULL,
@@ -297,12 +323,25 @@ CREATE TABLE IF NOT EXISTS upload_reservations (
   expires_at TIMESTAMPTZ NOT NULL,
   CONSTRAINT uq_uploads_scope UNIQUE (taco_id, purpose, idempotency_key)
 );
+
+CREATE TABLE IF NOT EXISTS published_revisions (
+  id UUID PRIMARY KEY,
+  taco_id UUID NOT NULL REFERENCES tacos(id) ON DELETE RESTRICT,
+  parent_revision_id UUID NULL REFERENCES published_revisions(id) ON DELETE RESTRICT,
+  sequence BIGINT NOT NULL DEFAULT 0,
+  content_hash TEXT NOT NULL,
+  snapshot_ref TEXT NOT NULL,
+  snapshot_json JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_published_revisions_taco ON published_revisions(taco_id, sequence DESC);
 `
 
 const SQLITE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS tacos (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
+  current_revision_id TEXT NULL,
   status TEXT NOT NULL CHECK (status IN ('open', 'closed', 'expired', 'deleted')) DEFAULT 'open',
   last_sequence INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
@@ -391,6 +430,7 @@ CREATE TABLE IF NOT EXISTS handoffs (
   payload_hash TEXT NOT NULL,
   comments_through_sequence TEXT NOT NULL,
   payload_json TEXT NOT NULL,
+  snapshot_json TEXT NULL,
   created_at TEXT NOT NULL
 );
 
@@ -398,6 +438,7 @@ CREATE TABLE IF NOT EXISTS events (
   id TEXT PRIMARY KEY,
   sequence INTEGER NOT NULL,
   taco_id TEXT NOT NULL REFERENCES tacos(id),
+  revision_id TEXT NULL,
   type TEXT NOT NULL,
   occurred_at TEXT NOT NULL,
   actor TEXT NOT NULL,
@@ -443,6 +484,18 @@ CREATE TABLE IF NOT EXISTS upload_reservations (
   expires_at TEXT NOT NULL,
   UNIQUE(taco_id, purpose, idempotency_key)
 );
+
+CREATE TABLE IF NOT EXISTS published_revisions (
+  id TEXT PRIMARY KEY,
+  taco_id TEXT NOT NULL REFERENCES tacos(id),
+  parent_revision_id TEXT NULL REFERENCES published_revisions(id),
+  sequence INTEGER NOT NULL DEFAULT 0,
+  content_hash TEXT NOT NULL,
+  snapshot_ref TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_published_revisions_taco ON published_revisions(taco_id, sequence DESC);
 `
 
 export function canonicalJsonStringify(val: unknown): string {
@@ -707,6 +760,73 @@ export function computeCheckpointChanges(
   return changes
 }
 
+const computeSnapshotContentHashSync = (snapshot: unknown): string =>
+  `sha256:${sha256HexSync(canonicalizeJson(snapshot))}`
+
+const fileContentKey = (snapshot: DocumentSnapshot): string =>
+  canonicalJsonStringify(
+    [...snapshot.files]
+      .map((f) => ({ path: f.path, mediaType: f.mediaType, content: f.content }))
+      .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)),
+  )
+
+const checkpointDefinitionKey = (snapshot: DocumentSnapshot): string => {
+  const cp = snapshot.checkpoints
+  if (!cp) return ''
+  return canonicalJsonStringify({ version: cp.version, template: cp.template ?? null, nodes: cp.nodes })
+}
+
+/**
+ * True when the live shared state carries unacknowledged human content changes relative to the
+ * last acknowledged reference snapshot. Checkpoint *status* edits are host-owned and excluded.
+ */
+const hasPendingHumanEdits = (live: DocumentSnapshot, reference: DocumentSnapshot): boolean => {
+  if (live.docId !== reference.docId) return true
+  if (live.root !== reference.root) return true
+  if ((live.title ?? '') !== (reference.title ?? '')) return true
+  if (fileContentKey(live) !== fileContentKey(reference)) return true
+  if (canonicalJsonStringify(live.navigation ?? null) !== canonicalJsonStringify(reference.navigation ?? null)) return true
+  if (checkpointDefinitionKey(live) !== checkpointDefinitionKey(reference)) return true
+  return false
+}
+
+/**
+ * Host owns checkpoint document statuses: keep the host record (status + updatedAt) for every
+ * path it already knows, retain host-only records, and append incoming-only records.
+ */
+const preserveHostCheckpoints = (incoming: DocumentSnapshot, host: DocumentSnapshot): CheckpointsState | undefined => {
+  const hostCp = host.checkpoints
+  if (!hostCp) return incoming.checkpoints
+  const incomingCp = incoming.checkpoints
+  const hostPaths = new Set(hostCp.documents.map((d) => d.path))
+  const merged = [
+    ...hostCp.documents.map((d) => ({ path: d.path, status: d.status, updatedAt: d.updatedAt })),
+    ...(incomingCp?.documents ?? []).filter((d) => !hostPaths.has(d.path)),
+  ]
+  return {
+    version: incomingCp?.version ?? hostCp.version ?? 1,
+    ...(incomingCp?.template !== undefined
+      ? { template: incomingCp.template }
+      : hostCp.template !== undefined
+        ? { template: hostCp.template }
+        : {}),
+    nodes: incomingCp?.nodes ?? hostCp.nodes,
+    documents: merged,
+  }
+}
+
+const deriveRenames = (previousFiles: SnapshotFile[], nextFiles: SnapshotFile[]): Map<string, string> => {
+  const nextById = new Map<string, string>()
+  for (const f of nextFiles) if (f.id) nextById.set(f.id, f.path)
+  const renames = new Map<string, string>()
+  for (const f of previousFiles) {
+    if (!f.id) continue
+    const nextPath = nextById.get(f.id)
+    if (nextPath && nextPath !== f.path) renames.set(f.path, nextPath)
+  }
+  return renames
+}
+
 export class PostgresDbAdapter implements TacoDb {
   private pool: pg.Pool
   private schemaInitialized = false
@@ -720,16 +840,50 @@ export class PostgresDbAdapter implements TacoDb {
     const client = await this.pool.connect()
     try {
       await client.query(PG_SCHEMA)
+      await client.query('ALTER TABLE tacos ADD COLUMN IF NOT EXISTS current_revision_id UUID;')
+      await client.query('ALTER TABLE events ADD COLUMN IF NOT EXISTS revision_id UUID;')
+      await client.query('ALTER TABLE handoffs ADD COLUMN IF NOT EXISTS snapshot_json JSONB;')
+      await client.query('ALTER TABLE published_revisions ADD COLUMN IF NOT EXISTS sequence BIGINT NOT NULL DEFAULT 0;')
       await client.query('ALTER TABLE mutation_receipts ADD COLUMN IF NOT EXISTS request_hash TEXT;')
       await client.query('ALTER TABLE listener_leases ADD COLUMN IF NOT EXISTS session_title TEXT;')
       await client.query('ALTER TABLE listener_leases ADD COLUMN IF NOT EXISTS connected_at TIMESTAMPTZ DEFAULT NOW();')
+
+      // Seed the initial published revision for any taco that has a baseline but no revision row,
+      // including databases whose current_revision_id pointer predates the published_revisions table
+      const unseededTacos = await client.query(
+        `SELECT t.id, pb.snapshot_ref, pb.snapshot_json, pb.created_at
+         FROM tacos t
+         JOIN publish_baselines pb ON t.id = pb.taco_id
+         LEFT JOIN published_revisions r ON r.id = t.id
+         WHERE r.id IS NULL`,
+      )
+      for (const row of unseededTacos.rows) {
+        const snap = typeof row.snapshot_json === 'string' ? JSON.parse(row.snapshot_json) : row.snapshot_json
+        await client.query(
+          `INSERT INTO published_revisions (id, taco_id, parent_revision_id, sequence, content_hash, snapshot_ref, snapshot_json, created_at)
+           VALUES ($1, $2, NULL, $3, $4, $5, $6, $7)
+           ON CONFLICT (id) DO NOTHING`,
+          [
+            row.id,
+            row.id,
+            '1',
+            computeSnapshotContentHashSync(snap),
+            row.snapshot_ref,
+            JSON.stringify(snap),
+            row.created_at,
+          ],
+        )
+        await client.query('UPDATE tacos SET current_revision_id = $1 WHERE id = $1 AND current_revision_id IS NULL', [
+          row.id,
+        ])
+      }
       this.schemaInitialized = true
     } finally {
       client.release()
     }
   }
 
-  async publishTaco(tacoId: string, title: string, snapshot: DocumentSnapshot): Promise<{ tacoId: string; stateVersion: string }> {
+  async publishTaco(tacoId: string, title: string, snapshot: DocumentSnapshot): Promise<{ tacoId: string; revisionId: string; stateVersion: string }> {
     await this.ensureSchema()
     const client = await this.pool.connect()
     try {
@@ -741,11 +895,14 @@ export class PostgresDbAdapter implements TacoDb {
       }
 
       const now = new Date().toISOString()
+      const revisionId = tacoId
+      const contentHash = computeSnapshotContentHashSync(snapshot)
+
       await client.query(
-        `INSERT INTO tacos (id, title, status, last_sequence, created_at, updated_at)
-         VALUES ($1, $2, 'open', 1, $3, $3)
-         ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, updated_at = EXCLUDED.updated_at`,
-        [tacoId, title, now],
+        `INSERT INTO tacos (id, title, current_revision_id, status, last_sequence, created_at, updated_at)
+         VALUES ($1, $2, $3, 'open', 1, $4, $4)
+         ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, current_revision_id = EXCLUDED.current_revision_id, updated_at = EXCLUDED.updated_at`,
+        [tacoId, title, revisionId, now],
       )
 
       await client.query(
@@ -755,25 +912,32 @@ export class PostgresDbAdapter implements TacoDb {
       )
 
       await client.query(
+        `INSERT INTO published_revisions (id, taco_id, parent_revision_id, sequence, content_hash, snapshot_ref, snapshot_json, created_at)
+         VALUES ($1, $2, NULL, 1, $3, $4, $5, $6)`,
+        [revisionId, tacoId, contentHash, `tacos/${tacoId}/revisions/${revisionId}.json`, JSON.stringify(snapshot), now],
+      )
+
+      await client.query(
         `INSERT INTO shared_states (taco_id, state_version, comments_through_sequence, snapshot_ref, snapshot_json, updated_at)
          VALUES ($1, '1', '0', $2, $3, $4)`,
         [tacoId, `tacos/${tacoId}/state.json`, JSON.stringify(snapshot), now],
       )
 
       await client.query(
-        `INSERT INTO events (id, sequence, taco_id, type, occurred_at, actor, data)
-         VALUES ($1, 1, $2, 'revision.published', $3, $4, $5)`,
+        `INSERT INTO events (id, sequence, taco_id, revision_id, type, occurred_at, actor, data)
+         VALUES ($1, 1, $2, $3, 'revision.published', $4, $5, $6)`,
         [
           `ev_${tacoId}_1`,
           tacoId,
+          revisionId,
           now,
           JSON.stringify({ kind: 'user', id: 'agent', displayName: 'Agent', verified: true }),
-          JSON.stringify({ title, root: snapshot.root }),
+          JSON.stringify({ revisionId, title, root: snapshot.root }),
         ],
       )
 
       await client.query('COMMIT')
-      return { tacoId, stateVersion: '1' }
+      return { tacoId, revisionId, stateVersion: '1' }
     } catch (err) {
       await client.query('ROLLBACK')
       throw err
@@ -782,14 +946,15 @@ export class PostgresDbAdapter implements TacoDb {
     }
   }
 
-  async getTaco(tacoId: string): Promise<{ id: string; title: string; status: string; lastSequence: string } | null> {
+  async getTaco(tacoId: string): Promise<{ id: string; title: string; currentRevisionId?: string; status: string; lastSequence: string } | null> {
     await this.ensureSchema()
-    const res = await this.pool.query('SELECT id, title, status, last_sequence FROM tacos WHERE id = $1', [tacoId])
+    const res = await this.pool.query('SELECT id, title, current_revision_id, status, last_sequence FROM tacos WHERE id = $1', [tacoId])
     if (res.rowCount === 0) return null
     const row = res.rows[0]
     return {
       id: row.id,
       title: row.title,
+      currentRevisionId: row.current_revision_id || row.id,
       status: row.status,
       lastSequence: String(row.last_sequence),
     }
@@ -798,7 +963,10 @@ export class PostgresDbAdapter implements TacoDb {
   async getSharedState(tacoId: string): Promise<SharedStateResult | null> {
     await this.ensureSchema()
     const res = await this.pool.query(
-      'SELECT state_version, comments_through_sequence, snapshot_json FROM shared_states WHERE taco_id = $1',
+      `SELECT ss.state_version, ss.comments_through_sequence, ss.snapshot_json, COALESCE(t.current_revision_id, t.id) AS current_revision_id
+       FROM shared_states ss
+       JOIN tacos t ON ss.taco_id = t.id
+       WHERE ss.taco_id = $1`,
       [tacoId],
     )
     if (res.rowCount === 0) return null
@@ -807,9 +975,263 @@ export class PostgresDbAdapter implements TacoDb {
     return {
       stateVersion: row.state_version,
       commentsThroughSequence: row.comments_through_sequence,
+      revisionId: row.current_revision_id || tacoId,
       snapshot,
     }
   }
+
+  private async resolveRevisionReferenceSnapshot(
+    client: pg.PoolClient,
+    tacoId: string,
+    baselineSnapshot: DocumentSnapshot,
+    liveSnapshot: DocumentSnapshot,
+    liveStateVersion: string,
+  ): Promise<DocumentSnapshot> {
+    const revision = await client.query(
+      `SELECT r.snapshot_json, r.sequence FROM published_revisions r
+       JOIN tacos t ON t.current_revision_id = r.id
+       WHERE t.id = $1`,
+      [tacoId],
+    )
+    const handoff = await client.query(
+      'SELECT snapshot_json, state_version, event_sequence FROM handoffs WHERE taco_id = $1 ORDER BY event_sequence DESC LIMIT 1',
+      [tacoId],
+    )
+    const revisionRow = revision.rows[0]
+    const handoffRow = handoff.rows[0]
+    if (handoffRow && (!revisionRow || BigInt(handoffRow.event_sequence) > BigInt(revisionRow.sequence))) {
+      if (handoffRow.snapshot_json) {
+        return typeof handoffRow.snapshot_json === 'string'
+          ? JSON.parse(handoffRow.snapshot_json)
+          : handoffRow.snapshot_json
+      }
+      // Handoffs written before the acknowledged snapshot column existed: the acknowledged content
+      // is the live content whenever nothing has changed since the state version it recorded.
+      if (handoffRow.state_version === liveStateVersion) return liveSnapshot
+    }
+    if (!revisionRow) return baselineSnapshot
+    return typeof revisionRow.snapshot_json === 'string' ? JSON.parse(revisionRow.snapshot_json) : revisionRow.snapshot_json
+  }
+
+  async createRevision(
+    tacoId: string,
+    payloadReq: {
+      baseRevisionId: string
+      expectedStateVersion: string
+      expectedCommentsThroughSequence: string
+      snapshot: DocumentSnapshot
+    },
+    idempotencyKey: string,
+  ): Promise<RevisionCommit> {
+    await this.ensureSchema()
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+
+      const tacoRes = await client.query(
+        'SELECT id, title, status, last_sequence, current_revision_id FROM tacos WHERE id = $1 FOR UPDATE',
+        [tacoId],
+      )
+      if (tacoRes.rowCount === 0) throw new NotFoundError('Taco not found')
+      if (tacoRes.rows[0].status === 'deleted' || tacoRes.rows[0].status === 'expired') {
+        throw new GoneError('Taco is deleted or expired')
+      }
+
+      const requestHash = await sha256Hex(canonicalJsonStringify(payloadReq))
+      const receipt = await client.query(
+        'SELECT action, response_body, status_code, request_hash FROM mutation_receipts WHERE taco_id = $1 AND idempotency_key = $2',
+        [tacoId, idempotencyKey],
+      )
+      if (receipt.rowCount && receipt.rowCount > 0) {
+        const row = receipt.rows[0]
+        if (row.action !== 'revision') {
+          throw new ConflictError(`Idempotency key has already been used for a different action: ${row.action}`)
+        }
+        if (!row.request_hash || row.request_hash !== requestHash) {
+          throw new ConflictError('Idempotency key has already been used with an unverified or different request payload')
+        }
+        await client.query('COMMIT')
+        const body = typeof row.response_body === 'string' ? JSON.parse(row.response_body) : row.response_body
+        return body as RevisionCommit
+      }
+
+      const sharedRes = await client.query(
+        'SELECT state_version, comments_through_sequence, snapshot_json FROM shared_states WHERE taco_id = $1 FOR UPDATE',
+        [tacoId],
+      )
+      if (sharedRes.rowCount === 0) throw new NotFoundError('Taco has no shared state')
+      const current = sharedRes.rows[0]
+      if (current.state_version !== payloadReq.expectedStateVersion) {
+        throw new ConflictError(
+          `Expected stateVersion ${payloadReq.expectedStateVersion} does not match current ${current.state_version}`,
+        )
+      }
+      if (current.comments_through_sequence !== payloadReq.expectedCommentsThroughSequence) {
+        throw new ConflictError(
+          `Expected commentsThroughSequence ${payloadReq.expectedCommentsThroughSequence} does not match current ${current.comments_through_sequence}`,
+        )
+      }
+      const currentRevisionId = tacoRes.rows[0].current_revision_id || tacoId
+      if (currentRevisionId.toLowerCase() !== payloadReq.baseRevisionId.toLowerCase()) {
+        throw new ConflictError(
+          `Expected baseRevisionId ${payloadReq.baseRevisionId} does not match current ${currentRevisionId}`,
+        )
+      }
+
+      const liveSnapshot: DocumentSnapshot =
+        typeof current.snapshot_json === 'string' ? JSON.parse(current.snapshot_json) : current.snapshot_json
+      if (payloadReq.snapshot.docId !== liveSnapshot.docId) {
+        throw new ConflictError('Revision snapshot docId does not match the published document')
+      }
+      if (payloadReq.snapshot.root !== liveSnapshot.root) {
+        throw new ConflictError('Revision snapshot root does not match the published document')
+      }
+
+      const baselineRes = await client.query(
+        'SELECT snapshot_json FROM publish_baselines WHERE taco_id = $1',
+        [tacoId],
+      )
+      if (baselineRes.rowCount === 0) throw new NotFoundError('Taco has no immutable publish baseline')
+      const baselineRaw = baselineRes.rows[0].snapshot_json
+      const baselineSnapshot: DocumentSnapshot = typeof baselineRaw === 'string' ? JSON.parse(baselineRaw) : baselineRaw
+
+      const reference = await this.resolveRevisionReferenceSnapshot(
+        client,
+        tacoId,
+        baselineSnapshot,
+        liveSnapshot,
+        current.state_version,
+      )
+      if (hasPendingHumanEdits(liveSnapshot, reference)) {
+        throw new ConflictError(
+          'Shared state contains human edits that have not been acknowledged by a handoff since the last revision',
+        )
+      }
+      const hostCheckpoints = preserveHostCheckpoints(payloadReq.snapshot, liveSnapshot)
+      const mergedSnapshot: DocumentSnapshot = {
+        ...payloadReq.snapshot,
+        ...(hostCheckpoints ? { checkpoints: hostCheckpoints } : {}),
+      }
+      const root = mergedSnapshot.root || liveSnapshot.root || '.'
+      const mergedSnapshotJson = JSON.stringify(mergedSnapshot)
+      if (new TextEncoder().encode(mergedSnapshotJson).byteLength > 32 * 1024 * 1024) {
+        throw new PayloadTooLargeError('Revision snapshot exceeds 32 MiB limit')
+      }
+      const revisionId = randomUUID()
+      const contentHash = computeSnapshotContentHashSync(mergedSnapshot)
+      const title = mergedSnapshot.title || tacoRes.rows[0].title
+      const nowIso = new Date().toISOString()
+      const nextSequence = BigInt(tacoRes.rows[0].last_sequence) + 1n
+      const nextSequenceStr = String(nextSequence)
+      const nextVersion = String(BigInt(current.state_version) + 1n)
+      const historyWindowId = randomUUID()
+
+      await client.query(
+        `INSERT INTO published_revisions (id, taco_id, parent_revision_id, sequence, content_hash, snapshot_ref, snapshot_json, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          revisionId,
+          tacoId,
+          currentRevisionId,
+          nextSequenceStr,
+          contentHash,
+          `tacos/${tacoId}/revisions/${revisionId}.json`,
+          mergedSnapshotJson,
+          nowIso,
+        ],
+      )
+
+      await client.query(
+        'UPDATE tacos SET current_revision_id = $1, title = $2, last_sequence = $3, updated_at = $4 WHERE id = $5',
+        [revisionId, title, nextSequenceStr, nowIso, tacoId],
+      )
+
+      await client.query(
+        `UPDATE shared_states SET state_version = $1, snapshot_ref = $2, snapshot_json = $3, updated_at = $4
+         WHERE taco_id = $5`,
+        [nextVersion, `tacos/${tacoId}/state.json`, mergedSnapshotJson, nowIso, tacoId],
+      )
+
+      await client.query(
+        `INSERT INTO history_windows (id, taco_id, started_at, closed_at, latest_state_version, snapshot_ref, snapshot_json)
+         VALUES ($1, $2, $3, NULL, $4, $5, $6)`,
+        [historyWindowId, tacoId, nowIso, nextVersion, `tacos/${tacoId}/windows/${historyWindowId}.json`, mergedSnapshotJson],
+      )
+
+      const filesMap = new Map<string, SnapshotFile>()
+      for (const f of mergedSnapshot.files) filesMap.set(f.path, f)
+      const renames = deriveRenames(liveSnapshot.files, mergedSnapshot.files)
+      const threadRows = await client.query(
+        'SELECT id, anchor, is_anchor_stale FROM persistent_comment_threads WHERE taco_id = $1',
+        [tacoId],
+      )
+      for (const tr of threadRows.rows) {
+        if (!tr.anchor) continue
+        const rawAnchor: TextAnchor = typeof tr.anchor === 'string' ? JSON.parse(tr.anchor) : tr.anchor
+        const reanchor = relocateAnchorAgainstFiles(rawAnchor, filesMap, root, renames)
+        const isStale = Boolean(reanchor.isStale)
+        const newAnchorJson = JSON.stringify(reanchor.anchor)
+        const oldAnchorJson = typeof tr.anchor === 'string' ? tr.anchor : JSON.stringify(tr.anchor)
+        if (isStale !== Boolean(tr.is_anchor_stale) || newAnchorJson !== oldAnchorJson) {
+          await client.query(
+            'UPDATE persistent_comment_threads SET anchor = $1, is_anchor_stale = $2, updated_at = $3 WHERE taco_id = $4 AND id = $5',
+            [newAnchorJson, isStale, nowIso, tacoId, tr.id],
+          )
+        }
+      }
+
+      const event: StoredEvent = {
+        id: `ev_${tacoId}_${nextSequenceStr}`,
+        sequence: nextSequenceStr,
+        tacoId,
+        type: 'revision.published',
+        occurredAt: nowIso,
+        actor: { kind: 'user', id: 'agent', displayName: 'Agent', verified: true },
+        data: { revisionId, baseRevisionId: currentRevisionId, title, root, contentHash },
+      }
+      await client.query(
+        `INSERT INTO events (id, sequence, taco_id, revision_id, type, occurred_at, actor, data)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          event.id,
+          nextSequenceStr,
+          tacoId,
+          revisionId,
+          event.type,
+          event.occurredAt,
+          JSON.stringify(event.actor),
+          JSON.stringify(event.data),
+        ],
+      )
+
+      const result: RevisionCommit = {
+        tacoId,
+        revisionId,
+        baseRevisionId: currentRevisionId,
+        title,
+        stateVersion: nextVersion,
+        createdAt: nowIso,
+        contentHash,
+        event,
+      }
+      await client.query(
+        `INSERT INTO mutation_receipts (taco_id, idempotency_key, action, status_code, response_body, created_at, request_hash)
+         VALUES ($1, $2, 'revision', 201, $3, $4, $5)`,
+        [tacoId, idempotencyKey, JSON.stringify(result), nowIso, requestHash],
+      )
+
+      await client.query('COMMIT')
+      return result
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK')
+      } catch {}
+      throw err
+    } finally {
+      client.release()
+    }
+  }
+
 
   async autosaveSharedState(
     tacoId: string,
@@ -1726,8 +2148,8 @@ export class PostgresDbAdapter implements TacoDb {
 
       // Insert handoff
       await client.query(
-        `INSERT INTO handoffs (id, taco_id, author, state_version, event_sequence, payload_ref, payload_hash, comments_through_sequence, payload_json, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        `INSERT INTO handoffs (id, taco_id, author, state_version, event_sequence, payload_ref, payload_hash, comments_through_sequence, payload_json, snapshot_json, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           handoffId,
           tacoId,
@@ -1738,6 +2160,7 @@ export class PostgresDbAdapter implements TacoDb {
           payloadHash,
           current.comments_through_sequence,
           payloadStr,
+          JSON.stringify(currentSnapshot),
           nowIso,
         ],
       )
@@ -2077,6 +2500,7 @@ interface SqliteTacoRow {
   id: string
   title: string
   status: string
+  current_revision_id: string | null
   last_sequence: number | bigint
   created_at: string
   updated_at: string
@@ -2196,6 +2620,9 @@ export class SqliteDbAdapter implements TacoDb {
     if (this.schemaInitialized) return
     this.db.exec(SQLITE_SCHEMA)
     try {
+      this.db.exec('ALTER TABLE tacos ADD COLUMN current_revision_id TEXT;')
+    } catch {}
+    try {
       this.db.exec('ALTER TABLE mutation_receipts ADD COLUMN request_hash TEXT;')
     } catch {}
     try {
@@ -2204,12 +2631,40 @@ export class SqliteDbAdapter implements TacoDb {
     try {
       this.db.exec('ALTER TABLE listener_leases ADD COLUMN connected_at TEXT;')
     } catch {}
-    this.schemaInitialized = true
+
+    const columns = this.db.prepare('PRAGMA table_info(events)').all()
+    if (!columns.some((column) => column.name === 'revision_id')) this.db.exec('ALTER TABLE events ADD COLUMN revision_id TEXT;')
+    const handoffColumns = this.db.prepare('PRAGMA table_info(handoffs)').all()
+    if (!handoffColumns.some((column) => column.name === 'snapshot_json')) this.db.exec('ALTER TABLE handoffs ADD COLUMN snapshot_json TEXT;')
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const unseeded = this.db.prepare(
+        `SELECT t.id, pb.snapshot_ref, pb.snapshot_json, pb.created_at
+         FROM tacos t JOIN publish_baselines pb ON t.id = pb.taco_id
+         LEFT JOIN published_revisions r ON r.id = t.id
+         WHERE r.id IS NULL`,
+      ).all()
+      for (const row of unseeded) {
+        const raw = String(row.snapshot_json)
+        this.db.prepare(
+          `INSERT INTO published_revisions (id, taco_id, parent_revision_id, sequence, content_hash, snapshot_ref, snapshot_json, created_at)
+           VALUES (?, ?, NULL, 1, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`,
+        ).run(String(row.id), String(row.id), computeSnapshotContentHashSync(JSON.parse(raw)), String(row.snapshot_ref), raw, String(row.created_at))
+        this.db.prepare('UPDATE tacos SET current_revision_id = ? WHERE id = ? AND current_revision_id IS NULL').run(String(row.id), String(row.id))
+      }
+      this.db.exec('COMMIT')
+      this.schemaInitialized = true
+    } catch (error) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
   }
 
-  async publishTaco(tacoId: string, title: string, snapshot: DocumentSnapshot): Promise<{ tacoId: string; stateVersion: string }> {
+  async publishTaco(tacoId: string, title: string, snapshot: DocumentSnapshot): Promise<{ tacoId: string; revisionId: string; stateVersion: string }> {
     this.ensureSchema()
     const now = new Date().toISOString()
+    const revisionId = tacoId
+    const contentHash = computeSnapshotContentHashSync(snapshot)
 
     this.db.exec('BEGIN IMMEDIATE')
     try {
@@ -2220,11 +2675,11 @@ export class SqliteDbAdapter implements TacoDb {
 
       this.db
         .prepare(
-          `INSERT INTO tacos (id, title, status, last_sequence, created_at, updated_at)
-           VALUES (?, ?, 'open', 1, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET title = excluded.title, updated_at = excluded.updated_at`,
+          `INSERT INTO tacos (id, title, current_revision_id, status, last_sequence, created_at, updated_at)
+           VALUES (?, ?, ?, 'open', 1, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET title = excluded.title, current_revision_id = excluded.current_revision_id, updated_at = excluded.updated_at`,
         )
-        .run(tacoId, title, now, now)
+        .run(tacoId, title, revisionId, now, now)
 
       this.db
         .prepare(
@@ -2235,6 +2690,13 @@ export class SqliteDbAdapter implements TacoDb {
 
       this.db
         .prepare(
+          `INSERT INTO published_revisions (id, taco_id, parent_revision_id, sequence, content_hash, snapshot_ref, snapshot_json, created_at)
+           VALUES (?, ?, NULL, 1, ?, ?, ?, ?)`,
+        )
+        .run(revisionId, tacoId, contentHash, `tacos/${tacoId}/revisions/${revisionId}.json`, JSON.stringify(snapshot), now)
+
+      this.db
+        .prepare(
           `INSERT INTO shared_states (taco_id, state_version, comments_through_sequence, snapshot_ref, snapshot_json, updated_at)
            VALUES (?, '1', '0', ?, ?, ?)`,
         )
@@ -2242,32 +2704,36 @@ export class SqliteDbAdapter implements TacoDb {
 
       this.db
         .prepare(
-          `INSERT INTO events (id, sequence, taco_id, type, occurred_at, actor, data)
-           VALUES (?, 1, ?, 'revision.published', ?, ?, ?)`,
+          `INSERT INTO events (id, sequence, taco_id, revision_id, type, occurred_at, actor, data)
+           VALUES (?, 1, ?, ?, 'revision.published', ?, ?, ?)`,
         )
         .run(
           `ev_${tacoId}_1`,
           tacoId,
+          revisionId,
           now,
           JSON.stringify({ kind: 'user', id: 'agent', displayName: 'Agent', verified: true }),
-          JSON.stringify({ title, root: snapshot.root }),
+          JSON.stringify({ revisionId, title, root: snapshot.root }),
         )
 
       this.db.exec('COMMIT')
-      return { tacoId, stateVersion: '1' }
+      return { tacoId, revisionId, stateVersion: '1' }
     } catch (err) {
       this.db.exec('ROLLBACK')
       throw err
     }
   }
 
-  async getTaco(tacoId: string): Promise<{ id: string; title: string; status: string; lastSequence: string } | null> {
+  async getTaco(tacoId: string): Promise<{ id: string; title: string; currentRevisionId?: string; status: string; lastSequence: string } | null> {
     this.ensureSchema()
-    const row = this.db.prepare('SELECT id, title, status, last_sequence FROM tacos WHERE id = ?').get(tacoId) as unknown as SqliteTacoRow | undefined
+    const row = this.db
+      .prepare('SELECT id, title, status, current_revision_id, last_sequence FROM tacos WHERE id = ?')
+      .get(tacoId) as unknown as SqliteTacoRow | undefined
     if (!row) return null
     return {
       id: row.id,
       title: row.title,
+      currentRevisionId: row.current_revision_id || row.id,
       status: row.status,
       lastSequence: String(row.last_sequence),
     }
@@ -2276,13 +2742,236 @@ export class SqliteDbAdapter implements TacoDb {
   async getSharedState(tacoId: string): Promise<SharedStateResult | null> {
     this.ensureSchema()
     const row = this.db
-      .prepare('SELECT state_version, comments_through_sequence, snapshot_json FROM shared_states WHERE taco_id = ?')
-      .get(tacoId) as unknown as SqliteSharedStateRow | undefined
+      .prepare(
+        `SELECT ss.state_version, ss.comments_through_sequence, ss.snapshot_json, COALESCE(t.current_revision_id, t.id) AS current_revision_id
+         FROM shared_states ss JOIN tacos t ON ss.taco_id = t.id
+         WHERE ss.taco_id = ?`,
+      )
+      .get(tacoId) as unknown as (SqliteSharedStateRow & { current_revision_id: string | null }) | undefined
     if (!row) return null
     return {
       stateVersion: row.state_version,
       commentsThroughSequence: row.comments_through_sequence,
+      revisionId: row.current_revision_id || tacoId,
       snapshot: JSON.parse(row.snapshot_json),
+    }
+  }
+
+  private resolveRevisionReferenceSnapshot(tacoId: string, baselineSnapshot: DocumentSnapshot, liveSnapshot: DocumentSnapshot, stateVersion: string): DocumentSnapshot {
+    const revision = this.db.prepare(
+      `SELECT r.snapshot_json, r.sequence FROM published_revisions r
+       JOIN tacos t ON t.current_revision_id = r.id WHERE t.id = ?`,
+    ).get(tacoId) as unknown as { snapshot_json: string; sequence: number } | undefined
+    const handoff = this.db.prepare(
+      'SELECT snapshot_json, event_sequence, state_version FROM handoffs WHERE taco_id = ? ORDER BY event_sequence DESC LIMIT 1',
+    ).get(tacoId) as unknown as { snapshot_json: string | null; event_sequence: number; state_version: string } | undefined
+    if (handoff && (!revision || BigInt(handoff.event_sequence) > BigInt(revision.sequence))) {
+      if (handoff.snapshot_json) return JSON.parse(handoff.snapshot_json)
+      if (handoff.state_version === stateVersion) return liveSnapshot
+    }
+    return revision ? JSON.parse(revision.snapshot_json) : baselineSnapshot
+  }
+
+  async createRevision(
+    tacoId: string,
+    payloadReq: {
+      baseRevisionId: string
+      expectedStateVersion: string
+      expectedCommentsThroughSequence: string
+      snapshot: DocumentSnapshot
+    },
+    idempotencyKey: string,
+  ): Promise<RevisionCommit> {
+    this.ensureSchema()
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      const taco = this.db
+        .prepare('SELECT id, title, status, last_sequence, current_revision_id FROM tacos WHERE id = ?')
+        .get(tacoId) as unknown as SqliteTacoRow | undefined
+      if (!taco) throw new NotFoundError('Taco not found')
+      if (taco.status === 'deleted' || taco.status === 'expired') {
+        throw new GoneError('Taco is deleted or expired')
+      }
+
+      const requestHash = sha256HexSync(canonicalJsonStringify(payloadReq))
+      const receipt = this.db
+        .prepare('SELECT action, response_body, status_code, request_hash FROM mutation_receipts WHERE taco_id = ? AND idempotency_key = ?')
+        .get(tacoId, idempotencyKey) as unknown as SqliteReceiptRow | undefined
+      if (receipt) {
+        if (receipt.action !== 'revision') {
+          throw new ConflictError(`Idempotency key has already been used for a different action: ${receipt.action}`)
+        }
+        if (!receipt.request_hash || receipt.request_hash !== requestHash) {
+          throw new ConflictError('Idempotency key has already been used with an unverified or different request payload')
+        }
+        this.db.exec('COMMIT')
+        return JSON.parse(receipt.response_body) as RevisionCommit
+      }
+
+      const current = this.db
+        .prepare('SELECT state_version, comments_through_sequence, snapshot_json FROM shared_states WHERE taco_id = ?')
+        .get(tacoId) as unknown as SqliteSharedStateRow | undefined
+      if (!current) throw new NotFoundError('Taco has no shared state')
+      if (current.state_version !== payloadReq.expectedStateVersion) {
+        throw new ConflictError(
+          `Expected stateVersion ${payloadReq.expectedStateVersion} does not match current ${current.state_version}`,
+        )
+      }
+      if (current.comments_through_sequence !== payloadReq.expectedCommentsThroughSequence) {
+        throw new ConflictError(
+          `Expected commentsThroughSequence ${payloadReq.expectedCommentsThroughSequence} does not match current ${current.comments_through_sequence}`,
+        )
+      }
+      const currentRevisionId = taco.current_revision_id || tacoId
+      if (currentRevisionId.toLowerCase() !== payloadReq.baseRevisionId.toLowerCase()) {
+        throw new ConflictError(
+          `Expected baseRevisionId ${payloadReq.baseRevisionId} does not match current ${currentRevisionId}`,
+        )
+      }
+
+      const liveSnapshot: DocumentSnapshot = JSON.parse(current.snapshot_json)
+      if (payloadReq.snapshot.docId !== liveSnapshot.docId) {
+        throw new ConflictError('Revision snapshot docId does not match the published document')
+      }
+      if (payloadReq.snapshot.root !== liveSnapshot.root) {
+        throw new ConflictError('Revision snapshot root does not match the published document')
+      }
+
+      const baselineRow = this.db
+        .prepare('SELECT snapshot_json FROM publish_baselines WHERE taco_id = ?')
+        .get(tacoId) as unknown as { snapshot_json: string } | undefined
+      if (!baselineRow) throw new NotFoundError('Taco has no immutable publish baseline')
+      const baselineSnapshot: DocumentSnapshot = JSON.parse(baselineRow.snapshot_json)
+
+      const reference = this.resolveRevisionReferenceSnapshot(tacoId, baselineSnapshot, liveSnapshot, current.state_version)
+      if (hasPendingHumanEdits(liveSnapshot, reference)) {
+        throw new ConflictError(
+          'Shared state contains human edits that have not been acknowledged by a handoff since the last revision',
+        )
+      }
+
+      const mergedSnapshot: DocumentSnapshot = {
+        ...payloadReq.snapshot,
+        checkpoints: preserveHostCheckpoints(payloadReq.snapshot, liveSnapshot),
+      }
+      const root = mergedSnapshot.root || liveSnapshot.root || '.'
+      const revisionId = randomUUID()
+      const contentHash = computeSnapshotContentHashSync(mergedSnapshot)
+      const title = mergedSnapshot.title || taco.title
+      const nowIso = new Date().toISOString()
+      const nextSequence = BigInt(taco.last_sequence) + 1n
+      const nextSequenceStr = String(nextSequence)
+      const nextVersion = String(BigInt(current.state_version) + 1n)
+      const historyWindowId = randomUUID()
+      const snapshotStr = JSON.stringify(mergedSnapshot)
+      if (Buffer.byteLength(snapshotStr, 'utf8') > 32 * 1024 * 1024) {
+        throw new PayloadTooLargeError('Merged revision snapshot exceeds 32 MiB limit')
+      }
+
+      this.db
+        .prepare(
+          `INSERT INTO published_revisions (id, taco_id, parent_revision_id, sequence, content_hash, snapshot_ref, snapshot_json, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          revisionId,
+          tacoId,
+          currentRevisionId,
+          Number(nextSequence),
+          contentHash,
+          `tacos/${tacoId}/revisions/${revisionId}.json`,
+          snapshotStr,
+          nowIso,
+        )
+
+      this.db
+        .prepare('UPDATE tacos SET current_revision_id = ?, title = ?, last_sequence = ?, updated_at = ? WHERE id = ?')
+        .run(revisionId, title, Number(nextSequence), nowIso, tacoId)
+
+      this.db
+        .prepare(
+          `UPDATE shared_states SET state_version = ?, snapshot_ref = ?, snapshot_json = ?, updated_at = ?
+           WHERE taco_id = ?`,
+        )
+        .run(nextVersion, `tacos/${tacoId}/state.json`, snapshotStr, nowIso, tacoId)
+
+      this.db
+        .prepare(
+          `INSERT INTO history_windows (id, taco_id, started_at, closed_at, latest_state_version, snapshot_ref, snapshot_json)
+           VALUES (?, ?, ?, NULL, ?, ?, ?)`,
+        )
+        .run(historyWindowId, tacoId, nowIso, nextVersion, `tacos/${tacoId}/windows/${historyWindowId}.json`, snapshotStr)
+
+      const filesMap = new Map<string, SnapshotFile>()
+      for (const f of mergedSnapshot.files) filesMap.set(f.path, f)
+      const renames = deriveRenames(liveSnapshot.files, mergedSnapshot.files)
+      const threadRows = this.db
+        .prepare('SELECT id, anchor, is_anchor_stale FROM persistent_comment_threads WHERE taco_id = ?')
+        .all(tacoId) as unknown as SqliteCommentThreadRow[]
+      for (const tr of threadRows) {
+        if (!tr.anchor) continue
+        const rawAnchor: TextAnchor = JSON.parse(tr.anchor)
+        const reanchor = relocateAnchorAgainstFiles(rawAnchor, filesMap, root, renames)
+        const isStale = Boolean(reanchor.isStale)
+        const newAnchorJson = JSON.stringify(reanchor.anchor)
+        if (isStale !== Boolean(tr.is_anchor_stale) || newAnchorJson !== tr.anchor) {
+          this.db
+            .prepare(
+              'UPDATE persistent_comment_threads SET anchor = ?, is_anchor_stale = ?, updated_at = ? WHERE taco_id = ? AND id = ?',
+            )
+            .run(newAnchorJson, isStale ? 1 : 0, nowIso, tacoId, tr.id)
+        }
+      }
+
+      const event: StoredEvent = {
+        id: `ev_${tacoId}_${nextSequenceStr}`,
+        sequence: nextSequenceStr,
+        tacoId,
+        type: 'revision.published',
+        occurredAt: nowIso,
+        actor: { kind: 'user', id: 'agent', displayName: 'Agent', verified: true },
+        data: { revisionId, baseRevisionId: currentRevisionId, title, root, contentHash },
+      }
+      this.db
+        .prepare(
+          `INSERT INTO events (id, sequence, taco_id, revision_id, type, occurred_at, actor, data)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          event.id,
+          Number(nextSequence),
+          tacoId,
+          revisionId,
+          event.type,
+          event.occurredAt,
+          JSON.stringify(event.actor),
+          JSON.stringify(event.data),
+        )
+
+      const result: RevisionCommit = {
+        tacoId,
+        revisionId,
+        baseRevisionId: currentRevisionId,
+        title,
+        stateVersion: nextVersion,
+        createdAt: nowIso,
+        contentHash,
+        event,
+      }
+      this.db
+        .prepare(
+          `INSERT INTO mutation_receipts (taco_id, idempotency_key, action, status_code, response_body, created_at, request_hash)
+           VALUES (?, ?, 'revision', 201, ?, ?, ?)`,
+        )
+        .run(tacoId, idempotencyKey, JSON.stringify(result), nowIso, requestHash)
+
+      this.db.exec('COMMIT')
+      return result
+    } catch (err) {
+      try {
+        this.db.exec('ROLLBACK')
+      } catch {}
+      throw err
     }
   }
 
@@ -2897,6 +3586,7 @@ export class SqliteDbAdapter implements TacoDb {
       const baselineSnapshot: DocumentSnapshot = JSON.parse(baseline.snapshot_json)
 
       const current = this.db.prepare('SELECT state_version, comments_through_sequence, snapshot_json FROM shared_states WHERE taco_id = ?').get(tacoId) as unknown as SqliteSharedStateRow | undefined
+      if (!current) throw new NotFoundError('Taco has no shared state')
 
       if (current.state_version !== payloadReq.expectedStateVersion) {
         throw new ConflictError(`Expected stateVersion ${payloadReq.expectedStateVersion} does not match current ${current.state_version}`)
@@ -3023,8 +3713,8 @@ export class SqliteDbAdapter implements TacoDb {
 
       this.db
         .prepare(
-          `INSERT INTO handoffs (id, taco_id, author, state_version, event_sequence, payload_ref, payload_hash, comments_through_sequence, payload_json, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO handoffs (id, taco_id, author, state_version, event_sequence, payload_ref, payload_hash, comments_through_sequence, payload_json, snapshot_json, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           handoffId,
@@ -3036,6 +3726,7 @@ export class SqliteDbAdapter implements TacoDb {
           payloadHash,
           current.comments_through_sequence,
           payloadStr,
+          JSON.stringify(currentSnapshot),
           nowIso,
         )
 

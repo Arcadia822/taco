@@ -34,7 +34,8 @@ Taco is local-first by design:
 - Run \`taco-cli publish <file.taco.html> --dry-run\` before the first network publication.
 - Subscribe with \`taco-cli subscribe <tacoId>\` before waiting for review; reconnect with the last confirmed sequence after interruption.
 - Use \`--host https://taco.arcadia-han.com\` for the public Tacobin service unless the project specifies another Host.
-- \`taco-cli\` publishes and reads; it does not update, close, delete, or export a Host Taco.
+- \`publish\` creates a new Taco (\`POST /v1/tacos\`); \`update <tacoId> <file> --base <revisionId>\` updates an existing Taco to the same URL in place while recording a new \`revisionId\` and preserving comments and Checkpoints.
+- If an installed CLI lacks network update support, report it as unsupported—never execute a silent fallback to \`publish\`.
 `
 
 const PUBLISHING_GUIDE_MD = `# Publishing Guide
@@ -50,8 +51,8 @@ const PUBLISHING_GUIDE_MD = `# Publishing Guide
 - Authored \`file:\` URLs and other local absolute references are reduced to safe relative paths, so a published Taco never points at the publisher's disk.
 
 ## Limits And Ownership
-- There is no account, login, or ApiKey in this flow: publishing needs no credential and asks for nothing interactive.
-- Because the Host has no owner for a published paste, no command can update, close, or delete it afterwards; publish a corrected file as a new Taco instead.
+- \`publish\` is create-only. To replace a published Taco at the same URL, use \`taco-cli update <tacoId> <file> --base <revisionId>\` with the active base revision ID.
+- Updating keeps the exact same reviewer URL, advances revision identity, and preserves hosted comment threads and Checkpoint statuses.
 - Verify the projection with \`--dry-run\` before the first network publish, and re-run it after any edit to the canonical Markdown.
 - Everything published is public. Never publish a file whose payload contains secrets, and see the credential boundary in the installation guide before sharing.
 `
@@ -64,7 +65,7 @@ const REVIEWING_GUIDE_MD = `# Reviewing Guide
 3. Process only \`review.handed_off\` as completed human review. Read its \`tacoId\` and \`data.handoffId\`, then fetch \`taco-cli handoff <tacoId> <handoffId> --host <origin>\`. Inspect cumulative and incremental file/Checkpoint changes and complete comment history, compare against canonical files, and stop on conflicts before applying feedback. Names are self-reported; event actor/time are assigned by the Host, not authenticated identities.
 4. After any interruption, reconnect with the last confirmed cursor in \`--after <sequence>\`, which the client also reuses automatically when a Host rotates its instance.
 5. Page the same log without a stream through \`taco-cli events <tacoId> [--after <sequence>]\`, which returns \`events\`, \`throughSequence\`, \`nextCursor\`, and \`hasMore\`.
-6. After processing Handoff, start another subscription from its confirmed sequence for the next review round. Comments and autosaves alone never request Agent continuation.
+6. After processing Handoff, update the same Taco via \`taco-cli update <tacoId> <file> --base <revisionId>\` (retaining the same reviewer URL), then start another subscription on that \`tacoId\` from its confirmed sequence for the next review round. Comments and autosaves alone never request Agent continuation.
 
 ## What To Expect
 - Reviewers write from the review page at \`<origin>/t/<tacoId>\`; \`taco-cli\` is a reader of what they publish there.
