@@ -2,7 +2,7 @@ export const CLI_SCHEMA_HELP = 'taco-cli-help/1'
 export const CLI_SCHEMA_SKILLS = 'taco-cli-skills/1'
 import pkg from '../package.json' with { type: 'json' }
 export const CLI_BINARY_VERSION: string = pkg.version
-export const DEFAULT_HOST = 'http://localhost:32167'
+export const DEFAULT_HOST = 'https://taco.arcadia-han.com'
 
 export interface HelpPositional {
   name: string

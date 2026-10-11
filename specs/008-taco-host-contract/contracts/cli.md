@@ -33,7 +33,7 @@ CLI 暂不增加通用 HTTP 代理命令，也不把每个读取/评审 API 都�
 
 ## Host、凭据与本地输入
 
-1. Host 优先级：`--host` > `TACO_HOST_URL` > `http://localhost:32167`。只接受 origin；拒绝 userinfo、非根路径、查询和 fragment。远端 HTTPS；HTTP 仅限 localhost/127.0.0.1/[::1]。规范化默认端口和尾斜杠后比较 origin。
+1. Host 优先级：`--host` > `TACO_HOST_URL` > `https://taco.arcadia-han.com`。只接受 origin；拒绝 userinfo、非根路径、查询和 fragment。远端 HTTPS；HTTP 仅限 localhost/127.0.0.1/[::1] 本地开发回环地址。规范化默认端口和尾斜杠后比较 origin。
 2. `TACO_HOST_API_KEY` > 该 origin 的已保存 Key。环境 Key 绑定环境 URL，未设置 URL 则绑定默认 origin。显式 Host 不同即 `CREDENTIAL_HOST_MISMATCH`，不能随覆盖参数发送到另一站点。管理请求不跨 origin 重定向；公开请求也不借重定向带上凭据。
 3. 公开 events/subscribe/export 不发 Key；help/skills/dry-run 不读取 Key、不访问网络。update 的 dry-run 只检查参数与本地投影，不能声称 base 仍为当前版本。
 4. publish 无 Key 时调用匿名引导并安全保存成功后才上传。优先系统凭据库；文件后端目录 0700、文件 0600，拒绝符号链接，以安全临时文件原子写入。不静默以宽权限保存；失败退出且不上传正文。保存位置类别可报告为 keychain/file，但不输出 secret 或散列。
@@ -121,7 +121,7 @@ HTTP events 的 `--through` 映射 throughSequence。首次请求捕获 H，后�
       "name": "--host",
       "type": "origin",
       "required": false,
-      "default": "http://localhost:32167",
+      "default": "https://taco.arcadia-han.com",
       "description": "覆盖环境 Host"
     },
     {
@@ -135,7 +135,7 @@ HTTP events 的 `--through` 映射 throughSequence。首次请求捕获 H，后�
   "environment": [
     {
       "name": "TACO_HOST_URL",
-      "default": "http://localhost:32167",
+      "default": "https://taco.arcadia-han.com",
       "precedence": "--host > environment > default",
       "description": "公开订阅目标，不发送 Key"
     }
