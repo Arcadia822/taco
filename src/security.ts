@@ -172,7 +172,7 @@ export const sanitizeMermaidSvg = (svg: string): string => {
     FORBID_TAGS: ['a', 'foreignObject', 'image', 'script', 'style', 'use'],
     FORBID_ATTR: ['href', 'xlink:href'],
     ALLOW_DATA_ATTR: false,
-    ADD_ATTR: ['data-look', 'data-color-id'],
+    ADD_ATTR: ['data-look', 'data-color-id', 'data-id', 'data-type', 'data-et', 'data-node-id', 'data-edge-id'],
     ALLOW_ARIA_ATTR: true,
   }))
   const parsed = new DOMParser().parseFromString(sanitized, 'image/svg+xml')
