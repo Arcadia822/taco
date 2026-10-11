@@ -181,6 +181,7 @@ jobs:
               npm run build
               npm run --prefix packages/host build
               node extensions/taco/bin/taco.mjs pack demo-spec --output demo-spec/demo-spec.taco.html
+            ' > /tmp/build.log 2>&1
           status=$?
           set -e
 
@@ -215,9 +216,9 @@ jobs:
             --workdir /app \
             mcr.microsoft.com/playwright:v1.56.1-noble bash -c '
               set -euo pipefail
-              npm run --prefix packages/host start -- --hostname 127.0.0.1 --port 4174 &
+              useradd -u 1001 appserver 2>/dev/null || true
+              su -s /bin/bash appserver -c "npm run --prefix packages/host start -- --hostname 127.0.0.1 --port 4174" &
               HOST_PID=$!
-              trap "kill ${HOST_PID} 2>/dev/null || true" EXIT
               TACO_FILE="demo-spec/demo-spec.taco.html"
               node /trusted-tools/collect-outlines.mjs \
                 --taco-file "$TACO_FILE" \
@@ -378,6 +379,7 @@ jobs:
               npm run build
               npm run --prefix packages/host build
               node extensions/taco/bin/taco.mjs pack demo-spec --output demo-spec/demo-spec.taco.html
+            ' > /tmp/build.log 2>&1
           status=$?
           set -e
 
@@ -413,9 +415,9 @@ jobs:
             --workdir /app \
             mcr.microsoft.com/playwright:v1.56.1-noble bash -c '
               set -euo pipefail
-              npm run --prefix packages/host start -- --hostname 127.0.0.1 --port 4174 &
+              useradd -u 1001 appserver 2>/dev/null || true
+              su -s /bin/bash appserver -c "npm run --prefix packages/host start -- --hostname 127.0.0.1 --port 4174" &
               HOST_PID=$!
-              trap "kill ${HOST_PID} 2>/dev/null || true" EXIT
               TACO_FILE="demo-spec/demo-spec.taco.html"
               node /trusted-tools/execute-preview.mjs \
                 --plan-file /plan/preview-plan.json \

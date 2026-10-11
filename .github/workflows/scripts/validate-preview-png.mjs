@@ -176,6 +176,38 @@ export function validateDirectory(dirPath, options = {}) {
   if (existsSync(manifestPath)) {
     try {
       manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
+      if (plan) {
+        // Strict structural cross-validation against the trusted plan
+        if (plan.source && manifest.planSource !== plan.source) {
+          throw new PngValidationError(`Manifest planSource mismatch`, 'ERR_PLAN_SOURCE')
+        }
+        if (Array.isArray(plan.scenes)) {
+          if (!Array.isArray(manifest.scenes) || manifest.scenes.length !== plan.scenes.length) {
+            throw new PngValidationError(`Manifest scene count mismatch`, 'ERR_SCENE_COUNT')
+          }
+          for (let sIdx = 0; sIdx < plan.scenes.length; sIdx += 1) {
+            const expectedScene = plan.scenes[sIdx]
+            const actualScene = manifest.scenes[sIdx]
+            if (!actualScene || actualScene.id !== expectedScene.id) {
+              throw new PngValidationError(
+                `Manifest scene [${sIdx}] ID mismatch: expected ${expectedScene.id}`,
+                'ERR_SCENE_ID',
+              )
+            }
+            if (actualScene.status === 'passed') {
+              const expectedShots = (expectedScene.steps || []).filter((st) => st.do === 'shot')
+              const actualShots = actualScene.screenshots || []
+              if (actualShots.length !== expectedShots.length) {
+                throw new PngValidationError(
+                  `Manifest scene [${expectedScene.id}] shot count mismatch: expected ${expectedShots.length}, got ${actualShots.length}`,
+                  'ERR_SHOT_COUNT',
+                )
+              }
+            }
+          }
+        }
+      }
+
       if (expectedNames.length === 0 && manifest.scenes && Array.isArray(manifest.scenes)) {
         for (const scene of manifest.scenes) {
           for (const shot of scene.screenshots || []) {
