@@ -47,11 +47,98 @@ describe('Dynamic Preview: Plan Schema Validation', () => {
           id: 'bad-scene',
           title: 'Dangerous',
           target: 'taco',
-          steps: [{ do: 'click', target: 'button#delete-all' }],
+          steps: [
+            { do: 'click', target: 'button#delete-all' },
+            { do: 'shot', name: 'dangerous-shot' },
+          ],
         },
       ],
     }
     expect(() => validatePreviewPlan(dangerousPlan)).toThrow(PlanValidationError)
+  })
+
+  it('enforces required operands for actions and bounds on wait ms', () => {
+    const missingTarget = {
+      version: 1,
+      source: 'deepseek-planner',
+      ui_change: true,
+      summary: 'Missing target',
+      scenes: [
+        {
+          id: 's1',
+          title: 'S1',
+          target: 'taco',
+          steps: [{ do: 'click' }, { do: 'shot', name: 's' }],
+        },
+      ],
+    }
+    expect(() => validatePreviewPlan(missingTarget)).toThrow(/requires non-empty target/)
+
+    const missingScrollTo = {
+      version: 1,
+      source: 'deepseek-planner',
+      ui_change: true,
+      summary: 'Missing to',
+      scenes: [
+        {
+          id: 's1',
+          title: 'S1',
+          target: 'taco',
+          steps: [{ do: 'scroll' }, { do: 'shot', name: 's' }],
+        },
+      ],
+    }
+    expect(() => validatePreviewPlan(missingScrollTo)).toThrow(/requires non-empty "to"/)
+
+    const missingOpenFilePath = {
+      version: 1,
+      source: 'deepseek-planner',
+      ui_change: true,
+      summary: 'Missing path',
+      scenes: [
+        {
+          id: 's1',
+          title: 'S1',
+          target: 'taco',
+          steps: [{ do: 'open-file' }, { do: 'shot', name: 's' }],
+        },
+      ],
+    }
+    expect(() => validatePreviewPlan(missingOpenFilePath)).toThrow(/requires non-empty "path"/)
+
+    const badWaitMs = {
+      version: 1,
+      source: 'deepseek-planner',
+      ui_change: true,
+      summary: 'Bad wait ms',
+      scenes: [
+        {
+          id: 's1',
+          title: 'S1',
+          target: 'taco',
+          steps: [{ do: 'wait', ms: 999999 }, { do: 'shot', name: 's' }],
+        },
+      ],
+    }
+    expect(() => validatePreviewPlan(badWaitMs)).toThrow(/wait ms must be a number between 50 and 10000/)
+  })
+
+  it('rejects scenes with no shot steps', () => {
+    const noShotsPlan = {
+      version: 1,
+      source: 'deepseek-planner',
+      ui_change: true,
+      summary: 'No shots',
+      scenes: [
+        {
+          id: 's1',
+          title: 'S1',
+          target: 'taco',
+          steps: [{ do: 'wait', ms: 500 }],
+        },
+      ],
+    }
+    expect(() => validatePreviewPlan(noShotsPlan)).toThrow(/must contain at least 1 "shot" step/)
   })
 
   it('enforces maximum scene count and step count budget', () => {
@@ -63,10 +150,10 @@ describe('Dynamic Preview: Plan Schema Validation', () => {
       ui_change: true,
       summary: 'Too many',
       scenes: [
-        { id: 's1', title: '1', target: 'taco', steps: [] },
-        { id: 's2', title: '2', target: 'taco', steps: [] },
-        { id: 's3', title: '3', target: 'taco', steps: [] },
-        { id: 's4', title: '4', target: 'taco', steps: [] },
+        { id: 's1', title: '1', target: 'taco', steps: [{ do: 'shot', name: 's1' }] },
+        { id: 's2', title: '2', target: 'taco', steps: [{ do: 'shot', name: 's2' }] },
+        { id: 's3', title: '3', target: 'taco', steps: [{ do: 'shot', name: 's3' }] },
+        { id: 's4', title: '4', target: 'taco', steps: [{ do: 'shot', name: 's4' }] },
       ],
     }
     expect(() => validatePreviewPlan(tooManyScenes)).toThrow(/exceeds maximum/)

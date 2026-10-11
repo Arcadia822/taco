@@ -129,15 +129,14 @@ export function validateSinglePng(filePath, expectedFilename) {
   }
 
   const expectedView = getViewByFilename(expectedFilename)
-  if (!expectedView) {
-    throw new PngValidationError(`Unknown view filename: ${expectedFilename}`, 'ERR_UNKNOWN_VIEW')
-  }
+  const targetWidth = expectedView ? expectedView.viewport.width : 1280
+  const targetHeight = expectedView ? expectedView.viewport.height : 800
 
   const buffer = readFileSync(filePath)
   const ihdr = parsePngIhdr(buffer)
-  if (ihdr.width !== expectedView.viewport.width || ihdr.height !== expectedView.viewport.height) {
+  if (ihdr.width !== targetWidth || ihdr.height !== targetHeight) {
     throw new PngValidationError(
-      `Dimension mismatch for ${expectedFilename}: expected ${expectedView.viewport.width}x${expectedView.viewport.height}, got ${ihdr.width}x${ihdr.height}`,
+      `Dimension mismatch for ${expectedFilename}: expected ${targetWidth}x${targetHeight}, got ${ihdr.width}x${ihdr.height}`,
       'ERR_DIMENSION_MISMATCH',
     )
   }
@@ -152,7 +151,8 @@ export function validateSinglePng(filePath, expectedFilename) {
   }
 }
 
-export function validateDirectory(dirPath) {
+export function validateDirectory(dirPath, options = {}) {
+  const { plan = null } = options
   const resolvedDir = resolve(dirPath)
   if (!existsSync(resolvedDir)) {
     throw new PngValidationError(`Directory does not exist: ${resolvedDir}`, 'ERR_DIR_MISSING')
@@ -172,12 +172,18 @@ export function validateDirectory(dirPath) {
             expectedNames.push(shot.filename)
           }
         }
+        if (manifest.status === 'passed' && expectedNames.length === 0) {
+          throw new PngValidationError(
+            'Manifest claims passed status but contains 0 screenshots',
+            'ERR_EMPTY_SCREENSHOTS',
+          )
+        }
       }
     } catch (e) {
+      if (e instanceof PngValidationError) throw e
       throw new PngValidationError(`Invalid manifest.json: ${e.message}`, 'ERR_MANIFEST')
     }
   }
-
   const entries = readdirSync(resolvedDir)
   const allowedEntries = new Set([...expectedNames, 'manifest.json'])
   const unexpected = entries.filter((entry) => !allowedEntries.has(entry))

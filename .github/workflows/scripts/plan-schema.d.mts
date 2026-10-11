@@ -95,6 +95,7 @@ export interface PreviewManifest {
   summary: string
   mismatch?: string
   unseen?: string
+  trustLevel?: 'verified' | 'untrusted-recorded'
   scenes: SceneExecutionResult[]
   errors: string[]
   executedAt: string

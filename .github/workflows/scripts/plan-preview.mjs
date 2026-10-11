@@ -33,15 +33,17 @@ You plan a short sequence of interactive desktop scenes (1280x800) demonstrating
 Rules:
 1. Target desktop only: scenes target either "taco" (the complete specification file) or "host" (the hosted demo web app).
 2. Maximum 3 scenes, maximum 12 steps per scene.
-3. Steps can be:
+3. Steps must strictly include their required operands:
    - "click": { "do": "click", "target": "css selector", "text": "optional text match", "caption": "short description" }
    - "hover": { "do": "hover", "target": "css selector" }
-   - "wait": { "do": "wait", "ms": 500 }
+   - "wait": { "do": "wait", "ms": 500 } (ms must be between 50 and 10000)
    - "scroll": { "do": "scroll", "to": "css selector" }
-   - "open-file": { "do": "open-file", "path": "path/in/sidebar" }
+   - "open-file": { "do": "open-file", "path": "exact/file/path" }
    - "shot": { "do": "shot", "name": "kebab-case-name", "caption": "what this screenshot shows" }
+   - Every scene MUST contain at least 1 "shot" step!
 4. Special capability:
    - Taco renders Mermaid diagrams (flowchart and sequenceDiagram).
+   - In Taco, files in the sidebar have exact data-path attributes, e.g. "button.sidebar-row.file-row[data-path='demo-spec/spec.md']". Use "open-file" with the exact path!
    - SVG Mermaid nodes have selectors like "g.node" or "[data-id]" and clicking a node activates the source editor line and the comment toolbar (".mermaid-comment-toolbar" or ".tiptap-code-block-button").
    - You can click Mermaid diagram nodes or code buttons to demonstrate interactions!
 5. Never click dangerous items (delete, remove, restart, quit, sign out).

@@ -55,6 +55,8 @@ def load_expectations(path: str) -> dict[str, tuple[int, int]]:
             for shot in scene.get("screenshots", []):
                 filename = shot["filename"]
                 expectations[filename] = (1280, 800)
+        if payload.get("status") == "passed" and not expectations:
+            raise SanitizerError(f"{path}: manifest claims passed status with zero expected screenshots")
     return expectations
 
 

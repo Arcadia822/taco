@@ -136,13 +136,9 @@ export async function ensureAssetsBranch(repo) {
 
 async function createBlobs(repo, artifactsDir, prNumber, headSha, manifest = null) {
   const tree = []
-  let filesToUpload = FIXED_VIEWS.map((v) => ({
-    filename: v.filename,
-    assetPath: previewAssetPath(v, prNumber, headSha),
-  }))
+  let filesToUpload = []
 
   if (manifest && manifest.scenes && Array.isArray(manifest.scenes)) {
-    filesToUpload = []
     for (const scene of manifest.scenes) {
       for (const shot of scene.screenshots || []) {
         const baseName = shot.filename.replace(/\.png$/, '')
@@ -152,8 +148,12 @@ async function createBlobs(repo, artifactsDir, prNumber, headSha, manifest = nul
         })
       }
     }
+  } else {
+    filesToUpload = FIXED_VIEWS.map((v) => ({
+      filename: v.filename,
+      assetPath: previewAssetPath(v, prNumber, headSha),
+    }))
   }
-
   for (const item of filesToUpload) {
     const filePath = join(artifactsDir, item.filename)
     if (!existsSync(filePath)) continue

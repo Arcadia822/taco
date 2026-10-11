@@ -113,15 +113,16 @@ jobs:
           name: ui-preview-tools-${{ github.run_id }}
           path: /tmp/trusted-tools
           retention-days: 1
-  record:
-    name: Record UI Screenshots
+  collect:
+    name: Collect Outlines (Untrusted Container, Network None)
     needs: detect
     if: needs.detect.outputs.run_preview == 'true'
     runs-on: ubuntu-latest
     permissions: {}
-    timeout-minutes: 30
+    timeout-minutes: 25
     outputs:
-      previews_artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      outlines_artifact_id: ${{ steps.upload_outlines.outputs.artifact-id }}
+      app_volume_prepared: 'true'
     steps:
       - name: Download trusted tooling
         uses: actions/download-artifact@v4
@@ -144,10 +145,10 @@ jobs:
           npm install --prefix /tmp/trusted-tools/playwright \
             --no-audit --no-fund --ignore-scripts playwright@1.56.1
 
-      - name: Prepare capture volume and output directories
+      - name: Prepare build volume and directories
         run: |
-          mkdir -p /tmp/sandbox-out /tmp/outlines-out
-          chmod 0777 /tmp/sandbox-out /tmp/outlines-out
+          mkdir -p /tmp/outlines-out
+          chmod 0777 /tmp/outlines-out
           docker volume create taco-preview-app
           docker run --rm --user 0 --mount type=volume,src=taco-preview-app,dst=/app,volume-nocopy \
             mcr.microsoft.com/playwright:v1.56.1-noble chown -R 1000:1000 /app
@@ -179,12 +180,11 @@ jobs:
               npm ci --no-audit --no-fund
               npm run build
               npm run --prefix packages/host build || true
-              node extensions/taco/bin/taco.mjs pack demo-spec --out demo-spec/demo-spec.taco.html || true
+              node extensions/taco/bin/taco.mjs pack demo-spec --output demo-spec/demo-spec.taco.html || true
             ' > /tmp/build.log 2>&1
           status=$?
           set -e
-          # The transcript comes from untrusted build scripts: only emit it while
-          # workflow command processing is disabled.
+
           cat /tmp/build.log || true
           echo "::$STOP_TOKEN::"
 
@@ -193,7 +193,7 @@ jobs:
             exit "$status"
           fi
 
-      - name: Extract DOM Outlines in a network-disabled container (Stage 1)
+      - name: Extract DOM Outlines in a network-disabled container
         run: |
           STOP_TOKEN="$(uuidgen 2>/dev/null || head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
           echo "::stop-commands::$STOP_TOKEN"
@@ -240,26 +240,161 @@ jobs:
             exit "$status"
           fi
 
+      - name: Upload extracted DOM Outlines
+        id: upload_outlines
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-preview-outlines-${{ github.run_id }}
+          path: /tmp/outlines-out/outlines.json
+          if-no-files-found: error
+          retention-days: 1
+
+  plan:
+    name: Compute Dynamic Preview Plan (Trusted Runner, Credentials Only)
+    needs: [detect, collect]
+    runs-on: ubuntu-latest
+    permissions: {}
+    timeout-minutes: 10
+    outputs:
+      plan_artifact_id: ${{ steps.upload_plan.outputs.artifact-id }}
+    steps:
+      - name: Download trusted tooling
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.detect.outputs.tools_artifact_id }}
+          path: /tmp/trusted-tools
+          merge-multiple: true
+
+      - name: Download extracted DOM Outlines
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.collect.outputs.outlines_artifact_id }}
+          path: /tmp/outlines
+          merge-multiple: true
+
       - name: Download PR diff anonymously
         env:
           PR_NUMBER: ${{ needs.detect.outputs.pr_number }}
           REPOSITORY: ${{ needs.detect.outputs.repository }}
         run: |
-          curl --fail --silent --show-error --location --retry 3 \
+          set +e
+          HTTP_CODE=$(curl --silent --show-error --location --retry 3 \
             -H "Accept: application/vnd.github.v3.diff" \
+            --write-out "%{http_code}" \
             --output /tmp/pr.diff \
-            "https://api.github.com/repos/${REPOSITORY}/pulls/${PR_NUMBER}" || touch /tmp/pr.diff
+            "https://api.github.com/repos/${REPOSITORY}/pulls/${PR_NUMBER}")
+          CURL_STATUS=$?
+          set -e
+          if [ "$CURL_STATUS" -ne 0 ] || [ "$HTTP_CODE" -ge 400 ]; then
+            echo "::error::Failed to download PR diff (HTTP ${HTTP_CODE}, status ${CURL_STATUS})."
+            exit 1
+          fi
 
-      - name: Compute Dynamic Preview Plan (Stage 2 - Controlled Network, NO untrusted execution)
+      - name: Compute Dynamic Preview Plan via Model API
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: |
+          mkdir -p /tmp/plan-out
           node /tmp/trusted-tools/plan-preview.mjs \
             --diff-file /tmp/pr.diff \
-            --outlines-file /tmp/outlines-out/outlines.json \
-            --out-plan /tmp/trusted-tools/preview-plan.json
+            --outlines-file /tmp/outlines/outlines.json \
+            --out-plan /tmp/plan-out/preview-plan.json
 
-      - name: Execute Dynamic Preview Plan in a network-disabled container (Stage 3)
+      - name: Upload validated preview plan
+        id: upload_plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-preview-plan-${{ github.run_id }}
+          path: /tmp/plan-out/preview-plan.json
+          if-no-files-found: error
+          retention-days: 1
+
+  record:
+    name: Record and Sanitize UI Screenshots (Network None, Zero Credentials)
+    needs: [detect, collect, plan]
+    runs-on: ubuntu-latest
+    permissions: {}
+    timeout-minutes: 30
+    outputs:
+      previews_artifact_id: ${{ steps.upload_previews.outputs.artifact-id }}
+    steps:
+      - name: Download trusted tooling
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.detect.outputs.tools_artifact_id }}
+          path: /tmp/trusted-tools
+          merge-multiple: true
+
+      - name: Download validated preview plan
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.plan.outputs.plan_artifact_id }}
+          path: /tmp/plan
+          merge-multiple: true
+
+      - name: Download the untrusted source archive anonymously
+        env:
+          HEAD_SHA: ${{ needs.detect.outputs.head_sha }}
+          REPOSITORY: ${{ needs.detect.outputs.repository }}
+        run: |
+          curl --fail --silent --show-error --location --retry 3 --retry-all-errors \
+            --output /tmp/source.tar.gz \
+            "https://codeload.github.com/${REPOSITORY}/tar.gz/${HEAD_SHA}"
+
+      - name: Install the pinned Playwright module into trusted tooling
+        run: |
+          npm install --prefix /tmp/trusted-tools/playwright \
+            --no-audit --no-fund --ignore-scripts playwright@1.56.1
+
+      - name: Prepare capture volume and output directories
+        run: |
+          mkdir -p /tmp/sandbox-out
+          chmod 0777 /tmp/sandbox-out
+          docker volume create taco-preview-app
+          docker run --rm --user 0 --mount type=volume,src=taco-preview-app,dst=/app,volume-nocopy \
+            mcr.microsoft.com/playwright:v1.56.1-noble chown -R 1000:1000 /app
+
+      - name: Build the untrusted application in an isolated container
+        run: |
+          STOP_TOKEN="$(uuidgen 2>/dev/null || head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+          echo "::stop-commands::$STOP_TOKEN"
+
+          set +e
+          docker run --rm \
+            --name taco-preview-build \
+            --user "1000:1000" \
+            --security-opt "no-new-privileges:true" \
+            --cap-drop ALL \
+            --pids-limit 1024 \
+            --memory "6g" \
+            --cpus "2" \
+            --env HOME=/home/pwuser \
+            --env npm_config_cache=/tmp/npm-cache \
+            --env NEXT_TELEMETRY_DISABLED=1 \
+            --mount type=volume,src=taco-preview-app,dst=/app,volume-nocopy \
+            --volume "/tmp/source.tar.gz:/src/source.tar.gz:ro" \
+            --workdir /app \
+            mcr.microsoft.com/playwright:v1.56.1-noble bash -c '
+              set -euo pipefail
+              tar --extract --gzip --no-same-owner --no-same-permissions \
+                --file /src/source.tar.gz --directory /app --strip-components=1
+              npm ci --no-audit --no-fund
+              npm run build
+              npm run --prefix packages/host build || true
+              node extensions/taco/bin/taco.mjs pack demo-spec --output demo-spec/demo-spec.taco.html || true
+            ' > /tmp/build.log 2>&1
+          status=$?
+          set -e
+
+          cat /tmp/build.log || true
+          echo "::$STOP_TOKEN::"
+
+          if [ "$status" -ne 0 ]; then
+            echo "::error::The isolated build container exited with status ${status}."
+            exit "$status"
+          fi
+
+      - name: Execute Dynamic Preview Plan in a network-disabled container
         run: |
           STOP_TOKEN="$(uuidgen 2>/dev/null || head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
           echo "::stop-commands::$STOP_TOKEN"
@@ -279,6 +414,7 @@ jobs:
             --mount type=volume,src=taco-preview-app,dst=/app,volume-nocopy \
             --volume "/tmp/sandbox-out:/out" \
             --volume "/tmp/trusted-tools:/trusted-tools:ro" \
+            --volume "/tmp/plan:/plan:ro" \
             --workdir /app \
             mcr.microsoft.com/playwright:v1.56.1-noble bash -c '
               set -euo pipefail
@@ -290,7 +426,7 @@ jobs:
                 TACO_FILE="demo-spec/demo-spec.taco.html"
               fi
               node /trusted-tools/execute-preview.mjs \
-                --plan-file /trusted-tools/preview-plan.json \
+                --plan-file /plan/preview-plan.json \
                 --taco-file "$TACO_FILE" \
                 --host-url http://127.0.0.1:4174 \
                 --out-dir /out \
@@ -307,6 +443,7 @@ jobs:
             echo "::error::The isolated capture container exited with status ${status}."
             exit "$status"
           fi
+
       - name: Build the trusted sanitizer image
         run: |
           mkdir -p /tmp/sanitizer-context
@@ -352,7 +489,7 @@ jobs:
         run: node /tmp/trusted-tools/validate-preview-png.mjs --dir /tmp/sandbox-out
 
       - name: Upload the validated screenshots
-        id: upload
+        id: upload_previews
         uses: actions/upload-artifact@v4
         with:
           name: ui-preview-${{ needs.detect.outputs.pr_number }}-${{ needs.detect.outputs.head_sha }}

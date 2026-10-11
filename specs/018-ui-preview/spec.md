@@ -240,3 +240,31 @@ The next probe [38044453203](https://github.com/Arcadia822/taco/actions/runs/380
 The third probe [38044557106](https://github.com/Arcadia822/taco/actions/runs/38044557106) completed all Docker build, capture, sanitization, validation, and screenshot upload steps. First publication then failed because GitHub rejects `{ tree: [] }` with 422 `Invalid tree info`. The assets bootstrap now creates a README tree with `parents: []`; estimate +250 bytes of CI publisher source / measured +240 bytes (8,433 -> 8,673; -10 bytes due to formatting), with 0 bytes added to product/skill/release payloads. A first-publication regression models the API's empty-tree rejection. Product build and Chromium smoke passed after this change. A separate existing local update-check test failed to report its temporary CLI version; the previous complete local suite and remote CI passed, and this environment failure is being investigated separately.
 
 Final live probe [38044802162](https://github.com/Arcadia822/taco/actions/runs/38044802162) passed detect, isolated Docker build/capture, PNG sanitization/validation/upload, and GitHub publication. PR #127 received four immutable image links from assets commit `066ebb456f00dd0fba182bbde6fdf03d5a553173`; all four URLs returned PNGs at the registered dimensions, totaling 291,231 bytes. Desktop Taco and mobile Host images were visually inspected. This proves the repaired jobs through a same-repository disposable `pull_request` entry; the production `pull_request_target` event still requires the fix to reach main.
+### 9.2 Dynamic Desktop UI Preview with Isolated Planner and Execution (TACO-68, TACO-62)
+
+Transformation of fixed UI preview into dynamic PR-diff and DOM-outline-driven desktop preview.
+
+#### Budget Estimation (Prepare)
+
+- **Added npm runtime dependencies**: 0
+- **Added npm dev dependencies**: 0
+- **Workflow additions**: Independent planner job with isolated `DEEPSEEK_API_KEY`, zero-credential network-none capture executor, estimated workflow increase ~3,000 bytes.
+- **Product byte growth**: Complete shell: 0 bytes; Lite shell: 0 bytes; skill directory: 0 bytes; release package: 0 bytes.
+- **Network behavior**: Outbound network strictly confined to `plan` stage via DeepSeek chat completions API (`https://api.deepseek.com/v1/chat/completions`) and GitHub diff/blob/tree/ref APIs in `publish`. Capture and outline extraction containers are `--network none`.
+
+#### Actual Measurements (Develop)
+
+- **Complete shell** (`dist-single/Taco_Spec.taco.html`): 2,846,082 bytes (Delta: 0 bytes, deviation: 0)
+- **Lite shell** (`dist-single/Taco_Spec_Lite.taco.html`): 296,789 bytes (Delta: 0 bytes, deviation: 0)
+- **Skill complete shell** (`skills/taco/taco-shell.html`): 2,737,618 bytes (Delta: 0 bytes, deviation: 0)
+- **Skill lite shell** (`skills/taco/taco-shell-lite.html`): 188,325 bytes (Delta: 0 bytes, deviation: 0)
+- **Skill directory** (`skills/taco/`): 14,091,559 bytes (Delta: 0 bytes, deviation: 0)
+- **Workflow** (`.github/workflows/ui-preview.yml`): 16,423 bytes (Estimated ~15,900 bytes, deviation +523 bytes due to 5-job security segmentation)
+- **Unit & regression tests**: 653 tests across 57 files passing cleanly (`npm test`).
+
+#### Trust Boundary & Failure Hardening
+
+1. **Playwright resolution**: Resolves via `createRequire.resolve` entry to prevent Node ESM `ERR_UNSUPPORTED_DIR_IMPORT`.
+2. **Isolated planner job**: `plan` job runs independently from PR code runners; `DEEPSEEK_API_KEY` is never mounted or accessible in untrusted build/capture containers.
+3. **Strict schema enforcement**: `validatePreviewPlan` enforces action operands (`click.target`, `scroll.to`, `open-file.path`, bounded `wait.ms` 50-10000ms), and forbids empty shot lists.
+4. **No fake fallback**: Missing keys, planner errors, or step execution errors explicitly produce `unavailable` or `failed` statuses without injecting fake homepage screenshots.

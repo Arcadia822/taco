@@ -594,4 +594,46 @@ describe('UI Preview: publisher', () => {
       false,
     )
   })
+
+  it('validates dynamic manifest with custom screenshots and rejects empty passed manifest', () => {
+    const dir = makeTempDir('dynamic-manifest-')
+    const shotName = 'flowchart-node.png'
+    writeFileSync(join(dir, shotName), cleanPng(1280, 800))
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'passed',
+        summary: 'Mermaid node clicked',
+        scenes: [
+          {
+            id: 'mermaid-flowchart',
+            title: 'Flowchart',
+            status: 'passed',
+            screenshots: [{ filename: shotName, name: 'node', caption: 'Clicked node', status: 'passed' }],
+          },
+        ],
+      }),
+    )
+
+    const res = validateDirectory(dir)
+    expect(res.valid).toBe(true)
+    expect(res.views).toHaveLength(1)
+    expect(res.views[0].filename).toBe(shotName)
+
+    // Rejects manifest claiming passed with 0 screenshots
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        planSource: 'deepseek-planner',
+        status: 'passed',
+        summary: 'Fake success',
+        scenes: [{ id: 'fake', title: 'Fake', screenshots: [] }],
+      }),
+    )
+    unlinkSync(join(dir, shotName))
+    expect(() => validateDirectory(dir)).toThrow(PngValidationError)
+  })
 })

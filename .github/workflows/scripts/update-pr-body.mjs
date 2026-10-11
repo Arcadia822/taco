@@ -85,7 +85,7 @@ export function generatePreviewBlockMarkdown({
 
   let markdown = `### 🌮 UI Preview (commit \`${shortSha}\`)\n\n`
 
-  if (manifest && manifest.scenes && manifest.scenes.length > 0) {
+  if (manifest) {
     const statusEmoji =
       manifest.status === 'passed' ? '✅' : manifest.status === 'failed' ? '❌' : 'ℹ️'
     markdown += `**Status:** ${statusEmoji} ${manifest.status.toUpperCase()} (${manifest.planSource})\n`
@@ -98,21 +98,34 @@ export function generatePreviewBlockMarkdown({
       markdown += `> ℹ️ **Unseen:** ${manifest.unseen}\n\n`
     }
 
-    markdown += '| Scene | Status | Caption | Preview (Desktop 1280x800) |\n'
-    markdown += '| :--- | :---: | :--- | :---: |\n'
-
-    for (const scene of manifest.scenes) {
-      for (const shot of scene.screenshots || []) {
-        const assetPath = `previews/pr-${prNumber}/${shot.filename.replace(/\.png$/, '')}-${headSha}.png`
-        const url = `${baseUrl}/${assetPath}`
-        const shotStatus = shot.status === 'passed' ? 'Passed' : 'Failed'
-        const imgCell = `[![${shot.caption || shot.name}](${url})](${url})`
-        markdown += `| **${scene.title}** | ${shotStatus} | ${shot.caption || '-'} | ${imgCell} |\n`
+    if (manifest.errors && manifest.errors.length > 0) {
+      markdown += `> ❌ **Errors:**\n`
+      for (const err of manifest.errors) {
+        markdown += `> - ${err}\n`
       }
+      markdown += '\n'
     }
-    markdown += '\n'
+
+    const hasScreenshots = (manifest.scenes || []).some((s) => (s.screenshots || []).length > 0)
+    if (hasScreenshots) {
+      markdown += '| Scene | Status | Caption | Preview (Desktop 1280x800) |\n'
+      markdown += '| :--- | :---: | :--- | :---: |\n'
+
+      for (const scene of manifest.scenes || []) {
+        for (const shot of scene.screenshots || []) {
+          const assetPath = `previews/pr-${prNumber}/${shot.filename.replace(/\.png$/, '')}-${headSha}.png`
+          const url = `${baseUrl}/${assetPath}`
+          const shotStatus = shot.status === 'passed' ? 'Passed' : 'Failed'
+          const imgCell = `[![${shot.caption || shot.name}](${url})](${url})`
+          markdown += `| **${scene.title}** | ${shotStatus} | ${shot.caption || '-'} | ${imgCell} |\n`
+        }
+      }
+      markdown += '\n'
+    } else {
+      markdown += `*No UI preview screenshots were captured for this revision.*\n\n`
+    }
   } else {
-    // Fixed desktop views fallback
+    // When no manifest is supplied at all (e.g. fixed legacy views test), render registered desktop views
     const cell = (view) => {
       if (!view) return '-'
       const url = `${baseUrl}/${previewAssetPath(view, prNumber, headSha)}`

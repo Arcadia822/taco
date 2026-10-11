@@ -86,6 +86,7 @@ export function validatePreviewPlan(plan) {
       )
     }
 
+    let sceneShotsCount = 0
     for (let stepIdx = 0; stepIdx < scene.steps.length; stepIdx += 1) {
       const step = scene.steps[stepIdx]
       if (!step || typeof step !== 'object') {
@@ -96,6 +97,41 @@ export function validatePreviewPlan(plan) {
         throw new PlanValidationError(
           `Scene [${scene.id}] step [${stepIdx}] invalid action: ${step.do}`,
         )
+      }
+      if (step.do === 'click' || step.do === 'hover') {
+        if (typeof step.target !== 'string' || !step.target.trim()) {
+          throw new PlanValidationError(
+            `Scene [${scene.id}] step [${stepIdx}] action "${step.do}" requires non-empty target selector`,
+          )
+        }
+      }
+      if (step.do === 'scroll') {
+        if (typeof step.to !== 'string' || !step.to.trim()) {
+          throw new PlanValidationError(
+            `Scene [${scene.id}] step [${stepIdx}] action "scroll" requires non-empty "to" selector`,
+          )
+        }
+      }
+      if (step.do === 'open-file') {
+        if (typeof step.path !== 'string' || !step.path.trim()) {
+          throw new PlanValidationError(
+            `Scene [${scene.id}] step [${stepIdx}] action "open-file" requires non-empty "path"`,
+          )
+        }
+      }
+      if (step.do === 'wait') {
+        if (step.ms !== undefined) {
+          if (
+            typeof step.ms !== 'number' ||
+            !Number.isFinite(step.ms) ||
+            step.ms < 50 ||
+            step.ms > 10000
+          ) {
+            throw new PlanValidationError(
+              `Scene [${scene.id}] step [${stepIdx}] wait ms must be a number between 50 and 10000`,
+            )
+          }
+        }
       }
       if (step.target && FORBIDDEN_TEXT_OR_TARGET.test(step.target)) {
         throw new PlanValidationError(
@@ -108,8 +144,14 @@ export function validatePreviewPlan(plan) {
         )
       }
       if (step.do === 'shot') {
+        sceneShotsCount += 1
         if (!step.name || !VALID_SHOT_NAME.test(step.name)) {
           throw new PlanValidationError(`Scene [${scene.id}] shot invalid name: ${step.name}`)
+        }
+        if (step.name.length > MAX_SHOT_NAME_LENGTH) {
+          throw new PlanValidationError(
+            `Scene [${scene.id}] shot name "${step.name}" exceeds length ${MAX_SHOT_NAME_LENGTH}`,
+          )
         }
         const filename = `${scene.id}-${step.name}.png`
         if (seenFilenames.has(filename)) {
@@ -117,6 +159,11 @@ export function validatePreviewPlan(plan) {
         }
         seenFilenames.add(filename)
       }
+    }
+    if (sceneShotsCount === 0) {
+      throw new PlanValidationError(
+        `Scene [${scene.id}] must contain at least 1 "shot" step to produce screenshots`,
+      )
     }
   }
 

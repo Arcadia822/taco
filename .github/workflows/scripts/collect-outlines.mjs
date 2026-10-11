@@ -7,11 +7,13 @@
  * JSON artifact. NO API keys, NO external networks, NO secrets.
  */
 
+import { createRequire } from 'node:module'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { resolve, join } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { extractDomOutline } from './dom-outline.mjs'
 
+const require = createRequire(import.meta.url)
 const DEFAULT_TIMEOUT_MS = 45000
 const DESKTOP_VIEWPORT = { width: 1280, height: 800 }
 
@@ -42,12 +44,24 @@ export async function collectOutlines(options = {}) {
     throw new Error('Output path is required')
   }
 
-  // Load Playwright
+  // Load Playwright via entry resolution to prevent ERR_UNSUPPORTED_DIR_IMPORT
   let playwright
-  if (playwrightModule) {
-    playwright = await import(pathToFileURL(playwrightModule).href)
+  const requested = playwrightModule || process.env.PLAYWRIGHT_MODULE_PATH || null
+  if (requested) {
+    const asPath = requested.startsWith('file://') ? fileURLToPath(requested) : requested
+    let entry
+    try {
+      entry = require.resolve(resolve(asPath))
+    } catch (err) {
+      throw new Error(`Could not resolve the Playwright module at ${requested}: ${err.message}`)
+    }
+    playwright = await import(pathToFileURL(entry).href)
   } else {
-    playwright = await import('playwright')
+    try {
+      playwright = await import(pathToFileURL(require.resolve('playwright')).href)
+    } catch (err) {
+      playwright = await import('playwright')
+    }
   }
   const { chromium } = playwright.default || playwright
 
@@ -107,8 +121,8 @@ export async function collectOutlines(options = {}) {
 
     // 2. Host view
     const pageHost = await context.newPage()
-    await pageHost.goto(hostUrl, { waitUntil: 'networkidle', timeout })
-    await pageHost.waitForSelector('#app, main, header', { timeout })
+    await pageHost.goto(hostUrl, { waitUntil: 'load', timeout })
+    await pageHost.waitForSelector('header, .home-root, body', { timeout })
     await pageHost.waitForTimeout(1000)
 
     const hostResult = await pageHost.evaluate(extractDomOutline)

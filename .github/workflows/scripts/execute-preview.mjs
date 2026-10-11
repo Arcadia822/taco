@@ -14,10 +14,13 @@
  * It NEVER replaces a failed target with a fake success homepage snapshot.
  */
 
+import { createRequire } from 'node:module'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve, join } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { validatePreviewPlan, DESKTOP_VIEWPORT } from './plan-schema.mjs'
+
+const require = createRequire(import.meta.url)
 
 const DEFAULT_TIMEOUT_MS = 30000
 
@@ -93,12 +96,24 @@ export async function executePlan(options = {}) {
     return manifest
   }
 
-  // Load Playwright
+  // Load Playwright via entry resolution to prevent ERR_UNSUPPORTED_DIR_IMPORT
   let playwright
-  if (playwrightModule) {
-    playwright = await import(pathToFileURL(playwrightModule).href)
+  const requested = playwrightModule || process.env.PLAYWRIGHT_MODULE_PATH || null
+  if (requested) {
+    const asPath = requested.startsWith('file://') ? fileURLToPath(requested) : requested
+    let entry
+    try {
+      entry = require.resolve(resolve(asPath))
+    } catch (err) {
+      throw new Error(`Could not resolve the Playwright module at ${requested}: ${err.message}`)
+    }
+    playwright = await import(pathToFileURL(entry).href)
   } else {
-    playwright = await import('playwright')
+    try {
+      playwright = await import(pathToFileURL(require.resolve('playwright')).href)
+    } catch (err) {
+      playwright = await import('playwright')
+    }
   }
   const { chromium } = playwright.default || playwright
 
@@ -135,7 +150,7 @@ export async function executePlan(options = {}) {
           await page.waitForSelector('#app', { timeout })
           await page.waitForFunction(() => !document.getElementById('taco-splash'), { timeout })
         } else {
-          await page.waitForSelector('#app, main', { timeout })
+          await page.waitForSelector('header, .home-root, body', { timeout })
         }
         await page.waitForTimeout(500)
 
@@ -177,13 +192,33 @@ export async function executePlan(options = {}) {
                 break
               }
               case 'open-file': {
-                if (step.path) {
-                  // Click file item in Taco file browser sidebar
-                  const fileSelector = `[data-path="${step.path}"], .file-tree-item`
-                  const item = page.locator(fileSelector).filter({ hasText: step.path }).first()
-                  await item.click({ timeout: 5000 })
-                  await page.waitForTimeout(500)
+                if (!step.path) {
+                  throw new Error('open-file step requires a path')
                 }
+                // Expand any closed stage/folder details elements in sidebar first
+                await page.evaluate(() => {
+                  document.querySelectorAll('details.stage-group:not([open])').forEach((d) => {
+                    d.setAttribute('open', '')
+                  })
+                })
+                // Locate precise button.sidebar-row.file-row with exact data-path
+                const fileButton = page
+                  .locator(`button.sidebar-row.file-row[data-path="${step.path}"]`)
+                  .first()
+                await fileButton.waitFor({ state: 'visible', timeout: 5000 })
+                await fileButton.click({ timeout: 5000 })
+                // Confirm selection
+                await page.waitForFunction(
+                  (p) => {
+                    const el = document.querySelector(
+                      `button.sidebar-row.file-row[data-path="${p}"]`,
+                    )
+                    return el && el.classList.contains('is-selected')
+                  },
+                  step.path,
+                  { timeout: 5000 },
+                )
+                await page.waitForTimeout(600)
                 break
               }
               case 'shot': {
