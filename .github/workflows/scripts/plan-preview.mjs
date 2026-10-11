@@ -101,14 +101,6 @@ export async function requestPlannerPlan(messages, config) {
   const content = json.choices?.[0]?.message?.content || '{}'
   return JSON.parse(content.replace(/^```(?:json)?\s*|\s*```$/g, ''))
 }
-
-export async function requestDeepseekPlan(messages, apiKey) {
-  return requestPlannerPlan(messages, {
-    apiKey,
-    baseUrl: DEFAULT_BASE_URL,
-    model: DEFAULT_MODEL,
-  })
-}
 export async function planPreview(options = {}) {
   const {
     diffFile,
@@ -122,7 +114,10 @@ export async function planPreview(options = {}) {
 
   const resolved = resolvePlannerConfig(process.env)
   const apiKey = explicitApiKey !== undefined ? explicitApiKey : resolved.apiKey
-  const baseUrl = (explicitBaseUrl !== undefined ? explicitBaseUrl : resolved.baseUrl).replace(/\/+$/, '')
+  const baseUrl = (explicitBaseUrl !== undefined ? explicitBaseUrl : resolved.baseUrl).replace(
+    /\/+$/,
+    '',
+  )
   const model = explicitModel !== undefined ? explicitModel : resolved.model
   // If a pre-validated fixture plan is explicitly provided (for offline reproduction/tests)
   if (fixturePlanFile && existsSync(fixturePlanFile)) {
@@ -135,12 +130,15 @@ export async function planPreview(options = {}) {
   }
 
   if (!apiKey) {
-    console.warn('[plan-preview] PREVIEW_API_KEY/DEEPSEEK_API_KEY is not set. Marking plan as unavailable.')
+    console.warn(
+      '[plan-preview] PREVIEW_API_KEY/DEEPSEEK_API_KEY is not set. Marking plan as unavailable.',
+    )
     const emptyPlan = {
       version: 1,
       source: 'deepseek-planner',
       ui_change: false,
-      summary: 'Preview planner API key is unavailable in this environment; dynamic planning skipped.',
+      summary:
+        'Preview planner API key is unavailable in this environment; dynamic planning skipped.',
       scenes: [],
     }
     writeFileSync(outPlanFile, JSON.stringify(emptyPlan, null, 2), 'utf-8')
@@ -230,7 +228,6 @@ function parseArgs(argv) {
     else if (argv[i] === '--model' && argv[i + 1]) options.model = argv[++i]
   }
   return options
-
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

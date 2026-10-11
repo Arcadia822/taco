@@ -119,11 +119,16 @@ describe('Dynamic Preview: Plan Schema Validation', () => {
           id: 's1',
           title: 'S1',
           target: 'taco',
-          steps: [{ do: 'wait', ms: 999999 }, { do: 'shot', name: 's' }],
+          steps: [
+            { do: 'wait', ms: 999999 },
+            { do: 'shot', name: 's' },
+          ],
         },
       ],
     }
-    expect(() => validatePreviewPlan(badWaitMs)).toThrow(/wait ms must be a number between 50 and 10000/)
+    expect(() => validatePreviewPlan(badWaitMs)).toThrow(
+      /wait ms must be a number between 50 and 10000/,
+    )
   })
 
   it('rejects scenes with no shot steps', () => {
@@ -258,6 +263,7 @@ describe('Dynamic Preview: Plan Schema Validation', () => {
         expect(body.model).toBe('deepseek/deepseek-v4.1-flash')
         expect(body.response_format).toEqual({ type: 'json_object' })
         expect(res.summary).toBe('Test plan')
+      } finally {
         vi.unstubAllGlobals()
       }
     })
