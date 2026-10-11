@@ -4,8 +4,8 @@ export interface CapturedView {
   viewport: {
     width: number
     height: number
-    isMobile: boolean
-    hasTouch: boolean
+    isMobile?: boolean
+    hasTouch?: boolean
   }
 }
 

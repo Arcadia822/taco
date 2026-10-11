@@ -248,6 +248,7 @@ export async function runPublisher() {
   const prNumber = process.env.PR_NUMBER
   const headSha = process.env.HEAD_SHA
   const artifactsDir = process.env.ARTIFACTS_DIR || './artifacts/previews'
+  const planFile = process.env.PLAN_FILE || null
   const runId = process.env.GITHUB_RUN_ID || null
 
   if (!repo || !prNumber || !headSha) {
@@ -257,7 +258,12 @@ export async function runPublisher() {
   const initial = await checkLivePrHeadSha(repo, prNumber, headSha)
   if (!initial.canPublish) return { skipped: true, reason: initial.reason }
 
-  const validation = validateDirectory(artifactsDir)
+  let plan = null
+  if (planFile && existsSync(planFile)) {
+    plan = JSON.parse(readFileSync(planFile, 'utf-8'))
+  }
+
+  const validation = validateDirectory(artifactsDir, { plan })
 
   const assetCommitSha = await uploadAssetsAndCommit({
     repo,

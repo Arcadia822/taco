@@ -98,24 +98,29 @@ export async function collectOutlines(options = {}) {
       interactiveElements: tacoInitial.interactiveElements,
     })
 
-    // Walk through files in sidebar (e.g. spec.md or others) to extract deeper outlines
-    const fileButtons = await pageTaco
-      .locator('button.sidebar-row.file-row:not(.is-selected)')
-      .all()
-    for (let fIdx = 0; fIdx < Math.min(fileButtons.length, 3); fIdx += 1) {
-      const btn = fileButtons[fIdx]
-      const filePath = await btn.getAttribute('data-path')
-      await btn.click()
-      await pageTaco.waitForTimeout(600)
-      const fileOutline = await pageTaco.evaluate(extractDomOutline)
-      outlines.push({
-        view: 'taco',
-        title: `Complete Taco - ${filePath}`,
-        url: tacoUrl,
-        filePath,
-        outline: fileOutline.outline,
-        interactiveElements: fileOutline.interactiveElements,
-      })
+    // Snapshot file paths from sidebar first to avoid dynamic DOM shift on selection
+    const candidatePaths = await pageTaco.evaluate(() => {
+      return Array.from(document.querySelectorAll('button.sidebar-row.file-row'))
+        .map((btn) => btn.getAttribute('data-path'))
+        .filter(Boolean)
+    })
+
+    for (let fIdx = 0; fIdx < Math.min(candidatePaths.length, 5); fIdx += 1) {
+      const filePath = candidatePaths[fIdx]
+      const btn = pageTaco.locator(`button.sidebar-row.file-row[data-path="${filePath}"]`).first()
+      if (btn) {
+        await btn.click({ timeout: 5000 }).catch(() => {})
+        await pageTaco.waitForTimeout(600)
+        const fileOutline = await pageTaco.evaluate(extractDomOutline)
+        outlines.push({
+          view: 'taco',
+          title: `Complete Taco - ${filePath}`,
+          url: tacoUrl,
+          filePath,
+          outline: fileOutline.outline,
+          interactiveElements: fileOutline.interactiveElements,
+        })
+      }
     }
     await pageTaco.close()
 

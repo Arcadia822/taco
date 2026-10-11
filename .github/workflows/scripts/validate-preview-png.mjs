@@ -158,31 +158,43 @@ export function validateDirectory(dirPath, options = {}) {
     throw new PngValidationError(`Directory does not exist: ${resolvedDir}`, 'ERR_DIR_MISSING')
   }
 
-  let expectedNames = FIXED_VIEWS.map((view) => view.filename)
+  let expectedNames = []
   let manifest = null
   const manifestPath = join(resolvedDir, 'manifest.json')
+
+  if (plan && plan.scenes && Array.isArray(plan.scenes)) {
+    // Derive expected screenshots from the TRUSTED plan
+    for (const scene of plan.scenes) {
+      for (const step of scene.steps || []) {
+        if (step.do === 'shot' && step.name) {
+          expectedNames.push(`${scene.id}-${step.name}.png`)
+        }
+      }
+    }
+  }
 
   if (existsSync(manifestPath)) {
     try {
       manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
-      if (manifest.scenes && Array.isArray(manifest.scenes)) {
-        expectedNames = []
+      if (expectedNames.length === 0 && manifest.scenes && Array.isArray(manifest.scenes)) {
         for (const scene of manifest.scenes) {
           for (const shot of scene.screenshots || []) {
             expectedNames.push(shot.filename)
           }
         }
-        if (manifest.status === 'passed' && expectedNames.length === 0) {
-          throw new PngValidationError(
-            'Manifest claims passed status but contains 0 screenshots',
-            'ERR_EMPTY_SCREENSHOTS',
-          )
-        }
+      }
+      if (manifest.status === 'passed' && expectedNames.length === 0) {
+        throw new PngValidationError(
+          'Manifest claims passed status but contains 0 screenshots',
+          'ERR_EMPTY_SCREENSHOTS',
+        )
       }
     } catch (e) {
       if (e instanceof PngValidationError) throw e
       throw new PngValidationError(`Invalid manifest.json: ${e.message}`, 'ERR_MANIFEST')
     }
+  } else if (expectedNames.length === 0) {
+    expectedNames = FIXED_VIEWS.map((view) => view.filename)
   }
   const entries = readdirSync(resolvedDir)
   const allowedEntries = new Set([...expectedNames, 'manifest.json'])
@@ -227,10 +239,13 @@ export function validateDirectory(dirPath, options = {}) {
 }
 
 function parseArgs(argv) {
-  const options = { dir: '', json: false }
+  const options = { dir: '', json: false, planFile: '' }
   for (let index = 0; index < argv.length; index += 1) {
     if (argv[index] === '--dir' && argv[index + 1]) {
       options.dir = argv[index + 1]
+      index += 1
+    } else if (argv[index] === '--plan' && argv[index + 1]) {
+      options.planFile = argv[index + 1]
       index += 1
     } else if (argv[index] === '--json') {
       options.json = true
@@ -238,7 +253,6 @@ function parseArgs(argv) {
   }
   return options
 }
-
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const options = parseArgs(process.argv.slice(2))
   if (!options.dir) {
@@ -247,7 +261,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   }
 
   try {
-    const result = validateDirectory(options.dir)
+    let plan = null
+    if (options.planFile && existsSync(options.planFile)) {
+      plan = JSON.parse(readFileSync(options.planFile, 'utf-8'))
+    }
+    const result = validateDirectory(options.dir, { plan })
     if (options.json) {
       console.log(JSON.stringify(result, null, 2))
     } else {

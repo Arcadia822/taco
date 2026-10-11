@@ -11,7 +11,7 @@ input: |-
 
 ## 1. Background & Goals
 
-When contributors or automated agents submit pull requests touching Taco specifications (`specs/**`), the web host application (`packages/host/**`), or explicitly ask for visual verification via the `ui-preview` label, reviewers need immediate visual evidence of how changes affect both the standalone Taco experience and the hosted environment across desktop and mobile form factors.
+When contributors or automated agents submit pull requests touching Taco specifications (`specs/**`), the web host application (`packages/host/**`), or explicitly ask for visual verification via the `ui-preview` label, reviewers need immediate visual evidence of how changes affect both the standalone Taco experience and the hosted environment on the standard 1280x800 desktop viewport.
 
 Existing CI (`.github/workflows/ci.yml`) validates formatting, tests, and shell synchronization, but does not render or snapshot UI artifacts. Running browser automation and preview rendering on pull requests requires stringent security boundaries: PR branches from public forks may contain untrusted code. Direct execution of untrusted fork code in a privileged `pull_request_target` runner risks leaking repository tokens (`GITHUB_TOKEN` with write permissions) or Actions environment credentials.
 
@@ -94,9 +94,7 @@ The capture pipeline never accepts view definitions from pull request code. `.gi
 | View ID        | Filename           | Target               | Viewport   | Purpose                                           |
 | :------------- | :----------------- | :------------------- | :--------- | :------------------------------------------------ |
 | `taco-desktop` | `taco-desktop.png` | Complete Taco bundle | 1280 x 800 | Desktop reader, navigation, and sidebar rendering |
-| `taco-mobile`  | `taco-mobile.png`  | Complete Taco bundle | 375 x 812  | Narrow responsive layout and touch targets        |
 | `host-desktop` | `host-desktop.png` | Host application     | 1280 x 800 | Hosted document loading, header, and toolbar      |
-| `host-mobile`  | `host-mobile.png`  | Host application     | 375 x 812  | Hosted narrow layout and touch targets            |
 
 ### 3.3 Container Isolation
 
@@ -125,10 +123,10 @@ The publisher replaces only the region between the markers:
 
 ### 🌮 UI Preview (commit `{short_sha}`)
 
-| Surface       |            Desktop (1280x800)             |            Mobile (375x812)             |
-| :------------ | :---------------------------------------: | :-------------------------------------: |
-| Complete Taco | ![{taco_desktop}]({raw_url_taco_desktop}) | ![{taco_mobile}]({raw_url_taco_mobile}) |
-| Host / Demo   | ![{host_desktop}]({raw_url_host_desktop}) | ![{host_mobile}]({raw_url_host_mobile}) |
+| Surface       |            Desktop (1280x800)             |
+| :------------ | :---------------------------------------: |
+| Complete Taco | ![{taco_desktop}]({raw_url_taco_desktop}) |
+| Host / Demo   | ![{host_desktop}]({raw_url_host_desktop}) |
 
 _Updated at {iso_timestamp} for commit `{short_sha}`. Actions run [{run_id}](https://github.com/{repo}/actions/runs/{run_id})_
 <!-- taco:ui-preview:end -->

@@ -155,8 +155,6 @@ export async function captureViews(options = {}) {
     for (const view of FIXED_VIEWS) {
       const context = await browser.newContext({
         viewport: { width: view.viewport.width, height: view.viewport.height },
-        isMobile: Boolean(view.viewport.isMobile),
-        hasTouch: Boolean(view.viewport.hasTouch),
         deviceScaleFactor: 1,
         reducedMotion: 'reduce',
       })
@@ -183,8 +181,6 @@ export async function captureViews(options = {}) {
           viewport: {
             width: view.viewport.width,
             height: view.viewport.height,
-            isMobile: Boolean(view.viewport.isMobile),
-            hasTouch: Boolean(view.viewport.hasTouch),
           },
         })
       } finally {

@@ -477,9 +477,8 @@ jobs:
             exit "$status"
           fi
 
-      - name: Validate the sanitized PNG set
-        run: node /tmp/trusted-tools/validate-preview-png.mjs --dir /tmp/sandbox-out
-
+      - name: Validate the sanitized PNG set against the trusted plan
+        run: node /tmp/trusted-tools/validate-preview-png.mjs --dir /tmp/sandbox-out --plan /tmp/plan/preview-plan.json
       - name: Upload the validated screenshots
         id: upload_previews
         uses: actions/upload-artifact@v4
@@ -491,7 +490,7 @@ jobs:
 
   publish:
     name: Publish UI Preview
-    needs: [detect, record]
+    needs: [detect, plan, record]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -514,6 +513,12 @@ jobs:
           artifact-ids: ${{ needs.record.outputs.previews_artifact_id }}
           path: downloaded-previews
           merge-multiple: true
+      - name: Download validated preview plan
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.plan.outputs.plan_artifact_id }}
+          path: /tmp/plan
+          merge-multiple: true
 
       - name: Publish the screenshots and update the pull request body
         env:
@@ -522,5 +527,6 @@ jobs:
           PR_NUMBER: ${{ needs.detect.outputs.pr_number }}
           HEAD_SHA: ${{ needs.detect.outputs.head_sha }}
           ARTIFACTS_DIR: downloaded-previews
+          PLAN_FILE: /tmp/plan/preview-plan.json
           GITHUB_RUN_ID: ${{ github.run_id }}
         run: node .github/workflows/scripts/publish-preview.mjs
