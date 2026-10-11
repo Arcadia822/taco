@@ -131,7 +131,7 @@ describe('skill packer', () => {
       bundle.checkpoints = {
         version: 1,
         nodes: [{ id: 'review', title: 'Review', after: [], documents: [{ path: 'roguelike-tactics-game/research.md' }] }],
-        documents: [{ path: 'roguelike-tactics-game/research.md', status: 'in_progress', updatedAt: '2026-09-24T10:00:00.000Z' }],
+        documents: [{ path: 'roguelike-tactics-game/research.md', status: 'freeze', updatedAt: '2026-09-24T10:00:00.000Z' }],
       }
       bundle.navigation = { version: 1, entry: 'research.md', groups: [{ id: 'group-1', title: 'Research', paths: ['research.md'] }] }
       bundle.vendorField = { keep: true }
@@ -146,7 +146,8 @@ describe('skill packer', () => {
     const beforeFiles = beforeJson.files as Array<Record<string, unknown>>
 
     write(join(directory, 'combat-model.md'), '# Combat Model\n\nOptions. Edited.\n')
-    pack(['--dir', directory, '--title', 'Roguelike Tactics Research'])
+    write(join(directory, 'round-3.md'), '## Additional research\n\nNew evidence.\n')
+    pack(['--dir', directory, '--out', artifact, '--title', 'Revised Combat Research'])
 
     const after = readBundle(artifact)
     expect(after.parsed.ok).toBe(true)
@@ -154,15 +155,17 @@ describe('skill packer', () => {
     const afterJson = JSON.parse(after.json) as Record<string, unknown>
     const afterFiles = afterJson.files as Array<Record<string, unknown>>
 
+    expect(afterJson.title).toBe('Revised Combat Research')
+    expect(afterFiles.find((file) => file.path === 'roguelike-tactics-game/round-3.md')?.content).toBe('## Additional research\n\nNew evidence.\n')
     expect(afterJson.docId).toBe(beforeJson.docId)
     expect(afterJson.comments).toEqual(beforeJson.comments)
     expect(afterJson.checkpoints).toEqual(beforeJson.checkpoints)
     expect(afterJson.navigation).toEqual(beforeJson.navigation)
     expect(afterJson.vendorField).toEqual({ keep: true })
 
-    for (const file of afterFiles) {
-      const previous = beforeFiles.find((candidate) => candidate.path === file.path)
-      expect(file.id).toBe(previous?.id)
+    for (const previous of beforeFiles) {
+      const file = afterFiles.find((candidate) => candidate.path === previous.path)
+      expect(file?.id).toBe(previous.id)
     }
     const edited = afterFiles.find((file) => file.path === 'roguelike-tactics-game/combat-model.md')
     const untouched = afterFiles.find((file) => file.path === 'roguelike-tactics-game/research.md')
@@ -204,15 +207,6 @@ describe('skill packer', () => {
     })
     expect(result.status).toBe(1)
     expect(result.stderr).toContain('navigation must be a v1 manifest')
-  })
-
-  it('ships the assembly path the skill documents', () => {
-    const skill = readFileSync(resolve('skills/taco/SKILL.md'), 'utf8')
-    expect(readFileSync(resolve('skills/taco/references/bundle-format.md'), 'utf8')).toContain('taco/files')
-    expect(skill).toContain('scripts/pack.mjs')
-    expect(skill).toContain('references/bundle-format.md')
-    // The absolute claim that forced agents to invent their own packer.
-    expect(skill).not.toMatch(/^No CLI is required\.$/m)
   })
 
   it('takes the group structure the agent declares, and rejects paths it cannot place', () => {

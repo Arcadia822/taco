@@ -116,6 +116,7 @@ CREATE TABLE IF NOT EXISTS handoffs (
   payload_hash TEXT NOT NULL,
   comments_through_sequence TEXT NOT NULL,
   payload_json JSONB NOT NULL,
+  snapshot_json JSONB NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_handoffs_taco ON handoffs(taco_id, created_at ASC);
@@ -186,6 +187,17 @@ CREATE TABLE IF NOT EXISTS revisions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS published_revisions (
+  id UUID PRIMARY KEY,
+  taco_id UUID NOT NULL REFERENCES tacos(id) ON DELETE RESTRICT,
+  parent_revision_id UUID NULL REFERENCES published_revisions(id) ON DELETE RESTRICT,
+  sequence BIGINT NOT NULL DEFAULT 0,
+  content_hash TEXT NOT NULL,
+  snapshot_ref TEXT NOT NULL,
+  snapshot_json JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_published_revisions_taco ON published_revisions(taco_id, sequence DESC);
 CREATE TABLE IF NOT EXISTS threads (
   id TEXT NOT NULL,
   revision_id UUID NOT NULL REFERENCES revisions(id) ON DELETE RESTRICT,

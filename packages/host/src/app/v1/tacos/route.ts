@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { type NextRequest, NextResponse } from 'next/server'
-import { validateDocumentSnapshot } from '@taco/protocol'
+import { computeSnapshotContentHash, validateDocumentSnapshot } from '@taco/protocol'
 import { ConflictError, DatabaseNotConfiguredError, getDatabase } from '@/lib/db'
 import { getStorageAdapter } from '@/lib/storage-adapter'
 
@@ -56,8 +56,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const db = getDatabase()
-    await db.publishTaco(tacoId, title, snapshot)
-
+    const publishRes = await db.publishTaco(tacoId, title, snapshot)
+    const contentHash = await computeSnapshotContentHash(snapshot)
+    const revisionId = publishRes.revisionId || tacoId
     // Also write to storage adapter if configured for legacy direct URL access
     try {
       const storage = getStorageAdapter()
@@ -77,6 +78,8 @@ export async function POST(req: NextRequest) {
         id: tacoId,
         tacoId,
         title,
+        revisionId,
+        contentHash,
         url: `${origin}/t/${tacoId}`,
         createdAt: nowIso,
       },

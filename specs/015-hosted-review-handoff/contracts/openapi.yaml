@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
-  title: TACO-33 公开自动保存与人工交接 HTTP 增量契约
-  version: 0.2.0-draft
+  title: Taco 公开评审与同一 URL 修订 HTTP 增量契约
+  version: 0.3.0-draft
   description: >-
-    只规定相对 008 Host 契约新增或改变的接口，不声明当前 Next 路由已实现。
-    一个 Taco 仅有一次 Agent publish；发布基线由 Host 内部保存，Agent 无需 revisionId。
+    规定相对 008 Host 契约新增或改变的公开评审接口。
+    首次 publish 创建 Taco 和初始 revisionId；后续 revision 保留 Taco URL，发布基线不变。
     分享 URL 可公开读写，自报姓名及监听资料不是认证；实现仍需同源防护与滥用限制。
 servers:
   - url: https://api.taco.local
@@ -50,6 +50,55 @@ paths:
         '403': { $ref: '#/components/responses/CrossOrigin' }
         '409': { $ref: '#/components/responses/Conflict' }
         '413': { description: 单文件或上传包超过上限；不截断 }
+  /v1/tacos/{id}/revisions:
+    post:
+      operationId: updatePublishedRevision
+      summary: 在同一 Taco URL 原子提交新的 Agent 修订
+      description: >-
+        校验 baseRevisionId、共享状态版本和评论高水位；任一冲突都不写入。
+        最近成功 Handoff 后尚未处理的正文、标题、navigation 或 Checkpoint 定义编辑拒绝覆盖。
+        现有评论历史及 Checkpoint 状态保留，评论锚点按新正文重定位。
+        revisionId 为不可变修订 UUID，独立于 autosave stateVersion 和十分钟历史窗口。
+        CLI 的 --base 可选；省略时从 GET /state 取得当前 revisionId 并填入本请求的 baseRevisionId。
+      parameters:
+        - $ref: '#/components/parameters/TacoId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CsrfToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [baseRevisionId, expectedStateVersion, expectedCommentsThroughSequence, snapshot]
+              properties:
+                baseRevisionId: { type: string, format: uuid }
+                expectedStateVersion: { $ref: './handoff.schema.json#/$defs/Sequence' }
+                expectedCommentsThroughSequence: { $ref: './handoff.schema.json#/$defs/Sequence' }
+                snapshot: { $ref: '../../008-taco-host-contract/contracts/protocol.schema.json#/$defs/Snapshot' }
+      responses:
+        '201':
+          description: 修订已持久化；原 reviewer URL 不变
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [command, tacoId, revisionId, url, stateVersion, createdAt, contentHash]
+                properties:
+                  command: { const: update }
+                  tacoId: { type: string, format: uuid }
+                  revisionId: { type: string, format: uuid }
+                  url: { type: string, format: uri }
+                  stateVersion: { $ref: './handoff.schema.json#/$defs/Sequence' }
+                  createdAt: { type: string, format: date-time }
+                  contentHash: { type: string, pattern: '^sha256:[0-9a-f]{64}$' }
+        '400': { description: 修订参数错误 }
+        '403': { $ref: '#/components/responses/CrossOrigin' }
+        '404': { description: Taco 不存在或不支持共享评审 }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { description: 修订超过请求大小上限 }
+        '422': { description: snapshot 或稳定文档身份校验失败 }
   /v1/tacos/{id}/state:
     get:
       operationId: readSharedReviewState
@@ -64,8 +113,9 @@ paths:
               schema:
                 type: object
                 additionalProperties: false
-                required: [stateVersion, commentsThroughSequence, snapshot]
+                required: [revisionId, stateVersion, commentsThroughSequence, snapshot]
                 properties:
+                  revisionId: { type: string, format: uuid }
                   stateVersion: { $ref: './handoff.schema.json#/$defs/Sequence' }
                   commentsThroughSequence: { $ref: './handoff.schema.json#/$defs/Sequence' }
                   snapshot: { $ref: '../../008-taco-host-contract/contracts/protocol.schema.json#/$defs/Snapshot' }

@@ -212,7 +212,7 @@ const I18N = {
     section4CliCmd: TACO_CLI_INSTALL_COMMAND,
     section4AgentTitle: 'FOR AGENT',
     section4AgentPrompt:
-      '阅读 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md 的托管评审说明，安装 Taco skill 与 taco-cli。先 dry-run 核对公开内容，再发布 Taco，保存 URL 和 tacoId；运行 taco-cli subscribe <tacoId> --host <origin> 并保持在线。等我评论并点击「交接」后，默认订阅输出 review.handed_off 并退出；用 taco-cli handoff 读取快照、比对源文件、应用反馈并报告，再从确认的 sequence 开始下一轮订阅。评论和自动保存不是交接；只有需要持续接收全部事件时才用 --stream。',
+      '阅读 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md 的托管评审说明，安装 Taco skill 与 taco-cli。先 dry-run 核对公开内容，再发布 Taco，保存 URL、tacoId 和 revisionId；运行 taco-cli subscribe <tacoId> --host <origin> 并保持在线。等我评论并点击「交接」后，默认订阅输出 review.handed_off 并退出；用 taco-cli handoff 读取快照、比对源文件、应用反馈并报告。后续评审轮次运行 taco-cli update <tacoId> <file> [--base <revisionId>] 原地更新到同一 URL 并记录新的 revisionId，再从确认的 sequence 开始订阅。评论和自动保存不是交接；旧版 CLI 若不支持 update 应报错而非静默重新发布。',
     creditsEyebrow: '07 / SHOUTOUT',
     creditsBackToTop: '回到顶部',
     creditsTitlePrefix: '感谢',
@@ -325,7 +325,7 @@ const I18N = {
     section4CliCmd: TACO_CLI_INSTALL_COMMAND,
     section4AgentTitle: 'FOR AGENT',
     section4AgentPrompt:
-      'Read the hosted-review section of https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and install the Taco skill and taco-cli. Dry-run the public payload, publish the Taco, retain its URL and tacoId, then keep taco-cli subscribe <tacoId> --host <origin> running. After I comment and click Handoff, the default subscriber emits review.handed_off and exits. Fetch the snapshot with taco-cli handoff, compare canonical files, apply feedback and report, then subscribe again from the confirmed sequence. Comments and autosaves are not Handoff; use --stream only for continuous full event streaming.',
+      'Read the hosted-review section of https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and install the Taco skill and taco-cli. Dry-run the public payload, publish the Taco, retain its URL, tacoId, and revisionId, then keep taco-cli subscribe <tacoId> --host <origin> running. After I comment and click Handoff, the default subscriber emits review.handed_off and exits. Fetch the snapshot with taco-cli handoff, compare canonical files, apply feedback and report. For subsequent rounds, run taco-cli update <tacoId> <file> [--base <revisionId>] to update to the same URL in place and record the new revisionId, then subscribe again from the confirmed sequence. Comments and autosaves are not Handoff; old CLIs without update must report unsupported rather than silently republishing.',
     creditsEyebrow: '07 / SHOUTOUT',
     creditsBackToTop: 'Back to Top',
     creditsTitlePrefix: 'Thank you,',
@@ -1254,7 +1254,6 @@ export default function HomePage() {
                 </span>
               </div>
               <div className="workflow-terminal__body">
-                <div className="workflow-terminal__env"><span>$</span><code>export TACO_HOST_URL={TRACE_HOST}</code></div>
                 <div className="workflow-terminal__step">
                   <div className="workflow-terminal__agent"><span>AGENT / 01</span>{t.tracePublish}</div>
                   <div className="workflow-terminal__command"><span>$</span><code>taco-cli publish design.taco.html</code></div>

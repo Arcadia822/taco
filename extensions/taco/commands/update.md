@@ -31,7 +31,7 @@ The user input may contain one feature-directory path followed by repeatable `--
    - Match previous file entries by path and preserve unknown fields and stable `id`, except the unsupported `sourceUrl` field. Keep `title` only if non-empty; recompute `sourceHash` (64 hex chars) from canonical source bytes when changed. Keep `blocks` only when `content` is byte-identical; drop stale blocks otherwise.
    - Every comment's `anchor.path` must still be present in `files`. If a commented source file disappeared, retain its prior bundle entry and report it; never silently remove its comments.
    - For a new Taco, use `format: "taco/files"`, `version: 1`, a unique `docId` (`crypto.randomUUID()`), `title`, repository-relative safe `root` and `files`.
-   - On refresh, merge intended changes onto the whole previous bundle; retain identity, root, format/version and all other state. Stop for unsupported format/version instead of downgrading. Confirm any pending review edits were handled before replacing their file contents.
+   - On refresh, merge intended changes onto the exact same `<FEATURE_DIR>/<feature-name>.taco.html` and retain `docId` in place; never reinitialize from a template or create a second file even when research notes or titles change. Retain identity, root, format/version, navigation, checkpoints, comments, and all other state. Stop for unsupported format/version instead of downgrading. Confirm any pending review edits were handled before replacing their file contents.
    - Serialize with `JSON.stringify(bundle, null, 2)`, then escape `<`, `>`, `&`, `\u2028`, `\u2029` as `\uXXXX`. Insert it into the single `#taco-document` block with a **callback** replacement — `html.replace(dataBlock, () => replacement)` — or an index splice; a plain replacement string expands `$&`, `` $` ``, `$'`, `$1` from the JSON. Set `<title>` to the HTML-escaped `<bundle title> — Taco` using the same safe insertion technique. Touch nothing else in the shell.
    - Validate before writing: `JSON.parse` the exact escaped string (it must round-trip) and check the shape rules above. Write the complete file to a temporary sibling and rename it over the destination, so a failed write never truncates the existing Taco.
 4. Present the generated Taco to the user:
@@ -44,6 +44,10 @@ The user input may contain one feature-directory path followed by repeatable `--
 ## Agent invariant
 
 Whenever you modify any canonical artifact inside a Spec Kit feature directory outside a lifecycle hook—including specification, clarification, plan, tasks, research, data model, contracts, checklists, or recorded implementation progress—run this command before reporting that operation complete.
+
+## Hosted round-trip (optional)
+
+This command never publishes. When the same feature Taco is also hosted on a Tacobin Host, the review round-trip after this in-place refresh is `taco-cli update <tacoId> <file.taco.html> [--base <revisionId>] --host <origin>`, which pushes the refreshed bundle to the same hosted Taco and reviewer URL and records the new `revisionId`. When `--base` is omitted, the CLI uses the Host's active revision automatically; pass explicit `--base <revisionId>` to assert a specific expected base. Do not re-publish a new Taco for a subsequent review round, and do not mint a new `docId`. If the installed binary does not implement network update, report that update is unsupported by the installed CLI rather than falling back to `publish`.
 
 ## Constraints
 

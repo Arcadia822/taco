@@ -44,13 +44,15 @@ Agent 常用的命令：
 | 命令 | 作用 |
 | --- | --- |
 | `taco-cli publish <file.taco.html> --host <origin> --dry-run` | 本地预检：列出将要公开的文件和大小，不发任何请求 |
-| `taco-cli publish <file.taco.html> --host <origin>` | 发布，返回给评审者的 `url` 和后续使用的 `tacoId` |
+| `taco-cli publish <file.taco.html> --host <origin>` | 发布新 Taco，返回给评审者的 `url` 和后续使用的 `tacoId` |
+| `taco-cli update <tacoId> <file.taco.html> [--base <revisionId>] --host <origin>` | 向已有的 Taco 提交替换修订版，保持原 URL 不变，并保留评论与 Checkpoint 状态（省略 `--base` 时默认使用 Host 当前 revision） |
+| `taco-cli update <tacoId> <file.taco.html> [--base <revisionId>] --dry-run` | 本地检查修订内容，不发网络请求；仅在显式传入时显示基础版本 |
 | `taco-cli subscribe <tacoId> --host <origin>` | 等待交接：忽略普通评论和编辑，收到 `review.handed_off` 后退出 |
 | `taco-cli subscribe <tacoId> --stream` | 持续接收全部事件 |
 | `taco-cli handoff <tacoId> <handoffId> --host <origin>` | 读取这次交接的不可变快照 |
 | `taco-cli events <tacoId> --after <sequence>` | 监听中断后补读事件；没人监听时发生的交接也能找回 |
 
-每次发布都会固定一份不可变的基线；改正后的文件需要重新发布，得到一个新的 Taco。
+首次发布会创建一份新的 Taco（`POST /v1/tacos`）并固定基础版本。后续评审轮次通过 `taco-cli update <tacoId> <file.taco.html> [--base <revisionId>]` 原地更新，保持评审 URL 稳定，推进 revision 记录，并保留评论与 Checkpoint 状态。省略 `--base` 时，CLI 会自动使用 Host 当前 revision；显式指定时，严格校验期望的基础版本。如果旧版本 CLI 不支持网络更新，会明确报错不支持，绝不会静默回退为新建发布（`publish`）。
 
 ## 安全
 
@@ -62,4 +64,4 @@ Agent 常用的命令：
 
 - Tacobin 不是事实来源。仓库里的文件仍然是权威版本，Tacobin 只承载这一轮评审；
 - 发布本身不会修改你的本地文件；
-- 目前不支持在线覆盖已发布的版本、私有托管和账号登录。
+- 目前不支持脱离基线版本强制覆盖、私有托管和账号登录。

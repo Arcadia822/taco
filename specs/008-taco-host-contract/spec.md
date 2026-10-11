@@ -22,7 +22,7 @@ issue: 'https://github.com/Arcadia822/taco/issues/27'
 - CLI 订阅为前台长进程，不新增本地 Daemon，不负责唤醒或编排 Agent。
 - 部署采用 Vercel。先前托管平台方案不再作为实现路径。
 
-评审确认：默认 JSON 输出；默认全部公开，无公开配置开关；匿名可发布，最小流程不含登录；Host 默认 `http://localhost:32167` 并支持环境变量；Taco 与 Revision 使用 UUID；首版必须有完整 help 与 binary 内置 skill。OAuth `taco-cli login` 延后，当前走 ApiKey。本文的匿名身份自动发 Key、具体 API、退出码、限制与留存仍是实现建议，不代表已实现。
+评审确认：默认 JSON 输出；默认全部公开，无公开配置开关；匿名可发布，最小流程不含登录；Host 默认 `https://taco.arcadia-han.com`（回环 HTTP `http://localhost:32167` 作为本地开发选项）并支持环境变量；Taco 与 Revision 使用 UUID；首版必须有完整 help 与 binary 内置 skill。OAuth `taco-cli login` 延后，当前走 ApiKey。本文的匿名身份自动发 Key、具体 API、退出码、限制与留存仍是实现建议，不代表已实现。
 
 本轮将精确定义拆为独立载体，以下为各自唯一维护位置：
 
@@ -64,7 +64,7 @@ taco-cli publish --help
 taco-cli skills list
 taco-cli skills read taco
 
-# 默认 http://localhost:32167；仅检查本地发布数据。
+# 默认 https://taco.arcadia-han.com；仅检查本地发布数据。
 taco-cli publish design.taco.html --dry-run
 
 # 匿名也能直接发布；默认公开，返回 UUID 和分享链接。
@@ -82,7 +82,7 @@ taco-cli export 8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001 --output review-export.json
 
 ### Host 与凭据
 
-- Host 优先级：显式 `--host` > `TACO_HOST_URL` > `http://localhost:32167`。选项全局可用；help 列出默认值与覆盖规则。
+- Host 优先级：显式 `--host` > `TACO_HOST_URL` > `https://taco.arcadia-han.com`。选项全局可用；help 列出默认值与覆盖规则；回环 HTTP `http://localhost:32167` 仍作为本地开发选项。
 - 远端只接受 HTTPS；HTTP 仅允许 localhost/127.0.0.1/[::1] 回环地址。规范化为 origin，不接受用户名、密码、查询参数或片段；不得跨 origin 重定向转发凭据。
 - ApiKey 优先级：`TACO_HOST_API_KEY` > 对应 origin 的本地凭据。环境 Key 绑定 `TACO_HOST_URL`，未设置 URL 时绑定默认 origin；显式 `--host` 与该绑定不一致则报错，不把 Key 发向另一站点。
 - 本地 Key 优先保存到系统凭据库；文件方式须仅当前用户可读写、拒绝符号链接。读取、help、dry-run 和导出不创建身份或写凭据；匿名 publish 创建凭据后告知保存位置类别，不输出 secret。
@@ -118,12 +118,12 @@ help 与 skills 内容必须跟随 binary 版本发布；从同一命令定义�
 ```json
 {
   "command": "publish",
-  "host": "http://localhost:32167",
+  "host": "https://taco.arcadia-han.com",
   "tacoId": "8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001",
   "revisionId": "993b05fd-2f80-48cc-aafd-1d7564781001",
   "contentHash": "sha256:<64 lowercase hex>",
-  "url": "http://localhost:32167/t/8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001",
-  "revisionUrl": "http://localhost:32167/t/8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001/r/993b05fd-2f80-48cc-aafd-1d7564781001",
+  "url": "https://taco.arcadia-han.com/t/8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001",
+  "revisionUrl": "https://taco.arcadia-han.com/t/8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001/r/993b05fd-2f80-48cc-aafd-1d7564781001",
   "expiresAt": null
 }
 ```
@@ -309,7 +309,7 @@ open → closed 为只读；open/closed → expired/deleted 停止服务并清�
 12. 无 Host 配置、网络或账号时，原有离线 pack/sync/validate/read 工作流保持可用。
 13. 新机器未安装 Node/Spec Kit/skill、未登录且无 Key：安装 binary 后 help/skills 离线可用，publish 自动匿名引导且 Key 安全落地后发布，随后 update 成功；丢失 Key 不可管理原 Taco。
 14. 单次输出、help、skills 都为 JSON，订阅为 NDJSON；不存在必须添加 json/public/host 参数的路径。未知参数报错而不是静默接受。
-15. Host 默认 localhost:32167，环境变量覆盖默认，显式参数覆盖环境；跨 origin 凭据不泄漏。无效 Key 不自动降级。
+15. Host 默认 https://taco.arcadia-han.com，环境变量覆盖默认，显式参数覆盖环境；跨 origin 凭据不泄漏。无效 Key 不自动降级。
 16. API 响应、链接、请求引用中 Taco/revision 标识都是 UUID v4；与来源 docId、事件 sequence 不混淆。
 17. 帮助准确列出参数、默认值、环境变量、输出和错误；内置指南与 binary 版本一致，读取不依赖网络或额外 skill 安装；未实现 login 不冒充可用命令。
 18. 上传授权、Blob 直传、校验、PostgreSQL 提交各边界失败：同键恢复同一 Taco；不同用户不能提交 uploadId；删除后旧 pending 请求不能复活；回收不能误删并发提交对象；迟到直传对象也会清理。
@@ -331,7 +331,7 @@ open → closed 为只读；open/closed → expired/deleted 停止服务并清�
 | 不做 json 参数                         | 单次命令/help/skills 默认 JSON，订阅默认 NDJSON                | 已处理 |
 | 不做 public 配置                       | CLI 和 API 均无公开开关，全部默认公开                          | 已处理 |
 | 最小流程无需 login，匿名可发布         | publish 自动匿名引导为实现建议，保留管理保护                   | 已处理 |
-| Host 默认值与环境支持，端口 32167      | 定义参数/环境/默认优先级及回环 HTTP 边界                       | 已处理 |
+| Host 默认值与环境支持，端口 32167      | 定义参数/环境/默认优先级，默认官方 Host，保留回环 HTTP 开发边界 | 已处理 |
 | Taco/Revision 使用 UUID                | 明确 UUID v4，响应、URL 和订阅示例同步                         | 已处理 |
 | help 参考 lark-cli，自带 skill         | 实查三条 help 命令，定义分层帮助和 build-time 内置 list/read   | 已处理 |
 

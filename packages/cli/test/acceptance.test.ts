@@ -458,7 +458,6 @@ describe('008-taco-host-contract 21 Acceptance Scenarios (spec.md Section 10)', 
     expect(r2.exitCode).toBe(2)
   })
 
-  // Scenario 15: Host default localhost:32167 and credential origin binding
   it('Scenario 15: enforces origin normalization and detects host mismatch', async () => {
     expect(normalizeHostOrigin('http://localhost:32167')).toBe('http://localhost:32167')
     expect(normalizeHostOrigin('https://api.taco.com/')).toBe('https://api.taco.com')

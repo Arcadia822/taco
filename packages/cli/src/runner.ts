@@ -326,29 +326,98 @@ export const runCli = async (
 
   if (primaryCmd === 'update') {
     const [tacoId, filePath] = positionals
-    const baseRevisionId = options['base']
-    if (!tacoId || !filePath || typeof baseRevisionId !== 'string') {
+    const baseOption = options['base']
+    const baseRevisionId = typeof baseOption === 'string' ? baseOption : undefined
+    if (!tacoId || !filePath || (baseOption !== undefined && typeof baseOption !== 'string')) {
       const error = makeCliError(
         'VALIDATION_ERROR',
-        'update requires <tacoId> <file> --base <revisionId>',
+        'update requires <tacoId> <file>; --base optionally specifies the expected revision',
       )
       return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
     }
-    if (options['dry-run'] !== true) {
-      const error = makeCliError('VALIDATION_ERROR', 'Network update is not implemented')
-      return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+    if (options['dry-run'] === true) {
+      try {
+        const summary = await executeLocalDryRun({
+          command: 'update',
+          filePath,
+          host,
+          baseRevisionId,
+        })
+        return { exitCode: EXIT_CODES.OK, stdout: JSON.stringify(summary, null, 2) }
+      } catch (err) {
+        const error = makeCliError('VALIDATION_ERROR', (err as Error).message)
+        return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+      }
     }
+
     try {
-      const summary = await executeLocalDryRun({
-        command: 'update',
-        filePath,
-        host,
-        baseRevisionId,
-      })
-      return { exitCode: EXIT_CODES.OK, stdout: JSON.stringify(summary, null, 2) }
+      const rawHtml = readFileSync(filePath, 'utf8')
+      const result = await client.update(tacoId, { rawHtml, baseRevisionId })
+      return { exitCode: EXIT_CODES.OK, stdout: JSON.stringify(result, null, 2) }
     } catch (err) {
-      const error = makeCliError('VALIDATION_ERROR', (err as Error).message)
-      return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+      const errObj = err as Error & {
+        statusCode?: number
+        code?: string
+        errorDetails?: {
+          error?: { code?: string; message?: string; details?: Record<string, unknown> }
+        }
+      }
+      const serverError = errObj.errorDetails?.error
+      if (
+        errObj.statusCode === 409 ||
+        errObj.code === 'CONFLICT_ERROR' ||
+        serverError?.code === 'REVISION_CONFLICT' ||
+        serverError?.code === 'CONFLICT'
+      ) {
+        const code = serverError?.code || 'CONFLICT_ERROR'
+        const message = serverError?.message || errObj.message || 'Revision conflict'
+        return {
+          exitCode: EXIT_CODES.CONFLICT_ERROR,
+          stderr: JSON.stringify(makeCliError(code, message, { details: serverError?.details })),
+        }
+      }
+      if (
+        errObj.statusCode === 404 ||
+        errObj.code === 'NOT_FOUND' ||
+        serverError?.code === 'NOT_FOUND'
+      ) {
+        const message = serverError?.message || errObj.message || 'Taco not found'
+        return {
+          exitCode: EXIT_CODES.VALIDATION_ERROR,
+          stderr: JSON.stringify(makeCliError('NOT_FOUND', message, { details: serverError?.details })),
+        }
+      }
+      if (
+        errObj.statusCode === 400 ||
+        errObj.statusCode === 422 ||
+        errObj.code === 'VALIDATION_ERROR' ||
+        serverError?.code === 'VALIDATION_ERROR' ||
+        serverError?.code === 'BAD_REQUEST' ||
+        serverError?.code === 'UNPROCESSABLE_ENTITY'
+      ) {
+        const code = serverError?.code || errObj.code || 'VALIDATION_ERROR'
+        const message = serverError?.message || errObj.message || 'Validation error'
+        return {
+          exitCode: EXIT_CODES.VALIDATION_ERROR,
+          stderr: JSON.stringify(makeCliError(code, message, { details: serverError?.details })),
+        }
+      }
+      if (errObj.code === 'ENOENT') {
+        return {
+          exitCode: EXIT_CODES.LOCAL_IO_ERROR,
+          stderr: JSON.stringify(makeCliError('LOCAL_IO_ERROR', errObj.message)),
+        }
+      }
+      return {
+        exitCode: EXIT_CODES.LOCAL_IO_ERROR,
+        stderr: JSON.stringify(
+          makeCliError(
+            serverError?.code || 'LOCAL_IO_ERROR',
+            serverError?.message || (err as Error).message,
+            { details: serverError?.details },
+          ),
+        ),
+      }
     }
   }
   // Handle subscribe
