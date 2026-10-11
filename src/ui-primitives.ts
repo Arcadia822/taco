@@ -332,6 +332,7 @@ export const createFileTypeIcon = (file: TacoFile): SVGSVGElement => {
     image: 'image',
     video: 'video',
     audio: 'music',
+    html: 'globe',
     text: 'file',
   }
   const type = svgIcon(icon[kind])

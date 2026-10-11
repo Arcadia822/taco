@@ -6,7 +6,7 @@
 
 import { resolveCheckpoints } from '@taco/protocol'
 import { resolveAnchorRange } from './comment-position.ts'
-import { isInternalFile, type TacoBundle } from './model.ts'
+import { fileKind, isInternalFile, type TacoBundle } from './model.ts'
 import { resolveDocumentNavigation } from './navigation.ts'
 import { TACO_SECURITY_VERSION, validateTacoSecurity, type SecurityIssueCode } from './security.ts'
 
@@ -128,7 +128,7 @@ export function validateDocument(bundle: TacoBundle, renderErrors: readonly Rend
       push('comment-anchor-missing-file', 'error', `comment ${thread.id} anchors a file that is not in the bundle`, anchor.path)
       continue
     }
-    if (file.mediaType === 'image/png') continue
+    if (file.mediaType === 'image/png' || fileKind(file) === 'html') continue
     if (!resolveAnchorRange(file.content, anchor)) {
       push('comment-anchor-stale', 'warning', `comment ${thread.id} quotes text that is no longer in the file: "${anchor.quote.exact.slice(0, 40)}"`, file.path)
     }
