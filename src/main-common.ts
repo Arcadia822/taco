@@ -1,4 +1,6 @@
-import { resolveCheckpoints, type DocumentStatus, type ResolvedCheckpoints } from '@taco/protocol'
+import { resolveCheckpoints, type DocumentStatus, type ResolvedCheckpoints, type LocalHandoff } from '@taco/protocol'
+import { parseListenParams } from './file-selection.ts'
+import { credentialFreeDocument, sendLocalHandoff } from './local-handoff.ts'
 import './styles.css'
 import { capturePristine, canWriteInPlace, openedFileName, saveFile, titleForFileName, type SaveResult } from './kernel/save.ts'
 import { configureApp } from './kernel/app.ts'
@@ -146,6 +148,7 @@ export function bootCommon(bundle: TacoBundle, options: FileBrowserOptions = {},
       getCheckpoints: () => resolveCheckpoints(doc),
       getReviewHandoff: () => {
         const changedFiles = browser.getModifiedReviewFiles()
+        doc.comments = doc.comments ?? []
         return {
           title: doc.title,
           root: doc.root,
@@ -154,7 +157,7 @@ export function bootCommon(bundle: TacoBundle, options: FileBrowserOptions = {},
           checkpointChanges: browser.getCheckpointChanges(),
           checkpointTemplateChange: browser.getCheckpointTemplateChange(),
           checkpointDocumentAdditions: browser.getCheckpointDocumentAdditions(),
-          comments: doc.comments ?? [],
+          comments: doc.comments,
         }
       },
     }
@@ -168,6 +171,73 @@ export function bootCommon(bundle: TacoBundle, options: FileBrowserOptions = {},
     expose()
     if (__HOSTED_BUILD__) {
       attachHostedSession(browser, window.taco)
+    }
+    if (!__HOSTED_BUILD__) {
+      let pendingHandoffId: string | null = null
+      let pendingSnapshotSignature: string | null = null
+      let pendingCreatedAt: string | null = null
+      let localInstalled = false
+      const setupListener = () => {
+        const params = parseListenParams(location.hash)
+        if (params && params.docId === next.docId) {
+          localInstalled = true
+          browser.setPrimaryHandoffHandler(
+            async () => {
+              const live = current
+              if (!live) return
+              const { bundle: doc, browser: b } = live
+              doc.comments = doc.comments ?? []
+              const baseline = credentialFreeDocument(b.getReviewBaseline())
+              const snapshot = credentialFreeDocument(doc)
+              const snapshotSig = JSON.stringify(snapshot)
+
+              let handoffId: string
+              if (pendingHandoffId && pendingSnapshotSignature === snapshotSig) {
+                handoffId = pendingHandoffId
+              } else {
+                handoffId = crypto.randomUUID()
+                pendingHandoffId = handoffId
+                pendingSnapshotSignature = snapshotSig
+                pendingCreatedAt = new Date().toISOString()
+              }
+
+              const payload: LocalHandoff = {
+                schema: 'taco-local-handoff/1',
+                handoffId,
+                sessionId: params.sessionId,
+                docId: doc.docId,
+                createdAt: pendingCreatedAt!,
+                baseline,
+                snapshot,
+              }
+              const ack = await sendLocalHandoff({
+                port: params.port,
+                token: params.token,
+                docId: doc.docId,
+                sessionId: params.sessionId,
+                payload,
+              })
+              if (ack.ok === true) {
+                pendingHandoffId = null
+                pendingSnapshotSignature = null
+                pendingCreatedAt = null
+                b.toast(b.copy.localHandoffSuccess)
+              } else {
+                b.toast(b.copy.localHandoffFailed)
+              }
+            },
+            browser.copy.copyReview,
+            'bot-handoff',
+            browser.copy.copyReviewLabel,
+          )
+        } else if (localInstalled) {
+          localInstalled = false
+          browser.setPrimaryHandoffHandler(null)
+        }
+      }
+      setupListener()
+      window.addEventListener('hashchange', setupListener)
+      browser.onDestruct(() => window.removeEventListener('hashchange', setupListener))
     }
     return browser
   }

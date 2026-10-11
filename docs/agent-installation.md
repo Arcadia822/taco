@@ -8,7 +8,7 @@ This is the machine-facing installation guide for an Agent adding Taco to an env
 
 - The skill directory (`skills/taco/`) is self-sufficient: `SKILL.md` (the agent guide), `taco-shell.html` (the complete offline browser shell), `taco-shell-lite.html` (the connected Lite shell), `references/` (loaded for the bundle contract, Checkpoints, or hosted workflows), `scripts/` (the bundled assembler and the saved-Checkpoint reader), and `templates/` (optional examples).
 - Once installed, the Agent can assemble, present, open, and review `.taco.html` files in any directory. Complete needs no network; Lite loads public CDN editor dependencies and remains editable in plain-text Markdown mode if those libraries fail.
-- `taco-cli` exists only for optional hosted workflows (Tacobin publishing, live review event streaming, and handoff retrieval). It is **never** part of the local installation.
+- `taco-cli` provides both an optional local toolbox (`new`, `init`, `pack`, `verify`, `refresh`, `diff`, `inspect`, `extract`, `open`, `listen`) and hosted Tacobin workflows (`publish`, `update`, `subscribe`, `events`, `handoff`). Installing the skill remains standalone by default without requiring `taco-cli` or Spec Kit.
 
 ### Choosing a shell for the recipient
 
@@ -62,8 +62,7 @@ This mechanism needs one bootstrap step: a skill snapshot installed before this 
 - `npx skills@latest update taco` updates an `npx skills` install; `npx skills@latest remove taco` removes it.
 - A copied install is updated by repeating the copy flow above and re-running the verification list.
 - Do not hand-edit `VERSION`: it is generated from `package.json` at release time by `npm run sync:version`.
-
-Do not install npm packages, download `taco-cli`, or run any build for the default install. Do not modify the target project. If the user's request is explicitly about hosted reviews (Tacobin), see "Install taco-cli" below.
+  Do not install npm packages, download `taco-cli`, or run any build for the default install. Do not modify the target project. If the user's request is explicitly about local CLI automation or hosted reviews (Tacobin), see "Install taco-cli" below.
 
 ## Use the skill
 
@@ -84,9 +83,9 @@ The skill works on any Spec Kit feature directory without project installation: 
 
 An optional deeper integration ships as a Spec Kit extension (`extensions/taco/`) that installs the two agent commands (`speckit.taco.update` / `speckit.taco.review`), lifecycle hooks, an offline CLI, and a persistent project policy into the target project. Only set this up when the user explicitly asks for project-level Spec Kit integration — see [`extensions/taco/README.md`](../extensions/taco/README.md). That document is also the home of the `prepare-policy` process-routing and migration contract.
 
-## Install taco-cli (hosted workflows only)
+## Install taco-cli (optional local toolbox and hosted workflows)
 
-`taco-cli` is required only when interacting with a Taco Host / Tacobin (publishing, streaming live review events, and retrieving handoffs). Install via **npm** or the **standalone binary**:
+`taco-cli` is optional. It provides both a local toolbox (`new`, `init`, `pack`, `verify`, `refresh`, `diff`, `inspect`, `extract`, `open`, `listen`) and hosted Tacobin workflows (publishing, streaming live review events, and retrieving handoffs). Install via **npm** or the **standalone binary**:
 
 ### Option A: npm
 
@@ -116,7 +115,7 @@ install -m 0755 taco-cli "$HOME/.local/bin/taco-cli"
 taco-cli help
 ```
 
-The canonical skill's optional hosted workflow lives in `skills/taco/references/publishing.md` and `references/reviewing.md`; read those when using a Host. `taco-cli skills read taco` currently returns the CLI's separately embedded, cloud-oriented guide, not a copy of the repository skill. Use `taco-cli help` for the installed binary's command contract; release-time embedding from the canonical skill has not yet been wired.
+The canonical skill's optional hosted workflow lives in `skills/taco/references/publishing.md` and `references/reviewing.md`; read those when using a Host. Release builds embed the canonical Skill and its references, so `taco-cli skills read taco` returns the guide shipped with that CLI version. Use `taco-cli help` for the installed binary's command contract. Local review uses `taco-cli listen <file.taco.html>` or `taco-cli open <file.taco.html> --listen`; after consuming the receipt and applying canonical edits, refresh the same file with `taco-cli refresh <file.taco.html> --dir <canonical-dir> --handoff <receipt-path>`.
 
 For hosted Tacobin reviews, the Host serves its own review shell; the installable Complete and Lite shells contain no Tacobin collaboration runtime or controls. Publishing projects the local Taco's document data into that Host shell after a local dry run (`taco-cli publish <file.taco.html> --host <origin> --dry-run`), without changing the local file or its offline Handoff. A publish creates an initial hosted Taco. Subsequent review rounds update that Taco in-place via `taco-cli update <tacoId> <file.taco.html> [--base <revisionId>] --host <origin>`, keeping the stable reviewer URL, advancing revision history, and preserving comment threads and Checkpoint statuses (the CLI uses the Host's active revision when `--base` is omitted, or strictly asserts it when provided); old CLI binaries without network update support report an unsupported error rather than silently falling back to `publish`. Public visitors may autosave shared edits and comments under unverified, self-reported names; neither action by itself requests Agent continuation, and autosaves or comments do not wake the agent session automatically. The reviewer must click **Handoff** on the Host page, which records a durable `review.handed_off` event. The agent streams or retrieves that event, fetches the full snapshot via `taco-cli handoff <tacoId> <handoffId>`, and applies feedback.
 

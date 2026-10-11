@@ -1,5 +1,5 @@
+import { CANONICAL_REFERENCES, CANONICAL_SKILL_MD } from './generated/assets.ts'
 import { CLI_BINARY_VERSION, CLI_SCHEMA_SKILLS } from './help.ts'
-
 export interface SkillEntry {
   id: string
   version: string
@@ -17,67 +17,12 @@ export interface SkillFileReadResult {
   content: string
 }
 
-const TACO_SKILL_MD = `# Taco Agent Guide
-
-Taco is local-first by design:
-- The core \`taco\` skill operates completely offline on local \`.taco.html\` files and source Markdown directories. A single skill is fully capable of driving local document reviews without \`taco-cli\` or cloud accounts.
-- \`taco-cli\` is the client dedicated to cloud/remote workflows (TacoHub / Tacobin): publishing shared specs to a Host and streaming live review events over Server-Sent Events.
-## Start Here
-1. Run \`taco-cli help\` and parse the returned \`taco-cli-help/1\` JSON before constructing a command.
-2. Run \`taco-cli skills read taco references/publishing.md\` before publishing or updating a shared Taco.
-3. Run \`taco-cli skills read taco references/reviewing.md\` before waiting for or processing review events.
-4. Treat local canonical files as primary. Editing or commenting in a Taco does not modify disk files until the relevant local sync workflow applies those changes.
-
-## Host Rules
-- Published Taco spaces, revisions, comments, and uploaded assets are public by default.
-- One-off commands emit one compact JSON object; event streams emit NDJSON. Parse output instead of scraping prose.
-- Run \`taco-cli publish <file.taco.html> --dry-run\` before the first network publication.
-- Subscribe with \`taco-cli subscribe <tacoId>\` before waiting for review; reconnect with the last confirmed sequence after interruption.
-- Use \`--host https://taco.arcadia-han.com\` for the public Tacobin service unless the project specifies another Host.
-- \`publish\` creates a new Taco (\`POST /v1/tacos\`); \`update <tacoId> <file> [--base <revisionId>]\` updates an existing Taco to the same URL in place (fetching the current revision if \`--base\` is omitted, or strictly asserting it if provided) while recording a new \`revisionId\` and preserving comments and Checkpoints.
-- If an installed CLI lacks network update support, report it as unsupported—never execute a silent fallback to \`publish\`.
-`
-
-const PUBLISHING_GUIDE_MD = `# Publishing Guide
-
-## Single-Request Publish
-1. \`taco-cli publish <file.taco.html> --dry-run\` reads the local container, projects it, and validates it without any network call; its summary carries \`contentHash\`, \`files\`, and \`payloadBytes\`.
-2. \`taco-cli publish <file.taco.html> --host <origin>\` repeats that projection and validation, then sends exactly one \`POST /v1/tacos\` request asking the Host to store the Taco.
-3. The Host replies with \`command\`, \`host\`, \`id\`, \`tacoId\`, \`title\`, \`blobUrl\`, \`url\`, and \`createdAt\`. Give the reviewer \`url\`, which is \`<origin>/t/<tacoId>\`.
-
-## What Travels
-- The request body is pure \`taco/files\` v1 data: \`{ protocol: "taco-host/1", snapshot: {...}, importedComments: [...] }\`. The \`snapshot\` keeps the same file model, anchors, and navigation as the local container.
-- Cryptographic collaboration state (relay keys, sync credentials, session material) never leaves the machine.
-- Authored \`file:\` URLs and other local absolute references are reduced to safe relative paths, so a published Taco never points at the publisher's disk.
-
-## Limits And Ownership
-- \`publish\` is create-only. To replace a published Taco at the same URL, use \`taco-cli update <tacoId> <file> [--base <revisionId>]\`. When \`--base\` is omitted, the CLI uses the Host's active revision automatically; provide \`--base\` to enforce an expected revision.
-- Updating keeps the exact same reviewer URL, advances revision identity, and preserves hosted comment threads and Checkpoint statuses.
-- Verify the projection with \`--dry-run\` before the first network publish, and re-run it after any edit to the canonical Markdown.
-- Everything published is public. Never publish a file whose payload contains secrets, and see the credential boundary in the installation guide before sharing.
-`
-
-const REVIEWING_GUIDE_MD = `# Reviewing Guide
-
-## Review Workflow
-1. Publish first, then keep \`taco-cli subscribe <tacoId> --host <origin>\` running. The Host page requires an active listener for Handoff; without one, it shows installation and subscription commands.
-2. Wait for the \`ready\` frame and read its \`cursor\` and \`mode\`: \`live\` means no cursor was requested, \`replay\` means the Host is replaying from the cursor you passed in \`--after\`. Default subscribe ignores comments/autosaves, emits \`review.handed_off\`, then exits with code 0. Use \`--stream\` (or \`--follow\`) only for continuous full event streaming.
-3. Process only \`review.handed_off\` as completed human review. Read its \`tacoId\` and \`data.handoffId\`, then fetch \`taco-cli handoff <tacoId> <handoffId> --host <origin>\`. Inspect cumulative and incremental file/Checkpoint changes and complete comment history, compare against canonical files, and stop on conflicts before applying feedback. Names are self-reported; event actor/time are assigned by the Host, not authenticated identities.
-4. After any interruption, reconnect with the last confirmed cursor in \`--after <sequence>\`, which the client also reuses automatically when a Host rotates its instance.
-5. Page the same log without a stream through \`taco-cli events <tacoId> [--after <sequence>]\`, which returns \`events\`, \`throughSequence\`, \`nextCursor\`, and \`hasMore\`.
-6. After processing Handoff, update the same Taco via \`taco-cli update <tacoId> <file> [--base <revisionId>]\` (retaining the same reviewer URL; defaults to the Host's current revision when \`--base\` is omitted), then start another subscription on that \`tacoId\` from its confirmed sequence for the next review round. Comments and autosaves alone never request Agent continuation.
-
-## What To Expect
-- Reviewers write from the review page at \`<origin>/t/<tacoId>\`; \`taco-cli\` is a reader of what they publish there.
-- The Header Save button saves a local Taco independently of Host autosave. Handoff waits for successful autosave and stops on save failures or conflicts.
-- Failed writes retain the draft and expose Retry. Conflicts retain it until the reviewer confirms discarding local changes and loading the latest saved review; cancelling preserves it. Host autosave does not reset the local Save or manual Handoff baseline.
-- Unknown comment or Handoff responses are retried with their original payload and idempotency key before newer changes. Unicode listener names and model IDs are supported; raw HTTP clients percent-encode the listener-name and model-id headers. Cursors advance after successful output, and default subscribe emits only the first Handoff.
-- File headers show the filename; the Checkpoints header shows only its localized page name. Keep stored title, template and navigation fields when refreshing.
-- Clicking the overlapping human/Agent avatars opens the listener list. Details label \`--harness\` as \`runtime\` / \`运行时\`; \`--session\` supplies the readable session name. Presence is not proof of delivery or processing.
-- A comment carries an anchor with the file \`path\`, a \`position\`, and a \`quote\`; nested block identity and no anchor at all are both valid. Comments re-open against the same content, so a quote the document no longer contains is stale rather than silently attached elsewhere.
-- A \`TACO_CLOSED\` error closes the stream with exit code 4: read what was recorded with \`events\` instead of subscribing again.
-- Events are stored by the Host, so a stream that reconnects resumes from your cursor rather than from the live watermark.
-`
+const tacoFiles: Record<string, string> = {
+  'SKILL.md': CANONICAL_SKILL_MD,
+}
+for (const [refName, refContent] of Object.entries(CANONICAL_REFERENCES)) {
+  tacoFiles[`references/${refName}`] = refContent
+}
 
 const EMBEDDED_SKILLS: Record<
   string,
@@ -86,11 +31,7 @@ const EMBEDDED_SKILLS: Record<
   taco: {
     version: '1.2.0',
     description: 'Post-install workflow for AI agents publishing and reviewing Taco workspaces',
-    files: {
-      'SKILL.md': TACO_SKILL_MD,
-      'references/publishing.md': PUBLISHING_GUIDE_MD,
-      'references/reviewing.md': REVIEWING_GUIDE_MD,
-    },
+    files: tacoFiles,
   },
 }
 

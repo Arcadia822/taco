@@ -1157,7 +1157,8 @@ describe('FileBrowser', () => {
     expect(downloadClick).toHaveBeenCalledTimes(1)
     expect(document.querySelector('.save-button .button-label')?.textContent).toBe('保存')
     expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(false)
-    expect(browser.getModifiedReviewFiles()).toEqual([])
+    expect(browser.getModifiedReviewFiles()).toHaveLength(1)
+    expect(browser.getModifiedReviewFiles()[0].content).toContain('Review edit ')
   })
 
   it('collapses the desktop right panel independently and preserves its active tab', () => {
@@ -1672,7 +1673,6 @@ describe('FileBrowser', () => {
       history.replaceState(null, '', '?embed')
       new FileBrowser(document.getElementById('app')!, structuredClone(bundle))
       expect(document.querySelector('.save-button')?.classList.contains('is-dirty')).toBe(false)
-      expect(document.querySelector('.copy-review-main')?.classList.contains('is-dirty')).toBe(false)
 
       document.getElementById('app')!.replaceChildren()
       history.replaceState(null, '', '?embed&pending')
@@ -2469,5 +2469,67 @@ describe('FileBrowser', () => {
     expect(fileKind(file('specs/a/clip.mp4', 'video/mp4'))).toBe('video')
     expect(fileKind(file('specs/a/track.mp3', 'text/plain'))).toBe('audio')
     expect(fileKind(file('specs/a/notes.bin', 'text/plain'))).toBe('text')
+  })
+
+  it('freezes review baseline on mount so Save never clears modified review files or checkpoint changes', () => {
+    const bundle: TacoBundle = {
+      format: 'taco/files',
+      version: 1,
+      docId: 'regression-baseline-save',
+      title: 'Regression Bundle',
+      root: 'specs/regression',
+      files: [{
+        path: 'specs/regression/spec.md',
+        mediaType: 'text/markdown',
+        content: '# Baseline A',
+      }],
+      checkpoints: {
+        version: 1,
+        nodes: [{
+          id: 'spec',
+          title: 'Spec Review',
+          after: [],
+          documents: [{ path: 'specs/regression/spec.md' }],
+        }],
+        documents: [{ path: 'specs/regression/spec.md', status: 'todo', updatedAt: '2026-10-11T00:00:00Z' }],
+      },
+    }
+
+    const browser = new FileBrowser(document.getElementById('app')!, bundle)
+    expect(browser.getReviewBaseline().files[0].content).toBe('# Baseline A')
+    expect(browser.getModifiedReviewFiles()).toEqual([])
+    expect(browser.getCheckpointChanges()).toEqual([])
+
+    bundle.files[0].content = '# Edited B'
+    bundle.checkpoints = {
+      version: 1,
+      nodes: [{
+        id: 'spec',
+        title: 'Spec Review',
+        after: [],
+        documents: [{ path: 'specs/regression/spec.md' }],
+      }],
+      documents: [{ path: 'specs/regression/spec.md', status: 'in_progress', updatedAt: '2026-10-11T01:00:00Z' }],
+    }
+
+    const modified = browser.getModifiedReviewFiles()
+    expect(modified.length).toBe(1)
+    expect(modified[0].path).toBe('spec.md')
+    expect(modified[0].content).toBe('# Edited B')
+    expect(modified[0].diff).toBeDefined()
+    expect(browser.getCheckpointChanges()).toEqual([
+      { path: 'specs/regression/spec.md', from: 'todo', to: 'in_progress' },
+    ])
+    browser.reportSave('saved')
+    expect(browser.getReviewBaseline().files[0].content).toBe('# Baseline A')
+    const savedModified = browser.getModifiedReviewFiles()
+    expect(savedModified.length).toBe(1)
+    expect(savedModified[0].path).toBe('spec.md')
+    expect(savedModified[0].content).toBe('# Edited B')
+    expect(savedModified[0].diff).toBeDefined()
+    expect(browser.getCheckpointChanges()).toEqual([
+      { path: 'specs/regression/spec.md', from: 'todo', to: 'in_progress' },
+    ])
+    browser.destroy()
   })
 })

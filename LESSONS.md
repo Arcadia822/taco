@@ -30,6 +30,7 @@ Guided by the principle **Encode Lessons in Structure**:
 | [LESSON-010](#lesson-010-revision-migrations-must-preserve-legacy-tables-and-event-order) | Revision Migrations Must Preserve Legacy Tables and Event Order |      1      |   **open**    | `packages/host/test/taco-60.test.ts`                                                 |
 | [LESSON-011](#lesson-011-dynamic-preview-boundary-discrepancies-and-marker-injection)     | Dynamic Preview Boundary Discrepancies & Marker Injection       |      1      |   **open**    | `.github/workflows/scripts/plan-schema.mjs`, `tests/dynamic-preview-plan.test.ts`    |
 | [LESSON-012](#lesson-012-nextjs-google-font-loader-crashes-on-non-extension-endpoints)    | Next.js Google Font Loader Crashes on Non-Extension Endpoints   |      1      |   **open**    | `packages/host/src/app/fonts/`, `packages/host/src/app/page.tsx`                     |
+| [LESSON-013](#lesson-013-cli-bundling-changes-helper-entrypoint-identity)                 | CLI Bundling Changes Helper Entrypoint Identity                 |      1      |   **open**    | Installed npm/native runtime smoke and deferred helper defaults                      |
 
 ---
 
@@ -371,3 +372,31 @@ The public review model reused a legacy table name with incompatible required co
 - Seed missing baseline rows independently of the current pointer. Update the pointer only while null, and retain the initial event sequence of 1.
 - Persist Handoff snapshots and compare event sequences. A legacy null snapshot can use live state only when its acknowledged state version matches.
 - Runtime probes and regression tests must use valid `FilePatch` content and observe the saved edit before checking conflict rejection.
+
+---
+
+### LESSON-013: CLI Bundling Changes Helper Entrypoint Identity
+
+- **ID**: `LESSON-013`
+- **Category**: `tooling`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: Installed npm/native runtime smoke and deferred helper defaults
+
+#### Symptom
+
+Importing the shared Mermaid helper prevented both CLI test suites from collecting with `TypeError: The URL must be of scheme file`. A source-only executable guard also becomes true when the helper is bundled into the CLI entrypoint.
+
+#### Root Cause
+
+The helper eagerly converted its module-relative default Shell URL into an OS path during import. Test transforms can supply a non-file module URL. Bundling changes module identity to the consuming executable, so comparing only `import.meta.url` and `process.argv[1]` does not distinguish the helper's standalone entrypoint.
+
+#### Evidence
+
+- 2026-10-11 — `npm test` failed before CLI assertions at `skills/taco/scripts/lint-mermaid.mjs:73`. Release source review identified the same module-identity assumption in both shared helper entrypoint guards.
+
+#### Prevention & Escalation
+
+- Resolve standalone helper defaults only when that standalone path is invoked.
+- Keep helper entrypoint guards false in npm and native CLI bundles.
+- Exercise the installed npm package and native binary without an installed Skill. A successful source import does not establish the packaged runtime contract.

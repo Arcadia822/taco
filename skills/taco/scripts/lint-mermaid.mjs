@@ -42,7 +42,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { isAbsolute, join, relative, resolve } from 'node:path'
+import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { inflateRawSync } from 'node:zlib'
 import { classifyMermaidFailure, mergeDiagnosticOffset } from './mermaid-diagnostics.mjs'
@@ -69,8 +69,23 @@ Exit codes:
      unreadable input, or a unit hit a runtime failure); 2 wins over 1
 `
 
-/** The Complete shell that ships with this skill, next to the scripts folder. */
-const DEFAULT_SHELL = fileURLToPath(new URL('../taco-shell.html', import.meta.url))
+const getDefaultShell = () => {
+  try {
+    const url = new URL('../taco-shell.html', import.meta.url)
+    if (url.protocol === 'file:') {
+      return fileURLToPath(url)
+    }
+  } catch {
+    // A virtual import URL (Vitest, bundlers) has no shell path; callers fall back to --shell.
+  }
+  return ''
+}
+/**
+ * Empty string: the shell path is resolved on demand by `getDefaultShell()` so that importing
+ * this module (CLI payload helpers, Vitest) never touches the filesystem or assumes a `file:`
+ * import URL. The standalone entry point resolves the Complete shell shipped next to this skill.
+ */
+const DEFAULT_SHELL = ''
 const PAYLOAD_TAG = /<script\b(?=[^>]*\bid=["']taco-asset-mermaid["'])[^>]*>([\s\S]*?)<\/script>/i
 /**
  * Matches the DOMPurify call inside `sanitizeText`:
@@ -258,8 +273,8 @@ const loadMermaid = async (options) => {
       path,
     )
   }
-  const shellPath = options.shell === undefined ? DEFAULT_SHELL : resolve(options.shell)
-  if (!existsSync(shellPath)) abort(`Complete shell not found: ${shellPath}`, shellPath)
+  const shellPath = options.shell === undefined ? getDefaultShell() : resolve(options.shell)
+  if (!shellPath || !existsSync(shellPath)) abort(`Complete shell not found: ${shellPath}`, shellPath)
   const payload = bypassSanitize(readShellPayload(shellPath), shellPath)
   return importPayload(payload, shellPath)
 }
@@ -517,13 +532,38 @@ const main = async () => {
     return aborted(error)
   }
 }
+const checkIsMain = () => {
+  try {
+    if (!process.argv[1] || basename(process.argv[1]) !== 'lint-mermaid.mjs') return false
+    const url = new URL(import.meta.url)
+    if (url.protocol === 'file:') {
+      return resolve(process.argv[1]) === resolve(fileURLToPath(url))
+    }
+  } catch {
+    // A virtual import URL can never be the on-disk entry point.
+  }
+  return false
+}
+const isMain = Boolean(checkIsMain())
+if (isMain) {
+  main().then(
+    (code) => {
+      process.exitCode = code
+    },
+    (error) => {
+      process.stderr.write(`error: ${error instanceof Error ? error.message : String(error)}\n`)
+      process.exitCode = 2
+    },
+  )
+}
 
-main().then(
-  (code) => {
-    process.exitCode = code
-  },
-  (error) => {
-    process.stderr.write(`error: ${error instanceof Error ? error.message : String(error)}\n`)
-    process.exitCode = 2
-  },
-)
+export {
+  run,
+  loadMermaid,
+  readShellPayload,
+  importPayload,
+  bypassSanitize,
+  validateUnit,
+  fencedUnits,
+  DEFAULT_SHELL,
+}

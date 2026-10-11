@@ -23,6 +23,7 @@ import { MAX_PNG_SIZE, PNG_DATA_URL_PREFIX, decodePng, validatePngBytes } from '
 import {
   lstat,
   mkdir,
+  open,
   readFile,
   readdir,
   rename,
@@ -31,7 +32,7 @@ import {
   writeFile,
 } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-
+import { fileURLToPath } from 'node:url'
 const FORMAT = 'taco/files'
 const FORMAT_VERSION = 1
 const DATA_CONTENT = /(<script\b(?=[^>]*\bid=["']taco-document["'])[^>]*>)([\s\S]*?)(<\/script>)/i
@@ -283,54 +284,59 @@ const isBlock = (value) =>
   typeof value.html === 'string' &&
   value.html.length <= MAX_BLOCK_HTML
 
+const isCommentMessage = (message) =>
+  isRecord(message) &&
+  typeof message.id === 'string' &&
+  typeof message.author === 'string' &&
+  typeof message.body === 'string' &&
+  message.body.trim().length > 0 &&
+  isTimestamp(message.createdAt) &&
+  (message.updatedAt === undefined || isTimestamp(message.updatedAt)) &&
+  (message.deletedAt === undefined || isTimestamp(message.deletedAt))
+
 const isCommentThread = (value) => {
-  if (!isRecord(value) || !isRecord(value.anchor) || !isRecord(value.anchor.position) || !isRecord(value.anchor.quote)) {
-    return false
+  if (!isRecord(value)) return false
+  const anchor = value.anchor
+  let validAnchor = false
+  if (anchor === null || anchor === undefined) {
+    validAnchor = true
+  } else if (isRecord(anchor) && typeof anchor.path === 'string') {
+    const position = anchor.position
+    const quote = anchor.quote
+    const validPosition =
+      position === undefined ||
+      (isRecord(position) &&
+        Number.isInteger(position.start) &&
+        Number.isInteger(position.end) &&
+        Number(position.start) >= 0 &&
+        Number(position.end) >= Number(position.start))
+    const validQuote =
+      quote === undefined ||
+      (isRecord(quote) &&
+        typeof quote.exact === 'string' &&
+        typeof quote.prefix === 'string' &&
+        typeof quote.suffix === 'string')
+    const block = anchor.block
+    const validBlock =
+      block === undefined ||
+      (isRecord(block) &&
+        typeof block.id === 'string' &&
+        block.id.length > 0 &&
+        block.type === 'codeBlock' &&
+        typeof block.language === 'string')
+    validAnchor = validPosition && validQuote && validBlock
   }
-  const { anchor } = value
-  const position = anchor.position
-  const quote = anchor.quote
-  const validPosition =
-    Number.isInteger(position.start) &&
-    Number.isInteger(position.end) &&
-    Number(position.start) >= 0 &&
-    Number(position.end) > Number(position.start)
-  const validQuote =
-    typeof quote.exact === 'string' &&
-    quote.exact.length > 0 &&
-    typeof quote.prefix === 'string' &&
-    typeof quote.suffix === 'string'
-  const block = anchor.block
-  const validBlock =
-    block === undefined ||
-    (isRecord(block) &&
-      typeof block.id === 'string' &&
-      block.id.length > 0 &&
-      block.type === 'codeBlock' &&
-      typeof block.language === 'string')
+  if (!validAnchor) return false
+
   return (
     typeof value.id === 'string' &&
     value.id.length > 0 &&
-    typeof anchor.path === 'string' &&
-    validPosition &&
-    validQuote &&
-    validBlock &&
     (value.status === 'open' || value.status === 'resolved') &&
     isTimestamp(value.createdAt) &&
     isTimestamp(value.updatedAt) &&
     Array.isArray(value.messages) &&
     value.messages.length > 0 &&
-    value.messages.every(
-      (message) =>
-        isRecord(message) &&
-        typeof message.id === 'string' &&
-        typeof message.author === 'string' &&
-        typeof message.body === 'string' &&
-        message.body.trim().length > 0 &&
-        isTimestamp(message.createdAt) &&
-        (message.updatedAt === undefined || isTimestamp(message.updatedAt)) &&
-        (message.deletedAt === undefined || isTimestamp(message.deletedAt)),
-    )
+    value.messages.every(isCommentMessage)
   )
 }
 
@@ -436,7 +442,9 @@ const validateBundle = (raw) => {
       fail('comments must contain valid local comment threads')
     }
     for (const thread of raw.comments) {
-      if (!seen.has(thread.anchor.path)) fail(`comment references a missing file: ${thread.anchor.path}`)
+      if (thread.anchor && thread.anchor.path && !seen.has(thread.anchor.path)) {
+        fail(`comment references a missing file: ${thread.anchor.path}`)
+      }
     }
   }
   if (raw.access !== undefined && raw.access !== 'reader') fail('access must be reader when present')
@@ -698,13 +706,19 @@ const embedBundle = (shell, bundle) => {
     : withBundle.replace('</head>', () => `<title>${escapedTitle}</title></head>`)
 }
 
-const atomicWrite = async (path, text) => {
+const atomicWrite = async (path, text, options = {}) => {
   const temporary = join(dirname(path), `.${basename(path)}.${randomUUID()}.tmp`)
-  await writeFile(temporary, text, 'utf8')
   try {
+    const handle = await open(temporary, 'w', options.mode ?? 0o666)
+    try {
+      await handle.writeFile(text, 'utf8')
+      await handle.sync()
+    } finally {
+      await handle.close()
+    }
     await rename(temporary, path)
   } catch (error) {
-    await rm(temporary, { force: true })
+    await rm(temporary, { force: true }).catch(() => {})
     throw error
   }
 }
@@ -717,8 +731,8 @@ const readBundleFrom = (html, label) => {
   let bundle
   try {
     bundle = JSON.parse(text)
-  } catch (error) {
-    throw new Error(`${label} has invalid JSON in #taco-document: ${error.message}`)
+  } catch {
+    throw new Error(`${label} has invalid JSON in #taco-document`)
   }
   return { html, bundle: validateBundle(bundle) }
 }
@@ -747,7 +761,7 @@ const parseArgs = (argv) => {
       continue
     }
     const name = argument.slice(2)
-    if (name === 'dry-run' || name === 'help') {
+    if (name === 'dry-run' || name === 'help' || name === 'lite') {
       flags.add(name)
       continue
     }
@@ -761,6 +775,9 @@ const parseArgs = (argv) => {
       options.set(name, value)
     }
   }
+  if (positional.length && !options.has('dir')) {
+    options.set('dir', positional[0])
+  }
   return { options, multi, flags, positional }
 }
 
@@ -770,7 +787,7 @@ const USAGE = `Usage:
                         [--group <Title>=<relPath,relPath>]... [--ignore <glob>]... [--dry-run]
   node scripts/pack.mjs verify <file.taco.html>`
 
-const pack = async ({ options, multi, flags }) => {
+const pack = async ({ options, multi, flags, customShellHtml }) => {
   const dirOption = options.get('dir')
   if (!dirOption) throw new Error(USAGE)
   const featureDir = resolve(dirOption)
@@ -798,7 +815,10 @@ const pack = async ({ options, multi, flags }) => {
 
   let shell
   let shellSource
-  if (options.get('shell')) {
+  if (customShellHtml) {
+    shellSource = 'embedded'
+    shell = customShellHtml
+  } else if (options.get('shell')) {
     shellSource = resolve(options.get('shell'))
     shell = await readFile(shellSource, 'utf8').catch(() => {
       throw new Error(`Shell not found: ${shellSource}`)
@@ -807,13 +827,17 @@ const pack = async ({ options, multi, flags }) => {
     // A refresh reuses the artifact's own shell, so Complete stays Complete and Lite stays Lite.
     shellSource = outputPath
     shell = priorHtml
+  } else if (flags.has('lite')) {
+    shellSource = join(import.meta.dirname, '../taco-shell-lite.html')
+    shell = await readFile(shellSource, 'utf8').catch(() => {
+      throw new Error(`Shell not found: ${shellSource}`)
+    })
   } else {
     shellSource = join(import.meta.dirname, '../taco-shell.html')
     shell = await readFile(shellSource, 'utf8').catch(() => {
       throw new Error(`Shell not found: ${shellSource}`)
     })
   }
-
   const ignorePatterns = (multi.get('ignore')?.length ? multi.get('ignore') : priorBundle?.packOptions?.ignore ?? []).map(
     normalizeIgnorePattern,
   )
@@ -900,7 +924,15 @@ const pack = async ({ options, multi, flags }) => {
   if (!flags.has('dry-run')) {
     await atomicWrite(outputPath, embedBundle(shell, bundle))
   }
-  process.stdout.write(`${lines.join('\n')}\n`)
+  return {
+    outputPath,
+    bundle,
+    structure,
+    shell,
+    lines,
+    skipped,
+    warnings: packWarnings,
+  }
 }
 
 const verify = async (path) => {
@@ -911,25 +943,110 @@ const verify = async (path) => {
   lines.push(`  title: ${bundle.title}`)
   lines.push(`  docId: ${bundle.docId}`)
   printStructure(bundle, structure, lines)
-  process.stdout.write(`${lines.join('\n')}\n`)
-  if (structure.warnings.length) process.exitCode = 2
+  return { path: resolve(path), html, bundle, structure, lines }
+}
+
+const packDirectory = async ({
+  dir,
+  out,
+  shell,
+  title,
+  root,
+  entry,
+  group = [],
+  ignore = [],
+  dryRun = false,
+  lite = false,
+  customShellHtml,
+}) => {
+  const options = new Map()
+  if (dir) options.set('dir', dir)
+  if (out) options.set('out', out)
+  if (shell) options.set('shell', shell)
+  if (title) options.set('title', title)
+  if (root) options.set('root', root)
+  if (entry) options.set('entry', entry)
+
+  const multi = new Map()
+  if (group && group.length) multi.set('group', Array.isArray(group) ? group : [group])
+  if (ignore && ignore.length) multi.set('ignore', Array.isArray(ignore) ? ignore : [ignore])
+
+  const flags = new Set()
+  if (dryRun) flags.add('dry-run')
+  if (lite) flags.add('lite')
+
+  return pack({ options, multi, flags, customShellHtml })
+}
+
+const verifyTaco = async (pathOrHtml) => {
+  if (typeof pathOrHtml === 'string' && (pathOrHtml.includes('<script') || pathOrHtml.includes('<!DOCTYPE'))) {
+    const { html, bundle } = readBundleFrom(pathOrHtml, 'in-memory taco')
+    const structure = structureOf(bundle)
+    const lines = [`taco verify: in-memory taco`]
+    lines.push(`  shell: ${shellVariantOf(html)}  security: ${securityVersionOf(html) ?? 'unknown'}`)
+    lines.push(`  title: ${bundle.title}`)
+    lines.push(`  docId: ${bundle.docId}`)
+    printStructure(bundle, structure, lines)
+    return { path: 'in-memory', html, bundle, structure, lines }
+  }
+  return verify(pathOrHtml)
 }
 
 const main = async () => {
   const argv = process.argv.slice(2)
   if (argv[0] === 'verify') {
     if (!argv[1]) throw new Error(USAGE)
-    return verify(argv[1])
+    const result = await verify(argv[1])
+    process.stdout.write(`${result.lines.join('\n')}\n`)
+    if (result.structure.warnings.length) process.exitCode = 2
+    return result
   }
   const parsed = parseArgs(argv)
   if (parsed.flags.has('help') || (!parsed.options.has('dir') && !parsed.positional.length)) {
     process.stdout.write(`${USAGE}\n`)
     return
   }
-  return pack(parsed)
+  const result = await pack(parsed)
+  process.stdout.write(`${result.lines.join('\n')}\n`)
+  return result
 }
 
-main().catch((error) => {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
-  process.exitCode = 1
-})
+const isMain = Boolean(
+  process.argv[1] &&
+    basename(process.argv[1]) === 'pack.mjs' &&
+    resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url)),
+)
+if (isMain) {
+  main().catch((error) => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
+    process.exitCode = 1
+  })
+}
+
+export {
+  FORMAT,
+  FORMAT_VERSION,
+  KNOWN_BUNDLE_FIELDS,
+  packDirectory,
+  verifyTaco,
+  verify,
+  pack,
+  readBundleFromHtml,
+  readBundleFrom,
+  embedBundle,
+  atomicWrite,
+  validateBundle,
+  structureOf,
+  shellVariantOf,
+  securityVersionOf,
+  isSafePath,
+  isSafeRootPath,
+  mediaTypeOf,
+  portableTitleBase,
+  tacoFileBase,
+  directoryGroups,
+  collectFiles,
+  sha256Hex,
+  isCommentThread,
+  isCommentMessage,
+}

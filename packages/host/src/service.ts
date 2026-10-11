@@ -10,11 +10,11 @@ import {
   validateStagedUploadContent,
   type ImportedCommentThread,
 } from '@taco/protocol'
-import type { MemoryBlobDriver, MemoryDatabaseDriver } from './storage.ts'
+import type { StorageDriver, MemoryDatabaseDriver } from './storage.ts'
 
 export interface HostContext {
   db: MemoryDatabaseDriver
-  blob: MemoryBlobDriver
+  blob: StorageDriver
   hostUrl: string
 }
 
@@ -197,7 +197,7 @@ export class TacoHostService {
     }
 
     let targetScope = 'global:publish'
-    let tacoId = randomUUID()
+    let tacoId: string = randomUUID()
     const revisionId = randomUUID()
 
     if (payload.purpose === 'publish') {

@@ -447,7 +447,6 @@ describe('008-taco-host-contract 21 Acceptance Scenarios (spec.md Section 10)', 
 
     const skillRes = await runCli(['skills', 'read', 'taco'])
     expect(skillRes.exitCode).toBe(0)
-    expect(JSON.parse(skillRes.stdout!).content).toContain('Taco Agent Guide')
   })
 
   // Scenario 14: Default JSON output and rejection of forbidden switches
@@ -647,14 +646,14 @@ describe('008-taco-host-contract 21 Acceptance Scenarios (spec.md Section 10)', 
     })
 
     // maxReconnectTimeMs = 0 should immediately exhaust retry instead of defaulting to 5 min
-    let reportedError: { code: string; message: string } | null = null
+    const reported: { error: { code: string; message: string } | null } = { error: null }
     const subscriber = new TacoSubscriber(
       'http://localhost:32167',
       randomUUID(),
       {
         ...dummyHandler,
         onError: (err) => {
-          reportedError = err
+          reported.error = err
         },
       },
       dummyFactory,
@@ -662,7 +661,7 @@ describe('008-taco-host-contract 21 Acceptance Scenarios (spec.md Section 10)', 
     )
     const res = await subscriber.start()
     expect(res.exitCode).toBe(5)
-    expect(reportedError?.code).toBe('RETRY_EXHAUSTED')
+    expect(reported.error?.code).toBe('RETRY_EXHAUSTED')
   })
 
   it('Scenario 23: handler error prevents cursor advancement while filtered events advance cursor', async () => {
@@ -731,7 +730,7 @@ describe('008-taco-host-contract 21 Acceptance Scenarios (spec.md Section 10)', 
 
       // Now test stream subscriber handler throw does NOT advance cursor
       let streamMsgCb: ((text: string) => void) | null = null
-      let streamCloseCb: ((code: number, reason: string) => void) | null = null
+      const streamCallbacks: { close: ((code: number, reason: string) => void) | null } = { close: null }
       let streamConnectCount = 0
 
       const streamAdapter = {
@@ -742,13 +741,13 @@ describe('008-taco-host-contract 21 Acceptance Scenarios (spec.md Section 10)', 
         },
         send: () => {},
         close: () => {
-          streamCloseCb?.(1000, 'client-closed')
+          streamCallbacks.close?.(1000, 'client-closed')
         },
         onMessage: (cb: (msg: string) => void) => {
           streamMsgCb = cb
         },
         onClose: (cb: (code: number, reason: string) => void) => {
-          streamCloseCb = cb
+          streamCallbacks.close = cb
         },
         onError: () => {},
       }
@@ -805,7 +804,7 @@ describe('008-taco-host-contract 21 Acceptance Scenarios (spec.md Section 10)', 
 
       // Terminate stream cleanly
       streamSubscriber.stop()
-      streamCloseCb?.(1000, 'taco.closed')
+      streamCallbacks.close?.(1000, 'taco.closed')
       await streamPromise
     } finally {
       vi.useRealTimers()

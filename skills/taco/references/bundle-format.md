@@ -71,7 +71,7 @@ Every `files[].path` must be safe and start with `${root}/`. A path equal to `ro
 
 Carry over `comments`, `navigation`, `checkpoints`, `access`, `collab`, `packOptions`, and **every unknown field** unchanged unless the reviewer's input changes them. Never fabricate a comment, never resolve one on the human's behalf, and never drop a field because you do not recognize it.
 
-`comments[]` threads must satisfy the comment shape (anchor with `path`/`position`/`quote`, `status` `open|resolved`, timestamps, non-empty `messages[]`), and each `anchor.path` must reference a file present in `files[]`. If a commented file disappears from the directory, keep its previous bundle entry and report the loss instead of deleting it.
+On a two-round refresh (e.g. via `taco-cli refresh <file.taco.html> --handoff <path|->`), `refresh` verifies pending direct file edits against the canonical source, preserves the original Shell variant (Complete vs Lite), stable file IDs, Checkpoint states, and navigation. Note that `--handoff` accepts only a local path or `'-'` for stdin (no remote URL).
 
 `navigation` is a v1 manifest: `{ version: 1, entry?: string, groups: [{ id, title, paths: string[] }] }`. `paths` entries may be root-relative (`spec.md`) or bundle-prefixed (`specs/001/spec.md`); the runtime stores root-relative. A malformed `navigation` is **silently deleted** on load and the sidebar falls back to directory grouping — so validate it yourself and fail loudly instead.
 
@@ -170,5 +170,4 @@ Persisting from the tab is the runtime's job too — it serializes against the p
 window.taco.canSave() // → true when in-place save is available
 await window.taco.save() // → 'saved' | 'saved-as' | 'downloaded' | 'cancelled' | …
 ```
-
-`save()` needs the browser's user activation and a file grant, so trigger it from a real gesture; when it reports `cancelled` or `downloaded`, say which happened rather than claiming the file was written.
+`save()` needs the browser's user activation and a file grant, so trigger it from a real gesture; when it reports `cancelled` or `downloaded`, say which happened rather than claiming the file was written. Saving writes to disk independently and does not reset the review baseline captured upon opening the document.

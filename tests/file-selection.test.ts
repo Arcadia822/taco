@@ -3,6 +3,7 @@ import {
   filePathFromHash,
   fileSelectionHash,
   headingFromHash,
+  parseListenParams,
   resolveDocumentLink,
   selectedPathForLoad,
   serializeFileSelection,
@@ -84,5 +85,43 @@ describe('hash heading contract', () => {
   it('decodes link fragments once to the same heading text', () => {
     expect(resolveDocumentLink('taco', 'taco/entry.md', '#50%-done')).toEqual({ kind: 'internal', path: 'taco/entry.md', heading: '50%-done' })
     expect(resolveDocumentLink('taco', 'taco/entry.md', '#%25')).toEqual({ kind: 'internal', path: 'taco/entry.md', heading: '%' })
+  })
+})
+
+describe('taco-listen fragment handling', () => {
+  it('parses percent-encoded and raw query params in taco-listen fragment', () => {
+    const encoded = '#taco-listen=port%3D12345%26token%3Dsecret-tok%26sessionId%3Dsess-1%26docId%3Ddoc-1'
+    expect(parseListenParams(encoded)).toEqual({
+      port: 12345,
+      token: 'secret-tok',
+      sessionId: 'sess-1',
+      docId: 'doc-1',
+    })
+    expect(filePathFromHash(encoded)).toBe('')
+
+    const raw = '#taco-listen=port=54321&token=raw-tok&sessionId=sess-2&docId=doc-2'
+    expect(parseListenParams(raw)).toEqual({
+      port: 54321,
+      token: 'raw-tok',
+      sessionId: 'sess-2',
+      docId: 'doc-2',
+    })
+    expect(filePathFromHash(raw)).toBe('')
+  })
+
+  it('preserves subsequent file path after taco-listen segment', () => {
+    const withPath = '#taco-listen=port%3D12345%26token%3Dtok%26sessionId%3Ds%26docId%3Dd::specs/demo/spec.md'
+    expect(parseListenParams(withPath)).toEqual({
+      port: 12345,
+      token: 'tok',
+      sessionId: 's',
+      docId: 'd',
+    })
+    expect(filePathFromHash(withPath)).toBe('specs/demo/spec.md')
+    expect(headingFromHash(withPath)).toBe('')
+
+    const withHeading = '#taco-listen=port=12345&token=tok&sessionId=s&docId=d::specs/demo/spec.md::section-1'
+    expect(filePathFromHash(withHeading)).toBe('specs/demo/spec.md')
+    expect(headingFromHash(withHeading)).toBe('section-1')
   })
 })

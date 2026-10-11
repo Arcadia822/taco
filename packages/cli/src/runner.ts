@@ -1,21 +1,31 @@
 import { readFileSync } from 'node:fs'
 import { TacoClient } from './client.ts'
+import { executeDiff } from './diff.ts'
 import { executeLocalDryRun } from './dry-run.ts'
 import { EXIT_CODES, makeCliError } from './errors.ts'
+import { executeExtract } from './extract.ts'
 import { COMMAND_HELPS, DEFAULT_HOST, ROOT_HELP, type CommandHelpOutput } from './help.ts'
+import { executeInit } from './init.ts'
+import { executeInspect } from './inspect.ts'
+import { executeListen } from './listen.ts'
+import { executeNew } from './new.ts'
+import { executeOpen } from './open.ts'
+import { executePack } from './pack.ts'
+import { executeRefresh } from './refresh.ts'
 import { listSkills, readSkillFile } from './skills.ts'
 import { TacoSubscriber, type WebSocketSessionAdapter } from './subscriber.ts'
+import { executeVerify } from './verify.ts'
 
 export interface ParsedArgs {
   command: string[]
   positionals: string[]
-  options: Record<string, string | boolean>
+  options: Record<string, string | boolean | string[]>
 }
 
 export const parseCliArgs = (argv: string[]): ParsedArgs => {
   const command: string[] = []
   const positionals: string[] = []
-  const options: Record<string, string | boolean> = {}
+  const options: Record<string, string | boolean | string[]> = {}
 
   let idx = 0
   while (idx < argv.length) {
@@ -25,18 +35,41 @@ export const parseCliArgs = (argv: string[]): ParsedArgs => {
       if (eqIdx !== -1) {
         const key = arg.slice(2, eqIdx)
         const val = arg.slice(eqIdx + 1)
-        options[key] = val
+        if (key === 'group' || key === 'ignore') {
+          const existing = options[key]
+          if (Array.isArray(existing)) {
+            existing.push(val)
+          } else if (typeof existing === 'string') {
+            options[key] = [existing, val]
+          } else {
+            options[key] = [val]
+          }
+        } else {
+          options[key] = val
+        }
       } else {
         const key = arg.slice(2)
         const next = argv[idx + 1]
-        if (next !== undefined && !next.startsWith('-')) {
-          options[key] = next
+        if (next !== undefined && (!next.startsWith('-') || next === '-')) {
+          const val = next
           idx += 1
+          if (key === 'group' || key === 'ignore') {
+            const existing = options[key]
+            if (Array.isArray(existing)) {
+              existing.push(val)
+            } else if (typeof existing === 'string') {
+              options[key] = [existing, val]
+            } else {
+              options[key] = [val]
+            }
+          } else {
+            options[key] = val
+          }
         } else {
           options[key] = true
         }
       }
-    } else if (arg.startsWith('-')) {
+    } else if (arg.startsWith('-') && arg !== '-') {
       if (arg === '-h') {
         options['help'] = true
       } else {
@@ -253,6 +286,17 @@ export const runCli = async (
     return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
   }
 
+  if ('timeout' in options) {
+    const rawTimeout = options['timeout']
+    const parsedTimeout = Number(rawTimeout)
+    if (Number.isNaN(parsedTimeout) || !Number.isInteger(parsedTimeout) || parsedTimeout <= 0) {
+      const error = makeCliError(
+        'VALIDATION_ERROR',
+        `--timeout must be a positive integer, found: ${String(rawTimeout)}`,
+      )
+      return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+    }
+  }
   // Handle Help requests
   if (primaryCmd === undefined || primaryCmd === 'help' || options['help'] === true) {
     let targetCmd = primaryCmd === 'help' ? positionals[0] : primaryCmd
@@ -290,6 +334,134 @@ export const runCli = async (
     }
   }
 
+  // Handle local toolbox commands
+  if (primaryCmd === 'new') {
+    return executeNew({
+      path: positionals[0],
+      title: typeof options['title'] === 'string' ? options['title'] : undefined,
+      lite: options['lite'] === true,
+    })
+  }
+
+  if (primaryCmd === 'init') {
+    return executeInit({
+      target: positionals[0],
+      template: typeof options['template'] === 'string' ? options['template'] : undefined,
+      title: typeof options['title'] === 'string' ? options['title'] : undefined,
+      lite: options['lite'] === true,
+      listTemplates: options['list-templates'] === true,
+    })
+  }
+
+  if (primaryCmd === 'pack') {
+    const groups = Array.isArray(options['group'])
+      ? options['group']
+      : typeof options['group'] === 'string'
+        ? [options['group']]
+        : undefined
+    const ignores = Array.isArray(options['ignore'])
+      ? options['ignore']
+      : typeof options['ignore'] === 'string'
+        ? [options['ignore']]
+        : undefined
+
+    return executePack({
+      dir: positionals[0] || (typeof options['dir'] === 'string' ? options['dir'] : ''),
+      out: typeof options['out'] === 'string' ? options['out'] : undefined,
+      title: typeof options['title'] === 'string' ? options['title'] : undefined,
+      entry: typeof options['entry'] === 'string' ? options['entry'] : undefined,
+      root: typeof options['root'] === 'string' ? options['root'] : undefined,
+      group: groups,
+      ignore: ignores,
+      lite: options['lite'] === true,
+      dryRun: options['dry-run'] === true,
+    })
+  }
+
+  if (primaryCmd === 'verify') {
+    return executeVerify(positionals[0])
+  }
+
+  if (primaryCmd === 'refresh') {
+    return executeRefresh({
+      filePath: positionals[0],
+      handoffPath: typeof options['handoff'] === 'string' ? options['handoff'] : '',
+      dirPath: typeof options['dir'] === 'string' ? options['dir'] : undefined,
+      dryRun: options['dry-run'] === true,
+    })
+  }
+
+  if (primaryCmd === 'diff') {
+    try {
+      const diffResult = await executeDiff({
+        source: positionals[0] || (typeof options['dir'] === 'string' ? options['dir'] : ''),
+        target: positionals[1],
+        handoff: typeof options['handoff'] === 'string' ? options['handoff'] : undefined,
+        dir: typeof options['dir'] === 'string' ? options['dir'] : undefined,
+      })
+      return { exitCode: EXIT_CODES.OK, stdout: JSON.stringify(diffResult, null, 2) }
+    } catch (err) {
+      const code = (err as { code?: string })?.code || 'VALIDATION_ERROR'
+      const exitCode = code === 'LOCAL_IO_ERROR' ? EXIT_CODES.LOCAL_IO_ERROR : EXIT_CODES.VALIDATION_ERROR
+      const error = makeCliError(code, (err as Error).message)
+      return { exitCode, stderr: JSON.stringify(error) }
+    }
+  }
+
+  if (primaryCmd === 'inspect') {
+    try {
+      const inspectResult = await executeInspect({
+        filePath: positionals[0],
+        credentials: options['credentials'] === true,
+      })
+      return { exitCode: EXIT_CODES.OK, stdout: JSON.stringify(inspectResult, null, 2) }
+    } catch (err) {
+      const code = (err as { code?: string })?.code || 'VALIDATION_ERROR'
+      const exitCode = code === 'LOCAL_IO_ERROR' ? EXIT_CODES.LOCAL_IO_ERROR : EXIT_CODES.VALIDATION_ERROR
+      const error = makeCliError(code, (err as Error).message)
+      return { exitCode, stderr: JSON.stringify(error) }
+    }
+  }
+
+  if (primaryCmd === 'extract') {
+    try {
+      const filesOption = typeof options['files'] === 'string'
+        ? options['files'].split(',').map((s) => s.trim())
+        : undefined
+      const extractResult = await executeExtract({
+        filePath: positionals[0],
+        outDir: typeof options['out-dir'] === 'string' ? options['out-dir'] : undefined,
+        files: filesOption,
+        dryRun: options['dry-run'] === true,
+      })
+      return { exitCode: EXIT_CODES.OK, stdout: JSON.stringify(extractResult, null, 2) }
+    } catch (err) {
+      const code = (err as { code?: string })?.code || 'VALIDATION_ERROR'
+      const exitCode = code === 'LOCAL_IO_ERROR' ? EXIT_CODES.LOCAL_IO_ERROR
+        : code === 'CONFLICT_ERROR' ? EXIT_CODES.CONFLICT_ERROR : EXIT_CODES.VALIDATION_ERROR
+      const error = makeCliError(code, (err as Error).message)
+      return { exitCode, stderr: JSON.stringify(error) }
+    }
+  }
+
+  if (primaryCmd === 'listen') {
+    return executeListen({
+      filePath: positionals[0],
+      port: typeof options['port'] === 'string' ? Number(options['port']) : undefined,
+      timeout: typeof options['timeout'] === 'string' ? Number(options['timeout']) : undefined,
+      noOpen: options['no-open'] !== false,
+    })
+  }
+
+  if (primaryCmd === 'open') {
+    return executeOpen({
+      filePath: positionals[0],
+      listen: options['listen'] === true,
+      port: typeof options['port'] === 'string' ? Number(options['port']) : undefined,
+      timeout: typeof options['timeout'] === 'string' ? Number(options['timeout']) : undefined,
+      noOpen: options['no-open'] === true,
+    })
+  }
   // Handle publish (Pastebin style: pure data upload, no login required)
   if (primaryCmd === 'publish') {
     const filePath = positionals[0]

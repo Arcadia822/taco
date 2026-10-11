@@ -51,7 +51,7 @@ import { BundleDirtyTracker } from './dirty-tracker.ts'
 import type { MermaidRuntime } from './mermaid.ts'
 import { CommentsController } from './comments-controller.ts'
 
-import { LOCALE_CHOICES, copy, resolveLocale, type Locale } from './i18n.ts'
+import { LOCALE_CHOICES, copy, resolveLocale, type Locale, type Copy } from './i18n.ts'
 import { createUnifiedDiff } from './kernel/diff.ts'
 
 import { OutlineController } from './outline-controller.ts'
@@ -89,6 +89,7 @@ export class FileBrowser {
   private checkpointBaseline = new Map<string, DocumentStatus>()
   private checkpointTemplateBaseline: string | null = null
   private checkpointDocumentBaseline = new Set<string>()
+  private reviewBaselineDoc: TacoBundle
   private cachedResolvedCheckpoints: { ref: unknown; resolved: ResolvedCheckpoints } | null = null
   private sidebar!: HTMLElement
   private fileNavigation: FileNavigation | null = null
@@ -138,6 +139,12 @@ export class FileBrowser {
   private readonly comments: CommentsController
   private readonly outline: OutlineController
   private copyFeedbackTimer: number | null = null
+  getReviewBaseline(): TacoBundle {
+    return this.reviewBaselineDoc
+  }
+  get copy(): Copy {
+    return this.t
+  }
   private readonly dirtyTracker: BundleDirtyTracker
   private readonly cleanups: Array<() => void> = []
   private readonly narrowLayout: MediaQueryList
@@ -193,13 +200,35 @@ export class FileBrowser {
     this.syncPanelToggles()
   }
 
+  private getReviewDirtyFileIds(): Set<string> {
+    const dirty = new Set<string>()
+    const baselineMap = new Map<string, TacoFile>(
+      this.reviewBaselineDoc.files.map((f) => [f.id ?? f.path, f])
+    )
+    for (const file of this.bundle.files) {
+      if (isInternalFile(file.path)) continue
+      const id = file.id ?? file.path
+      const base = baselineMap.get(id) ?? this.reviewBaselineDoc.files.find((f) => f.path === file.path)
+      if (!base) {
+        dirty.add(id)
+      } else if (base.content !== file.content || base.title !== file.title) {
+        dirty.add(id)
+      }
+    }
+    return dirty
+  }
+
   getModifiedReviewFiles(): Array<{ path: string; mediaType: string; content: string; diff?: string }> {
-    const dirtyIds = this.dirtyTracker.getDirtyFileIds()
+    const dirtyIds = this.getReviewDirtyFileIds()
+    const baselineMap = new Map<string, TacoFile>(
+      this.reviewBaselineDoc.files.map((f) => [f.id ?? f.path, f])
+    )
     return this.bundle.files
       .filter((file) => !isInternalFile(file.path) && dirtyIds.has(file.id ?? file.path))
       .map((file) => {
         const rel = relativePath(this.bundle, file)
-        const baseline = this.dirtyTracker.getBaselineContent(file.id ?? file.path) ?? ''
+        const base = baselineMap.get(file.id ?? file.path) ?? this.reviewBaselineDoc.files.find((f) => f.path === file.path)
+        const baseline = base?.content ?? ''
         const diff = isMediaFileKind(fileKind(file)) ? undefined : createUnifiedDiff(baseline, file.content, rel)
         return {
           path: rel,
@@ -310,6 +339,7 @@ export class FileBrowser {
       }
     }
     this.dirtyTracker = new BundleDirtyTracker(bundle)
+    this.reviewBaselineDoc = JSON.parse(JSON.stringify(bundle)) as TacoBundle
     this.narrowLayout = matchMedia('(max-width: 820px)')
     this.sidebarClosed = this.narrowLayout.matches
     this.desktopCommentPanelOpen = storageGet(`taco-right-panel:${bundle.docId}`, 'session') !== 'closed'
@@ -1336,13 +1366,13 @@ export class FileBrowser {
     this.saveButton.setAttribute('aria-label', this.saveButton.title)
 
     // Handoff reflects actual file, comment, and Checkpoint changes.
-    const hasFileChanges = this.dirtyTracker.getDirtyFileIds().size > 0
+    const hasFileChanges = this.getReviewDirtyFileIds().size > 0
     const hasCommentChanges = this.dirtyTracker.isCommentsDirty()
+      || (this.bundle.comments?.length ?? 0) > (this.reviewBaselineDoc.comments?.length ?? 0)
     const hasOpenComments = (this.bundle.comments ?? []).some((c) => c.status === 'open')
-    const hasCheckpointChanges = this.dirtyTracker.isDocumentDirty()
-      && (this.getCheckpointChanges().length > 0 || this.getCheckpointTemplateChange() !== null
+    const hasCheckpointChanges = (this.getCheckpointChanges().length > 0 || this.getCheckpointTemplateChange() !== null
         || this.getCheckpointDocumentAdditions().length > 0)
-    const handoffDirty = hasFileChanges || hasCommentChanges || hasCheckpointChanges || (hasOpenComments && saveDirty)
+    const handoffDirty = hasFileChanges || hasCommentChanges || hasCheckpointChanges || hasOpenComments
     this.copyButton.classList.toggle('is-dirty', handoffDirty)
   }
 
@@ -1387,6 +1417,7 @@ export class FileBrowser {
     if (options?.establishReviewBaseline) {
       this.dirtyTracker.markSaved()
       this.captureCheckpointBaseline()
+      this.reviewBaselineDoc = JSON.parse(JSON.stringify(this.bundle)) as TacoBundle
     } else {
       this.dirtyTracker.note({ kind: 'all' })
     }
@@ -1635,10 +1666,10 @@ export class FileBrowser {
     const checkpointChanges = this.getCheckpointChanges()
     const checkpointTemplateChange = this.getCheckpointTemplateChange()
     const checkpointDocumentAdditions = this.getCheckpointDocumentAdditions()
-    const hasDocTitleChange = this.dirtyTracker.isDocumentDirty() && !this.bundle.navigation
+    const hasDocTitleChange = this.bundle.title !== this.reviewBaselineDoc.title && !this.bundle.navigation
     const hasFileOrCommentChanges = changedFiles.length > 0 || comments.length > 0 || checkpointChanges.length > 0
       || checkpointTemplateChange !== null || checkpointDocumentAdditions.length > 0
-      || this.dirtyTracker.isCommentsDirty() || this.dirtyTracker.getDirtyFileIds().size > 0
+      || this.getReviewDirtyFileIds().size > 0
     if (!hasDocTitleChange && !hasFileOrCommentChanges) {
       this.toast(this.t.noReviewChanges)
       return
@@ -1747,11 +1778,10 @@ export class FileBrowser {
     }
   }
 
-  private reportSave(result: SaveResult): void {
+  reportSave(result: SaveResult): void {
     if (result === 'cancelled') { this.toast(this.t.saveCancelled); return }
     if (result === 'directory-unavailable') { this.toast(this.t.directoryUnavailable); return }
     this.dirtyTracker.markSaved()
-    this.captureCheckpointBaseline()
     this.syncDirtyState()
     if (result !== 'downloaded') this.saveButton.querySelector('.button-label')!.textContent = this.t.saved
     this.toast(result === 'downloaded'

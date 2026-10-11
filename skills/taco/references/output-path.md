@@ -87,7 +87,9 @@ The personal archive is `Documents/tacos` under `HOME ?? USERPROFILE`. When both
 | `blocks` | keep **only** while that file's new content is byte-identical to the previous content; drop it as soon as the content changes and let the runtime rebuild it |
 | `sourceHash` | keep the existing value when the content is byte-identical; when the content changed, recompute it only if the host can compute SHA-256, otherwise drop the field — it is optional in `bundle-format.md`, and never leave a stale hash |
 | packaged set | built-in exclusions and `packOptions.ignore` per §4 |
+| review baseline | independent of local disk Save; captures mount baseline |
 
+When using CLI refresh (`taco-cli refresh <file.taco.html> --handoff <path|->`), the command validates direct file edits against canonical files, preserves the original Shell (Complete vs Lite), and accepts `--handoff` via local file path or `'-'` for stdin only (remote URLs are rejected).
 ### 5.3 Migration (only when the user asks for it)
 
 The occupancy check comes **before any write**:

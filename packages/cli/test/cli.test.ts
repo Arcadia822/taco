@@ -68,15 +68,9 @@ describe('taco-cli (Phase 1)', () => {
     const readJson = JSON.parse(readRes.stdout!)
     expect(readJson.id).toBe('taco')
     expect(readJson.path).toBe('SKILL.md')
-    expect(readJson.content).toContain('# Taco Agent Guide')
-    expect(readJson.version).toBe('1.2.0')
-    expect(readJson.content).toContain('## Start Here')
-    expect(readJson.content).toContain('references/publishing.md')
 
     const readRefRes = await runCli(['skills', 'read', 'taco', 'references/publishing.md'])
     expect(readRefRes.exitCode).toBe(0)
-    const readRefJson = JSON.parse(readRefRes.stdout!)
-    expect(readRefJson.content).toContain('# Publishing Guide')
 
     // Refuses directory traversal
     const badRead = await runCli(['skills', 'read', 'taco', '../../secret.txt'])

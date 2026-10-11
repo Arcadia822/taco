@@ -10,6 +10,12 @@ if (!existsSync(distDir)) {
   mkdirSync(distDir, { recursive: true })
 }
 
+console.log('Building canonical shells...')
+execSync('node ./scripts/build-shells.mjs', { cwd: projectRoot, stdio: 'inherit' })
+
+console.log('Generating CLI static assets...')
+execSync('node ./scripts/build-cli-assets.mjs', { cwd: projectRoot, stdio: 'inherit' })
+
 console.log('Compiling @tacobin/cli standalone binary with Bun...')
 
 try {
@@ -21,10 +27,8 @@ try {
       stdio: 'inherit',
     },
   )
-  console.log('Successfully compiled: packages/cli/dist/taco-cli-darwin-arm64')
+  console.log('Successfully compiled: packages/cli/dist/taco-cli')
 } catch (err) {
-  console.warn(
-    'Native binary compile with bun skipped or requires bun installed on target:',
-    err.message,
-  )
+  console.error('Native binary compilation failed:', err.message)
+  process.exitCode = 1
 }

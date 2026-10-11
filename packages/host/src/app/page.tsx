@@ -204,15 +204,15 @@ const I18N = {
     section3DescBefore: '已为 ',
     section3DescAfter: ' 做好完整集成。安装 Taco 扩展插件后，Agent 在每个规范生命周期（specify、plan、tasks 等）自动更新单文件容器，人类审查随时跟进。',
     section3Cmd: 'specify extension add taco --from https://github.com/Arcadia822/taco/releases/latest/download/taco-extension.zip',
-    section4Eyebrow: '06 / TACOBIN 协作空间',
-    section4Title: 'Tacobin：为团队连接 Taco 与 Agent',
+    section4Eyebrow: '06 / TACOBIN 协作空间与 CLI 本地工具箱',
+    section4Title: 'Tacobin 与 taco-cli：连接 Taco 与 Agent',
     section4Desc:
-      '本地 Taco 可离线评审；Tacobin 分享页支持共享编辑与评论，改动自动保存。保存失败可重试；冲突会保留草稿，确认放弃后才加载最新评审。保持 Agent 订阅在线；没有监听者时，交接会展示安装与订阅命令。自动保存成功后点击「交接」，才产生 review.handed_off；保存按钮另存本地 Taco，评论不会唤醒 Agent。点击重叠头像查看完整监听名单，在线不代表意见已送达或处理。',
+      '本地 Taco 文件无需安装即可离线评审；可选的 taco-cli 提供完整本地工具箱（new、init、pack、verify、refresh、diff、inspect、extract、open、listen），也支持 Tacobin 云端共享评审。浏览器打开 Taco 本地评审后，点击「交接」即可持久化未保存快照至本地回执（仅限本机 127.0.0.1 访问，有限超时释放，不可达时可通过菜单复制交接），再由 Agent diff 核验并 refresh 原地更新。Tacobin 云端分享页支持多方协作编辑与评论并自动保存，点击「交接」后生成 review.handed_off 事件。',
     section4CliTitle: 'CLI',
     section4CliCmd: TACO_CLI_INSTALL_COMMAND,
     section4AgentTitle: 'FOR AGENT',
     section4AgentPrompt:
-      '阅读 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md 的托管评审说明，安装 Taco skill 与 taco-cli。先 dry-run 核对公开内容，再发布 Taco，保存 URL、tacoId 和 revisionId；运行 taco-cli subscribe <tacoId> --host <origin> 并保持在线。等我评论并点击「交接」后，默认订阅输出 review.handed_off 并退出；用 taco-cli handoff 读取快照、比对源文件、应用反馈并报告。后续评审轮次运行 taco-cli update <tacoId> <file> [--base <revisionId>] 原地更新到同一 URL 并记录新的 revisionId，再从确认的 sequence 开始订阅。评论和自动保存不是交接；旧版 CLI 若不支持 update 应报错而非静默重新发布。',
+      '阅读 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md 的本地工具箱与托管评审说明，安装 Taco skill 与 taco-cli。本地可通过 taco-cli pack/init 创建或打包规范，运行 taco-cli listen <file.taco.html> 或 taco-cli open <file.taco.html> --listen 开启本地交接监听；评审者点击「交接」后，Agent 接收未保存快照、比对源文件并用 taco-cli refresh 原地更新复审。托管评审则先 dry-run 核对公开内容，再发布 Taco 并订阅 review.handed_off 事件。',
     creditsEyebrow: '07 / SHOUTOUT',
     creditsBackToTop: '回到顶部',
     creditsTitlePrefix: '感谢',
@@ -222,6 +222,10 @@ const I18N = {
     pageNavAria: '页面导航',
     pageDotAria: (page: number) => `跳转到第 ${page} 页`,
     langSwitchAria: '切换语言',
+    traceLocalPack: '打包现有规范目录为单文件容器',
+    traceLocalListen: '启动短时回环监听器并生成安全入口',
+    traceLocalDiff: '只读比对未保存反馈与本地源文件差异',
+    traceLocalRefresh: '原地原子复审，保留评审身份与评论',
     tracePublish: '发布 Taco，拿到分享地址',
     traceSubscribe: '用 tacoId 订阅这份文档的评审',
     traceEvent: '交接事件到达；Agent 拉取完整快照',
@@ -317,15 +321,15 @@ const I18N = {
     section3DescBefore: 'Full integration ready out of the box. Installing the Taco extension equips ',
     section3DescAfter: ' with automatic single-file container refreshes across all lifecycle hooks.',
     section3Cmd: 'specify extension add taco --from https://github.com/Arcadia822/taco/releases/latest/download/taco-extension.zip',
-    section4Eyebrow: '06 / TACOBIN SPACE',
-    section4Title: 'Tacobin: Collaborative Relay for Teams & Agents',
+    section4Eyebrow: '06 / TACOBIN SPACE & LOCAL TOOLBOX',
+    section4Title: 'Tacobin & taco-cli: Connecting Tacos with Agents',
     section4Desc:
-      'Local Taco files work offline; Tacobin supports shared edits and comments that autosave. Retry failed saves; conflicts retain your draft until you confirm discarding it and loading the latest review. Keep an Agent subscribed: without a listener, Handoff shows installation and subscription commands. After autosave succeeds, Handoff records review.handed_off; Save writes a local Taco copy, and comments do not wake an agent. Click the overlapping avatars for the full listener list; online presence is not a delivery receipt.',
+      'Local Taco files work offline without installation; the optional taco-cli provides a complete local toolbox (new, init, pack, verify, refresh, diff, inspect, extract, open, listen) alongside hosted Tacobin shared reviews. Open a Taco locally in your browser, review and click Handoff to atomically persist an unsaved snapshot into a local receipt (same-machine 127.0.0.1 loopback only, finite idle timeout, use the copy menu when unreachable), followed by agent diff and in-place refresh. On Tacobin, shared edits and comments autosave, and clicking Handoff records review.handed_off.',
     section4CliTitle: 'CLI',
     section4CliCmd: TACO_CLI_INSTALL_COMMAND,
     section4AgentTitle: 'FOR AGENT',
     section4AgentPrompt:
-      'Read the hosted-review section of https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and install the Taco skill and taco-cli. Dry-run the public payload, publish the Taco, retain its URL, tacoId, and revisionId, then keep taco-cli subscribe <tacoId> --host <origin> running. After I comment and click Handoff, the default subscriber emits review.handed_off and exits. Fetch the snapshot with taco-cli handoff, compare canonical files, apply feedback and report. For subsequent rounds, run taco-cli update <tacoId> <file> [--base <revisionId>] to update to the same URL in place and record the new revisionId, then subscribe again from the confirmed sequence. Comments and autosaves are not Handoff; old CLIs without update must report unsupported rather than silently republishing.',
+      'Read https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md for local toolbox and hosted review instructions, and install the Taco skill and taco-cli. For local review, use taco-cli pack/init, start taco-cli listen <file.taco.html> or taco-cli open <file.taco.html> --listen for local handoff; after the reviewer clicks Handoff, receive the unsaved snapshot, compare canonical files, and run taco-cli refresh in place. For hosted review, dry-run public payloads, publish, and keep taco-cli subscribe running for review.handed_off.',
     creditsEyebrow: '07 / SHOUTOUT',
     creditsBackToTop: 'Back to Top',
     creditsTitlePrefix: 'Thank you,',
@@ -333,6 +337,10 @@ const I18N = {
     creditsDescription: 'Taco’s inspiration and core code come from Bento. Thank you to nyblnet for making it open source and giving Taco a place to begin.',
     creditsContact: 'Keep in touch',
     tracePublish: 'Publish the Taco and get a share URL',
+    traceLocalPack: 'Package canonical spec directory into single-file container',
+    traceLocalListen: 'Start finite loopback listener and emit clickable URL',
+    traceLocalDiff: 'Read-only check of un-saved feedback against canonical source',
+    traceLocalRefresh: 'Atomic in-place refresh preserving identity and comments',
     pageNavAria: 'Page navigation',
     pageDotAria: (page: number) => `Scroll to page ${page}`,
     langSwitchAria: 'Switch Language',
@@ -1255,20 +1263,21 @@ export default function HomePage() {
               </div>
               <div className="workflow-terminal__body">
                 <div className="workflow-terminal__step">
-                  <div className="workflow-terminal__agent"><span>AGENT / 01</span>{t.tracePublish}</div>
-                  <div className="workflow-terminal__command"><span>$</span><code>taco-cli publish design.taco.html</code></div>
-                  <div className="workflow-terminal__output workflow-terminal__output--url"><span>url</span><code>{TRACE_HOST}/t/{TRACE_TACO_ID}</code></div>
-                  <div className="workflow-terminal__output"><span>tacoId</span><code>{TRACE_TACO_ID}</code></div>
+                  <div className="workflow-terminal__agent"><span>LOCAL / 01</span>{t.traceLocalPack}</div>
+                  <div className="workflow-terminal__command"><span>$</span><code>taco-cli pack docs/ --title Spec --out Spec.taco.html</code></div>
                 </div>
                 <div className="workflow-terminal__step">
-                  <div className="workflow-terminal__agent"><span>AGENT / 02</span>{t.traceSubscribe}</div>
-                  <div className="workflow-terminal__command"><span>$</span><code>taco-cli subscribe {TRACE_TACO_ID}</code></div>
-                  <div className="workflow-terminal__log"><span>ready</span><code>{'{"kind":"ready","mode":"live","cursor":"0"}'}</code></div>
+                  <div className="workflow-terminal__agent"><span>LOCAL / 02</span>{t.traceLocalListen}</div>
+                  <div className="workflow-terminal__command"><span>$</span><code>taco-cli listen Spec.taco.html --no-open</code></div>
+                  <div className="workflow-terminal__output workflow-terminal__output--url"><span>ready</span><code>file:///.../Spec.taco.html#taco-listen=port%3D49152...</code></div>
                 </div>
                 <div className="workflow-terminal__step">
-                  <div className="workflow-terminal__agent"><span>AGENT / 03</span>{t.traceEvent}</div>
-                  <div className="workflow-terminal__log"><span>event</span><code>{JSON.stringify({ kind: 'event', type: 'review.handed_off', tacoId: TRACE_TACO_ID, data: { handoffId: '63e82d37-a037-46f9-90d8-c752500169ed' } })}</code></div>
-                  <div className="workflow-terminal__command"><span>$</span><code>taco-cli handoff {TRACE_TACO_ID} 63e82d37-a037-46f9-90d8-c752500169ed</code></div>
+                  <div className="workflow-terminal__log"><span>receipt</span><code>{'{"type":"handoff","path":"<receipt.json>"}'}</code></div>
+                  <div className="workflow-terminal__command"><span>$</span><code>taco-cli diff Spec.taco.html --handoff &lt;receipt.json&gt; --dir docs/</code></div>
+                </div>
+                <div className="workflow-terminal__step">
+                  <div className="workflow-terminal__agent"><span>LOCAL / 04</span>{t.traceLocalRefresh}</div>
+                  <div className="workflow-terminal__command"><span>$</span><code>taco-cli refresh Spec.taco.html --dir docs/ --handoff &lt;receipt.json&gt;</code></div>
                 </div>
               </div>
             </div>

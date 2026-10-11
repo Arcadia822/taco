@@ -8,6 +8,7 @@ export interface HelpPositional {
   name: string
   type: string
   required: boolean
+  default?: unknown
   description: string
 }
 
@@ -137,6 +138,16 @@ export const ROOT_HELP: CommandHelpOutput = {
     },
   ],
   commands: [
+    { name: 'new', summary: 'Create an empty standalone Taco file with default Complete or Lite shell' },
+    { name: 'init', summary: 'Initialize document structure from built-in template' },
+    { name: 'pack', summary: 'Package local source directory into standalone .taco.html container' },
+    { name: 'verify', summary: 'Verify integrity, safe paths, data block, and diagram diagnostics of a local Taco' },
+    { name: 'refresh', summary: 'Refresh Taco artifact with received feedback and canonical directory source' },
+    { name: 'diff', summary: 'Read-only comparison across Taco artifacts, canonical directory, and handoff reviews' },
+    { name: 'inspect', summary: 'Inspect structure, files, comments, and checkpoints of a local Taco container' },
+    { name: 'extract', summary: 'Extract credential-free projected files or directory from local Taco container' },
+    { name: 'open', summary: 'Open local Taco file in system browser, optionally with feedback loopback listener' },
+    { name: 'listen', summary: 'Start loopback HTTP listener and emit clickable URL for local review feedback' },
     { name: 'publish', summary: 'Validate, project, and publish a local Taco to the Host' },
     {
       name: 'update',
@@ -157,6 +168,240 @@ export const ROOT_HELP: CommandHelpOutput = {
 }
 
 export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
+  new: {
+    schema: CLI_SCHEMA_HELP,
+    binaryVersion: CLI_BINARY_VERSION,
+    command: ['new'],
+    summary: 'Create an empty standalone Taco file with default Complete or Lite shell',
+    positionals: [
+      { name: 'path', type: 'path', required: true, description: 'Destination path ending in .taco.html' },
+    ],
+    options: [
+      { name: '--title', type: 'string', required: false, default: null, description: 'Document title' },
+      { name: '--lite', type: 'boolean', required: false, default: false, description: 'Use lightweight CDN-backed shell instead of complete offline shell' },
+    ],
+    environment: [],
+    output: { stdout: 'JSON summary of created file', stderr: 'ErrorResponse JSON on failure', streaming: false },
+    errors: [
+      { code: 'VALIDATION_ERROR', exitCode: 2, recovery: 'Provide valid .taco.html target path' },
+      { code: 'CONFLICT_ERROR', exitCode: 4, recovery: 'Target already exists; choose a new path' },
+      { code: 'LOCAL_IO_ERROR', exitCode: 1, recovery: 'Check filesystem permissions' },
+    ],
+    examples: [
+      { invocation: 'taco-cli new Design_Spec.taco.html --title "Design Spec"', purpose: 'Create empty Taco spec' },
+    ],
+  },
+  init: {
+    schema: CLI_SCHEMA_HELP,
+    binaryVersion: CLI_BINARY_VERSION,
+    command: ['init'],
+    summary: 'Initialize document structure from built-in template',
+    positionals: [
+      { name: 'target', type: 'path', required: false, description: 'Destination path or directory' },
+    ],
+    options: [
+      { name: '--template', type: 'string', required: false, default: 'spec', description: 'Template type (spec, architecture, api-reference, adr)' },
+      { name: '--title', type: 'string', required: false, default: null, description: 'Document title' },
+      { name: '--lite', type: 'boolean', required: false, default: false, description: 'Use lite shell' },
+      { name: '--list-templates', type: 'boolean', required: false, default: false, description: 'List available templates' },
+    ],
+    environment: [],
+    output: { stdout: 'JSON summary of initialized files', stderr: 'ErrorResponse JSON on failure', streaming: false },
+    errors: [
+      { code: 'VALIDATION_ERROR', exitCode: 2, recovery: 'Provide valid template name' },
+      { code: 'CONFLICT_ERROR', exitCode: 4, recovery: 'Target already exists' },
+      { code: 'LOCAL_IO_ERROR', exitCode: 1, recovery: 'Check filesystem permissions' },
+    ],
+    examples: [
+      { invocation: 'taco-cli init docs/my-spec --template spec', purpose: 'Initialize spec template in directory' },
+    ],
+  },
+  pack: {
+    schema: CLI_SCHEMA_HELP,
+    binaryVersion: CLI_BINARY_VERSION,
+    command: ['pack'],
+    summary: 'Package local source directory into standalone .taco.html container',
+    positionals: [
+      { name: 'dir', type: 'path', required: true, description: 'Source document directory' },
+    ],
+    options: [
+      { name: '--out', type: 'path', required: false, default: null, description: 'Output .taco.html file path' },
+      { name: '--title', type: 'string', required: false, default: null, description: 'Document title' },
+      { name: '--entry', type: 'path', required: false, default: null, description: 'Initial file opened' },
+      { name: '--root', type: 'path', required: false, default: null, description: 'Bundle root relative path' },
+      { name: '--group', type: 'string', required: false, default: null, description: 'Sidebar group definition' },
+      { name: '--ignore', type: 'glob', required: false, default: null, description: 'Patterns to ignore' },
+      { name: '--lite', type: 'boolean', required: false, default: false, description: 'Use lite shell' },
+      { name: '--dry-run', type: 'boolean', required: false, default: false, description: 'Preview output without writing' },
+    ],
+    environment: [],
+    output: { stdout: 'JSON summary of packed container', stderr: 'ErrorResponse JSON on failure', streaming: false },
+    errors: [
+      { code: 'VALIDATION_ERROR', exitCode: 2, recovery: 'Check paths, entries, or groups' },
+      { code: 'LOCAL_IO_ERROR', exitCode: 1, recovery: 'Check filesystem permissions or source files' },
+    ],
+    examples: [
+      { invocation: 'taco-cli pack docs/ --title Spec --out Spec.taco.html', purpose: 'Package documentation into Taco' },
+    ],
+  },
+  verify: {
+    schema: CLI_SCHEMA_HELP,
+    binaryVersion: CLI_BINARY_VERSION,
+    command: ['verify'],
+    summary: 'Verify integrity, safe paths, data block, and diagram diagnostics of a local Taco',
+    positionals: [
+      { name: 'file', type: 'path', required: true, description: 'Path to .taco.html file' },
+    ],
+    options: [],
+    environment: [],
+    output: { stdout: 'JSON verification results', stderr: 'ErrorResponse JSON on failure', streaming: false },
+    errors: [
+      { code: 'VALIDATION_ERROR', exitCode: 2, recovery: 'Fix invalid bundle structure or diagram syntax' },
+      { code: 'LOCAL_IO_ERROR', exitCode: 1, recovery: 'Check file path and read access' },
+    ],
+    examples: [
+      { invocation: 'taco-cli verify spec.taco.html', purpose: 'Verify Taco document integrity' },
+    ],
+  },
+  refresh: {
+    schema: CLI_SCHEMA_HELP,
+    binaryVersion: CLI_BINARY_VERSION,
+    command: ['refresh'],
+    summary: 'Refresh Taco artifact with received feedback and canonical directory source',
+    positionals: [
+      { name: 'file', type: 'path', required: true, description: 'Path to original .taco.html file' },
+    ],
+    options: [
+      { name: '--handoff', type: 'path', required: true, default: null, description: 'Path to handoff receipt file or - for stdin' },
+      { name: '--dir', type: 'path', required: false, default: null, description: 'Canonical source directory' },
+      { name: '--dry-run', type: 'boolean', required: false, default: false, description: 'Preview refresh without writing' },
+    ],
+    environment: [],
+    output: { stdout: 'JSON summary of refreshed container', stderr: 'ErrorResponse JSON on failure', streaming: false },
+    errors: [
+      { code: 'CONFLICT_ERROR', exitCode: 4, recovery: 'Resolve pending or conflicting edits in canonical source before refresh' },
+      { code: 'VALIDATION_ERROR', exitCode: 2, recovery: 'Check handoff payload and baseline match' },
+      { code: 'LOCAL_IO_ERROR', exitCode: 1, recovery: 'Check filesystem permissions' },
+    ],
+    examples: [
+      { invocation: 'taco-cli refresh spec.taco.html --dir docs/ --handoff receipt.json', purpose: 'Refresh spec with review feedback' },
+    ],
+  },
+  diff: {
+    schema: CLI_SCHEMA_HELP,
+    binaryVersion: CLI_BINARY_VERSION,
+    command: ['diff'],
+    summary: 'Read-only comparison across Taco artifacts, canonical directory, and handoff reviews',
+    positionals: [
+      { name: 'source', type: 'path', required: true, description: 'Source .taco.html or canonical directory' },
+      { name: 'target', type: 'path', required: false, description: 'Target .taco.html file' },
+    ],
+    options: [
+      { name: '--dir', type: 'path', required: false, default: null, description: 'Canonical directory to compare against' },
+      { name: '--handoff', type: 'path', required: false, default: null, description: 'Handoff receipt file to compare against' },
+    ],
+    environment: [],
+    output: { stdout: 'JSON structured difference report', stderr: 'ErrorResponse JSON on failure', streaming: false },
+    errors: [
+      { code: 'VALIDATION_ERROR', exitCode: 2, recovery: 'Check comparison target arguments' },
+      { code: 'LOCAL_IO_ERROR', exitCode: 1, recovery: 'Check file paths and read access' },
+    ],
+    examples: [
+      { invocation: 'taco-cli diff spec.taco.html --dir docs/', purpose: 'Compare Taco against source directory' },
+    ],
+  },
+  inspect: {
+    schema: CLI_SCHEMA_HELP,
+    binaryVersion: CLI_BINARY_VERSION,
+    command: ['inspect'],
+    summary: 'Inspect structure, files, comments, and checkpoints of a local Taco container',
+    positionals: [
+      { name: 'file', type: 'path', required: true, description: 'Path to .taco.html file' },
+    ],
+    options: [
+      { name: '--credentials', type: 'boolean', required: false, default: false, description: 'Scan for embedded collaboration tokens without printing secrets' },
+    ],
+    environment: [],
+    output: { stdout: 'JSON summary of Taco structure', stderr: 'ErrorResponse JSON on failure', streaming: false },
+    errors: [
+      { code: 'VALIDATION_ERROR', exitCode: 2, recovery: 'Check file integrity' },
+      { code: 'LOCAL_IO_ERROR', exitCode: 1, recovery: 'Check file path' },
+    ],
+    examples: [
+      { invocation: 'taco-cli inspect spec.taco.html --credentials', purpose: 'Inspect Taco structure and credentials' },
+    ],
+  },
+  extract: {
+    schema: CLI_SCHEMA_HELP,
+    binaryVersion: CLI_BINARY_VERSION,
+    command: ['extract'],
+    summary: 'Extract credential-free projected files or directory from local Taco container',
+    positionals: [
+      { name: 'file', type: 'path', required: true, description: 'Path to .taco.html file' },
+    ],
+    options: [
+      { name: '--out-dir', type: 'path', required: false, default: null, description: 'Directory to extract files into' },
+      { name: '--files', type: 'string', required: false, default: null, description: 'Comma-separated file paths to extract' },
+      { name: '--dry-run', type: 'boolean', required: false, default: false, description: 'Preview extraction without writing' },
+    ],
+    environment: [],
+    output: { stdout: 'JSON summary of extracted files', stderr: 'ErrorResponse JSON on failure', streaming: false },
+    errors: [
+      { code: 'VALIDATION_ERROR', exitCode: 2, recovery: 'Check safe path boundaries and symlinks' },
+      { code: 'LOCAL_IO_ERROR', exitCode: 1, recovery: 'Check filesystem permissions' },
+      { code: 'CONFLICT_ERROR', exitCode: 4, recovery: 'Choose an output directory without existing target files' },
+    ],
+    examples: [
+      { invocation: 'taco-cli extract spec.taco.html --out-dir extracted/', purpose: 'Safely extract files from Taco' },
+    ],
+  },
+  open: {
+    schema: CLI_SCHEMA_HELP,
+    binaryVersion: CLI_BINARY_VERSION,
+    command: ['open'],
+    summary: 'Open local Taco file in system browser, optionally with feedback loopback listener',
+    positionals: [
+      { name: 'file', type: 'path', required: true, description: 'Path to .taco.html file' },
+    ],
+    options: [
+      { name: '--listen', type: 'boolean', required: false, default: false, description: 'Start loopback listener for human review feedback' },
+      { name: '--port', type: 'number', required: false, default: 0, description: 'Specific port for loopback HTTP listener' },
+      { name: '--timeout', type: 'seconds', required: false, default: 300, description: 'Listener timeout in seconds' },
+      { name: '--no-open', type: 'boolean', required: false, default: false, description: 'Do not automatically launch system browser' },
+    ],
+    environment: [],
+    output: { stdout: 'Single JSON object or NDJSON stream if listening', stderr: 'ErrorResponse JSON on failure', streaming: false },
+    errors: [
+      { code: 'LOCAL_IO_ERROR', exitCode: 1, recovery: 'Check file path and browser launch capability' },
+    ],
+    examples: [
+      { invocation: 'taco-cli open spec.taco.html --listen', purpose: 'Open Taco and listen for review feedback' },
+    ],
+  },
+  listen: {
+    schema: CLI_SCHEMA_HELP,
+    binaryVersion: CLI_BINARY_VERSION,
+    command: ['listen'],
+    summary: 'Start loopback HTTP listener and emit clickable URL for local review feedback',
+    positionals: [
+      { name: 'file', type: 'path', required: true, description: 'Path to .taco.html file' },
+    ],
+    options: [
+      { name: '--port', type: 'number', required: false, default: 0, description: 'Specific port for loopback HTTP listener' },
+      { name: '--timeout', type: 'seconds', required: false, default: 300, description: 'Listener timeout in seconds' },
+      { name: '--no-open', type: 'boolean', required: false, default: true, description: 'Do not launch system browser' },
+    ],
+    environment: [],
+    output: { stdout: 'NDJSON stream of ready event and delivery receipt', stderr: 'ErrorResponse JSON on failure', streaming: true },
+    errors: [
+      { code: 'NETWORK_TIMEOUT', exitCode: 5, recovery: 'Listener timed out before review submission' },
+      { code: 'CONFLICT_ERROR', exitCode: 4, recovery: 'Another listener is already running on this artifact' },
+      { code: 'LOCAL_IO_ERROR', exitCode: 1, recovery: 'Check file path or port availability' },
+    ],
+    examples: [
+      { invocation: 'taco-cli listen spec.taco.html --no-open', purpose: 'Start headless review feedback listener' },
+    ],
+  },
   publish: {
     schema: CLI_SCHEMA_HELP,
     binaryVersion: CLI_BINARY_VERSION,

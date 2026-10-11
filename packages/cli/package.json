@@ -21,7 +21,7 @@
     "taco-cli": "dist/main.js"
   },
   "scripts": {
-    "build": "bun build src/main.ts --outfile dist/main.js --target node",
+    "build": "node ../../scripts/build-shells.mjs && node ../../scripts/build-cli-assets.mjs && bun build src/main.ts --outfile dist/main.js --target node",
     "prepack": "npm run build",
     "test": "vitest run"
   },
