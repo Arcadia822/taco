@@ -28,9 +28,10 @@
   `<feature-directory>/<feature-name>.taco.html` and update it only through the
   installed Taco commands: read the existing Taco first, assemble a fresh copy of
   the shell in memory, write the `taco/files` v1 bundle into `#taco-document`, and
-  preserve `docId`, `comments`, `navigation`, and every other stored bundle field
-  across refreshes. Exclude `*.taco.html` from the bundle and report every
-  exclusion. No CLI is required.
+  preserve the exact local file path, `docId`, `comments`, `navigation`, `checkpoints`,
+  and every other stored bundle field across refreshes. Never reinitialize from a template
+  or create a second file even if research files or titles change. Exclude `*.taco.html`
+  from the bundle and report every exclusion. No CLI is required.
 - Validate the complete result before atomically replacing the destination; never
   copy a blank shell over a reviewed file. Preserve the original while review
   edits are unresolved or conflicted.

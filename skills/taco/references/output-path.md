@@ -41,7 +41,7 @@ Anything else is `malformed`:
 
 Absolute paths are allowed.
 
-**Filename and title are one value.** The filename stem is the normalized title: NFKC → replace every non-alphanumeric except `_` and `-` with `_` → collapse and trim `_`/`-` → fall back to `Untitled` when empty. The renderer and the save path both rely on this correspondence; there is no legal state where the two disagree.
+**For a new artifact, the filename stem is the normalized title:** NFKC → replace every non-alphanumeric except `_` and `-` with `_` → collapse and trim `_`/`-` → fall back to `Untitled` when empty. L1 refresh retains the existing path even when the intended bundle title changes. Browser download/Save a copy may suggest a title-derived filename; import that review copy into the known original artifact rather than treating it as a new review destination.
 
 **Forbidden targets win over L0.** A target inside the skill directory, the extension directory, a template directory, `node_modules/`, or `.git/` is refused (`forbidden`) no matter who asked for it.
 
@@ -82,7 +82,7 @@ The personal archive is `Documents/tacos` under `HOME ?? USERPROFILE`. When both
 | Field | Rule |
 | --- | --- |
 | `docId`, `comments`, `navigation`, `checkpoints`, `access`, `collab`, unknown top-level fields | carry over untouched |
-| title | keep the existing bundle's title; if the target filename stem does not equal its normalized form, report the conflict and stop (never rename silently, never rewrite the title) |
+| title | keep unless the review requests a title change; update the bundle title and HTML title without renaming the existing artifact |
 | each file's `id` | carry over (comment anchors and block identity depend on it) |
 | `blocks` | keep **only** while that file's new content is byte-identical to the previous content; drop it as soon as the content changes and let the runtime rebuild it |
 | `sourceHash` | keep the existing value when the content is byte-identical; when the content changed, recompute it only if the host can compute SHA-256, otherwise drop the field — it is optional in `bundle-format.md`, and never leave a stale hash |

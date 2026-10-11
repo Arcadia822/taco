@@ -48,7 +48,7 @@ Consequence: **omitting `navigation` and `checkpoints` does not give you a flat 
 | `format`  | exactly `"taco/files"`                                                                 |
 | `version` | integer `>= 1`; higher values load as frozen (do not downgrade)                        |
 | `docId`   | non-empty string; stable identity, preserved on refresh; mint a new unique one per document |
-| `title`   | non-empty string; drives the persisted filename stem and `<title>`                      |
+| `title`   | non-empty string; drives `<title>` and the initial filename stem; refresh keeps the existing path |
 | `root`    | safe relative POSIX path: no leading `/`, no `\`, no NUL, no empty/`.`/`..` segment     |
 | `files`   | array (may be empty); every entry needs `path`, `mediaType`, `content` as strings       |
 
