@@ -179,9 +179,8 @@ jobs:
                 --file /src/source.tar.gz --directory /app --strip-components=1
               npm ci --no-audit --no-fund
               npm run build
-              npm run --prefix packages/host build || true
-              node extensions/taco/bin/taco.mjs pack demo-spec --output demo-spec/demo-spec.taco.html || true
-            ' > /tmp/build.log 2>&1
+              npm run --prefix packages/host build
+              node extensions/taco/bin/taco.mjs pack demo-spec --output demo-spec/demo-spec.taco.html
           status=$?
           set -e
 
@@ -219,10 +218,7 @@ jobs:
               npm run --prefix packages/host start -- --hostname 127.0.0.1 --port 4174 &
               HOST_PID=$!
               trap "kill ${HOST_PID} 2>/dev/null || true" EXIT
-              TACO_FILE="dist-single/Taco_Spec.taco.html"
-              if [ -f "demo-spec/demo-spec.taco.html" ]; then
-                TACO_FILE="demo-spec/demo-spec.taco.html"
-              fi
+              TACO_FILE="demo-spec/demo-spec.taco.html"
               node /trusted-tools/collect-outlines.mjs \
                 --taco-file "$TACO_FILE" \
                 --host-url http://127.0.0.1:4174 \
@@ -380,9 +376,8 @@ jobs:
                 --file /src/source.tar.gz --directory /app --strip-components=1
               npm ci --no-audit --no-fund
               npm run build
-              npm run --prefix packages/host build || true
-              node extensions/taco/bin/taco.mjs pack demo-spec --output demo-spec/demo-spec.taco.html || true
-            ' > /tmp/build.log 2>&1
+              npm run --prefix packages/host build
+              node extensions/taco/bin/taco.mjs pack demo-spec --output demo-spec/demo-spec.taco.html
           status=$?
           set -e
 
@@ -421,10 +416,7 @@ jobs:
               npm run --prefix packages/host start -- --hostname 127.0.0.1 --port 4174 &
               HOST_PID=$!
               trap "kill ${HOST_PID} 2>/dev/null || true" EXIT
-              TACO_FILE="dist-single/Taco_Spec.taco.html"
-              if [ -f "demo-spec/demo-spec.taco.html" ]; then
-                TACO_FILE="demo-spec/demo-spec.taco.html"
-              fi
+              TACO_FILE="demo-spec/demo-spec.taco.html"
               node /trusted-tools/execute-preview.mjs \
                 --plan-file /plan/preview-plan.json \
                 --taco-file "$TACO_FILE" \
