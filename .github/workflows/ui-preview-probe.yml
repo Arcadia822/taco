@@ -35,12 +35,10 @@ jobs:
             --user "1000:1000" \
             --security-opt "no-new-privileges:true" \
             --cap-drop ALL \
-            --pids-limit 1024 \
-            --memory "6g" \
-            --cpus "2" \
             --env HOME=/home/pwuser \
             --env npm_config_cache=/tmp/npm-cache \
             --env NEXT_TELEMETRY_DISABLED=1 \
+            --env NEXT_FONT_GOOGLE_MOCKED=1 \
             --mount type=volume,src=taco-preview-app,dst=/app,volume-nocopy \
             --volume "$PWD:/src:ro" \
             --workdir /app \
