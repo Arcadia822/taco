@@ -27,6 +27,7 @@ When a user asks an agent to install, use, package, or review Taco, read `README
 - Treat collaboration-enabled Taco files as potentially credential-bearing. Follow `docs/agent-installation.md` before sending their contents to any external model, service, log, or ticket. Local inspection remains allowed, and revocation or key reset is an explicit user action.
 - Tacobin deploys only from a pushed `tacobin-v*` tag. `packages/host/vercel.json` disables Git-triggered Vercel deployments, and the tag drives the Deploy Tacobin workflow, which calls the project's Deploy Hook; a branch push, a pull request, or the tag by itself publishes nothing.
 - Issue 管理：需求、任务与缺陷一律用 `linctl` 在 Linear 团队 `TACO` 建 Issue，不手动建 GitHub Issue（Linear 会自动同步到 GitHub）。创建时补全上下文字段：状态 `Backlog`、Linear 内建 `priority`（不用 priority 标签代替）、已有语义 `labels`，以及适用的 `project`。
+- Issue 驱动开发：当提示词指向一个 Issue（如 `TACO-xx`），Agent 在查看后若判断该任务是开始新开发的一个 Issue，则默认使用 `Poteto Mode` Skill 进行开发流程。
 
 # Agent 踩坑复盘与规则闭环 (LESSONS.md)
 
