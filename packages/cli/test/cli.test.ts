@@ -117,7 +117,56 @@ describe('taco-cli (Phase 1)', () => {
     expect(json.baseRevisionId).toBe('993b05fd-2f80-48cc-aafd-1d7564781001')
     expect(json.contentHash).toMatch(/^sha256:[a-f0-9]{64}$/)
   })
-
+  it('routes publish to default official host, environment override, and --host precedence', async () => {
+    const originalFetch = globalThis.fetch
+    const originalEnv = process.env.TACO_HOST_URL
+    const requests: Array<{ url: string; method?: string; title: string; path: string }> = []
+    globalThis.fetch = async (input, init) => {
+      const payload = JSON.parse(String(init?.body))
+      const origin = new URL(String(input)).origin
+      requests.push({
+        url: String(input),
+        method: init?.method,
+        title: payload.snapshot.title,
+        path: payload.snapshot.files[0].path,
+      })
+      return Response.json({
+        command: 'publish',
+        host: origin,
+        tacoId: '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001',
+        url: `${origin}/t/8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001`,
+      })
+    }
+    try {
+      for (const [envHost, args, origin] of [
+        [undefined, [], 'https://taco.arcadia-han.com'],
+        ['https://custom-env.taco.com', [], 'https://custom-env.taco.com'],
+        ['https://custom-env.taco.com', ['--host', 'http://localhost:32167'], 'http://localhost:32167'],
+      ] as const) {
+        if (envHost === undefined) delete process.env.TACO_HOST_URL
+        else process.env.TACO_HOST_URL = envHost
+        const result = await runCli(['publish', FIXTURE_TACO, ...args])
+        expect(result.exitCode).toBe(0)
+        expect(requests.at(-1)).toEqual({
+          url: `${origin}/v1/tacos`,
+          method: 'POST',
+          title: '008-taco-host-contract',
+          path: 'specs/008-taco-host-contract/contracts/cli.md',
+        })
+        expect(JSON.parse(result.stdout!).url).toBe(`${origin}/t/8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001`)
+      }
+      for (const args of [['help'], ['help', 'publish']]) {
+        const help = JSON.parse((await runCli(args)).stdout!)
+        const requestOrigin = new URL(requests[0].url).origin
+        expect(help.options.find((option: { name: string }) => option.name === '--host').default).toBe(requestOrigin)
+        expect(help.environment.find((variable: { name: string }) => variable.name === 'TACO_HOST_URL').default).toBe(requestOrigin)
+      }
+    } finally {
+      globalThis.fetch = originalFetch
+      if (originalEnv === undefined) delete process.env.TACO_HOST_URL
+      else process.env.TACO_HOST_URL = originalEnv
+    }
+  })
   it('carries the requested resume cursor to the Host stream URL', async () => {
     const originalFetch = globalThis.fetch
     let requestedUrl = ''

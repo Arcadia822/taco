@@ -1244,7 +1244,6 @@ export default function HomePage() {
                 </span>
               </div>
               <div className="workflow-terminal__body">
-                <div className="workflow-terminal__env"><span>$</span><code>export TACO_HOST_URL={TRACE_HOST}</code></div>
                 <div className="workflow-terminal__step">
                   <div className="workflow-terminal__agent"><span>AGENT / 01</span>{t.tracePublish}</div>
                   <div className="workflow-terminal__command"><span>$</span><code>taco-cli publish design.taco.html</code></div>

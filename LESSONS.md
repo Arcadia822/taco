@@ -25,6 +25,7 @@ Guided by the principle **Encode Lessons in Structure**:
 | [LESSON-005](#lesson-005-artifact-id-downloads-nest-the-consumed-files)     | Artifact-ID Downloads Nest the Consumed Files     |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
 | [LESSON-006](#lesson-006-empty-docker-volume-copy-up-overrides-ownership)   | Empty Docker Volume Copy-Up Overrides Ownership   |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
 | [LESSON-007](#lesson-007-github-rejects-empty-asset-bootstrap-trees)        | GitHub Rejects Empty Asset Bootstrap Trees        |      1      |   **open**    | `.github/workflows/scripts/publish-preview.mjs`, `tests/ui-preview-pipeline.test.ts` |
+| [LESSON-008](#lesson-008-occupied-preview-port-serves-another-worktree)     | Occupied Preview Port Serves Another Worktree     |      1      |   **open**    | Unique preview ports and rendered workflow verification                              |
 
 ---
 
@@ -223,3 +224,30 @@ The absent assets branch bootstrap submitted `{ tree: [] }` to the Git Trees API
 
 - Initialize the orphan branch with a valid tree containing its generated-assets README. Retain `parents: []` and the existing create-ref race handling.
 - The first-publication regression rejects empty tree requests and checks the orphan commit references the initialized tree.
+
+---
+
+### LESSON-008: Occupied Preview Port Serves Another Worktree
+
+- **ID**: `LESSON-008`
+- **Category**: `tooling`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: Unique preview ports and rendered workflow verification
+
+#### Symptom
+
+A preview tool reports a new Next service ready, then the process exits. The browser still loads a homepage containing code removed from the current worktree.
+
+#### Root Cause
+
+The readiness port was already occupied by a different Next process. Port availability proved that some server was listening, not that the newly launched process served this worktree.
+
+#### Evidence
+
+- 2026-10-11, TACO-61. Port 32168 served the old environment setup row. `lsof` showed an existing Next listener. A service launched from this worktree on port 32169 rendered the updated workflow without that row.
+
+#### Prevention & Escalation
+
+- Assign a unique port to each worktree preview and launch from the package directory.
+- Verify a changed rendered element before treating readiness as proof. Report readiness mismatches to the tool owner.
