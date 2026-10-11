@@ -40,7 +40,7 @@ Refreshes keep `docId`, comments, navigation, and Checkpoints, which is what let
 ## Security
 
 - File paths must stay inside the document folder; anything that escapes is rejected;
-- Plain `.html` source files cannot be packed into a Taco;
+- Plain `.html` source files are embedded read-only in a sandboxed frame that blocks all external network access;
 - A Taco with online collaboration enabled may carry access credentials; do not pass it around.
 
 ## Hosts
