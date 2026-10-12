@@ -294,6 +294,44 @@ describe('skill packer', () => {
     expect(readFileSync(artifact, 'utf8')).toContain('name="taco-shell-variant" content="lite"')
   })
 
+  it.each(['complete', 'lite'])('upgrades legacy %s shell for HTML while preserving review metadata', (variant) => {
+    const directory = freeFormDirectory()
+    const stockPath = resolve(`skills/taco/taco-shell${variant === 'lite' ? '-lite' : ''}.html`)
+    const legacyPath = join(fixtureDir(), 'legacy.html')
+    write(legacyPath, '<!doctype html><head><meta name="taco-shell-variant" content="' + variant + '"><script type="application/taco+json" id="taco-document"></script></head><body>Legacy viewer</body>')
+    pack(['--dir', directory, '--title', 'Roguelike Tactics Research', '--shell', legacyPath])
+    const artifact = join(directory, 'Roguelike_Tactics_Research.taco.html')
+    writeBundle(artifact, (bundle) => {
+      bundle.navigation = { version: 1, entry: 'research.md', groups: [] }
+      bundle.checkpoints = { version: 1, nodes: [{ id: 'review', title: 'Review', after: [], documents: [{ path: 'roguelike-tactics-game/research.md' }] }], documents: [] }
+      bundle.comments = [{ id: 'preserved-thread', status: 'open', createdAt: '2026-10-11T00:00:00Z', updatedAt: '2026-10-11T00:00:00Z', anchor: { path: 'roguelike-tactics-game/research.md', position: { start: 2, end: 10 }, quote: { exact: 'Roguelike', prefix: '# ', suffix: '' } }, messages: [{ id: 'preserved-message', author: 'Reviewer', body: 'Keep this review', createdAt: '2026-10-11T00:00:00Z' }] }]
+      bundle.vendorField = { preserve: true }
+    })
+    const before = JSON.parse(readBundle(artifact).json)
+    write(join(directory, 'report.html'), '<!doctype html><h1>Report</h1><script>document.body.dataset.ready="yes"</script>')
+    pack(['--dir', directory, '--title', 'Roguelike Tactics Research'])
+    const after = readBundle(artifact)
+    expect(after.parsed.ok).toBe(true)
+    const afterBundle = JSON.parse(after.json)
+    for (const field of ['docId', 'comments', 'navigation', 'checkpoints', 'vendorField']) expect(afterBundle[field]).toEqual(before[field])
+    expect(afterBundle.files.find((file: { path: string }) => file.path.endsWith('/report.html')).mediaType).toBe('text/html')
+    expect(after.html.replace(dataBlock, '').replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, '')).toBe(readFileSync(stockPath, 'utf8').replace(dataBlock, '').replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, ''))
+  })
+
+  it('rejects an explicitly selected incompatible HTML shell without replacing the artifact', () => {
+    const directory = freeFormDirectory()
+    pack(['--dir', directory, '--title', 'Roguelike Tactics Research'])
+    const artifact = join(directory, 'Roguelike_Tactics_Research.taco.html')
+    const before = readFileSync(artifact, 'utf8')
+    write(join(directory, 'report.html'), '<h1>Report</h1>')
+    const incompatible = join(fixtureDir(), 'custom.html')
+    write(incompatible, '<script type="application/taco+json" id="taco-document"></script>')
+    const result = spawnSync(process.execPath, [packScript, '--dir', directory, '--title', 'Roguelike Tactics Research', '--shell', incompatible], { encoding: 'utf8' })
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('does not declare embedded-html support')
+    expect(readFileSync(artifact, 'utf8')).toBe(before)
+  })
+
   it('refuses to downgrade a bundle written by a newer format version', () => {
     const directory = freeFormDirectory()
     pack(['--dir', directory, '--title', 'Roguelike Tactics Research'])
@@ -368,5 +406,37 @@ describe('skill packer', () => {
     expect(readFileSync(artifact, 'utf8').startsWith(shell.slice(0, shell.indexOf('<title')))).toBe(true)
     const { parsed } = readBundle(artifact)
     expect(parsed.ok).toBe(true)
+  })
+  it('packs a directory containing page.html as text/html and parses cleanly', () => {
+    const directory = fixtureDir()
+    write(join(directory, 'index.md'), '# Index\n')
+    write(join(directory, 'page.html'), '<!doctype html><html><head><title>Page</title></head><body><h1>Hello</h1></body></html>\n')
+
+    pack(['--dir', directory, '--title', 'HTML Pack Test'])
+    const artifact = join(directory, 'HTML_Pack_Test.taco.html')
+    const { parsed } = readBundle(artifact)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    const htmlFile = parsed.bundle.files.find((f) => f.path.endsWith('page.html'))
+    expect(htmlFile).toBeDefined()
+    expect(htmlFile?.mediaType).toBe('text/html')
+    expect(htmlFile?.content).toContain('<h1>Hello</h1>')
+  })
+
+  it('rejects a bundle carrying an x.taco.html file path', () => {
+    const directory = freeFormDirectory()
+    pack(['--dir', directory, '--title', 'Roguelike Tactics Research'])
+    const artifact = join(directory, 'Roguelike_Tactics_Research.taco.html')
+
+    writeBundle(artifact, (bundle) => {
+      const files = bundle.files as Array<Record<string, unknown>>
+      files.push({
+        path: `${bundle.root}/sub/nested.taco.html`,
+        mediaType: 'text/html',
+        content: '<!doctype html><title>Nested</title>',
+      })
+    })
+
+    expect(() => pack(['verify', artifact])).toThrow(/bundle file path must not end in \.taco\.html/)
   })
 })

@@ -92,6 +92,7 @@ Agent 只复制 skill 的 shell、把文档写入其数据块，目录中的其�
 Agent 需要遵守：
 
 - 被评审的目录始终是 canonical source。`.taco.html` 只是运输载体：复制 skill 的 `taco-shell.html`，再把 `taco/files` v1 bundle JSON 写入其 `#taco-document` 数据块，并在每次刷新时保留 `docId`、comments、navigation，以及已有的 Checkpoint 图和状态。只有该数据块和转义后的 HTML `<title>` 可写；不要手工修改其余 shell。
+- 先按 Skill 判断是否需要人审、设计深度与项目约定，再选择 CLI 命令或模板。本地回执与 Checkpoint 状态不代表获准实施。派生 HTML 页面保持只读，从其源内容重新生成；向旧 Taco 加入 HTML 时，若原 Shell 不兼容，使用同变体的当前 stock Shell，并保留全部 bundle 字段。
 - 当宿主允许本地 `file://` 导航时，用用户的浏览器打开生成的文件，并如实报告 `presented as a clickable file`、`opened`、`opened and verified` 三者中真正发生的一项。headless 加载只是内部证据，不能当作面向用户的可视化展示。
 - 通过对应渠道取回评审结果：本地评审通过浏览器的 **Handoff**（发送包含未保存改动与 open comment 的内存快照到本地 listener，或复制 Markdown 到剪贴板）或评审者保存后的 `.taco.html`。独立保存文件不重置评审交接基线。可选的托管评审（Tacobin）中，访客以自报姓名编辑和评论并自动保存，但评论和自动保存不代表评审完成且不会自动唤醒会话，仅在评审者显式点击「交接」后生成 `review.handed_off` 事件并通过 `taco-cli` 获取不可变交接快照。未收到评审输入时如实说明，不要导入并未真正获得的内容。
 - 评审期间保持 Agent 订阅在线：本地评审使用 `taco-cli listen <file.taco.html>`（或 `taco-cli open <file.taco.html> --listen`），托管评审使用 `taco-cli subscribe <tacoId>`。交接需要活跃监听者，否则页面提供剪贴板复制或展示设置命令。
@@ -112,7 +113,7 @@ speckit.taco.review specs/001-example/001-example.taco.html
 
 更严格的“全有或全无”规则属于 extension 的可选 `sync` CLI 工具：它为每个打包文件记录 SHA-256 基线，当 canonical 文件与 Taco 副本自打包后都发生变化时，拒绝任何写入。这两条都不是 skill 离线路径上自动生效的行为 —— 当评审通过 Handoff 或保存文件到达、链路中没有 CLI 时，由 Agent 自己完成同样的比对，并在遇到无法归因的改动时停止。
 
-打包器包含可见的 UTF-8 普通文件，以及单个不超过 10 MiB、验证通过的本地 PNG 资源。PNG 会嵌入 Taco 以供 Markdown 离线渲染，并在评审往返过程中按二进制数据原样保留。默认只排除 `*.taco.html` 和隐藏路径；可重复的 `--ignore` 参数可以显式排除其他路径。普通 `.html`、`.htm` 源文件不再受支持，未显式忽略时打包会明确报错；作为产品容器的 `.taco.html` 不受此限制。
+打包器包含可见的 UTF-8 普通文件，以及单个不超过 10 MiB、验证通过的本地 PNG 资源。PNG 会嵌入 Taco 以供 Markdown 离线渲染，并在评审往返过程中按二进制数据原样保留。默认只排除 `*.taco.html` 和隐藏路径；可重复的 `--ignore` 参数可以显式排除其他路径。普通 `.html`、`.htm` 源文件以 `text/html` 打包，在本地与 Tacobin 中均以禁止联网的沙箱只读展示；嵌套 `.taco.html` 容器仍被排除。
 
 每次 update 成功后，Agent 都会把对应 Taco 作为原生、可点击的本地文件展示，并在宿主允许本地 HTML 导航时用用户的浏览器打开它。在 Codex 中，由用户点击后交给 Browser 打开；Agent 不会尝试自主导航到 `file://`。headless 启动检查只是内部证据，不会当作面向用户的可视化展示。
 

@@ -13,6 +13,7 @@ import {
   type NavigationManifest,
   type TacoFile,
 } from './model.ts'
+import { EMBEDDED_HTML_SANDBOX, embeddedHtmlDocument } from './embedded-html.ts'
 import { resolveCheckpoints, setDocumentStatus, type DocumentStatus, type ResolvedCheckpoints } from '@taco/protocol'
 import { canSaveAndUnpack, canWriteInPlace, saveAndUnpack, saveCopy, saveFile, type SaveResult } from './kernel/save.ts'
 import { getDefaultRichEditorAdapter, type RichEditorAdapter, type RichEditorHandle } from './rich-editor.ts'
@@ -224,7 +225,7 @@ export class FileBrowser {
       this.reviewBaselineDoc.files.map((f) => [f.id ?? f.path, f])
     )
     return this.bundle.files
-      .filter((file) => !isInternalFile(file.path) && dirtyIds.has(file.id ?? file.path))
+      .filter((file) => !isInternalFile(file.path) && fileKind(file) !== 'html' && dirtyIds.has(file.id ?? file.path))
       .map((file) => {
         const rel = relativePath(this.bundle, file)
         const base = baselineMap.get(file.id ?? file.path) ?? this.reviewBaselineDoc.files.find((f) => f.path === file.path)
@@ -761,6 +762,16 @@ export class FileBrowser {
         audio.src = file.content
       }
       container.append(audio)
+      this.viewer.append(container)
+    } else if (kind === 'html') {
+      const container = el('div', 'media-document-container html-document-container')
+      const iframe = document.createElement('iframe')
+      iframe.className = 'media-document-preview html-document-preview'
+      iframe.setAttribute('sandbox', EMBEDDED_HTML_SANDBOX)
+      iframe.setAttribute('referrerpolicy', 'no-referrer')
+      iframe.title = file.title || fallbackFileTitle(file)
+      iframe.srcdoc = embeddedHtmlDocument(file.content)
+      container.append(iframe)
       this.viewer.append(container)
     } else if (kind === 'markdown') {
       this.mountMarkdownEditor(file, mountSerial)

@@ -81,6 +81,8 @@ export const executePack = async (
     const msg = err instanceof Error ? err.message : String(err)
     const isValidation =
       msg.includes('not supported') ||
+      msg.includes('must not end in .taco.html') ||
+      msg.includes('embedded-html') ||
       msg.includes('not a safe') ||
       msg.includes('does not match') ||
       msg.includes('duplicate') ||
@@ -91,7 +93,6 @@ export const executePack = async (
       msg.includes('symbolic link') ||
       msg.includes('Non-canonical') ||
       msg.includes('required directory')
-
     const isConflict = msg.includes('already exists')
     if (isConflict) {
       const error = makeCliError('CONFLICT_ERROR', msg)

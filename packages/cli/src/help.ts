@@ -200,7 +200,7 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
       { name: 'target', type: 'path', required: false, description: 'Destination path or directory' },
     ],
     options: [
-      { name: '--template', type: 'string', required: false, default: 'spec', description: 'Template type (spec, architecture, api-reference, adr)' },
+      { name: '--template', type: 'string', required: false, default: 'spec', description: 'Template type (spec, architecture, api-reference, adr, prd, interaction)' },
       { name: '--title', type: 'string', required: false, default: null, description: 'Document title' },
       { name: '--lite', type: 'boolean', required: false, default: false, description: 'Use lite shell' },
       { name: '--list-templates', type: 'boolean', required: false, default: false, description: 'List available templates' },

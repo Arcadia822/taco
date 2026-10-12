@@ -9,6 +9,7 @@ updated: 2026-10-03
 - **Single-file container**: documents, reader, editor, and comments in one offline-capable `.taco.html`;
 - **Review and handoff**: comments on selected text, Mermaid nodes, and code lines; Handoff;
 - **Structured rendering**: YAML properties panel, JSON/YAML source editing, OpenAPI overview, Mermaid preview and syntax checks;
+- **Embedded single-page HTML**: generated `.html` pages pack into the Taco and render inline in a sandbox;
 - **Checkpoints**: stage graph, four statuses, document requirements, not-created placeholders, project templates;
 - **Lite shell**: an online edition of about 180 KB;
 - **Tacobin online review**: share links, autosave, explicit handoff, `taco-cli` subscriptions.

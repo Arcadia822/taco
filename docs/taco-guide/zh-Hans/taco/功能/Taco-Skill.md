@@ -36,7 +36,7 @@ npx skills@latest add arcadia822/taco --skill=taco
 
 - 复制 skill 自带的 shell，只把文档写进其中的数据块，不改动应用本身；
 - 刷新时保留文档身份（`docId`）、评论线程、导航和检查点，所以你重新打开的始终是「同一个」Taco；
-- 默认排除隐藏文件和其他 `.taco.html`，拒绝普通 HTML 源文件。
+- 默认排除隐藏文件和其他 `.taco.html`；HTML 源文件打包为内嵌只读页面。
 
 ### 打开给你看
 

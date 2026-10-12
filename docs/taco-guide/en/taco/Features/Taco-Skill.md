@@ -36,7 +36,7 @@ If `npx skills` is unavailable, copying the `skills/taco/` folder into your agen
 
 - Copies the skill's shell and writes your documents only into its data block, never touching the application itself;
 - Keeps the document identity (`docId`), comment threads, navigation, and Checkpoints on refresh, so you always reopen the same Taco;
-- Excludes hidden files and other `.taco.html` files by default, and rejects plain HTML source files.
+- Excludes hidden files and other `.taco.html` files by default; HTML source files pack as embedded read-only pages.
 
 ### Show it to you
 

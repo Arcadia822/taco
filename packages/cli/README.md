@@ -70,7 +70,7 @@ Creates a new blank `.taco.html` specification review container with an empty `f
 
 ### `taco-cli init [target] --template <name>`
 
-Initializes a new specification from bundled templates (`spec`, `adr`, `architecture`, `api-reference`). A directory target creates canonical Markdown and a Taco; a `.taco.html` target creates only the container.
+Initializes a new specification from bundled templates (`spec`, `adr`, `architecture`, `api-reference`, `prd`, `interaction`). A directory target creates canonical Markdown and a Taco; a `.taco.html` target creates only the container.
 
 - `--title <title>`: Custom document title.
 - `--lite`: Use the Lite shell variant.
@@ -78,7 +78,7 @@ Initializes a new specification from bundled templates (`spec`, `adr`, `architec
 
 ### `taco-cli pack <dir>`
 
-Packs a local documentation directory into a standalone `.taco.html` review artifact.
+Packs a local documentation directory into a standalone `.taco.html` review artifact. Supports Markdown, code, diagrams, images, and single-page HTML (`text/html`, rendered read-only in a sandbox).
 
 - `--title <title>`: Document title (defaults to directory name).
 - `--out <path>`: Explicit output path.
@@ -96,7 +96,7 @@ Performs read-only validation of the `#taco-document` data block, path security,
 
 ### `taco-cli refresh <file.taco.html>`
 
-Refreshes an existing `.taco.html` in place after canonical source edits, preserving stable `docId`, comments, checkpoints, navigation, and unknown metadata fields.
+Refreshes an existing `.taco.html` in place after canonical source edits, preserving stable `docId`, comments, checkpoints, navigation, and unknown metadata fields. When refreshed with embedded HTML sources, legacy shells lacking `embedded-html` capability are compatibly upgraded to the current stock shell while preserving Complete/Lite variant.
 
 - `--dir <path>`: Canonical source directory (defaults to the bundle root relative to the Taco).
 - `--handoff <path|->`: Required local handoff receipt or payload, or `-` for stdin. Rejects remote URLs.

@@ -14,12 +14,22 @@ import {
 } from '../../../skills/taco/scripts/pack.mjs'
 import { decodePng } from '../../../skills/taco/scripts/png.mjs'
 import { EXIT_CODES, makeCliError } from './errors.ts'
+import { COMPLETE_SHELL_HTML, LITE_SHELL_HTML } from './generated/assets.ts'
 import {
   assertSafeDestination,
   verifyNoSymlinksInAncestry,
-  verifyNotForbidden,
 } from './local-paths.ts'
 
+const DATA_BLOCK = /<script\b(?=[^>]*\bid=["']taco-document["'])[^>]*>[\s\S]*?<\/script>/i
+
+const supportsEmbeddedHtml = (html: string): boolean => {
+  const shell = html.replace(DATA_BLOCK, '')
+  const marker = shell.match(/<meta\b(?=[^>]*\bname=["']taco-shell-features["'])[^>]*>/i)?.[0]
+  return marker?.match(/\bcontent=["']([^"']*)["']/i)?.[1].split(/\s+/).includes('embedded-html') ?? false
+}
+
+const isHtmlFile = (path: string, mediaType?: string): boolean =>
+  /\.html?$/i.test(path) || mediaType?.split(';')[0].trim().toLowerCase() === 'text/html'
 export interface RefreshOptions {
   filePath: string
   handoffPath: string
@@ -254,10 +264,8 @@ export const executeRefresh = async (
     return { exitCode: EXIT_CODES.LOCAL_IO_ERROR, stderr: JSON.stringify(error) }
   }
 
-  // Verify canonical directory destination security (no symlinks in ancestry or forbidden targets)
   try {
     await verifyNoSymlinksInAncestry(canonicalDir)
-    await verifyNotForbidden(canonicalDir)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     const error = makeCliError('VALIDATION_ERROR', msg)
@@ -305,6 +313,14 @@ export const executeRefresh = async (
     const snapFile = snapshotFilesMap.get(bundlePath)
     const origFile = originalFilesMap.get(bundlePath)
     const canonicalFile = canonicalCollectedMap.get(bundlePath)
+    const isHtml = isHtmlFile(bundlePath, snapFile?.mediaType ?? baseFile?.mediaType ?? canonicalFile?.mediaType)
+    if (isHtml && baseFile && snapFile && baseFile.content !== snapFile.content) {
+      const error = makeCliError(
+        'CONFLICT_ERROR',
+        `Tampering detected: read-only HTML file '${bundlePath}' content was modified in review handoff`,
+      )
+      return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+    }
 
     if (!baseFile && snapFile) {
       // Addition in review: canonical source must hold the reviewed content
@@ -478,8 +494,41 @@ export const executeRefresh = async (
 
   validateBundle(refreshedBundle)
 
+  let finalShell = originalHtml
+  let shellReplaced = false
+  const warnings: string[] = []
+
+  const hasEmbeddedHtml = refreshedBundle.files.some(
+    (file) => isHtmlFile(file.path, file.mediaType),
+  )
+
+  if (hasEmbeddedHtml && !supportsEmbeddedHtml(originalHtml)) {
+    const variant = shellVariantOf(originalHtml)
+
+    const stockShell = variant === 'lite' ? LITE_SHELL_HTML : COMPLETE_SHELL_HTML
+    if (!supportsEmbeddedHtml(stockShell)) {
+      const error = makeCliError(
+        'VALIDATION_ERROR',
+        `Shell lacks embedded-html support: variant ${variant}`,
+      )
+      return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+    }
+
+    if (shellVariantOf(stockShell).split(' ')[0] !== shellVariantOf(originalHtml).split(' ')[0]) {
+      const error = makeCliError(
+        'VALIDATION_ERROR',
+        'HTML refresh must preserve the existing Complete/Lite shell variant',
+      )
+      return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+    }
+
+    finalShell = stockShell
+    shellReplaced = true
+    warnings.push('Replaced legacy shell with the current stock shell of the same variant for embedded HTML')
+  }
+
   if (!options.dryRun) {
-    const updatedHtml = embedBundle(originalHtml, refreshedBundle)
+    const updatedHtml = embedBundle(finalShell, refreshedBundle)
     await atomicWrite(artifactPath, updatedHtml)
   }
 
@@ -492,7 +541,8 @@ export const executeRefresh = async (
     fileCount: refreshedBundle.files.length,
     commentCount: refreshedBundle.comments?.length ?? 0,
     checkpoints: Boolean(refreshedBundle.checkpoints),
-    shellVariant: shellVariantOf(originalHtml),
+    shellVariant: shellVariantOf(finalShell),
+    ...(shellReplaced ? { shellReplaced: true, warnings } : {}),
   }
 
   return { exitCode: EXIT_CODES.OK, stdout: JSON.stringify(result, null, 2) }

@@ -402,7 +402,9 @@ export const runCli = async (
       return { exitCode: EXIT_CODES.OK, stdout: JSON.stringify(diffResult, null, 2) }
     } catch (err) {
       const code = (err as { code?: string })?.code || 'VALIDATION_ERROR'
-      const exitCode = code === 'LOCAL_IO_ERROR' ? EXIT_CODES.LOCAL_IO_ERROR : EXIT_CODES.VALIDATION_ERROR
+      const exitCode = code === 'LOCAL_IO_ERROR' ? EXIT_CODES.LOCAL_IO_ERROR
+        : code === 'CONFLICT_ERROR' ? EXIT_CODES.CONFLICT_ERROR
+          : EXIT_CODES.VALIDATION_ERROR
       const error = makeCliError(code, (err as Error).message)
       return { exitCode, stderr: JSON.stringify(error) }
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultFile, fileKind, isInternalFile, parseBundle, type TacoBundle } from '../src/model.ts'
+import { defaultFile, fileKind, isInternalFile, parseBundle, type TacoBundle, type TacoFile } from '../src/model.ts'
 
 const bundle = (): TacoBundle => ({
   format: 'taco/files',
@@ -101,22 +101,48 @@ describe('file-first Taco bundle', () => {
     expect(parseBundle(JSON.stringify(invalid))).toMatchObject({ ok: false, err: 'shape' })
   })
 
-  it('rejects ordinary HTML source files', () => {
-    const htmlPath = bundle()
-    htmlPath.files.push({
+  it('accepts text/html bundle files and classifies their fileKind as html', () => {
+    const htmlBundle = bundle()
+    htmlBundle.files.push({
       path: 'specs/001-test/prototype.html',
-      mediaType: 'text/plain',
+      mediaType: 'text/html',
       content: '<!doctype html><title>Prototype</title>',
     })
-    expect(parseBundle(JSON.stringify(htmlPath))).toMatchObject({
+    const parsed = parseBundle(JSON.stringify(htmlBundle))
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    const file = parsed.bundle.files.find((f) => f.path === 'specs/001-test/prototype.html')!
+    expect(fileKind(file)).toBe('html')
+
+    // Parameterized media type text/html; charset=utf-8
+    const paramFile: TacoFile = {
+      path: 'specs/001-test/page.html',
+      mediaType: 'text/html; charset=utf-8',
+      content: '<h1>Page</h1>',
+    }
+    expect(fileKind(paramFile)).toBe('html')
+
+    // Extension fallback for a generic text/plain mediaType
+    const genericHtml: TacoFile = {
+      path: 'specs/001-test/page.htm',
+      mediaType: 'text/plain',
+      content: '<h1>Page</h1>',
+    }
+    expect(fileKind(genericHtml)).toBe('html')
+  })
+
+  it('rejects bundle files ending in .taco.html', () => {
+    const tacoHtml = bundle()
+    tacoHtml.files.push({
+      path: 'specs/001-test/nested.taco.html',
+      mediaType: 'text/html',
+      content: '<!doctype html><title>Nested</title>',
+    })
+    expect(parseBundle(JSON.stringify(tacoHtml))).toMatchObject({
       ok: false,
       err: 'shape',
-      detail: 'HTML source files are not supported: specs/001-test/prototype.html',
+      detail: 'bundle file path must not end in .taco.html: specs/001-test/nested.taco.html',
     })
-
-    const htmlMediaType = bundle()
-    htmlMediaType.files[2].mediaType = 'text/html'
-    expect(parseBundle(JSON.stringify(htmlMediaType))).toMatchObject({ ok: false, err: 'shape' })
   })
 
   it('rejects the legacy sourceUrl field on any file', () => {

@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.15.0](https://github.com/Arcadia822/taco/compare/v0.14.5...v0.15.0) (2026-10-11)
+
+### Features
+
+* **ci**: 实现隔离动态桌面预览并稳定 Host 字体构建 (#132) ([a718c98](https://github.com/Arcadia822/taco/commit/a718c9884cc16b7f9a93e9ddae79468903ac35ff))
+* **host**: preserve hosted reviews across revisions ([a5d7d38](https://github.com/Arcadia822/taco/commit/a5d7d384219fb862ed9c9f116f842f13aba747b3))
+
+### Bug Fixes
+
+* **cli**: make update base revision optional ([2693d13](https://github.com/Arcadia822/taco/commit/2693d133ee8acfc3798bad6ec0384aebd72ac877))
+* **taco**: refresh the original review after feedback ([5f79d4b](https://github.com/Arcadia822/taco/commit/5f79d4b99b171da29801ec4c4e15b377be3dc864))
+
+### Chores & Maintenance
+
+* chore: **release**: tacobin-v0.9.0 ([87e9f0f](https://github.com/Arcadia822/taco/commit/87e9f0f186bf7e3bc00ba36dcef0dd29be12a888))
+* chore: **release**: taco-cli v0.5.0 ([1827b65](https://github.com/Arcadia822/taco/commit/1827b6579ef05963752c152b015311502b1c19b3))
+
 ## Unreleased
 
 ### Features
@@ -23,11 +40,14 @@
 * test: **mermaid**: add regression test for sequenceDiagram interaction and neo theme (TACO-67) ([f3c1664](https://github.com/Arcadia822/taco/commit/f3c1664f85a9adf98cd7a1620218f80e5e444c7f))
 
 ## [0.14.4](https://github.com/Arcadia822/taco/compare/v0.14.3...v0.14.4) (2026-10-10)
+
 ### Features
 
 * **ci**: dynamic desktop UI preview pipeline driven by PR diff and DOM outlines with strict network and secret isolation (TACO-68, TACO-62)
 
+### Bug Fixes
 
+* **extension**: support HTML source files as text/html while rejecting nested containers (TACO-70)
 * **governance**: resolve review findings for lessons validator and evidence counts (TACO-66) ([0e61c3e](https://github.com/Arcadia822/taco/commit/0e61c3e6905f3d32bc0a388e2e2c453e8fe129ae))
 * **ci**: keep a CI verdict for every commit on main (TACO-63) ([0d7d30e](https://github.com/Arcadia822/taco/commit/0d7d30eeee2cf184c3aee7170efda559d50dabaa))
 

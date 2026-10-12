@@ -171,8 +171,8 @@ export function parseBundle(json: string): ParseResult {
       try { decodePng(value.content, value.path) }
       catch (error) { return { ok: false, err: 'shape', detail: (error as Error).message } }
     }
-    if (value.mediaType === 'text/html' || /\.html?$/i.test(value.path)) {
-      return { ok: false, err: 'shape', detail: `HTML source files are not supported: ${value.path}` }
+    if (value.path.toLowerCase().endsWith('.taco.html')) {
+      return { ok: false, err: 'shape', detail: `bundle file path must not end in .taco.html: ${value.path}` }
     }
     if ('sourceUrl' in value) {
       return { ok: false, err: 'shape', detail: `sourceUrl is no longer supported: ${value.path}` }
@@ -342,7 +342,7 @@ export const isInternalFile = (path: string): boolean => {
   return norm.endsWith('/.DS_Store')
 }
 export type MediaFileKind = 'image' | 'video' | 'audio'
-export type FileKind = 'markdown' | 'yaml' | 'json' | 'mermaid' | MediaFileKind | 'text'
+export type FileKind = 'markdown' | 'yaml' | 'json' | 'mermaid' | MediaFileKind | 'html' | 'text'
 
 const MEDIA_FILE_KIND: Record<MediaFileKind, true> = { image: true, video: true, audio: true }
 
@@ -357,10 +357,12 @@ export function fileKind(file: TacoFile): FileKind {
   if (mediaType.startsWith('video/')) return 'video'
   if (mediaType.startsWith('audio/')) return 'audio'
   if (mediaType === 'text/markdown') return 'markdown'
+  if (mediaType === 'text/html' || mediaType.startsWith('text/html;')) return 'html'
   if (mediaType.includes('yaml')) return 'yaml'
   if (mediaType.includes('json')) return 'json'
   // Extension fallbacks, for bundles whose media types are generic.
   if (lower.endsWith('.md')) return 'markdown'
+  if (/\.html?$/i.test(lower)) return 'html'
   if (lower.endsWith('.mmd')) return 'mermaid'
   if (/\.ya?ml$/.test(lower)) return 'yaml'
   if (/\.json$/.test(lower)) return 'json'

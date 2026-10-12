@@ -999,6 +999,10 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
       for (const [path, newF] of newFilesMap.entries()) {
         const oldF = oldFilesMap.get(path)
         const isPng = newF.mediaType === 'image/png' || path.endsWith('.png')
+        const isHtml = /\.html?$/i.test(path) || newF.mediaType === 'text/html' || oldF?.mediaType === 'text/html'
+        if (isHtml && oldF && newF && oldF.content !== newF.content) {
+          throw conflictError(`Tampering detected: read-only HTML file '${path}' content was modified in review handoff`)
+        }
 
         if (!oldF) {
           const diffText = isPng ? null : createUnifiedDiff('', newF.content ?? '', path)
@@ -1030,6 +1034,7 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
 
       for (const [path, oldF] of oldFilesMap.entries()) {
         if (!newFilesMap.has(path)) {
+
           const isPng = oldF.mediaType === 'image/png' || path.endsWith('.png')
           const diffText = isPng ? null : createUnifiedDiff(oldF.content ?? '', '', path)
           changedFiles.push({
@@ -1079,6 +1084,10 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
       for (const [path, snapF] of snapshotFilesMap.entries()) {
         const baseF = baselineFilesMap.get(path)
         const isPng = snapF.mediaType === 'image/png' || path.endsWith('.png')
+        const isHtml = /\.html?$/i.test(path) || snapF.mediaType === 'text/html' || baseF?.mediaType === 'text/html'
+        if (isHtml && baseF && snapF && baseF.content !== snapF.content) {
+          throw conflictError(`Tampering detected: read-only HTML file '${path}' content was modified in review handoff`)
+        }
 
         if (!baseF) {
           const diffText = isPng ? null : createUnifiedDiff('', snapF.content ?? '', snapF.path)
@@ -1110,6 +1119,7 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
 
       for (const [path, baseF] of baselineFilesMap.entries()) {
         if (!snapshotFilesMap.has(path)) {
+
           const isPng = baseF.mediaType === 'image/png' || path.endsWith('.png')
           const diffText = isPng ? null : createUnifiedDiff(baseF.content ?? '', '', baseF.path)
           changedFiles.push({

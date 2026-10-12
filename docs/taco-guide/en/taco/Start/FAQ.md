@@ -29,7 +29,7 @@ A local Taco does not. For online review with several people, use [Tacobin](../F
 
 ## Which files are supported?
 
-Markdown, Mermaid, JSON, YAML (with an OpenAPI overview), PNG/SVG images, and audio/video. Other text files are shown as source. For security, plain `.html` source files cannot be packed into a Taco.
+Markdown, Mermaid, JSON, YAML (with an OpenAPI overview), PNG/SVG images, audio/video, and single-page HTML. Other text files are shown as source. An `.html` page is embedded read-only in a sandboxed frame that blocks all external network access, so a self-contained page renders fully.
 
 ## How big is a Taco?
 

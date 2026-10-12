@@ -53,7 +53,7 @@ export const verifyNotForbidden = async (targetPath: string): Promise<void> => {
   }
   const realPrefix = existsSync(probe) ? await realpath(probe) : resolved
   const parts = [...resolved.split(sep), ...realPrefix.split(sep)]
-  const forbiddenNames = ['node_modules', '.git']
+  const forbiddenNames = ['node_modules', '.git', 'skills', 'extensions', 'templates']
   for (const part of parts) {
     if (forbiddenNames.includes(part)) {
       const error = new Error(`Refusing forbidden target path inside '${part}': ${targetPath}`)

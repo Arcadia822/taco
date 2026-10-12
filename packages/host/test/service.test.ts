@@ -93,6 +93,129 @@ describe('@taco/host Service (Phase 2)', () => {
     expect((tacoRes.body as { title: string }).title).toBe('Initial Document')
   })
 
+  it('accepts and preserves text/html source files in staged upload commit and revision retrieval while rejecting .taco.html', async () => {
+    const { service, blob } = createTestHost()
+    const anon = (await service.createAnonymousCredentials()).body as { apiKey: { secret: string } }
+    const auth = `Bearer ${anon.apiKey.secret}`
+
+    // 1. Stage upload containing normal text/html file
+    const pubKey = randomUUID()
+    const stagedWithHtml = {
+      protocol: 'taco-host/1',
+      snapshot: {
+        format: 'taco/files',
+        version: 1,
+        docId: 'doc_html_test',
+        title: 'HTML Test Doc',
+        root: 'specs/sample',
+        files: [
+          {
+            path: 'specs/sample/spec.md',
+            mediaType: 'text/markdown',
+            content: '# Main Spec',
+          },
+          {
+            path: 'specs/sample/report.html',
+            mediaType: 'text/html',
+            content: '<!doctype html><html><body><h1>Report</h1></body></html>',
+          },
+        ],
+      },
+    }
+    const stagedBytes = new TextEncoder().encode(JSON.stringify(stagedWithHtml))
+    const cryptoHash = await crypto.subtle.digest('SHA-256', stagedBytes)
+    const payloadHash = `sha256:${Array.from(new Uint8Array(cryptoHash))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')}`
+
+    const prepRes = await service.prepareUpload(auth, pubKey, {
+      protocol: 'taco-host/1',
+      purpose: 'publish',
+      payloadHash,
+      payloadBytes: stagedBytes.byteLength,
+    })
+    expect(prepRes.status).toBe(201)
+    const prepBody = prepRes.body as { uploadId: string; uploadUrl: string }
+    const blobPath = prepBody.uploadUrl.match(/vercel-storage\.com\/([^?]+)/)![1]
+    await blob.putObject(blobPath, stagedBytes)
+
+    const commitRes = await service.publishTaco(auth, pubKey, {
+      protocol: 'taco-host/1',
+      uploadId: prepBody.uploadId,
+    })
+    expect(commitRes.status).toBe(201)
+    interface PublishBody {
+      tacoId: string
+      revisionId: string
+    }
+    const pubBody = commitRes.body as PublishBody
+
+    // Retrieve revision snapshot and verify HTML file is preserved intact
+    const revRes = await service.getRevision(pubBody.tacoId, pubBody.revisionId)
+    expect(revRes.status).toBe(200)
+    expect(revRes.body).toMatchObject({
+      snapshot: {
+        files: expect.arrayContaining([
+          expect.objectContaining({
+            path: 'specs/sample/report.html',
+            mediaType: 'text/html',
+            content: '<!doctype html><html><body><h1>Report</h1></body></html>',
+          }),
+        ]),
+      },
+    })
+
+    // 2. Reject staged upload containing nested .taco.html container
+    const tacoKey = randomUUID()
+    const stagedWithNestedTaco = {
+      protocol: 'taco-host/1',
+      snapshot: {
+        format: 'taco/files',
+        version: 1,
+        docId: 'doc_bad_taco',
+        title: 'Bad Taco Doc',
+        root: 'specs/sample',
+        files: [
+          {
+            path: 'specs/sample/nested.taco.html',
+            mediaType: 'text/html',
+            content: '<!doctype html><title>Nested</title>',
+          },
+        ],
+      },
+    }
+    const badBytes = new TextEncoder().encode(JSON.stringify(stagedWithNestedTaco))
+    const badHash = `sha256:${Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', badBytes)))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')}`
+    const prepBadRes = await service.prepareUpload(auth, tacoKey, {
+      protocol: 'taco-host/1',
+      purpose: 'publish',
+      payloadHash: badHash,
+      payloadBytes: badBytes.byteLength,
+    })
+    expect(prepBadRes.status).toBe(201)
+    interface PrepBody {
+      uploadId: string
+      uploadUrl: string
+    }
+    const prepBad = prepBadRes.body as PrepBody
+    const matchBlob = prepBad.uploadUrl.match(/vercel-storage\.com\/([^?]+)/)
+    expect(matchBlob).not.toBeNull()
+    await blob.putObject(matchBlob![1], badBytes)
+
+    const badCommit = await service.publishTaco(auth, tacoKey, {
+      protocol: 'taco-host/1',
+      uploadId: prepBad.uploadId,
+    })
+    expect(badCommit.status).toBe(422)
+    expect(badCommit.body).toMatchObject({
+      error: {
+        message: expect.stringContaining('bundle file path must not end in .taco.html'),
+      },
+    })
+  })
+
   it('rejects update with base revision conflict', async () => {
     const { service, blob } = createTestHost()
     const anon = (await service.createAnonymousCredentials()).body as { apiKey: { secret: string } }

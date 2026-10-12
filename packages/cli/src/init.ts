@@ -23,7 +23,7 @@ export interface InitOptions {
   listTemplates?: boolean
 }
 
-const TEMPLATE_NAMES = ['spec', 'architecture', 'api-reference', 'adr'] as const
+const TEMPLATE_NAMES = ['spec', 'architecture', 'api-reference', 'adr', 'prd', 'interaction'] as const
 
 export const executeInit = async (
   options: InitOptions,

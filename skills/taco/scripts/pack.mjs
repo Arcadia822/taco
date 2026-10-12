@@ -59,6 +59,7 @@ const mediaTypeOf = (path) => {
   if (lower.endsWith('.json')) return 'application/json'
   if (lower.endsWith('.mmd')) return 'text/plain'
   if (lower.endsWith('.png')) return 'image/png'
+  if (/\.html?$/i.test(lower)) return 'text/html'
   return 'text/plain'
 }
 
@@ -172,11 +173,6 @@ const collectFiles = async (featureDir, rootPath, existingByPath, ignorePatterns
       if (!entry.isFile()) {
         throw new Error(
           `Unsupported filesystem entry in document directory: ${relativePathKey}; exclude it with --ignore`,
-        )
-      }
-      if (/\.html?$/i.test(entry.name)) {
-        throw new Error(
-          `HTML source files are not supported: ${relativePathKey}; exclude it with --ignore`,
         )
       }
       const mediaType = mediaTypeOf(relativePathKey)
@@ -421,8 +417,8 @@ const validateBundle = (raw) => {
     if (value.sourceHash !== undefined && (typeof value.sourceHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.sourceHash))) {
       fail(`file sourceHash is invalid: ${value.path}`)
     }
-    if (value.mediaType === 'text/html' || /\.html?$/i.test(value.path)) {
-      fail(`HTML source files are not supported: ${value.path}`)
+    if (value.path.toLowerCase().endsWith('.taco.html')) {
+      fail(`bundle file path must not end in .taco.html: ${value.path}`)
     }
     if ('sourceUrl' in value) fail(`sourceUrl is no longer supported: ${value.path}`)
     if (value.blocks !== undefined && (!Array.isArray(value.blocks) || !value.blocks.every(isBlock))) {
@@ -742,6 +738,12 @@ const readBundleFromHtml = async (path) => readBundleFrom(await readFile(path, '
 const shellVariantOf = (html) =>
   html.match(/<meta\b(?=[^>]*\bname=["']taco-shell-variant["'])[^>]*>/i)?.[0]?.match(/\bcontent=["'](complete|lite)["']/i)?.[1] ?? 'complete (unmarked)'
 
+const supportsEmbeddedHtml = (html) => {
+  const shell = html.replace(DATA_BLOCK, '')
+  const marker = shell.match(/<meta\b(?=[^>]*\bname=["']taco-shell-features["'])[^>]*>/i)?.[0]
+  return marker?.match(/\bcontent=["']([^"']*)["']/i)?.[1].split(/\s+/).includes('embedded-html') ?? false
+}
+
 const securityVersionOf = (html) =>
   html.match(/<meta\b(?=[^>]*\bname=["']taco-security-version["'])[^>]*>/i)?.[0]?.match(/\bcontent=["']([^"']+)["']/i)?.[1] ?? null
 
@@ -858,6 +860,23 @@ const pack = async ({ options, multi, flags, customShellHtml }) => {
     packWarnings.push(`commented source is gone from the directory; keeping its last known content: ${previous.path}`)
   }
   if (!files.length) throw new Error(`No supported source files found in ${featureDir}`)
+
+  if (files.some((file) => file.mediaType.split(';')[0].trim().toLowerCase() === 'text/html' || /\.html?$/i.test(file.path))) {
+    if (!supportsEmbeddedHtml(shell)) {
+      if (options.get('shell')) throw new Error('Selected shell does not declare embedded-html support; use a current shell of the same variant')
+      const variant = shellVariantOf(shell)
+      if (variant !== 'complete' && variant !== 'lite' && variant !== 'complete (unmarked)') {
+        throw new Error('Cannot determine the existing shell variant for HTML refresh')
+      }
+      shellSource = join(import.meta.dirname, variant === 'lite' ? '../taco-shell-lite.html' : '../taco-shell.html')
+      shell = await readFile(shellSource, 'utf8')
+      if (!supportsEmbeddedHtml(shell)) throw new Error(`Shell lacks embedded-html support: ${shellSource}`)
+      packWarnings.push('Replaced legacy shell with the current stock shell of the same variant for embedded HTML')
+    }
+    if (priorHtml && shellVariantOf(shell).split(' ')[0] !== shellVariantOf(priorHtml).split(' ')[0]) {
+      throw new Error('HTML refresh must preserve the existing Complete/Lite shell variant')
+    }
+  }
 
   const title = options.get('title') ?? priorBundle?.title ?? portableTitleBase(rootPath)
   const expectedStem = portableTitleBase(title)

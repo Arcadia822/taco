@@ -15,7 +15,8 @@ const artifact = join(scratch, 'Review.taco.html')
 await mkdir(source)
 const initial = '---\ntitle: Review\n---\n\n## Review\n\nOriginal paragraph.\n\nLiteral `</script>` $& $` $\' $1 and 中文.\n'
 await writeFile(join(source, 'review.md'), initial)
-
+const htmlSource = '<!doctype html><html><body><h1>Sample Embedded HTML</h1><p>Read-only page</p></body></html>'
+await writeFile(join(source, 'sample.html'), htmlSource)
 const run = (args, expected = 0) => new Promise((resolveRun, reject) => {
   const child = spawn(cli[0], [...cli.slice(1), ...args], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] })
   let stdout = ''
@@ -36,7 +37,7 @@ const replaceBundle = (html, bundle) => html.replace(/(<script\b[^>]*\bid=["']ta
 
 await run(['new', join(scratch, 'Empty.taco.html'), '--title', 'Empty'])
 assert.deepEqual(parseBundle(await readFile(join(scratch, 'Empty.taco.html'), 'utf8')).files, [])
-for (const template of ['spec', 'architecture', 'api-reference', 'adr']) {
+for (const template of ['spec', 'architecture', 'api-reference', 'adr', 'prd', 'interaction']) {
   const target = join(scratch, template)
   await run(['init', target, '--template', template])
   const initialized = join(target, `${template}.taco.html`)
@@ -144,6 +145,14 @@ try {
     await page.goto(`${previewOrigin}/Review.taco.html${new URL(ready.url).hash}`, { waitUntil: 'load' })
     await page.waitForFunction(() => window.taco && document.querySelector('.ProseMirror'))
     assert.equal(await page.locator('nav.file-sidebar button.file-row.is-selected').getAttribute('data-path'), `${bundled.root}/review.md`)
+    const htmlFileRow = page.locator(`nav.file-sidebar button.file-row[data-path="${bundled.root}/sample.html"]`)
+    if (await htmlFileRow.isVisible()) {
+      await htmlFileRow.click()
+      await page.waitForFunction(() => document.querySelector('iframe'))
+      assert(await page.locator('iframe').isVisible(), 'HTML is rendered inside an iframe')
+      await page.locator(`nav.file-sidebar button.file-row[data-path="${bundled.root}/review.md"]`).click()
+      await page.waitForFunction(() => document.querySelector('.ProseMirror'))
+    }
     const reviewed = `Round ${round} reviewed paragraph.`
     await page.locator('.ProseMirror').first().click()
     await page.keyboard.press('ControlOrMeta+End')
@@ -202,6 +211,17 @@ try {
     assert.equal(receipt.payload.baseline.docId, bundled.docId)
     const baselineFile = receipt.payload.baseline.files.find((file) => file.path === `${bundled.root}/review.md`)
     assert.equal(baselineFile.content, round === 1 ? initial : roundOneContent, 'Save does not advance review-start baseline')
+    assert(snapshot.files.some((file) => file.path === `${bundled.root}/sample.html`), 'snapshot carries HTML file for archival')
+    assert(receipt.payload.baseline.files.some((file) => file.path === `${bundled.root}/sample.html`), 'baseline carries HTML file')
+    const tamperedReceiptPath = join(scratch, `tampered-round-${round}.json`)
+    const tamperedReceipt = JSON.parse(await readFile(receiptPath, 'utf8'))
+    const htmlInSnap = tamperedReceipt.payload.snapshot.files.find((file) => file.path.endsWith('.html'))
+    if (htmlInSnap) {
+      htmlInSnap.content = '<h1>Tampered</h1>'
+      await writeFile(tamperedReceiptPath, JSON.stringify(tamperedReceipt))
+      await run(['refresh', artifact, '--dir', source, '--handoff', tamperedReceiptPath], 4)
+      await run(['diff', artifact, '--handoff', tamperedReceiptPath], 4)
+    }
     const beforeRefresh = await readFile(artifact, 'utf8')
     await run(['refresh', artifact, '--dir', source, '--handoff', receiptPath], 4)
     assert.equal(await readFile(artifact, 'utf8'), beforeRefresh, 'pending review edits refuse refresh without replacing artifact')
@@ -231,6 +251,41 @@ try {
     await page.screenshot({ path: join(scratch, `round-${round}.png`), fullPage: true })
     await page.close()
   }
+  // Test legacy Complete and Lite capability replacement and variant retention
+  for (const variant of ['complete', 'lite']) {
+    const legacyDir = join(scratch, `legacy-${variant}`)
+    await mkdir(legacyDir, { recursive: true })
+    await writeFile(join(legacyDir, 'page.html'), '<h1>Legacy</h1>')
+    const legacyArtifact = join(scratch, `Legacy_${variant}.taco.html`)
+    await run(['pack', legacyDir, '--title', `Legacy_${variant}`, '--out', legacyArtifact, ...(variant === 'lite' ? ['--lite'] : [])])
+    const legacyHtml = await readFile(legacyArtifact, 'utf8')
+    const strippedHtml = legacyHtml.replace(/<meta\b(?=[^>]*\bname=["']taco-shell-features["'])[^>]*>/i, '')
+    await writeFile(legacyArtifact, strippedHtml)
+
+    const legacyBundle = parseBundle(strippedHtml)
+    const legacyHandoff = {
+      schema: 'taco-local-receipt/1',
+      docId: legacyBundle.docId,
+      payload: {
+        schema: 'taco-local-handoff/1',
+        docId: legacyBundle.docId,
+        baseline: legacyBundle,
+        snapshot: legacyBundle,
+      },
+    }
+    const legacyReceiptPath = join(scratch, `legacy-receipt-${variant}.json`)
+    await writeFile(legacyReceiptPath, JSON.stringify(legacyHandoff))
+
+    const refreshRes = await run(['refresh', legacyArtifact, '--dir', legacyDir, '--handoff', legacyReceiptPath])
+    assert(refreshRes.stdout.includes('Replaced legacy shell with the current stock shell of the same variant for embedded HTML'))
+    const refreshedHtml = await readFile(legacyArtifact, 'utf8')
+    assert(refreshedHtml.includes('name="taco-shell-features"'))
+    assert.equal(parseBundle(refreshedHtml).docId, legacyBundle.docId)
+    if (variant === 'lite') {
+      assert(refreshedHtml.includes('content="lite"'))
+    }
+  }
+
   console.log(JSON.stringify({ ok: true, rounds: 2, artifact, scratch, cli }))
 } finally {
   for (const child of active) child.kill('SIGTERM')

@@ -194,7 +194,7 @@ const I18N = {
     section2Lead: '打开 Taco，你可以：',
     section2Points: [
       '划词评论，讨论就挂在原文旁边',
-      '直接修改：Markdown 所见即所得，JSON/YAML 编辑高亮源码，Mermaid 编辑源码并预览图表',
+      '直接修改：Markdown 所见即所得，JSON/YAML 编辑高亮源码，Mermaid 编辑源码并预览图表；单页 HTML 在本地与托管评审中均以沙箱只读展示',
       '回复、解决评论线程',
       '点「交接改动」，把改动和评论整理成一段话交给 Agent',
     ],
@@ -212,7 +212,7 @@ const I18N = {
     section4CliCmd: TACO_CLI_INSTALL_COMMAND,
     section4AgentTitle: 'FOR AGENT',
     section4AgentPrompt:
-      '阅读 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md 的本地工具箱与托管评审说明，安装 Taco skill 与 taco-cli。本地可通过 taco-cli pack/init 创建或打包规范，运行 taco-cli listen <file.taco.html> 或 taco-cli open <file.taco.html> --listen 开启本地交接监听；评审者点击「交接」后，Agent 接收未保存快照、比对源文件并用 taco-cli refresh 原地更新复审。托管评审则先 dry-run 核对公开内容，再发布 Taco 并订阅 review.handed_off 事件。',
+      '阅读 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md，安装 Taco skill；需要自动化时可选安装 taco-cli。先按 Skill 的人类评审触发、设计深度与项目约定选择内容，再用 taco-cli pack 或 init 创建评审。运行 taco-cli listen <file.taco.html> 或 taco-cli open <file.taco.html> --listen 接收显式交接；核验 diff、处理 canonical 文件后，用 taco-cli refresh <file.taco.html> --dir <canonical-dir> --handoff <receipt-path> 原地复审。Handoff 和 Checkpoint 状态不代表获准实施。托管评审先 dry-run 核对公开内容，再发布并订阅 review.handed_off。',
     creditsEyebrow: '07 / SHOUTOUT',
     creditsBackToTop: '回到顶部',
     creditsTitlePrefix: '感谢',
@@ -311,7 +311,7 @@ const I18N = {
     section2Lead: 'In Taco you can:',
     section2Points: [
       'Select text to comment — the discussion stays next to the source',
-      'Edit in place: WYSIWYG Markdown, syntax-highlighted JSON/YAML source and Mermaid diagram preview',
+      'Edit in place: WYSIWYG Markdown, syntax-highlighted JSON/YAML source, and Mermaid diagram preview; single-page HTML stays read-only in a sandbox in local and hosted reviews',
       'Reply to and resolve threads',
       'Hit Handoff to pack every edit and comment into one message for your agent',
     ],
@@ -329,7 +329,7 @@ const I18N = {
     section4CliCmd: TACO_CLI_INSTALL_COMMAND,
     section4AgentTitle: 'FOR AGENT',
     section4AgentPrompt:
-      'Read https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md for local toolbox and hosted review instructions, and install the Taco skill and taco-cli. For local review, use taco-cli pack/init, start taco-cli listen <file.taco.html> or taco-cli open <file.taco.html> --listen for local handoff; after the reviewer clicks Handoff, receive the unsaved snapshot, compare canonical files, and run taco-cli refresh in place. For hosted review, dry-run public payloads, publish, and keep taco-cli subscribe running for review.handed_off.',
+      'Read https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and install the Taco skill; optionally install taco-cli for automation. Choose content using the Skill human-review trigger, design depth and project conventions before pack or init. Run taco-cli listen <file.taco.html> or taco-cli open <file.taco.html> --listen for explicit Handoff; check diff, handle canonical files, then run taco-cli refresh <file.taco.html> --dir <canonical-dir> --handoff <receipt-path> in place. Handoff and Checkpoint status do not authorize implementation. For hosted review, dry-run public payloads, publish, and subscribe to review.handed_off.',
     creditsEyebrow: '07 / SHOUTOUT',
     creditsBackToTop: 'Back to Top',
     creditsTitlePrefix: 'Thank you,',
