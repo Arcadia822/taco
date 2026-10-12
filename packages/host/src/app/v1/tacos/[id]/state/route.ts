@@ -54,6 +54,9 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
 
     return res
   } catch (err) {
+    if (err instanceof GoneError) {
+      return NextResponse.json({ error: { code: 'GONE', message: err.message } }, { status: 410 })
+    }
     if (err instanceof DatabaseNotConfiguredError) {
       return NextResponse.json({ error: { code: 'SERVICE_UNAVAILABLE', message: err.message } }, { status: 503 })
     }

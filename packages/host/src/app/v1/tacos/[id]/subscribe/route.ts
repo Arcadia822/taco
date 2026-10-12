@@ -216,6 +216,26 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
           if (streamClosed || isPolling) return
           isPolling = true
           try {
+            const currentTaco = await db.getTaco(tacoId)
+            if (!currentTaco || currentTaco.status === 'deleted' || currentTaco.status === 'expired') {
+              if (!streamClosed) {
+                streamClosed = true
+                cleanup()
+                try {
+                  controller.enqueue(
+                    encoder.encode(
+                      `data: ${JSON.stringify({
+                        kind: 'diagnostic',
+                        code: 'TACO_GONE',
+                        message: 'Taco has expired or was deleted',
+                      })}\n\n`,
+                    ),
+                  )
+                  controller.close()
+                } catch {}
+              }
+              return
+            }
             const events = await db.getEventsAfter(tacoId, currentSentSequence)
             for (const ev of events) {
               if (streamClosed) break

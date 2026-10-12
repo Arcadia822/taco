@@ -15,6 +15,6 @@ export async function GET() {
       maxImageBytes: 10485760,
     },
     idempotency: { retentionSeconds: 86400 },
-    retention: { policy: 'manual_only', defaultTtlSeconds: null },
+    retention: { policy: 'ttl', defaultTtlSeconds: 2592000, maxTtlSeconds: 31536000 },
   })
 }

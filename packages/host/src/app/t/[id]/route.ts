@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import type { DocumentSnapshot } from '@taco/protocol'
-import type { SharedStateResult } from '@/lib/db'
+import { getDatabase, GoneError, type SharedStateResult } from '@/lib/db'
 import { getStorageAdapter } from '@/lib/storage-adapter'
 import { getSharedReviewState } from '@/lib/server-state'
 import { renderCanonicalTacoHtml } from '@/lib/taco-shell-template'
@@ -39,6 +39,12 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
   try {
     state = await getSharedReviewState(pasteId)
   } catch (error) {
+    if (error instanceof GoneError) {
+      return new Response(JSON.stringify({ error: { code: 'GONE', message: error.message } }), {
+        status: 410,
+        headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+      })
+    }
     // The Host database is unreachable, so there is no way to tell the baseline from the current
     // shared state. Fail closed instead of serving a stale published object as if it were current.
     const message = error instanceof Error ? error.message : 'Host review storage is unavailable'
@@ -52,6 +58,22 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
   const shared = Boolean(state)
   let legacy: LegacyPaste = {}
   if (!snapshot) {
+    try {
+      const taco = await getDatabase().getTaco(pasteId)
+      if (taco && (taco.status === 'deleted' || taco.status === 'expired')) {
+        return new Response(JSON.stringify({ error: { code: 'GONE', message: 'Taco has expired or was deleted' } }), {
+          status: 410,
+          headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+        })
+      }
+    } catch (err) {
+      if (err instanceof GoneError) {
+        return new Response(JSON.stringify({ error: { code: 'GONE', message: err.message } }), {
+          status: 410,
+          headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+        })
+      }
+    }
     const storage = getStorageAdapter()
     const rawBytes = await storage.getObject(`pastes/${pasteId}.json`)
     if (!rawBytes) notFound()
