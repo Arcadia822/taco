@@ -109,6 +109,56 @@ describe('taco-cli (Phase 1)', () => {
     expect(err.error.code).toBe('VALIDATION_ERROR')
     expect(err.error.message).toContain('Invalid duration format for --ttl')
   })
+  it('supports custom --ttl range boundaries and zero permanent spellings in publish dry-run', async () => {
+    for (const validTtl of ['365d', '31536000s', '1y']) {
+      const res = await runCli(['publish', FIXTURE_TACO, '--dry-run', '--ttl', validTtl])
+      expect(res.exitCode).toBe(0)
+      const json = JSON.parse(res.stdout!)
+      expect(json.ttlSeconds).toBe(31536000)
+      expect(json.expiresAt).toBeDefined()
+    }
+
+    for (const zeroTtl of ['0', '0s', '0d', 'none', 'never', 'null', 'infinite']) {
+      const res = await runCli(['publish', FIXTURE_TACO, '--dry-run', '--ttl', zeroTtl])
+      expect(res.exitCode).toBe(0)
+      const json = JSON.parse(res.stdout!)
+      expect(json.ttlSeconds).toBeNull()
+      expect(json.expiresAt).toBeNull()
+    }
+
+    for (const invalidTtl of ['366d', '31536001s', '2y', '9999999999999999999999999999s']) {
+      const res = await runCli(['publish', FIXTURE_TACO, '--dry-run', '--ttl', invalidTtl])
+      expect(res.exitCode).toBe(2)
+      const err = JSON.parse(res.stderr!)
+      expect(err.error.code).toBe('VALIDATION_ERROR')
+      expect(err.error.message).toContain('Duration exceeds maximum allowed duration of 365 days')
+    }
+  })
+
+  it('rejects invalid --ttl before dry-run or network publish without making any fetch calls', async () => {
+    const originalFetch = globalThis.fetch
+    let fetchCount = 0
+    globalThis.fetch = async (): Promise<Response> => {
+      fetchCount += 1
+      throw new Error('Network should not be reached for invalid TTL')
+    }
+
+    try {
+      const resDryRun = await runCli(['publish', FIXTURE_TACO, '--dry-run', '--ttl', '366d'])
+      expect(resDryRun.exitCode).toBe(2)
+      const errDryRun = JSON.parse(resDryRun.stderr!)
+      expect(errDryRun.error.code).toBe('VALIDATION_ERROR')
+      expect(fetchCount).toBe(0)
+
+      const resPublish = await runCli(['publish', FIXTURE_TACO, '--ttl', '366d'])
+      expect(resPublish.exitCode).toBe(2)
+      const errPublish = JSON.parse(resPublish.stderr!)
+      expect(errPublish.error.code).toBe('VALIDATION_ERROR')
+      expect(fetchCount).toBe(0)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
 
   it('includes an explicit base revision in a local update preview', async () => {
     const res = await runCli([
@@ -667,6 +717,127 @@ describe('taco-cli (Phase 1)', () => {
         error: {
           code: 'CURSOR_EXPIRED',
           message: 'Requested cursor sequence is too old',
+        },
+      })
+    } finally {
+      process.stderr.write = originalStderrWrite
+      globalThis.fetch = originalFetch
+    }
+  })
+  it('exits with code 2 and TACO_GONE when subscribe receives HTTP 410 Gone for expired Taco without retrying', async () => {
+    const originalFetch = globalThis.fetch
+    const stderrChunks: string[] = []
+    const originalStderrWrite = process.stderr.write
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      stderrChunks.push(String(chunk))
+      return true
+    }) as typeof process.stderr.write
+
+    let fetchCount = 0
+
+    globalThis.fetch = async (): Promise<Response> => {
+      fetchCount += 1
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: 'GONE',
+            message: 'Taco is closed, expired, or deleted',
+          },
+        }),
+        { status: 410, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+
+    try {
+      const res = await runCli([
+        'subscribe',
+        '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001',
+        '--host',
+        'https://host.example',
+      ])
+      expect(res.exitCode).toBe(2)
+      expect(fetchCount).toBe(1)
+
+      const outputLines = stderrChunks.join('').split('\n').filter(Boolean)
+      expect(outputLines.length).toBe(1)
+      const record = JSON.parse(outputLines[0])
+      expect(record).toEqual({
+        kind: 'error',
+        error: {
+          code: 'TACO_GONE',
+          message: 'Taco is closed, expired, or deleted',
+        },
+      })
+    } finally {
+      process.stderr.write = originalStderrWrite
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('exits with code 2 and TACO_GONE when subscribe receives HTTP 410 Gone on reconnect without retrying', async () => {
+    const originalFetch = globalThis.fetch
+    const stderrChunks: string[] = []
+    const originalStderrWrite = process.stderr.write
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      stderrChunks.push(String(chunk))
+      return true
+    }) as typeof process.stderr.write
+
+    let callCount = 0
+
+    globalThis.fetch = async (): Promise<Response> => {
+      callCount += 1
+      if (callCount === 1) {
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            const encoder = new TextEncoder()
+            controller.enqueue(
+              encoder.encode('data: {"kind":"ready","cursor":"3","mode":"live"}\n\n'),
+            )
+            controller.close()
+          },
+        })
+        return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+      }
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: 'GONE',
+            message: 'Taco is closed, expired, or deleted',
+          },
+        }),
+        { status: 410, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+
+    try {
+      const res = await runCli([
+        'subscribe',
+        '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001',
+        '--after',
+        '3',
+        '--host',
+        'https://host.example',
+      ])
+
+      expect(res.exitCode).toBe(2)
+      expect(callCount).toBe(2)
+
+      const outputLines = stderrChunks.join('').split('\n').filter(Boolean)
+      const records = outputLines.map((l) => JSON.parse(l))
+
+      const diagnostics = records.filter((r) => r.kind === 'diagnostic')
+      const errors = records.filter((r) => r.kind === 'error')
+
+      expect(diagnostics.length).toBe(1)
+      expect(diagnostics[0].code).toBe('DISCONNECTED')
+      expect(diagnostics[0].attempt).toBe(1)
+      expect(errors.length).toBe(1)
+      expect(errors[0]).toEqual({
+        kind: 'error',
+        error: {
+          code: 'TACO_GONE',
+          message: 'Taco is closed, expired, or deleted',
         },
       })
     } finally {

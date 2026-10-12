@@ -94,47 +94,87 @@ export const parseCliArgs = (argv: string[]): ParsedArgs => {
   return { command, positionals, options }
 }
 
+export const MAX_TTL_SECONDS = 31536000 // 365 days
+
 export const parseDurationToSeconds = (input: string): number | null => {
   const trimmed = input.trim().toLowerCase()
-  if (trimmed === '0' || trimmed === 'none' || trimmed === 'never' || trimmed === 'null' || trimmed === 'infinite') {
+  if (
+    trimmed === '0' ||
+    trimmed === 'none' ||
+    trimmed === 'never' ||
+    trimmed === 'null' ||
+    trimmed === 'infinite'
+  ) {
     return null
   }
-  const match = trimmed.match(/^(\d+)\s*(s|sec|seconds?|m|min|minutes?|h|hours?|d|days?|w|weeks?|y|years?)?$/)
+  const match = trimmed.match(
+    /^(\d+)\s*(s|sec|seconds?|m|min|minutes?|h|hours?|d|days?|w|weeks?|y|years?)?$/,
+  )
   if (!match) {
-    throw new Error(`Invalid duration format for --ttl: "${input}". Expected format like 1h, 7d, 30d, 86400s, or 0/none for permanent.`)
+    throw new Error(
+      `Invalid duration format for --ttl: "${input}". Expected format like 1h, 7d, 30d, 86400s, or 0/none for permanent.`,
+    )
   }
-  const amount = parseInt(match[1], 10)
+  const amountStr = match[1]
+  if (amountStr.length > 15) {
+    throw new Error(
+      `Invalid duration for --ttl: "${input}". Duration exceeds maximum allowed duration of 365 days (31536000 seconds).`,
+    )
+  }
+  const amount = parseInt(amountStr, 10)
+  if (!Number.isFinite(amount) || amount > Number.MAX_SAFE_INTEGER) {
+    throw new Error(
+      `Invalid duration for --ttl: "${input}". Duration exceeds maximum allowed duration of 365 days (31536000 seconds).`,
+    )
+  }
+  if (amount === 0) {
+    return null
+  }
   const unit = match[2] || 's'
+  let seconds: number
   switch (unit) {
     case 's':
     case 'sec':
     case 'second':
     case 'seconds':
-      return amount
+      seconds = amount
+      break
     case 'm':
     case 'min':
     case 'minute':
     case 'minutes':
-      return amount * 60
+      seconds = amount * 60
+      break
     case 'h':
     case 'hour':
     case 'hours':
-      return amount * 3600
+      seconds = amount * 3600
+      break
     case 'd':
     case 'day':
     case 'days':
-      return amount * 86400
+      seconds = amount * 86400
+      break
     case 'w':
     case 'week':
     case 'weeks':
-      return amount * 7 * 86400
+      seconds = amount * 7 * 86400
+      break
     case 'y':
     case 'year':
     case 'years':
-      return amount * 365 * 86400
+      seconds = amount * 365 * 86400
+      break
     default:
-      return amount
+      seconds = amount
+      break
   }
+  if (!Number.isFinite(seconds) || seconds <= 0 || seconds > MAX_TTL_SECONDS) {
+    throw new Error(
+      `Invalid duration for --ttl: "${input}". Duration exceeds maximum allowed duration of 365 days (31536000 seconds).`,
+    )
+  }
+  return seconds
 }
 
 class SseSessionAdapter implements WebSocketSessionAdapter {
@@ -171,7 +211,7 @@ class SseSessionAdapter implements WebSocketSessionAdapter {
         } catch {}
         const error = new Error(msg) as Error & { statusCode?: number; code?: string }
         error.statusCode = 410
-        error.code = errCode === 'GONE' ? 'TACO_GONE' : errCode
+        error.code = errCode === 'GONE' || errCode === 'TACO_GONE' ? 'TACO_GONE' : errCode
         throw error
       }
       if (res.status === 404) {

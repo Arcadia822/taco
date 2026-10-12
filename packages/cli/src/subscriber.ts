@@ -72,7 +72,7 @@ export class TacoSubscriber {
         reconnectAttempts = 0
       } catch (err) {
         const errObj = err as Error & { statusCode?: number; code?: string }
-        if (errObj.code === 'TACO_GONE') {
+        if (errObj.code === 'TACO_GONE' || errObj.code === 'GONE') {
           this.handler.onError({
             code: 'TACO_GONE',
             message: errObj.message || 'The Taco has expired or was deleted',
@@ -177,7 +177,7 @@ export class TacoSubscriber {
         const frameCode = frame.error?.code || frame.code
         const frameMsg = frame.error?.message || frame.message
         if (frame.kind === 'error' || frame.kind === 'diagnostic') {
-          if (frameCode === 'TACO_GONE') {
+          if (frameCode === 'TACO_GONE' || frameCode === 'GONE') {
             this.settled = true
             this.handler.onError({
               code: 'TACO_GONE',
@@ -283,6 +283,16 @@ export class TacoSubscriber {
     socket.onError((err) => {
       if (this.settled) return
       const errObj = err as Error & { statusCode?: number; code?: string }
+      if (errObj.code === 'TACO_GONE' || errObj.code === 'GONE') {
+        this.settled = true
+        this.handler.onError({
+          code: 'TACO_GONE',
+          message: errObj.message || 'The Taco has expired or was deleted',
+        })
+        resolve(2)
+        socket.close()
+        return
+      }
       if (errObj.code === 'CURSOR_EXPIRED' || errObj.statusCode === 410) {
         this.settled = true
         this.handler.onError({
@@ -311,6 +321,15 @@ export class TacoSubscriber {
       .catch((err) => {
         if (this.settled) return
         const errObj = err as Error & { statusCode?: number; code?: string }
+        if (errObj.code === 'TACO_GONE' || errObj.code === 'GONE') {
+          this.settled = true
+          this.handler.onError({
+            code: 'TACO_GONE',
+            message: errObj.message || 'The Taco has expired or was deleted',
+          })
+          resolve(2)
+          return
+        }
         if (errObj.code === 'CURSOR_EXPIRED' || errObj.statusCode === 410) {
           this.settled = true
           this.handler.onError({
