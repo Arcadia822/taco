@@ -72,6 +72,13 @@ export class TacoSubscriber {
         reconnectAttempts = 0
       } catch (err) {
         const errObj = err as Error & { statusCode?: number; code?: string }
+        if (errObj.code === 'TACO_GONE') {
+          this.handler.onError({
+            code: 'TACO_GONE',
+            message: errObj.message || 'The Taco has expired or was deleted',
+          })
+          return { exitCode: 2 }
+        }
         if (errObj.code === 'CURSOR_EXPIRED' || errObj.statusCode === 410) {
           this.handler.onError({
             code: 'CURSOR_EXPIRED',
@@ -160,25 +167,37 @@ export class TacoSubscriber {
       try {
         const frame = JSON.parse(text) as {
           kind: string
+          code?: string
+          message?: string
           cursor?: string
           sequence?: string
           mode?: string
           error?: { code: string; message?: string }
         }
-        if (frame.kind === 'error') {
-          // Settle first: closing the transport reports a client-initiated close synchronously,
-          // and that must not be mistaken for a dropped connection worth reconnecting.
-          if (frame.error?.code === 'CURSOR_EXPIRED') {
+        const frameCode = frame.error?.code || frame.code
+        const frameMsg = frame.error?.message || frame.message
+        if (frame.kind === 'error' || frame.kind === 'diagnostic') {
+          if (frameCode === 'TACO_GONE') {
+            this.settled = true
+            this.handler.onError({
+              code: 'TACO_GONE',
+              message: frameMsg || 'The Taco has expired or was deleted',
+            })
+            resolve(2)
+            socket.close()
+            return
+          }
+          if (frameCode === 'CURSOR_EXPIRED') {
             this.settled = true
             this.handler.onError({
               code: 'CURSOR_EXPIRED',
-              message: frame.error.message || 'Cursor has expired and cannot be replayed',
+              message: frameMsg || 'Cursor has expired and cannot be replayed',
             })
             resolve(6)
             socket.close()
             return
           }
-          if (frame.error?.code === 'TACO_CLOSED') {
+          if (frameCode === 'TACO_CLOSED') {
             this.settled = true
             resolve(4)
             socket.close()
