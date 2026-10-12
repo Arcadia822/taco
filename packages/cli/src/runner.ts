@@ -94,6 +94,49 @@ export const parseCliArgs = (argv: string[]): ParsedArgs => {
   return { command, positionals, options }
 }
 
+export const parseDurationToSeconds = (input: string): number | null => {
+  const trimmed = input.trim().toLowerCase()
+  if (trimmed === '0' || trimmed === 'none' || trimmed === 'never' || trimmed === 'null' || trimmed === 'infinite') {
+    return null
+  }
+  const match = trimmed.match(/^(\d+)\s*(s|sec|seconds?|m|min|minutes?|h|hours?|d|days?|w|weeks?|y|years?)?$/)
+  if (!match) {
+    throw new Error(`Invalid duration format for --ttl: "${input}". Expected format like 1h, 7d, 30d, 86400s, or 0/none for permanent.`)
+  }
+  const amount = parseInt(match[1], 10)
+  const unit = match[2] || 's'
+  switch (unit) {
+    case 's':
+    case 'sec':
+    case 'second':
+    case 'seconds':
+      return amount
+    case 'm':
+    case 'min':
+    case 'minute':
+    case 'minutes':
+      return amount * 60
+    case 'h':
+    case 'hour':
+    case 'hours':
+      return amount * 3600
+    case 'd':
+    case 'day':
+    case 'days':
+      return amount * 86400
+    case 'w':
+    case 'week':
+    case 'weeks':
+      return amount * 7 * 86400
+    case 'y':
+    case 'year':
+    case 'years':
+      return amount * 365 * 86400
+    default:
+      return amount
+  }
+}
+
 class SseSessionAdapter implements WebSocketSessionAdapter {
   private abortController: AbortController | null = null
   private closed = false
@@ -128,7 +171,7 @@ class SseSessionAdapter implements WebSocketSessionAdapter {
         } catch {}
         const error = new Error(msg) as Error & { statusCode?: number; code?: string }
         error.statusCode = 410
-        error.code = errCode
+        error.code = errCode === 'GONE' ? 'TACO_GONE' : errCode
         throw error
       }
       if (res.status === 404) {
@@ -472,9 +515,24 @@ export const runCli = async (
       }
     }
 
+    let ttlSeconds: number | null | undefined = undefined
+    const rawTtl = options['ttl']
+    if (rawTtl !== undefined) {
+      if (typeof rawTtl !== 'string') {
+        const error = makeCliError('VALIDATION_ERROR', 'Option --ttl requires a duration value (e.g. 7d, 30d)')
+        return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+      }
+      try {
+        ttlSeconds = parseDurationToSeconds(rawTtl)
+      } catch (err) {
+        const error = makeCliError('VALIDATION_ERROR', (err as Error).message)
+        return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+      }
+    }
+
     if (options['dry-run'] === true) {
       try {
-        const summary = await executeLocalDryRun({ command: 'publish', filePath, host })
+        const summary = await executeLocalDryRun({ command: 'publish', filePath, host, ttlSeconds })
         return { exitCode: EXIT_CODES.OK, stdout: JSON.stringify(summary, null, 2) }
       } catch (err) {
         return {
@@ -486,7 +544,7 @@ export const runCli = async (
 
     try {
       const rawHtml = readFileSync(filePath, 'utf8')
-      const result = await client.publish({ rawHtml })
+      const result = await client.publish({ rawHtml, ttlSeconds })
       return { exitCode: EXIT_CODES.OK, stdout: JSON.stringify(result, null, 2) }
     } catch (err) {
       return {

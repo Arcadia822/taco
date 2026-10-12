@@ -430,6 +430,13 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
         default: DEFAULT_HOST,
         description: 'Override target Host origin',
       },
+      {
+        name: '--ttl',
+        type: 'duration',
+        required: false,
+        default: '30d',
+        description: 'Expiration duration for auto-cleanup (e.g. 1h, 7d, 30d, or 0/none for permanent)',
+      },
     ],
     environment: GLOBAL_ENV,
     output: {
@@ -456,6 +463,7 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
         purpose: 'Preview projected payload locally',
       },
       { invocation: 'taco-cli publish design.taco.html', purpose: 'Publish new Taco' },
+      { invocation: 'taco-cli publish design.taco.html --ttl 7d', purpose: 'Publish new Taco with 7-day expiration' },
     ],
   },
   update: {

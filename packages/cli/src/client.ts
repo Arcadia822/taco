@@ -14,6 +14,7 @@ export interface PublishResult {
   contentHash: string
   url: string
   createdAt: string
+  expiresAt?: string | null
   revisionId?: string
 }
 
@@ -40,7 +41,7 @@ export class TacoClient {
    * 3. Sends directly to POST /v1/tacos without any User/ApiKey/Login requirements
    * 4. Returns public Taco URL
    */
-  async publish(options: { rawHtml: string }): Promise<PublishResult> {
+  async publish(options: { rawHtml: string; ttlSeconds?: number | null }): Promise<PublishResult> {
     const rawBundle = extractTacoBundleFromHtml(options.rawHtml)
     const projected = projectLocalBundleToUploadContent(rawBundle)
     if (!projected.ok) {
@@ -52,7 +53,10 @@ export class TacoClient {
       throw new Error(`Protocol validation failed: ${validated.err}`)
     }
 
-    const payload = validated.payload
+    const payload = {
+      ...validated.payload,
+      ...(options.ttlSeconds !== undefined ? { ttlSeconds: options.ttlSeconds } : {}),
+    }
     const res = await fetch(`${this.hostUrl}/v1/tacos`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
