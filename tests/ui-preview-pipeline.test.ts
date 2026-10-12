@@ -1,6 +1,14 @@
 // @vitest-environment node
 
-import { linkSync, mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import {
+  linkSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -30,6 +38,7 @@ import {
   ensureAssetsBranch,
   GitHubApiError,
   runPublisher,
+  uploadAssetsAndCommit,
 } from '../.github/workflows/scripts/publish-preview.mjs'
 
 const HEAD_SHA = '438d0844c07649feab04e738ef63c7bff8294660'
@@ -48,6 +57,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
   delete process.env.ARTIFACTS_DIR
+  delete process.env.PLAN_FILE
   while (fixtures.length > 0) rmSync(fixtures.pop() as string, { recursive: true, force: true })
 })
 
@@ -96,6 +106,40 @@ function writeArtifactSet(dir: string, colorType = 2): void {
     )
   }
 }
+/** An artifact set with no screenshots: only the manifest the record job uploads. */
+function writeUnavailableArtifacts(summary: string): string {
+  const dir = makeTempDir('taco-preview-unavailable-')
+  writeFileSync(
+    join(dir, 'manifest.json'),
+    JSON.stringify({
+      version: 1,
+      planSource: 'deepseek-planner',
+      status: 'unavailable',
+      summary,
+      scenes: [],
+      errors: [],
+      executedAt: '2026-10-12T00:00:00.000Z',
+    }),
+  )
+  process.env.ARTIFACTS_DIR = dir
+  return dir
+}
+
+function writePlanFile(plan: { uiChange: boolean; summary: string }): string {
+  const file = join(makeTempDir('taco-preview-plan-'), 'preview-plan.json')
+  writeFileSync(
+    file,
+    JSON.stringify({
+      version: 1,
+      source: 'deepseek-planner',
+      ui_change: plan.uiChange,
+      summary: plan.summary,
+      scenes: [],
+    }),
+  )
+  process.env.PLAN_FILE = file
+  return file
+}
 
 /** Reads a field off an unvalidated JSON payload without widening to `any`. */
 function asRecord(value: unknown): Record<string, unknown> {
@@ -138,6 +182,46 @@ function installFetch(handler: FetchHandler): FetchCall[] {
     }),
   )
   return calls
+}
+
+/**
+ * Routes the publisher's REST calls for a revision with no screenshots, and
+ * reproduces GitHub's rejection of an empty tree so a regression fails loudly.
+ */
+function installNoScreenshotPublisherFetch(body = ''): FetchCall[] {
+  return installFetch((call) => {
+    if (call.path === '/repos/Arcadia822/taco/pulls/119' && call.method === 'GET') {
+      return { body: { state: 'open', head: { sha: HEAD_SHA }, body } }
+    }
+    if (call.path === '/repos/Arcadia822/taco/pulls/119' && call.method === 'PATCH') {
+      return { body: {} }
+    }
+    if (call.path.endsWith('/git/trees')) {
+      const tree = asList(asRecord(call.body).tree)
+      return tree.length === 0
+        ? { status: 422, body: { message: 'Invalid tree info' } }
+        : { body: { sha: 'composed-tree' } }
+    }
+    if (call.path.endsWith('/git/blobs')) return { body: { sha: 'blob-sha' } }
+    if (call.path.endsWith('/git/ref/heads/ui-preview-assets')) {
+      return { body: { object: { sha: 'tip-a' } } }
+    }
+    if (call.path.endsWith('/git/refs/heads/ui-preview-assets') && call.method === 'PATCH') {
+      return { body: {} }
+    }
+    if (call.path.endsWith('/git/commits/tip-a')) return { body: { tree: { sha: 'tree-a' } } }
+    if (call.path.endsWith('/git/commits') && call.method === 'POST') {
+      return { body: { sha: ASSETS_SHA } }
+    }
+    throw new Error(`unexpected request ${call.method} ${call.path}`)
+  })
+}
+
+/** The preview block the publisher wrote into the pull request body. */
+function readPublishedBlock(calls: FetchCall[]): string {
+  const patch = calls.find((call) => call.path.endsWith('/pulls/119') && call.method === 'PATCH')
+  const body = asRecord(patch?.body).body
+  return typeof body === 'string' ? body : ''
 }
 
 describe('UI Preview: view registry', () => {
@@ -949,5 +1033,53 @@ describe('UI Preview: publisher', () => {
     const res = validateDirectory(dir, { plan: trustedPlan })
     expect(res.valid).toBe(true)
     expect(res.views).toHaveLength(0)
+  })
+
+  it('publishes a screenshot-free manifest without touching the Git data API', async () => {
+    writeUnavailableArtifacts('Layout-only refactor; no visible change.')
+    writePlanFile({ uiChange: false, summary: 'Layout-only refactor; no visible change.' })
+    const calls = installNoScreenshotPublisherFetch()
+
+    const result = await runPublisher()
+
+    expect(result).toEqual({ success: true, assetCommitSha: null })
+    expect(calls.filter((call) => call.path.includes('/git/'))).toEqual([])
+    const published = readPublishedBlock(calls)
+    expect(published).toContain(
+      '*No UI preview was generated: this revision reports no UI change.*',
+    )
+    expect(published).not.toContain('Preview planning failed')
+  })
+
+  it('reports a planner failure rather than a no-UI-change verdict', async () => {
+    const reason = 'Planner produced invalid plan: Plan with ui_change=false must have scenes=[]'
+    writeUnavailableArtifacts(reason)
+    writePlanFile({ uiChange: false, summary: reason })
+    const calls = installNoScreenshotPublisherFetch()
+
+    const result = await runPublisher()
+
+    expect(result).toEqual({ success: true, assetCommitSha: null })
+    expect(calls.filter((call) => call.path.includes('/git/'))).toEqual([])
+    const published = readPublishedBlock(calls)
+    expect(published).toContain('**Preview planning failed.**')
+    expect(published).not.toContain('this revision reports no UI change')
+  })
+
+  it('returns no assets commit when the manifest holds no screenshots', async () => {
+    const dir = writeUnavailableArtifacts('No UI change.')
+    const calls = installNoScreenshotPublisherFetch()
+    const manifest: unknown = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf-8'))
+
+    await expect(
+      uploadAssetsAndCommit({
+        repo: REPO,
+        prNumber: 119,
+        headSha: HEAD_SHA,
+        artifactsDir: dir,
+        manifest,
+      }),
+    ).resolves.toBeNull()
+    expect(calls).toEqual([])
   })
 })
