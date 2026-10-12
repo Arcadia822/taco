@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { DatabaseSync } from 'node:sqlite'
 import { unlinkSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
@@ -228,6 +229,66 @@ describe('Subscribe Route Unicode Metadata and Lifecycle', () => {
 
       setIntervalSpy.mockRestore()
       clearIntervalSpy.mockRestore()
+    } finally {
+      vi.restoreAllMocks()
+      currentDb = null
+      try {
+        unlinkSync(testDbPath)
+      } catch {}
+    }
+  })
+  it('terminates with TACO_GONE diagnostic frame if taco expires during historical replay before emitting replay events', async () => {
+    const { testDbPath, db, tacoId } = await setupTestDb()
+    try {
+      await db.mutateReviewThread(
+        tacoId,
+        {
+          author: 'Tester',
+          action: 'create',
+          body: 'Replay comment to verify gating',
+        },
+        randomUUID(),
+      )
+
+      // Intercept getEventsAfter: while data is read, expire the taco in the DB
+      const originalGetEventsAfter = db.getEventsAfter.bind(db)
+      db.getEventsAfter = async (id: string, after: bigint) => {
+        const events = await originalGetEventsAfter(id, after)
+        // Simulate expiration crossing the deadline during replay read
+        const directDb = new DatabaseSync(testDbPath)
+        directDb.prepare('UPDATE tacos SET expires_at = ?, status = ? WHERE id = ?').run(
+          '1970-01-01T00:00:00.000Z',
+          'expired',
+          id,
+        )
+        directDb.close()
+        return events
+      }
+
+      const req = new NextRequest(`http://localhost:32167/v1/tacos/${tacoId}/subscribe?after=0`)
+      const res = await GET(req, { params: Promise.resolve({ id: tacoId }) })
+      expect(res.status).toBe(200)
+
+      const body = res.body
+      expect(body).not.toBeNull()
+      const reader = body!.getReader()
+
+      // Read initial ready frame
+      const first = await reader.read()
+      expect(first.done).toBe(false)
+      const firstText = new TextDecoder().decode(first.value)
+      expect(firstText).toContain('"kind":"ready"')
+
+      // Second frame must be diagnostic TACO_GONE because expiry gate intercepted before replay emission
+      const second = await reader.read()
+      expect(second.done).toBe(false)
+      const secondText = new TextDecoder().decode(second.value)
+      expect(secondText).toContain('"kind":"diagnostic"')
+      expect(secondText).toContain('"code":"TACO_GONE"')
+
+      // Reader is closed immediately after diagnostic frame
+      const third = await reader.read()
+      expect(third.done).toBe(true)
     } finally {
       vi.restoreAllMocks()
       currentDb = null

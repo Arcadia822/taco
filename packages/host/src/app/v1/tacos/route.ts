@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 import { type NextRequest, NextResponse } from 'next/server'
 import { computeSnapshotContentHash, validateDocumentSnapshot } from '@taco/protocol'
 import { ConflictError, DatabaseNotConfiguredError, getDatabase } from '@/lib/db'
-import { getStorageAdapter } from '@/lib/storage-adapter'
 
 export const dynamic = 'force-dynamic'
 
@@ -83,14 +82,6 @@ export async function POST(req: NextRequest) {
     const publishRes = await db.publishTaco(tacoId, title, snapshot, { ttlSeconds })
     const contentHash = await computeSnapshotContentHash(snapshot)
     const revisionId = publishRes.revisionId || tacoId
-    // Also write to storage adapter if configured for legacy direct URL access
-    try {
-      const storage = getStorageAdapter()
-      const rawBytes = new TextEncoder().encode(JSON.stringify(body))
-      await storage.putObject(`pastes/${tacoId}.json`, rawBytes, 'application/json')
-    } catch {
-      // Storage adapter write is non-authoritative
-    }
 
     const origin = req.nextUrl.origin
     const nowIso = new Date().toISOString()

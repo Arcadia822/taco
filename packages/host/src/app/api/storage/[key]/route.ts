@@ -159,6 +159,27 @@ export async function GET(req: NextRequest, context: { params: Promise<{ key: st
   }
 
   // Non-UUID legacy storage path
+  const pasteMatch = decodedKey.match(/^pastes\/([^/]+)\.json$/i)
+  if (pasteMatch) {
+    const pasteId = pasteMatch[1]
+    try {
+      const db = getDatabase()
+      const taco = await db.getTaco(pasteId)
+      if (taco && (taco.status === 'deleted' || taco.status === 'expired')) {
+        return NextResponse.json({ error: { code: 'GONE', message: 'Taco has expired or was deleted' } }, { status: 410 })
+      }
+    } catch (err) {
+      if (err instanceof GoneError) {
+        return NextResponse.json({ error: { code: 'GONE', message: err.message } }, { status: 410 })
+      }
+      if (err instanceof DatabaseNotConfiguredError) {
+        return NextResponse.json({ error: { code: 'SERVICE_UNAVAILABLE', message: err.message } }, { status: 503 })
+      }
+      const message = err instanceof Error ? err.message : 'Database unavailable'
+      return NextResponse.json({ error: { code: 'SERVICE_UNAVAILABLE', message } }, { status: 503 })
+    }
+  }
+
   try {
     const storage = getStorageAdapter()
     const data = await storage.getObject(decodedKey)

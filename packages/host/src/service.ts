@@ -74,8 +74,9 @@ export class TacoHostService {
         retentionSeconds: 86400,
       },
       retention: {
-        policy: 'manual_only',
-        defaultTtlSeconds: null,
+        policy: 'ttl',
+        defaultTtlSeconds: 2592000,
+        maxTtlSeconds: 31536000,
       },
     })
   }
