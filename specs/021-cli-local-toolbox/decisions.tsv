@@ -1,0 +1,9 @@
+timestamp	phase	decision	why	evidence	result
+2026-10-11T13:00:00Z	frame	Keep new as an empty Agent authoring bundle	User clarified there is no human empty-shell journey	specs/021-cli-local-toolbox/spec.md	accepted
+2026-10-11T13:01:00Z	baseline	Capture production Shell, Skill directory, npm tarball and native binary sizes	Compare actual release artifacts against pre-change baseline	tmp/toolbox-baseline.json	captured
+2026-10-11T13:02:00Z	architecture	Reuse canonical Skill pack helper through CLI imports	One implementation prevents divergent serialization and path rules	agent://ToolboxDesignA	selected
+2026-10-11T13:31:04.476Z	audit	Treat earlier row timestamps as approximate labels, not measured event times	Initial timestamps were manually assigned; this timestamp was read from runtime	specs/021-cli-local-toolbox/decisions.tsv	corrected
+2026-10-11	review	Freeze review-start baseline independently from disk Save	Save-before-Handoff must retain original contents and Checkpoint deltas	agent://ArchitectureJudge; specs/021-cli-local-toolbox/spec.md	browser worker corrected
+2026-10-11	architecture	Reject typed-core migration, receipt history, force, new exit code and extension rewrite	These exceed accepted local toolbox scope	agent://ArchitectureJudge; agent://ToolboxDesignB	rejected; designer withdrew later records
+2026-10-11	verification	Use real comments and Checkpoint controls in two-round browser smoke	Direct array mutation cannot prove reviewer flow	scripts/smoke-local-toolbox.mjs	passed on installed npm and native CLI; failed-delivery retry also passed
+2026-10-11	delivery	Use installed npm and native CLI without a Skill install	Source imports do not prove release asset embedding	specs/021-cli-local-toolbox/spec.md	passed; canonical guides and template mirrors verified

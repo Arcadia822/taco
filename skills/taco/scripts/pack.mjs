@@ -21,17 +21,20 @@
 import { randomUUID } from 'node:crypto'
 import { MAX_PNG_SIZE, PNG_DATA_URL_PREFIX, decodePng, validatePngBytes } from './png.mjs'
 import {
+  link,
   lstat,
   mkdir,
+  open,
   readFile,
   readdir,
   rename,
   rm,
   stat,
+  unlink,
   writeFile,
 } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
-
+import { fileURLToPath } from 'node:url'
 const FORMAT = 'taco/files'
 const FORMAT_VERSION = 1
 const DATA_CONTENT = /(<script\b(?=[^>]*\bid=["']taco-document["'])[^>]*>)([\s\S]*?)(<\/script>)/i
@@ -47,8 +50,10 @@ const SAFE_PATH_PATTERN =
 const SAFE_ROOT_PATTERN =
   /^(?:\.|(?![a-zA-Z]:)(?!(?:\.{1,2}(?:\/|$)))[^/\\\0]+(?:\/(?!(?:\.{1,2}(?:\/|$)))[^/\\\0]+)*)$/
 
-const isSafePath = (value) => typeof value === 'string' && value.length > 0 && SAFE_PATH_PATTERN.test(value)
-const isSafeRootPath = (value) => typeof value === 'string' && value.length > 0 && SAFE_ROOT_PATTERN.test(value)
+const isSafePath = (value) =>
+  typeof value === 'string' && value.length > 0 && SAFE_PATH_PATTERN.test(value)
+const isSafeRootPath = (value) =>
+  typeof value === 'string' && value.length > 0 && SAFE_ROOT_PATTERN.test(value)
 const posix = (value) => value.split(sep).join('/')
 
 const mediaTypeOf = (path) => {
@@ -69,7 +74,10 @@ const portableTitleBase = (value) =>
     .replace(/_+/g, '_')
     .replace(/^[_-]+|[_-]+$/g, '') || 'Untitled'
 
-const tacoFileBase = (path) => basename(path).replace(/\.taco\.html$/i, '').replace(/\.html$/i, '')
+const tacoFileBase = (path) =>
+  basename(path)
+    .replace(/\.taco\.html$/i, '')
+    .replace(/\.html$/i, '')
 
 const sha256Hex = async (bytes) => {
   const { createHash } = await import('node:crypto')
@@ -81,7 +89,10 @@ const sha256Hex = async (bytes) => {
 // ---------------------------------------------------------------------------
 
 const normalizeIgnorePattern = (value) => {
-  const normalized = value.replace(/\/{2,}/g, '/').replace(/^\.\//, '').replace(/\/$/, '')
+  const normalized = value
+    .replace(/\/{2,}/g, '/')
+    .replace(/^\.\//, '')
+    .replace(/\/$/, '')
   if (
     !normalized ||
     isAbsolute(normalized) ||
@@ -94,7 +105,8 @@ const normalizeIgnorePattern = (value) => {
   return normalized
 }
 
-const escapeRegex = (character) => (/[\\^$+?.()|{}[\]]/.test(character) ? `\\${character}` : character)
+const escapeRegex = (character) =>
+  /[\\^$+?.()|{}[\]]/.test(character) ? `\\${character}` : character
 
 const globRegex = (pattern) => {
   let source = '^'
@@ -220,7 +232,9 @@ const buildNavigation = (entries, rootPath, knownPaths) => {
   const toBundlePath = (value, option) => {
     const path = value.startsWith(`${rootPath}/`) ? value : `${rootPath}/${value}`
     if (!isSafePath(path) || !path.startsWith(`${rootPath}/`)) {
-      throw new Error(`${option} must be root-relative or a bundle path under ${rootPath}/: ${value}`)
+      throw new Error(
+        `${option} must be root-relative or a bundle path under ${rootPath}/: ${value}`,
+      )
     }
     return path
   }
@@ -241,7 +255,11 @@ const buildNavigation = (entries, rootPath, knownPaths) => {
       }
     }
     // Store root-relative paths, the form the runtime's own navigation editor writes.
-    groups.push({ id: `group-${groups.length + 1}`, title, paths: paths.map((path) => path.slice(rootPath.length + 1)) })
+    groups.push({
+      id: `group-${groups.length + 1}`,
+      title,
+      paths: paths.map((path) => path.slice(rootPath.length + 1)),
+    })
   }
   return groups
 }
@@ -253,7 +271,10 @@ const buildNavigation = (entries, rootPath, knownPaths) => {
 const isRecord = (value) => typeof value === 'object' && value !== null && !Array.isArray(value)
 const isNonEmptyString = (value) => typeof value === 'string' && value.length > 0
 const isTimestamp = (value) =>
-  typeof value === 'string' && value.length > 0 && value.length <= 128 && !Number.isNaN(Date.parse(value))
+  typeof value === 'string' &&
+  value.length > 0 &&
+  value.length <= 128 &&
+  !Number.isNaN(Date.parse(value))
 
 const SUPPORTED_BLOCK_TYPES = new Set([
   'paragraph',
@@ -279,54 +300,56 @@ const isBlock = (value) =>
   typeof value.html === 'string' &&
   value.html.length <= MAX_BLOCK_HTML
 
+const isCommentMessage = (message) =>
+  isRecord(message) &&
+  typeof message.id === 'string' &&
+  typeof message.author === 'string' &&
+  typeof message.body === 'string' &&
+  message.body.trim().length > 0 &&
+  isTimestamp(message.createdAt) &&
+  (message.updatedAt === undefined || isTimestamp(message.updatedAt)) &&
+  (message.deletedAt === undefined || isTimestamp(message.deletedAt))
+
 const isCommentThread = (value) => {
-  if (!isRecord(value) || !isRecord(value.anchor) || !isRecord(value.anchor.position) || !isRecord(value.anchor.quote)) {
-    return false
+  if (!isRecord(value)) return false
+  const anchor = value.anchor
+  let validAnchor = false
+  if (anchor === null) {
+    validAnchor = true
+  } else if (isRecord(anchor) && isRecord(anchor.position) && isRecord(anchor.quote)) {
+    const position = anchor.position
+    const quote = anchor.quote
+    const validPosition =
+      Number.isInteger(position.start) &&
+      Number.isInteger(position.end) &&
+      Number(position.start) >= 0 &&
+      Number(position.end) > Number(position.start)
+    const validQuote =
+      typeof quote.exact === 'string' &&
+      quote.exact.length > 0 &&
+      typeof quote.prefix === 'string' &&
+      typeof quote.suffix === 'string'
+    const block = anchor.block
+    const validBlock =
+      block === undefined ||
+      (isRecord(block) &&
+        typeof block.id === 'string' &&
+        block.id.length > 0 &&
+        block.type === 'codeBlock' &&
+        typeof block.language === 'string')
+    validAnchor = typeof anchor.path === 'string' && validPosition && validQuote && validBlock
   }
-  const { anchor } = value
-  const position = anchor.position
-  const quote = anchor.quote
-  const validPosition =
-    Number.isInteger(position.start) &&
-    Number.isInteger(position.end) &&
-    Number(position.start) >= 0 &&
-    Number(position.end) > Number(position.start)
-  const validQuote =
-    typeof quote.exact === 'string' &&
-    quote.exact.length > 0 &&
-    typeof quote.prefix === 'string' &&
-    typeof quote.suffix === 'string'
-  const block = anchor.block
-  const validBlock =
-    block === undefined ||
-    (isRecord(block) &&
-      typeof block.id === 'string' &&
-      block.id.length > 0 &&
-      block.type === 'codeBlock' &&
-      typeof block.language === 'string')
+  if (!validAnchor) return false
+
   return (
     typeof value.id === 'string' &&
     value.id.length > 0 &&
-    typeof anchor.path === 'string' &&
-    validPosition &&
-    validQuote &&
-    validBlock &&
     (value.status === 'open' || value.status === 'resolved') &&
     isTimestamp(value.createdAt) &&
     isTimestamp(value.updatedAt) &&
     Array.isArray(value.messages) &&
     value.messages.length > 0 &&
-    value.messages.every(
-      (message) =>
-        isRecord(message) &&
-        typeof message.id === 'string' &&
-        typeof message.author === 'string' &&
-        typeof message.body === 'string' &&
-        message.body.trim().length > 0 &&
-        isTimestamp(message.createdAt) &&
-        (message.updatedAt === undefined || isTimestamp(message.updatedAt)) &&
-        (message.deletedAt === undefined || isTimestamp(message.deletedAt)),
-    )
+    value.messages.every(isCommentMessage)
   )
 }
 
@@ -349,12 +372,14 @@ const isCollabInvite = (value) =>
   isNonEmptyString(value.pub) &&
   isNonEmptyString(value.priv) &&
   (value.role === 'writer' || value.role === 'commenter') &&
-  (value.exp === undefined || (typeof value.exp === 'number' && Number.isFinite(value.exp) && value.exp >= 0)) &&
+  (value.exp === undefined ||
+    (typeof value.exp === 'number' && Number.isFinite(value.exp) && value.exp >= 0)) &&
   isNonEmptyString(value.sig)
 
 const isCollab = (value) => {
   if (!isRecord(value)) return false
-  if (value.room !== undefined && (!isNonEmptyString(value.room) || !/^wss?:\/\//.test(value.room))) return false
+  if (value.room !== undefined && (!isNonEmptyString(value.room) || !/^wss?:\/\//.test(value.room)))
+    return false
   if (value.key !== undefined && !isNonEmptyString(value.key)) return false
   if (value.on !== undefined && typeof value.on !== 'boolean') return false
   if (value.v !== undefined && (!Number.isInteger(value.v) || Number(value.v) < 1)) return false
@@ -396,7 +421,12 @@ const validateBundle = (raw) => {
 
   const seen = new Set()
   for (const value of raw.files) {
-    if (!isRecord(value) || typeof value.path !== 'string' || typeof value.mediaType !== 'string' || typeof value.content !== 'string') {
+    if (
+      !isRecord(value) ||
+      typeof value.path !== 'string' ||
+      typeof value.mediaType !== 'string' ||
+      typeof value.content !== 'string'
+    ) {
       fail('every file requires path, mediaType and content strings')
     }
     if (!isSafePath(value.path) || !value.path.startsWith(`${raw.root}/`)) {
@@ -404,18 +434,25 @@ const validateBundle = (raw) => {
     }
     if (seen.has(value.path)) fail(`duplicate file path: ${value.path}`)
     seen.add(value.path)
-    if (value.id !== undefined && !isNonEmptyString(value.id)) fail(`file id is invalid: ${value.path}`)
+    if (value.id !== undefined && !isNonEmptyString(value.id))
+      fail(`file id is invalid: ${value.path}`)
     if (value.title !== undefined && (typeof value.title !== 'string' || !value.title.trim())) {
       fail(`file title is invalid: ${value.path}`)
     }
-    if (value.sourceHash !== undefined && (typeof value.sourceHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.sourceHash))) {
+    if (
+      value.sourceHash !== undefined &&
+      (typeof value.sourceHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.sourceHash))
+    ) {
       fail(`file sourceHash is invalid: ${value.path}`)
     }
     if (value.path.toLowerCase().endsWith('.taco.html')) {
       fail(`bundle file path must not end in .taco.html: ${value.path}`)
     }
     if ('sourceUrl' in value) fail(`sourceUrl is no longer supported: ${value.path}`)
-    if (value.blocks !== undefined && (!Array.isArray(value.blocks) || !value.blocks.every(isBlock))) {
+    if (
+      value.blocks !== undefined &&
+      (!Array.isArray(value.blocks) || !value.blocks.every(isBlock))
+    ) {
       fail(`file blocks are invalid: ${value.path}`)
     }
     if (value.mediaType === 'image/png') {
@@ -432,13 +469,19 @@ const validateBundle = (raw) => {
       fail('comments must contain valid local comment threads')
     }
     for (const thread of raw.comments) {
-      if (!seen.has(thread.anchor.path)) fail(`comment references a missing file: ${thread.anchor.path}`)
+      if (thread.anchor && thread.anchor.path && !seen.has(thread.anchor.path)) {
+        fail(`comment references a missing file: ${thread.anchor.path}`)
+      }
     }
   }
-  if (raw.access !== undefined && raw.access !== 'reader') fail('access must be reader when present')
-  if (raw.collab !== undefined && !isCollab(raw.collab)) fail('collab contains invalid sharing credentials')
+  if (raw.access !== undefined && raw.access !== 'reader')
+    fail('access must be reader when present')
+  if (raw.collab !== undefined && !isCollab(raw.collab))
+    fail('collab contains invalid sharing credentials')
   if (raw.navigation !== undefined && !isNavigationManifest(raw.navigation)) {
-    fail('navigation must be a v1 manifest with groups[].{id,title,paths}; fix it or remove the field to continue')
+    fail(
+      'navigation must be a v1 manifest with groups[].{id,title,paths}; fix it or remove the field to continue',
+    )
   }
   if (raw.packOptions !== undefined) {
     if (
@@ -491,8 +534,11 @@ const checkpointState = (bundle) => {
         problems.push(`checkpoint "${node.id}" has a malformed document entry`)
         continue
       }
-      const path = document.path.startsWith(`${bundle.root}/`) ? document.path : `${bundle.root}/${document.path}`
-      if (seenDocuments.has(path)) problems.push(`a document belongs to more than one checkpoint: ${path}`)
+      const path = document.path.startsWith(`${bundle.root}/`)
+        ? document.path
+        : `${bundle.root}/${document.path}`
+      if (seenDocuments.has(path))
+        problems.push(`a document belongs to more than one checkpoint: ${path}`)
       seenDocuments.add(path)
     }
   }
@@ -507,10 +553,14 @@ const checkpointState = (bundle) => {
   const ordered = []
   const satisfied = new Set()
   while (remaining.size) {
-    const ready = [...remaining.values()].filter((node) => node.after.every((id) => satisfied.has(id)))
+    const ready = [...remaining.values()].filter((node) =>
+      node.after.every((id) => satisfied.has(id)),
+    )
     if (!ready.length) {
       // A dependency cycle is the only way here; the runtime refuses the whole graph.
-      problems.push(`checkpoint graph has a dependency cycle involving: ${[...remaining.keys()].join(', ')}`)
+      problems.push(
+        `checkpoint graph has a dependency cycle involving: ${[...remaining.keys()].join(', ')}`,
+      )
       break
     }
     ready.sort((a, b) => a.id.localeCompare(b.id))
@@ -520,7 +570,12 @@ const checkpointState = (bundle) => {
       remaining.delete(node.id)
     }
   }
-  return { nodes: ordered, status, template: typeof checkpoints.template === 'string' ? checkpoints.template : null, problems }
+  return {
+    nodes: ordered,
+    status,
+    template: typeof checkpoints.template === 'string' ? checkpoints.template : null,
+    problems,
+  }
 }
 
 /** First-level directory groups, the sidebar's default when no manifest declares any. */
@@ -534,13 +589,18 @@ const directoryGroups = (files, rootPath) => {
     if (!byCategory.has(title)) byCategory.set(title, [])
     byCategory.get(title).push(relative)
   }
-  return [...byCategory.entries()].map(([title, paths]) => ({ id: `category-${title}`, title, paths }))
+  return [...byCategory.entries()].map(([title, paths]) => ({
+    id: `category-${title}`,
+    title,
+    paths,
+  }))
 }
 
 const structureOf = (bundle) => {
   const warnings = []
   const paths = new Set(bundle.files.map((file) => file.path))
-  const rel = (path) => (path.startsWith(`${bundle.root}/`) ? path.slice(bundle.root.length + 1) : path)
+  const rel = (path) =>
+    path.startsWith(`${bundle.root}/`) ? path.slice(bundle.root.length + 1) : path
   const checkpoint = checkpointState(bundle)
   const checkpointPaths = new Set()
   const checkpointGroups = []
@@ -553,7 +613,9 @@ const structureOf = (bundle) => {
           : `${bundle.root}/${document.path}`
         checkpointPaths.add(path)
         if (!paths.has(path)) {
-          warnings.push(`checkpoint "${node.id}" references a document that is not in the bundle: ${path}`)
+          warnings.push(
+            `checkpoint "${node.id}" references a document that is not in the bundle: ${path}`,
+          )
         }
         return {
           path,
@@ -579,11 +641,15 @@ const structureOf = (bundle) => {
           continue
         }
         if (!paths.has(path)) {
-          warnings.push(`navigation group "${group.title}" lists a path that is not in the bundle: ${path}`)
+          warnings.push(
+            `navigation group "${group.title}" lists a path that is not in the bundle: ${path}`,
+          )
           continue
         }
         if (assigned.has(path)) {
-          warnings.push(`navigation group "${group.title}" lists a path already grouped elsewhere: ${path}`)
+          warnings.push(
+            `navigation group "${group.title}" lists a path already grouped elsewhere: ${path}`,
+          )
           continue
         }
         assigned.add(path)
@@ -593,12 +659,18 @@ const structureOf = (bundle) => {
       if (!files.length) warnings.push(`navigation group "${group.title}" is empty`)
     }
     if (manifest.entry) {
-      const entry = manifest.entry.startsWith(`${bundle.root}/`) ? manifest.entry : `${bundle.root}/${manifest.entry}`
+      const entry = manifest.entry.startsWith(`${bundle.root}/`)
+        ? manifest.entry
+        : `${bundle.root}/${manifest.entry}`
       if (!paths.has(entry)) warnings.push(`navigation.entry is not in the bundle: ${entry}`)
     }
   } else {
     for (const group of directoryGroups(bundle.files, bundle.root)) {
-      groups.push({ id: group.id, title: group.title, files: group.paths.map((path) => `${bundle.root}/${path}`) })
+      groups.push({
+        id: group.id,
+        title: group.title,
+        files: group.paths.map((path) => `${bundle.root}/${path}`),
+      })
       for (const path of group.paths) assigned.add(`${bundle.root}/${path}`)
     }
   }
@@ -610,13 +682,19 @@ const structureOf = (bundle) => {
       : `${bundle.root}/${manifest.entry}`
     : null
   const markdown = bundle.files.find((file) => /\.md$/i.test(file.path))
-  const entry = (declaredEntry && paths.has(declaredEntry) ? declaredEntry : null) ?? markdown?.path ?? bundle.files[0]?.path ?? null
+  const entry =
+    (declaredEntry && paths.has(declaredEntry) ? declaredEntry : null) ??
+    markdown?.path ??
+    bundle.files[0]?.path ??
+    null
 
   const comments = bundle.comments ?? []
   const open = comments.filter((thread) => thread.status === 'open')
   for (const thread of comments) {
-    if (!paths.has(thread.anchor.path)) {
-      warnings.push(`comment ${thread.id} anchors a file that is not in the bundle: ${thread.anchor.path}`)
+    if (thread.anchor && !paths.has(thread.anchor.path)) {
+      warnings.push(
+        `comment ${thread.id} anchors a file that is not in the bundle: ${thread.anchor.path}`,
+      )
     }
   }
 
@@ -626,7 +704,16 @@ const structureOf = (bundle) => {
     checkpointGroups,
     groups,
     unassigned,
-    comments: { total: comments.length, open: open.length, resolved: comments.length - open.length, threads: comments.map((thread) => ({ id: thread.id, status: thread.status, path: thread.anchor.path })) },
+    comments: {
+      total: comments.length,
+      open: open.length,
+      resolved: comments.length - open.length,
+      threads: comments.map((thread) => ({
+        id: thread.id,
+        status: thread.status,
+        path: thread.anchor ? thread.anchor.path : null,
+      })),
+    },
     warnings,
   }
 }
@@ -634,7 +721,9 @@ const structureOf = (bundle) => {
 const printStructure = (bundle, structure, lines, extraWarnings = []) => {
   lines.push(`  root: ${bundle.root}`)
   lines.push(`  files: ${bundle.files.length}`)
-  lines.push(`  entry: ${structure.entry ?? '(none)'}${structure.entryDeclared ? ' (declared)' : ' (derived)'}`)
+  lines.push(
+    `  entry: ${structure.entry ?? '(none)'}${structure.entryDeclared ? ' (declared)' : ' (derived)'}`,
+  )
   if (structure.checkpointGroups.length) {
     lines.push('  checkpoints:')
     for (const group of structure.checkpointGroups) {
@@ -694,13 +783,33 @@ const embedBundle = (shell, bundle) => {
     : withBundle.replace('</head>', () => `<title>${escapedTitle}</title></head>`)
 }
 
-const atomicWrite = async (path, text) => {
+const atomicWrite = async (path, text, options = {}) => {
   const temporary = join(dirname(path), `.${basename(path)}.${randomUUID()}.tmp`)
-  await writeFile(temporary, text, 'utf8')
   try {
-    await rename(temporary, path)
+    const handle = await open(temporary, 'w', options.mode ?? 0o666)
+    try {
+      await handle.writeFile(text, 'utf8')
+      await handle.sync()
+    } finally {
+      await handle.close()
+    }
+    if (options.exclusive) {
+      try {
+        await link(temporary, path)
+      } catch (linkError) {
+        if (linkError && linkError.code === 'EEXIST') {
+          const error = new Error(`Target file already exists: ${path}. Refusing to overwrite.`)
+          error.code = 'EEXIST'
+          throw error
+        }
+        throw linkError
+      }
+      await unlink(temporary).catch(() => {})
+    } else {
+      await rename(temporary, path)
+    }
   } catch (error) {
-    await rm(temporary, { force: true })
+    await rm(temporary, { force: true }).catch(() => {})
     throw error
   }
 }
@@ -709,29 +818,40 @@ const readBundleFrom = (html, label) => {
   const match = html.match(DATA_CONTENT)
   if (!match) throw new Error(`${label} has no #taco-document data block`)
   const text = match[2].trim()
-  if (!text) throw new Error(`${label} has an empty #taco-document data block; assemble a bundle first`)
+  if (!text)
+    throw new Error(`${label} has an empty #taco-document data block; assemble a bundle first`)
   let bundle
   try {
     bundle = JSON.parse(text)
-  } catch (error) {
-    throw new Error(`${label} has invalid JSON in #taco-document: ${error.message}`)
+  } catch {
+    throw new Error(`${label} has invalid JSON in #taco-document`)
   }
   return { html, bundle: validateBundle(bundle) }
 }
 
-const readBundleFromHtml = async (path) => readBundleFrom(await readFile(path, 'utf8'), resolve(path))
+const readBundleFromHtml = async (path) =>
+  readBundleFrom(await readFile(path, 'utf8'), resolve(path))
 
 const shellVariantOf = (html) =>
-  html.match(/<meta\b(?=[^>]*\bname=["']taco-shell-variant["'])[^>]*>/i)?.[0]?.match(/\bcontent=["'](complete|lite)["']/i)?.[1] ?? 'complete (unmarked)'
+  html
+    .match(/<meta\b(?=[^>]*\bname=["']taco-shell-variant["'])[^>]*>/i)?.[0]
+    ?.match(/\bcontent=["'](complete|lite)["']/i)?.[1] ?? 'complete (unmarked)'
 
 const supportsEmbeddedHtml = (html) => {
   const shell = html.replace(DATA_BLOCK, '')
   const marker = shell.match(/<meta\b(?=[^>]*\bname=["']taco-shell-features["'])[^>]*>/i)?.[0]
-  return marker?.match(/\bcontent=["']([^"']*)["']/i)?.[1].split(/\s+/).includes('embedded-html') ?? false
+  return (
+    marker
+      ?.match(/\bcontent=["']([^"']*)["']/i)?.[1]
+      .split(/\s+/)
+      .includes('embedded-html') ?? false
+  )
 }
 
 const securityVersionOf = (html) =>
-  html.match(/<meta\b(?=[^>]*\bname=["']taco-security-version["'])[^>]*>/i)?.[0]?.match(/\bcontent=["']([^"']+)["']/i)?.[1] ?? null
+  html
+    .match(/<meta\b(?=[^>]*\bname=["']taco-security-version["'])[^>]*>/i)?.[0]
+    ?.match(/\bcontent=["']([^"']+)["']/i)?.[1] ?? null
 
 // ---------------------------------------------------------------------------
 // commands
@@ -749,7 +869,7 @@ const parseArgs = (argv) => {
       continue
     }
     const name = argument.slice(2)
-    if (name === 'dry-run' || name === 'help') {
+    if (name === 'dry-run' || name === 'help' || name === 'lite' || name === 'exclusive') {
       flags.add(name)
       continue
     }
@@ -763,6 +883,9 @@ const parseArgs = (argv) => {
       options.set(name, value)
     }
   }
+  if (positional.length && !options.has('dir')) {
+    options.set('dir', positional[0])
+  }
   return { options, multi, flags, positional }
 }
 
@@ -772,7 +895,7 @@ const USAGE = `Usage:
                         [--group <Title>=<relPath,relPath>]... [--ignore <glob>]... [--dry-run]
   node scripts/pack.mjs verify <file.taco.html>`
 
-const pack = async ({ options, multi, flags }) => {
+const pack = async ({ options, multi, flags, customShellHtml }) => {
   const dirOption = options.get('dir')
   if (!dirOption) throw new Error(USAGE)
   const featureDir = resolve(dirOption)
@@ -782,10 +905,15 @@ const pack = async ({ options, multi, flags }) => {
   const rootPath = options.get('root') ?? basename(featureDir)
   if (!isSafeRootPath(rootPath)) throw new Error(`--root is not a safe relative path: ${rootPath}`)
 
-  const outputPath = resolve(options.get('out') ?? join(featureDir, `${portableTitleBase(options.get('title') ?? rootPath)}.taco.html`))
-  if (!outputPath.toLowerCase().endsWith('.taco.html')) throw new Error('Output must be a .taco.html file')
+  const outputPath = resolve(
+    options.get('out') ??
+      join(featureDir, `${portableTitleBase(options.get('title') ?? rootPath)}.taco.html`),
+  )
+  if (!outputPath.toLowerCase().endsWith('.taco.html'))
+    throw new Error('Output must be a .taco.html file')
   const outputStats = await lstat(outputPath).catch(() => null)
-  if (outputStats?.isSymbolicLink()) throw new Error(`Refusing to write Taco through a symbolic link: ${outputPath}`)
+  if (outputStats?.isSymbolicLink())
+    throw new Error(`Refusing to write Taco through a symbolic link: ${outputPath}`)
 
   const priorHtml = outputStats ? await readFile(outputPath, 'utf8') : null
   const priorBundle = priorHtml ? readBundleFrom(priorHtml, outputPath).bundle : null
@@ -800,7 +928,10 @@ const pack = async ({ options, multi, flags }) => {
 
   let shell
   let shellSource
-  if (options.get('shell')) {
+  if (customShellHtml) {
+    shellSource = 'embedded'
+    shell = customShellHtml
+  } else if (options.get('shell')) {
     shellSource = resolve(options.get('shell'))
     shell = await readFile(shellSource, 'utf8').catch(() => {
       throw new Error(`Shell not found: ${shellSource}`)
@@ -809,47 +940,79 @@ const pack = async ({ options, multi, flags }) => {
     // A refresh reuses the artifact's own shell, so Complete stays Complete and Lite stays Lite.
     shellSource = outputPath
     shell = priorHtml
+  } else if (flags.has('lite')) {
+    shellSource = join(import.meta.dirname, '../taco-shell-lite.html')
+    shell = await readFile(shellSource, 'utf8').catch(() => {
+      throw new Error(`Shell not found: ${shellSource}`)
+    })
   } else {
     shellSource = join(import.meta.dirname, '../taco-shell.html')
     shell = await readFile(shellSource, 'utf8').catch(() => {
       throw new Error(`Shell not found: ${shellSource}`)
     })
   }
-
-  const ignorePatterns = (multi.get('ignore')?.length ? multi.get('ignore') : priorBundle?.packOptions?.ignore ?? []).map(
-    normalizeIgnorePattern,
-  )
+  const ignorePatterns = (
+    multi.get('ignore')?.length ? multi.get('ignore') : (priorBundle?.packOptions?.ignore ?? [])
+  ).map(normalizeIgnorePattern)
   const existingByPath = new Map((priorBundle?.files ?? []).map((file) => [file.path, file]))
-  const { files, skipped } = await collectFiles(featureDir, rootPath, existingByPath, ignorePatterns)
+  const { files, skipped } = await collectFiles(
+    featureDir,
+    rootPath,
+    existingByPath,
+    ignorePatterns,
+  )
   const packWarnings = []
   // A commented source that disappeared keeps its previous entry: the review history still exists
   // and dropping the file would make the bundle's own comments unresolvable.
   const present = new Set(files.map((file) => file.path))
   for (const thread of priorBundle?.comments ?? []) {
+    if (!thread.anchor) continue
     if (present.has(thread.anchor.path)) continue
     const previous = existingByPath.get(thread.anchor.path)
     if (!previous) {
-      throw new Error(`comment ${thread.id} anchors ${thread.anchor.path}, which is neither in the directory nor in the previous bundle`)
+      throw new Error(
+        `comment ${thread.id} anchors ${thread.anchor.path}, which is neither in the directory nor in the previous bundle`,
+      )
     }
     files.push(previous)
     present.add(previous.path)
-    packWarnings.push(`commented source is gone from the directory; keeping its last known content: ${previous.path}`)
+    packWarnings.push(
+      `commented source is gone from the directory; keeping its last known content: ${previous.path}`,
+    )
   }
   if (!files.length) throw new Error(`No supported source files found in ${featureDir}`)
 
-  if (files.some((file) => file.mediaType.split(';')[0].trim().toLowerCase() === 'text/html' || /\.html?$/i.test(file.path))) {
+  if (
+    files.some(
+      (file) =>
+        file.mediaType.split(';')[0].trim().toLowerCase() === 'text/html' ||
+        /\.html?$/i.test(file.path),
+    )
+  ) {
     if (!supportsEmbeddedHtml(shell)) {
-      if (options.get('shell')) throw new Error('Selected shell does not declare embedded-html support; use a current shell of the same variant')
+      if (options.get('shell'))
+        throw new Error(
+          'Selected shell does not declare embedded-html support; use a current shell of the same variant',
+        )
       const variant = shellVariantOf(shell)
       if (variant !== 'complete' && variant !== 'lite' && variant !== 'complete (unmarked)') {
         throw new Error('Cannot determine the existing shell variant for HTML refresh')
       }
-      shellSource = join(import.meta.dirname, variant === 'lite' ? '../taco-shell-lite.html' : '../taco-shell.html')
+      shellSource = join(
+        import.meta.dirname,
+        variant === 'lite' ? '../taco-shell-lite.html' : '../taco-shell.html',
+      )
       shell = await readFile(shellSource, 'utf8')
-      if (!supportsEmbeddedHtml(shell)) throw new Error(`Shell lacks embedded-html support: ${shellSource}`)
-      packWarnings.push('Replaced legacy shell with the current stock shell of the same variant for embedded HTML')
+      if (!supportsEmbeddedHtml(shell))
+        throw new Error(`Shell lacks embedded-html support: ${shellSource}`)
+      packWarnings.push(
+        'Replaced legacy shell with the current stock shell of the same variant for embedded HTML',
+      )
     }
-    if (priorHtml && shellVariantOf(shell).split(' ')[0] !== shellVariantOf(priorHtml).split(' ')[0]) {
+    if (
+      priorHtml &&
+      shellVariantOf(shell).split(' ')[0] !== shellVariantOf(priorHtml).split(' ')[0]
+    ) {
       throw new Error('HTML refresh must preserve the existing Complete/Lite shell variant')
     }
   }
@@ -857,7 +1020,9 @@ const pack = async ({ options, multi, flags }) => {
   const title = options.get('title') ?? priorBundle?.title ?? portableTitleBase(rootPath)
   const expectedStem = portableTitleBase(title)
   if (!priorBundle && tacoFileBase(outputPath) !== expectedStem) {
-    throw new Error(`Taco title requires filename ${expectedStem}.taco.html, not ${basename(outputPath)}`)
+    throw new Error(
+      `Taco title requires filename ${expectedStem}.taco.html, not ${basename(outputPath)}`,
+    )
   }
 
   const knownPaths = new Set(files.map((file) => file.path))
@@ -865,7 +1030,9 @@ const pack = async ({ options, multi, flags }) => {
   let entry
   const declaredEntry = options.get('entry')
   if (declaredEntry) {
-    const path = declaredEntry.startsWith(`${rootPath}/`) ? declaredEntry : `${rootPath}/${declaredEntry}`
+    const path = declaredEntry.startsWith(`${rootPath}/`)
+      ? declaredEntry
+      : `${rootPath}/${declaredEntry}`
     if (!knownPaths.has(path)) throw new Error(`--entry is not in the bundle: ${path}`)
     entry = path.slice(rootPath.length + 1)
   }
@@ -891,7 +1058,9 @@ const pack = async ({ options, multi, flags }) => {
     bundle.navigation = {
       version: 1,
       entry,
-      groups: priorManifest?.groups?.length ? priorManifest.groups : directoryGroups(files, rootPath),
+      groups: priorManifest?.groups?.length
+        ? priorManifest.groups
+        : directoryGroups(files, rootPath),
     }
   } else if (priorManifest) {
     bundle.navigation = priorManifest
@@ -909,7 +1078,9 @@ const pack = async ({ options, multi, flags }) => {
     for (const item of skipped) lines.push(`    - ${item.path} (${item.reason})`)
   }
   if (priorBundle) {
-    const unknownFields = Object.keys(priorBundle).filter((key) => !KNOWN_BUNDLE_FIELDS.has(key)).length
+    const unknownFields = Object.keys(priorBundle).filter(
+      (key) => !KNOWN_BUNDLE_FIELDS.has(key),
+    ).length
     lines.push(
       `  preserved from the previous Taco: docId, ${priorBundle.comments?.length ?? 0} comment thread(s), ` +
         `${priorBundle.checkpoints ? 'checkpoint graph and status table, ' : ''}${unknownFields} unknown field(s)`,
@@ -917,9 +1088,18 @@ const pack = async ({ options, multi, flags }) => {
   }
 
   if (!flags.has('dry-run')) {
-    await atomicWrite(outputPath, embedBundle(shell, bundle))
+    const isExclusive = flags.has('exclusive') || !outputStats
+    await atomicWrite(outputPath, embedBundle(shell, bundle), { exclusive: isExclusive })
   }
-  process.stdout.write(`${lines.join('\n')}\n`)
+  return {
+    outputPath,
+    bundle,
+    structure,
+    shell,
+    lines,
+    skipped,
+    warnings: packWarnings,
+  }
 }
 
 const verify = async (path) => {
@@ -930,25 +1110,116 @@ const verify = async (path) => {
   lines.push(`  title: ${bundle.title}`)
   lines.push(`  docId: ${bundle.docId}`)
   printStructure(bundle, structure, lines)
-  process.stdout.write(`${lines.join('\n')}\n`)
-  if (structure.warnings.length) process.exitCode = 2
+  return { path: resolve(path), html, bundle, structure, lines }
+}
+
+const packDirectory = async ({
+  dir,
+  out,
+  shell,
+  title,
+  root,
+  entry,
+  group = [],
+  ignore = [],
+  dryRun = false,
+  lite = false,
+  customShellHtml,
+  exclusive = false,
+}) => {
+  const options = new Map()
+  if (dir) options.set('dir', dir)
+  if (out) options.set('out', out)
+  if (shell) options.set('shell', shell)
+  if (title) options.set('title', title)
+  if (root) options.set('root', root)
+  if (entry) options.set('entry', entry)
+
+  const multi = new Map()
+  if (group && group.length) multi.set('group', Array.isArray(group) ? group : [group])
+  if (ignore && ignore.length) multi.set('ignore', Array.isArray(ignore) ? ignore : [ignore])
+
+  const flags = new Set()
+  if (dryRun) flags.add('dry-run')
+  if (lite) flags.add('lite')
+  if (exclusive) flags.add('exclusive')
+  return pack({ options, multi, flags, customShellHtml })
+}
+
+const verifyTaco = async (pathOrHtml) => {
+  if (
+    typeof pathOrHtml === 'string' &&
+    (pathOrHtml.includes('<script') || pathOrHtml.includes('<!DOCTYPE'))
+  ) {
+    const { html, bundle } = readBundleFrom(pathOrHtml, 'in-memory taco')
+    const structure = structureOf(bundle)
+    const lines = [`taco verify: in-memory taco`]
+    lines.push(
+      `  shell: ${shellVariantOf(html)}  security: ${securityVersionOf(html) ?? 'unknown'}`,
+    )
+    lines.push(`  title: ${bundle.title}`)
+    lines.push(`  docId: ${bundle.docId}`)
+    printStructure(bundle, structure, lines)
+    return { path: 'in-memory', html, bundle, structure, lines }
+  }
+  return verify(pathOrHtml)
 }
 
 const main = async () => {
   const argv = process.argv.slice(2)
   if (argv[0] === 'verify') {
     if (!argv[1]) throw new Error(USAGE)
-    return verify(argv[1])
+    const result = await verify(argv[1])
+    process.stdout.write(`${result.lines.join('\n')}\n`)
+    if (result.structure.warnings.length) process.exitCode = 2
+    return result
   }
   const parsed = parseArgs(argv)
   if (parsed.flags.has('help') || (!parsed.options.has('dir') && !parsed.positional.length)) {
     process.stdout.write(`${USAGE}\n`)
     return
   }
-  return pack(parsed)
+  const result = await pack(parsed)
+  process.stdout.write(`${result.lines.join('\n')}\n`)
+  return result
 }
 
-main().catch((error) => {
-  process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
-  process.exitCode = 1
-})
+const isMain = Boolean(
+  process.argv[1] &&
+  basename(process.argv[1]) === 'pack.mjs' &&
+  resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url)),
+)
+if (isMain) {
+  main().catch((error) => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
+    process.exitCode = 1
+  })
+}
+
+export {
+  FORMAT,
+  FORMAT_VERSION,
+  KNOWN_BUNDLE_FIELDS,
+  packDirectory,
+  verifyTaco,
+  verify,
+  pack,
+  readBundleFromHtml,
+  readBundleFrom,
+  embedBundle,
+  atomicWrite,
+  validateBundle,
+  structureOf,
+  shellVariantOf,
+  securityVersionOf,
+  isSafePath,
+  isSafeRootPath,
+  mediaTypeOf,
+  portableTitleBase,
+  tacoFileBase,
+  directoryGroups,
+  collectFiles,
+  sha256Hex,
+  isCommentThread,
+  isCommentMessage,
+}

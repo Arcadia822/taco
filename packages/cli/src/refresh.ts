@@ -1,0 +1,692 @@
+import { readFile } from 'node:fs/promises'
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import {
+  atomicWrite,
+  collectFiles,
+  embedBundle,
+  readBundleFromHtml,
+  sha256Hex,
+  shellVariantOf,
+  validateBundle,
+  type TacoBundle,
+  type TacoFile,
+} from '../../../skills/taco/scripts/pack.mjs'
+import { decodePng } from '../../../skills/taco/scripts/png.mjs'
+import { EXIT_CODES, makeCliError } from './errors.ts'
+import { COMPLETE_SHELL_HTML, LITE_SHELL_HTML } from './generated/assets.ts'
+import { assertSafeDestination, verifyNoSymlinksInAncestry } from './local-paths.ts'
+
+const DATA_BLOCK = /<script\b(?=[^>]*\bid=["']taco-document["'])[^>]*>[\s\S]*?<\/script>/i
+
+const supportsEmbeddedHtml = (html: string): boolean => {
+  const shell = html.replace(DATA_BLOCK, '')
+  const marker = shell.match(/<meta\b(?=[^>]*\bname=["']taco-shell-features["'])[^>]*>/i)?.[0]
+  return (
+    marker
+      ?.match(/\bcontent=["']([^"']*)["']/i)?.[1]
+      .split(/\s+/)
+      .includes('embedded-html') ?? false
+  )
+}
+
+const isHtmlFile = (path: string, mediaType?: string): boolean =>
+  /\.html?$/i.test(path) || mediaType?.split(';')[0].trim().toLowerCase() === 'text/html'
+
+interface ParsedCommentMessage {
+  id: string
+  body?: string | null
+  createdAt?: string
+  updatedAt?: string
+  deletedAt?: string
+}
+
+interface ParsedCommentThread {
+  id: string
+  status?: string
+  createdAt?: string
+  updatedAt?: string
+  messages: ParsedCommentMessage[]
+}
+
+const parseCommentThread = (val: unknown): ParsedCommentThread | null => {
+  if (!val || typeof val !== 'object') return null
+  const rec = val as Record<string, unknown>
+  if (typeof rec.id !== 'string') return null
+  const rawMsgs = Array.isArray(rec.messages) ? rec.messages : []
+  const messages: ParsedCommentMessage[] = []
+  for (const m of rawMsgs) {
+    if (!m || typeof m !== 'object') return null
+    const mRec = m as Record<string, unknown>
+    if (typeof mRec.id !== 'string') return null
+    messages.push({
+      id: mRec.id,
+      body: typeof mRec.body === 'string' ? mRec.body : null,
+      createdAt: typeof mRec.createdAt === 'string' ? mRec.createdAt : undefined,
+      updatedAt: typeof mRec.updatedAt === 'string' ? mRec.updatedAt : undefined,
+      deletedAt: typeof mRec.deletedAt === 'string' ? mRec.deletedAt : undefined,
+    })
+  }
+  return {
+    id: rec.id,
+    status: typeof rec.status === 'string' ? rec.status : undefined,
+    createdAt: typeof rec.createdAt === 'string' ? rec.createdAt : undefined,
+    updatedAt: typeof rec.updatedAt === 'string' ? rec.updatedAt : undefined,
+    messages,
+  }
+}
+
+const areBaselineCommentsMatchingArtifact = (
+  baselineComments?: unknown[],
+  artifactComments?: unknown[],
+): boolean => {
+  const baseList = Array.isArray(baselineComments) ? baselineComments : []
+  const artList = Array.isArray(artifactComments) ? artifactComments : []
+  if (baseList.length !== artList.length) return false
+
+  const artMap = new Map<string, ParsedCommentThread>()
+  for (const c of artList) {
+    const parsed = parseCommentThread(c)
+    if (!parsed) return false
+    artMap.set(parsed.id, parsed)
+  }
+  if (artMap.size !== artList.length) return false
+
+  for (const baseItem of baseList) {
+    const baseThread = parseCommentThread(baseItem)
+    if (!baseThread) return false
+    const artThread = artMap.get(baseThread.id)
+    if (!artThread) return false
+
+    if (baseThread.status !== artThread.status) return false
+    if ((baseThread.createdAt ?? null) !== (artThread.createdAt ?? null)) return false
+    if ((baseThread.updatedAt ?? null) !== (artThread.updatedAt ?? null)) return false
+
+    if (baseThread.messages.length !== artThread.messages.length) return false
+
+    const artMsgMap = new Map<string, ParsedCommentMessage>()
+    for (const m of artThread.messages) {
+      artMsgMap.set(m.id, m)
+    }
+    if (artMsgMap.size !== artThread.messages.length) return false
+
+    for (const bMsg of baseThread.messages) {
+      const aMsg = artMsgMap.get(bMsg.id)
+      if (!aMsg) return false
+      if (bMsg.body !== aMsg.body) return false
+      if ((bMsg.createdAt ?? null) !== (aMsg.createdAt ?? null)) return false
+      if ((bMsg.updatedAt ?? null) !== (aMsg.updatedAt ?? null)) return false
+      if ((bMsg.deletedAt ?? null) !== (aMsg.deletedAt ?? null)) return false
+    }
+  }
+
+  return true
+}
+export interface RefreshOptions {
+  filePath: string
+  handoffPath: string
+  dirPath?: string
+  dryRun?: boolean
+}
+
+interface FileContentCheck {
+  path: string
+  status: 'handled' | 'pending' | 'conflict' | 'unmodified' | 'added' | 'deleted'
+  reason?: string
+}
+
+export const executeRefresh = async (
+  options: RefreshOptions,
+): Promise<{ exitCode: number; stdout?: string; stderr?: string }> => {
+  const artifactPath = resolve(options.filePath)
+  if (!existsSync(artifactPath)) {
+    const err = makeCliError('LOCAL_IO_ERROR', `Artifact file not found: ${artifactPath}`)
+    return { exitCode: EXIT_CODES.LOCAL_IO_ERROR, stderr: JSON.stringify(err) }
+  }
+
+  // Pre-check artifact destination: refuses symlinks and forbidden ancestors
+  try {
+    await assertSafeDestination(artifactPath)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    const error = makeCliError('VALIDATION_ERROR', msg)
+    return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  // Read original artifact
+  let originalHtml: string
+  let originalBundle: TacoBundle
+  try {
+    const res = await readBundleFromHtml(artifactPath)
+    originalHtml = res.html
+    originalBundle = res.bundle
+  } catch (err) {
+    const error = makeCliError(
+      'VALIDATION_ERROR',
+      `Failed to parse artifact: ${(err as Error).message}`,
+    )
+    return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  // Read handoff
+  let rawHandoffText: string
+  try {
+    if (options.handoffPath === '-') {
+      rawHandoffText = readFileSync(0, 'utf8')
+    } else {
+      const p = resolve(options.handoffPath)
+      if (!existsSync(p)) {
+        const err = makeCliError('LOCAL_IO_ERROR', `Handoff file not found: ${p}`)
+        return { exitCode: EXIT_CODES.LOCAL_IO_ERROR, stderr: JSON.stringify(err) }
+      }
+      rawHandoffText = await readFile(p, 'utf8')
+    }
+  } catch (err) {
+    const error = makeCliError('LOCAL_IO_ERROR', 'Failed to read handoff file')
+    return { exitCode: EXIT_CODES.LOCAL_IO_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  let handoffJson: unknown
+  try {
+    handoffJson = JSON.parse(rawHandoffText)
+  } catch {
+    const error = makeCliError('VALIDATION_ERROR', 'Invalid JSON syntax in handoff')
+    return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  if (!handoffJson || typeof handoffJson !== 'object') {
+    const error = makeCliError('VALIDATION_ERROR', 'Handoff JSON must be an object')
+    return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  const handoffRecord = handoffJson as Record<string, unknown>
+  const payloadRaw = handoffRecord.payload !== undefined ? handoffRecord.payload : handoffRecord
+
+  if (!payloadRaw || typeof payloadRaw !== 'object') {
+    const error = makeCliError('VALIDATION_ERROR', 'Handoff payload must be an object')
+    return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  // Extract LocalHandoff payload (either direct or wrapped in LocalReceipt)
+  const payload = payloadRaw as {
+    schema?: unknown
+    handoffId?: unknown
+    sessionId?: unknown
+    docId?: unknown
+    baseline?: TacoBundle
+    snapshot?: TacoBundle
+  }
+
+  const baseline = payload.baseline
+  const snapshot = payload.snapshot
+
+  if (!baseline || !snapshot) {
+    const error = makeCliError(
+      'VALIDATION_ERROR',
+      'Handoff payload must contain baseline and snapshot',
+    )
+    return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  // Schema validation: a Handoff declares its schema explicitly
+  if (payload.schema !== 'taco-local-handoff/1') {
+    const error = makeCliError(
+      'VALIDATION_ERROR',
+      payload.schema === undefined
+        ? 'Handoff payload is missing the taco-local-handoff/1 schema marker'
+        : `Unsupported handoff schema: ${String(payload.schema)}`,
+    )
+    return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  try {
+    validateBundle(baseline)
+    validateBundle(snapshot)
+  } catch (err) {
+    const error = makeCliError(
+      'VALIDATION_ERROR',
+      `Invalid bundle structure in handoff: ${(err as Error).message}`,
+    )
+    return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  // 1. Identity & root checks
+  if (payload.docId !== originalBundle.docId) {
+    const error = makeCliError('CONFLICT_ERROR', `Handoff docId does not match artifact docId`)
+    return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  if (baseline.docId !== originalBundle.docId || snapshot.docId !== originalBundle.docId) {
+    const error = makeCliError(
+      'CONFLICT_ERROR',
+      `Handoff baseline/snapshot docId does not match artifact docId`,
+    )
+    return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  if (baseline.root !== originalBundle.root || snapshot.root !== originalBundle.root) {
+    const error = makeCliError('CONFLICT_ERROR', `Handoff root does not match artifact root`)
+    return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  // 2. Strict baseline membership & content match against original artifact
+  // "Matching docId/root but baseline differs from original artifact (including membership/PNG) reject stale earlier/copy. Round2 artifact same identity but original A baseline payload must reject after first refresh."
+  const originalFilesMap = new Map(originalBundle.files.map((f) => [f.path, f]))
+  const baselineFilesMap = new Map(baseline.files.map((f) => [f.path, f]))
+
+  if (originalFilesMap.size !== baselineFilesMap.size) {
+    const error = makeCliError(
+      'CONFLICT_ERROR',
+      `Baseline file count (${baselineFilesMap.size}) does not match artifact file count (${originalFilesMap.size}); rejecting stale review baseline`,
+    )
+    return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  for (const [path, baseFile] of baselineFilesMap.entries()) {
+    const origFile = originalFilesMap.get(path)
+    if (!origFile) {
+      const error = makeCliError(
+        'CONFLICT_ERROR',
+        `Baseline contains file '${path}' not found in artifact; rejecting stale review baseline`,
+      )
+      return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+    }
+    if (origFile.content !== baseFile.content) {
+      const error = makeCliError(
+        'CONFLICT_ERROR',
+        `Baseline content for '${path}' differs from current artifact; rejecting stale review baseline (artifact may have been refreshed already)`,
+      )
+      return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+    }
+  }
+
+  // Bind baseline comments to current artifact
+  if (!areBaselineCommentsMatchingArtifact(baseline.comments, originalBundle.comments)) {
+    const error = makeCliError(
+      'CONFLICT_ERROR',
+      `Baseline comments differ from current artifact; rejecting stale review baseline`,
+    )
+    return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  // Bind baseline checkpoints to current artifact
+  const origCp = JSON.stringify(originalBundle.checkpoints ?? null)
+  const baseCp = JSON.stringify(baseline.checkpoints ?? null)
+  if (origCp !== baseCp) {
+    const error = makeCliError(
+      'CONFLICT_ERROR',
+      `Baseline checkpoints differ from current artifact; rejecting stale review baseline`,
+    )
+    return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  // 3. Metadata drift check: original title/nav/checkpoints must not mismatch supplied baseline unless matching snapshot
+  if (originalBundle.title !== baseline.title && originalBundle.title !== snapshot.title) {
+    const error = makeCliError(
+      'CONFLICT_ERROR',
+      `Artifact title has independent modifications mismatching baseline and snapshot`,
+    )
+    return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  // Check navigation drift
+  const origNav = JSON.stringify(originalBundle.navigation ?? null)
+  const baseNav = JSON.stringify(baseline.navigation ?? null)
+  const snapNav = JSON.stringify(snapshot.navigation ?? null)
+  if (origNav !== baseNav && origNav !== snapNav) {
+    const error = makeCliError(
+      'CONFLICT_ERROR',
+      `Artifact navigation has independent modifications mismatching baseline and snapshot`,
+    )
+    return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  // 4. Canonical directory check: require canonical directory
+  let canonicalDir = options.dirPath ? resolve(options.dirPath) : null
+  if (!canonicalDir) {
+    // Attempt resolving from originalBundle.root if it's a valid relative directory
+    if (
+      originalBundle.root &&
+      originalBundle.root !== '.' &&
+      existsSync(resolve(originalBundle.root))
+    ) {
+      canonicalDir = resolve(originalBundle.root)
+    } else {
+      const error = makeCliError(
+        'VALIDATION_ERROR',
+        'Missing required canonical source directory argument (--dir <canonicalDir>)',
+      )
+      return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+    }
+  }
+
+  if (!existsSync(canonicalDir)) {
+    const error = makeCliError('LOCAL_IO_ERROR', `Canonical directory not found: ${canonicalDir}`)
+    return { exitCode: EXIT_CODES.LOCAL_IO_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  try {
+    await verifyNoSymlinksInAncestry(canonicalDir)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    const error = makeCliError('VALIDATION_ERROR', msg)
+    return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  // Canonical collectFiles to find ALL current files in directory supporting excludes/packOptions
+  const ignores = originalBundle.packOptions?.ignore ?? []
+  let canonicalCollected: TacoFile[]
+  try {
+    const collectedRes = await collectFiles(
+      canonicalDir,
+      originalBundle.root,
+      originalFilesMap,
+      ignores,
+    )
+    canonicalCollected = collectedRes.files
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    const error = makeCliError('VALIDATION_ERROR', `Failed collecting canonical files: ${msg}`)
+    return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  const canonicalCollectedMap = new Map(canonicalCollected.map((f) => [f.path, f]))
+  const snapshotFilesMap = new Map(snapshot.files.map((f) => [f.path, f]))
+  const allPaths = new Set([
+    ...baselineFilesMap.keys(),
+    ...snapshotFilesMap.keys(),
+    ...canonicalCollectedMap.keys(),
+  ])
+
+  const checks: FileContentCheck[] = []
+  const canonicalLoadedFiles: TacoFile[] = []
+
+  const computeFileHash = async (file: {
+    content: string
+    mediaType: string
+    path: string
+  }): Promise<string> => {
+    if (file.mediaType === 'image/png' || file.path.toLowerCase().endsWith('.png')) {
+      const rawBytes = decodePng(file.content, file.path)
+      return await sha256Hex(rawBytes)
+    }
+    return await sha256Hex(file.content)
+  }
+
+  // Check read-only HTML tampering: pair baseline/snapshot files by id when present, and by path.
+  // Any HTML file whose content changed under the same id (rename or not) => CONFLICT_ERROR tampering;
+  // pure HTML rename/add/delete remain allowed.
+  const baselineById = new Map<string, TacoFile>()
+  for (const f of baseline.files) {
+    if (f.id) {
+      baselineById.set(f.id, f)
+    }
+  }
+
+  for (const snapFile of snapshot.files) {
+    let pairedBase: TacoFile | undefined = undefined
+    if (snapFile.id && baselineById.has(snapFile.id)) {
+      pairedBase = baselineById.get(snapFile.id)
+    } else {
+      pairedBase = baselineFilesMap.get(snapFile.path)
+    }
+    if (pairedBase) {
+      const isHtml =
+        isHtmlFile(snapFile.path, snapFile.mediaType) ||
+        isHtmlFile(pairedBase.path, pairedBase.mediaType)
+      if (isHtml && pairedBase.content !== snapFile.content) {
+        const error = makeCliError(
+          'CONFLICT_ERROR',
+          `Tampering detected: read-only HTML file '${snapFile.path}' content was modified in review handoff`,
+        )
+        return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+      }
+    }
+  }
+
+  for (const bundlePath of allPaths) {
+    const baseFile = baselineFilesMap.get(bundlePath)
+    const snapFile = snapshotFilesMap.get(bundlePath)
+    const origFile = originalFilesMap.get(bundlePath)
+    const canonicalFile = canonicalCollectedMap.get(bundlePath)
+    const isHtml = isHtmlFile(
+      bundlePath,
+      snapFile?.mediaType ?? baseFile?.mediaType ?? canonicalFile?.mediaType,
+    )
+    if (isHtml && baseFile && snapFile && baseFile.content !== snapFile.content) {
+      const error = makeCliError(
+        'CONFLICT_ERROR',
+        `Tampering detected: read-only HTML file '${bundlePath}' content was modified in review handoff`,
+      )
+      return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+    }
+
+    if (!baseFile && snapFile) {
+      // Addition in review: canonical source must hold the reviewed content
+      if (!canonicalFile) {
+        checks.push({
+          path: bundlePath,
+          status: 'pending',
+          reason: `Addition '${bundlePath}' not found in canonical directory`,
+        })
+      } else if (canonicalFile.content !== snapFile.content) {
+        checks.push({
+          path: bundlePath,
+          status: 'conflict',
+          reason: `Addition '${bundlePath}' in canonical directory does not match reviewed content`,
+        })
+      } else {
+        checks.push({ path: bundlePath, status: 'handled' })
+        const hash = await computeFileHash(canonicalFile)
+        canonicalLoadedFiles.push({
+          ...snapFile,
+          content: canonicalFile.content,
+          sourceHash: hash,
+          ...(snapFile.blocks ? { blocks: snapFile.blocks } : {}),
+        })
+      }
+    } else if (baseFile && !snapFile) {
+      // Deletion in review: handled only once the file is gone from canonical source
+      if (canonicalFile) {
+        checks.push({
+          path: bundlePath,
+          status: 'pending',
+          reason: `Deleted file '${bundlePath}' is still present in canonical directory`,
+        })
+      } else {
+        checks.push({ path: bundlePath, status: 'handled' })
+      }
+    } else if (baseFile && snapFile) {
+      // Present in baseline and snapshot
+      if (!canonicalFile) {
+        checks.push({
+          path: bundlePath,
+          status: 'conflict',
+          reason: `File '${bundlePath}' missing from canonical directory`,
+        })
+      } else if (baseFile.content === snapFile.content) {
+        // Unmodified in review
+        checks.push({ path: bundlePath, status: 'unmodified' })
+        const loaded: TacoFile = {
+          ...(origFile ?? {}),
+          ...snapFile,
+          content: canonicalFile.content,
+          sourceHash: await computeFileHash(canonicalFile),
+        }
+        // `blocks` is a runtime render cache: keep it only while content is byte-identical.
+        delete loaded.blocks
+        if (canonicalFile.content === baseFile.content) {
+          const blocks = snapFile.blocks ?? origFile?.blocks
+          if (blocks !== undefined) {
+            loaded.blocks = blocks
+          }
+        }
+        canonicalLoadedFiles.push(loaded)
+      } else if (canonicalFile.content === snapFile.content) {
+        // Canonical matches the reviewed snapshot: handled
+        checks.push({ path: bundlePath, status: 'handled' })
+        const hash = await computeFileHash(canonicalFile)
+        const loaded: TacoFile = {
+          ...(origFile ?? {}),
+          ...snapFile,
+          content: canonicalFile.content,
+          sourceHash: hash,
+        }
+        delete loaded.blocks
+        if (snapFile.blocks !== undefined) {
+          loaded.blocks = snapFile.blocks
+        }
+        canonicalLoadedFiles.push(loaded)
+      } else if (canonicalFile.content === baseFile.content) {
+        // Canonical is still baseline content: the review change is pending
+        checks.push({
+          path: bundlePath,
+          status: 'pending',
+          reason: `Review change for '${bundlePath}' is still pending in canonical directory (still baseline content)`,
+        })
+      } else {
+        // Canonical holds an independent change: ambiguous, stop the whole refresh
+        checks.push({
+          path: bundlePath,
+          status: 'conflict',
+          reason: `Canonical directory content for '${bundlePath}' conflicts with both baseline and review snapshot`,
+        })
+      }
+    } else if (canonicalFile) {
+      // New canonical source file not present in the review baseline or snapshot
+      checks.push({ path: bundlePath, status: 'added' })
+      const hash = await computeFileHash(canonicalFile)
+      canonicalLoadedFiles.push({
+        ...canonicalFile,
+        sourceHash: hash,
+      })
+    }
+  }
+
+  const pendingOrConflict = checks.filter((c) => c.status === 'pending' || c.status === 'conflict')
+  if (pendingOrConflict.length > 0) {
+    const summary = pendingOrConflict.map((c) => `${c.path}: ${c.reason}`).join('; ')
+    const error = makeCliError(
+      'CONFLICT_ERROR',
+      `Cannot refresh: unresolved review changes in canonical directory. ${summary}`,
+      { details: { checks } },
+    )
+    return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  // 5. Assemble refreshed bundle using handled canonical files
+  // Retain all comments from snapshot and earlier comments from original
+  const existingCommentIds = new Set((snapshot.comments ?? []).map((c) => c.id))
+  const preservedOriginalComments = (originalBundle.comments ?? []).filter(
+    (c) => !existingCommentIds.has(c.id),
+  )
+  const mergedComments = [...preservedOriginalComments, ...(snapshot.comments ?? [])]
+
+  // Retain checkpoints from snapshot, fallback to original
+  const refreshedCheckpoints = snapshot.checkpoints ?? originalBundle.checkpoints
+
+  // Retain navigation from snapshot, fallback to original
+  const refreshedNavigation = snapshot.navigation ?? originalBundle.navigation
+
+  // Retain unknown fields without dropping original access/collab credentials locally
+  const unknownFields: Record<string, unknown> = {}
+  const knownKeys: Record<string, true> = {
+    format: true,
+    version: true,
+    docId: true,
+    title: true,
+    root: true,
+    files: true,
+    comments: true,
+    checkpoints: true,
+    navigation: true,
+    packOptions: true,
+    access: true,
+    collab: true,
+  }
+
+  for (const [key, value] of Object.entries(originalBundle)) {
+    if (!knownKeys[key]) {
+      unknownFields[key] = value
+    }
+  }
+  for (const [key, value] of Object.entries(snapshot)) {
+    if (!knownKeys[key]) {
+      unknownFields[key] = value
+    }
+  }
+
+  const refreshedBundle: TacoBundle = {
+    ...unknownFields,
+    format: originalBundle.format,
+    version: originalBundle.version,
+    docId: originalBundle.docId,
+    title: snapshot.title ?? originalBundle.title,
+    root: originalBundle.root,
+    files: canonicalLoadedFiles,
+    comments: mergedComments,
+    ...(refreshedCheckpoints ? { checkpoints: refreshedCheckpoints } : {}),
+    ...(refreshedNavigation ? { navigation: refreshedNavigation } : {}),
+    ...(originalBundle.packOptions ? { packOptions: originalBundle.packOptions } : {}),
+    // Preserve local access and collab from original artifact
+    ...(originalBundle.access !== undefined ? { access: originalBundle.access } : {}),
+    ...(originalBundle.collab !== undefined ? { collab: originalBundle.collab } : {}),
+  }
+
+  validateBundle(refreshedBundle)
+
+  let finalShell = originalHtml
+  let shellReplaced = false
+  const warnings: string[] = []
+
+  const hasEmbeddedHtml = refreshedBundle.files.some((file) =>
+    isHtmlFile(file.path, file.mediaType),
+  )
+
+  if (hasEmbeddedHtml && !supportsEmbeddedHtml(originalHtml)) {
+    const variant = shellVariantOf(originalHtml)
+
+    const stockShell = variant === 'lite' ? LITE_SHELL_HTML : COMPLETE_SHELL_HTML
+    if (!supportsEmbeddedHtml(stockShell)) {
+      const error = makeCliError(
+        'VALIDATION_ERROR',
+        `Shell lacks embedded-html support: variant ${variant}`,
+      )
+      return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+    }
+
+    if (shellVariantOf(stockShell).split(' ')[0] !== shellVariantOf(originalHtml).split(' ')[0]) {
+      const error = makeCliError(
+        'VALIDATION_ERROR',
+        'HTML refresh must preserve the existing Complete/Lite shell variant',
+      )
+      return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
+    }
+
+    finalShell = stockShell
+    shellReplaced = true
+    warnings.push(
+      'Replaced legacy shell with the current stock shell of the same variant for embedded HTML',
+    )
+  }
+
+  if (!options.dryRun) {
+    const updatedHtml = embedBundle(finalShell, refreshedBundle)
+    await atomicWrite(artifactPath, updatedHtml)
+  }
+
+  const result = {
+    schema: 'taco-cli-refresh/1',
+    docId: refreshedBundle.docId,
+    title: refreshedBundle.title,
+    root: refreshedBundle.root,
+    dryRun: Boolean(options.dryRun),
+    fileCount: refreshedBundle.files.length,
+    commentCount: refreshedBundle.comments?.length ?? 0,
+    checkpoints: Boolean(refreshedBundle.checkpoints),
+    shellVariant: shellVariantOf(finalShell),
+    ...(shellReplaced ? { shellReplaced: true, warnings } : {}),
+  }
+
+  return { exitCode: EXIT_CODES.OK, stdout: JSON.stringify(result, null, 2) }
+}

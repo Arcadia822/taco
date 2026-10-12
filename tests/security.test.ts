@@ -7,6 +7,9 @@ import {
   sanitizeMermaidSvg,
   validateTacoSecurity,
 } from '../src/security.ts'
+import { credentialFreeDocument, sendLocalHandoff } from '../src/local-handoff.ts'
+import { isCommentThread } from '../skills/taco/scripts/pack.mjs'
+import type { LocalHandoff } from '@taco/protocol'
 
 const bundle = (): TacoBundle => ({
   format: 'taco/files', version: 1, docId: 'security-test', title: 'Security test', root: 'specs/security-test',
@@ -104,5 +107,143 @@ describe('untrusted Taco input policy', () => {
     })
     expect(JSON.stringify(projected)).not.toContain('nested-room-secret')
     expect(JSON.stringify(projected)).not.toContain('nested-owner-secret')
+  })
+
+  it('strips known credential fields from document, files and blocks while preserving unknown metadata', () => {
+    const raw = bundle() as unknown as Record<string, unknown>
+    raw.collab = { key: 'top-key', ownerPriv: 'top-owner', invite: { priv: 'top-priv' } }
+    raw.access = 'reader'
+    raw.token = 'top-token'
+    raw.credentials = { secret: 'top-secret' }
+    raw.relayConfig = { url: 'wss://relay' }
+    raw.customMetadata = { preserved: true }
+
+    const fileObj = (raw.files as Array<Record<string, unknown>>)[0]
+    fileObj.key = 'file-key'
+    fileObj.token = 'file-token'
+    fileObj.customFileField = 123
+    const blockObj = (fileObj.blocks as Array<Record<string, unknown>>)[0]
+    blockObj.ownerPriv = 'block-priv'
+    blockObj.customBlockField = 'ok'
+    raw.comments = [{
+      id: 'thread-comment',
+      anchor: null,
+      status: 'open',
+      createdAt: '2026-08-10T00:00:00.000Z',
+      updatedAt: '2026-08-10T00:00:00.000Z',
+      messages: [{
+        id: 'msg-1',
+        author: 'Reviewer',
+        body: 'Comment text',
+        createdAt: '2026-08-10T00:00:00.000Z',
+        secret: 'nested-comment-secret',
+        apiKey: 'nested-key',
+      }],
+    }]
+
+    const clean = credentialFreeDocument(raw)
+    expect(clean).not.toHaveProperty('collab')
+    expect(clean).not.toHaveProperty('access')
+    expect(clean).not.toHaveProperty('token')
+    expect(clean).not.toHaveProperty('credentials')
+    expect(clean).not.toHaveProperty('relayConfig')
+    expect(clean).toHaveProperty('customMetadata', { preserved: true })
+
+    const cleanFile = clean.files[0]
+    expect(cleanFile).not.toHaveProperty('key')
+    expect(cleanFile).not.toHaveProperty('token')
+    expect(cleanFile).toHaveProperty('customFileField', 123)
+
+    const cleanBlock = (cleanFile.blocks as Array<Record<string, unknown>>)[0]
+    expect(cleanBlock).not.toHaveProperty('ownerPriv')
+    expect(cleanBlock).toHaveProperty('customBlockField', 'ok')
+    const cleanComment = (clean.comments as Array<Record<string, unknown>>)[0]
+    const cleanMessage = (cleanComment.messages as Array<Record<string, unknown>>)[0]
+    expect(cleanMessage).not.toHaveProperty('secret')
+    expect(cleanMessage).not.toHaveProperty('apiKey')
+    expect(cleanMessage).toHaveProperty('body', 'Comment text')
+  })
+
+  it('validates comment thread message arrays and accepts anchor:null', () => {
+    expect(isCommentThread({
+      id: 'thread-null-msg',
+      anchor: null,
+      status: 'open',
+      createdAt: '2026-08-10T00:00:00.000Z',
+      updatedAt: '2026-08-10T00:00:00.000Z',
+      messages: [null],
+    })).toBe(false)
+    expect(isCommentThread({
+      id: 'thread-null-arr',
+      anchor: null,
+      status: 'open',
+      createdAt: '2026-08-10T00:00:00.000Z',
+      updatedAt: '2026-08-10T00:00:00.000Z',
+      messages: null as unknown as [],
+    })).toBe(false)
+    expect(isCommentThread({
+      id: 'thread-valid',
+      anchor: null,
+      status: 'open',
+      createdAt: '2026-08-10T00:00:00.000Z',
+      updatedAt: '2026-08-10T00:00:00.000Z',
+      messages: [{
+        id: 'msg-1',
+        author: 'Reviewer',
+        body: 'Valid comment',
+        createdAt: '2026-08-10T00:00:00.000Z',
+      }],
+    })).toBe(true)
+  })
+
+  it('rejects invalid or mismatched acknowledgements in sendLocalHandoff', async () => {
+    const dummyDoc = bundle()
+    const payload: LocalHandoff = {
+      schema: 'taco-local-handoff/1',
+      handoffId: 'test-h-1',
+      sessionId: 'sess-1',
+      docId: dummyDoc.docId,
+      createdAt: '2026-10-11T00:00:00Z',
+      baseline: dummyDoc,
+      snapshot: dummyDoc,
+    }
+
+    // Mock fetch returning ok: 'false' as a string (must not be treated as success)
+    const originalFetch = globalThis.fetch
+    try {
+      globalThis.fetch = async () => new Response(JSON.stringify({ ok: 'false', handoffId: 'test-h-1', receiptId: 'rcpt-1' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+      const ack1 = await sendLocalHandoff({ port: 1234, token: 'tok', docId: dummyDoc.docId, sessionId: 'sess-1', payload })
+      expect(ack1.ok).toBe(false)
+
+      // Mismatched handoffId
+      globalThis.fetch = async () => new Response(JSON.stringify({ ok: true, handoffId: 'wrong-id', receiptId: 'rcpt-1' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+      const ack2 = await sendLocalHandoff({ port: 1234, token: 'tok', docId: dummyDoc.docId, sessionId: 'sess-1', payload })
+      expect(ack2.ok).toBe(false)
+
+      // Missing receiptId
+      globalThis.fetch = async () => new Response(JSON.stringify({ ok: true, handoffId: 'test-h-1' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+      const ack3 = await sendLocalHandoff({ port: 1234, token: 'tok', docId: dummyDoc.docId, sessionId: 'sess-1', payload })
+      expect(ack3.ok).toBe(false)
+
+      // Valid ACK
+      globalThis.fetch = async () => new Response(JSON.stringify({ ok: true, handoffId: 'test-h-1', receiptId: 'rcpt-valid' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+      const ackValid = await sendLocalHandoff({ port: 1234, token: 'tok', docId: dummyDoc.docId, sessionId: 'sess-1', payload })
+      expect(ackValid.ok).toBe(true)
+      expect(ackValid.receiptId).toBe('rcpt-valid')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
   })
 })

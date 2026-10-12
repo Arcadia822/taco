@@ -5,9 +5,50 @@ export interface StoredFileSelection {
 
 export const fileSelectionSessionKey = (docId: string): string => `taco-selected-file-${docId}`
 
+export interface ListenParams {
+  port: number
+  token: string
+  sessionId: string
+  docId: string
+}
+
+export const parseListenParams = (hash: string): ListenParams | null => {
+  if (!hash) return null
+  const cleaned = hash.replace(/^#/, '')
+  const parts = cleaned.split('::')
+  const listenSegment = parts.find((part) => part.startsWith('taco-listen=') || part.includes('taco-listen='))
+  if (!listenSegment) return null
+
+  const raw = listenSegment.slice(listenSegment.indexOf('taco-listen=') + 'taco-listen='.length)
+  if (!raw) return null
+
+  let decoded = raw
+  try {
+    decoded = decodeURIComponent(raw)
+  } catch {}
+
+  const params = new URLSearchParams(decoded)
+  const portStr = params.get('port')
+  const token = params.get('token')
+  const sessionId = params.get('sessionId') ?? params.get('session_id') ?? params.get('session')
+  const docId = params.get('docId') ?? params.get('doc_id')
+
+  const port = portStr ? parseInt(portStr, 10) : NaN
+  if (!Number.isFinite(port) || port <= 0 || !token || !sessionId || !docId) {
+    return null
+  }
+
+  return { port, token, sessionId, docId }
+}
+
 export const filePathFromHash = (hash: string): string => {
-  const encodedPath = hash.replace(/^#/, '').split('::', 1)[0] ?? ''
-  try { return decodeURIComponent(encodedPath) }
+  const cleaned = hash.replace(/^#/, '')
+  const parts = cleaned.split('::')
+  let pathPart = parts[0] ?? ''
+  if (pathPart.startsWith('taco-listen=') || pathPart.includes('taco-listen=')) {
+    pathPart = parts[1] ?? ''
+  }
+  try { return decodeURIComponent(pathPart) }
   catch { return '' }
 }
 
@@ -41,8 +82,12 @@ export const fileSelectionHash = (path: string, headingId = ''): string =>
   `#${encodeURIComponent(path)}${headingId ? `::${encodeURIComponent(headingId)}` : ''}`
 
 export const headingFromHash = (hash: string): string => {
-  const marker = hash.indexOf('::')
-  return marker < 0 ? '' : decodeOrRaw(hash.slice(marker + 2))
+  const cleaned = hash.replace(/^#/, '')
+  const parts = cleaned.split('::')
+  if (parts[0]?.startsWith('taco-listen=') || parts[0]?.includes('taco-listen=')) {
+    return parts.length > 2 ? decodeOrRaw(parts.slice(2).join('::')) : ''
+  }
+  return parts.length > 1 ? decodeOrRaw(parts.slice(1).join('::')) : ''
 }
 
 // Malformed escapes are kept literally: `#50%-done` names a heading, it is not a broken URL.

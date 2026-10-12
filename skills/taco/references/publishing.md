@@ -1,7 +1,5 @@
 # Publishing a Taco to a Host
-
-Open this reference only for explicitly requested remote publication. Local Taco assembly and review use `SKILL.md` without a CLI or account.
-
+Open this reference only for explicitly requested remote publication. Local Taco assembly, local toolbox usage (`new`, `init`, `pack`, `verify`, `refresh`, `diff`, `inspect`, `extract`, `open`, `listen`), and local review work offline without requiring a remote Host or account.
 1. Read `taco-cli help publish` for the installed binary's current arguments and output. Choose the intended Host with `--host <origin>` or `TACO_HOST_URL`; current CLI releases default to the official service (https://taco.arcadia-han.com), but consult installed help because older releases default to a local Host.
 2. Inspect the `.taco.html` locally for secrets and collaboration credentials before sharing it. A collaboration-enabled file can contain credentials; do not transmit the complete file to an external service or model without authorization. Hosted Tacos, comments, revisions, and assets are public by default.
 3. Run `taco-cli publish <file.taco.html> --host <origin> --dry-run`. This projects and validates locally; examine its file list, `contentHash`, and `payloadBytes`. The dry run sends no network request.

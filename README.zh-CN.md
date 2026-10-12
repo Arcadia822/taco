@@ -81,6 +81,8 @@ Agent 只复制 skill 的 shell、把文档写入其数据块，目录中的其�
 - 可选用检查点追踪文档进度。重命名或删除必需文件后，原要求路径仍显示为「未创建」，不会被悄悄改写。
 - Taco 与 Tacobin 页头只显示含扩展名的文件名，或国际化的检查点页面名。正文仍可编辑文档标题。保存按钮保存本地 Taco 文件；Tacobin 的共享改动独立自动保存。
 - 收件环境可能离线时选择自包含的 Complete；联网评审可选择更小的 Lite。Lite 的 CDN 编辑器不可用时仍可编辑 Markdown 源码。
+- 可选 CLI 本地工具箱（`taco-cli`）：提供确定性的本地编写与评审命令（`new`、`init`、`pack`、`verify`、`refresh`、`diff`、`inspect`、`extract`、`open`、`listen`）以及托管协作（`publish`、`update`、`subscribe`、`events`、`handoff`）。CLI 完全可选，`taco` skill 与自带脚本无需 CLI 即可独立工作。
+- 无缝本地评审闭环：启动回环监听（`taco-cli listen <file.taco.html>` 或 `taco-cli open <file.taco.html> --listen`），在浏览器中审阅，点击「交接」即可将未保存快照直接送达 Agent；Agent 可通过 `taco-cli diff` 检查改动并用 `taco-cli refresh` 原地刷新文件，无需手动复制粘贴。
 - 可选地（需显式请求）集成 Spec Kit，持续更新每个 feature 的 Taco，并通过冲突检测安全导入人类修改与评论。
 
 ## Agent 安装说明
@@ -90,9 +92,10 @@ Agent 只复制 skill 的 shell、把文档写入其数据块，目录中的其�
 Agent 需要遵守：
 
 - 被评审的目录始终是 canonical source。`.taco.html` 只是运输载体：复制 skill 的 `taco-shell.html`，再把 `taco/files` v1 bundle JSON 写入其 `#taco-document` 数据块，并在每次刷新时保留 `docId`、comments、navigation，以及已有的 Checkpoint 图和状态。只有该数据块和转义后的 HTML `<title>` 可写；不要手工修改其余 shell。
+- 先按 Skill 判断是否需要人审、设计深度与项目约定，再选择 CLI 命令或模板。本地回执与 Checkpoint 状态不代表获准实施。派生 HTML 页面保持只读，从其源内容重新生成；向旧 Taco 加入 HTML 时，若原 Shell 不兼容，使用同变体的当前 stock Shell，并保留全部 bundle 字段。
 - 当宿主允许本地 `file://` 导航时，用用户的浏览器打开生成的文件，并如实报告 `presented as a clickable file`、`opened`、`opened and verified` 三者中真正发生的一项。headless 加载只是内部证据，不能当作面向用户的可视化展示。
-- 通过对应渠道取回评审结果：本地评审通过浏览器的 **Handoff**（复制自上次保存以来的文本 diff 与 open comment，无需先保存）或评审者保存后的 `.taco.html`（必须先保存）；可选的托管评审（Tacobin）中，访客以自报姓名编辑和评论并自动保存，但评论和自动保存不代表评审完成且不会自动唤醒会话，仅在评审者显式点击「交接」后生成 `review.handed_off` 事件并通过 `taco-cli` 获取不可变交接快照。未收到评审输入时如实说明，不要导入并未真正获得的内容。
-- 托管评审期间保持 Agent 订阅在线。交接需要活跃监听者，否则页面展示安装与订阅命令。`taco-cli subscribe` 默认等待 `review.handed_off` 后以退出码 0 结束，`--stream` 持续接收全部事件。点击人类与 Agent 重叠头像打开监听名单；在线不等于意见已送达。
+- 通过对应渠道取回评审结果：本地评审通过浏览器的 **Handoff**（发送包含未保存改动与 open comment 的内存快照到本地 listener，或复制 Markdown 到剪贴板）或评审者保存后的 `.taco.html`。独立保存文件不重置评审交接基线。可选的托管评审（Tacobin）中，访客以自报姓名编辑和评论并自动保存，但评论和自动保存不代表评审完成且不会自动唤醒会话，仅在评审者显式点击「交接」后生成 `review.handed_off` 事件并通过 `taco-cli` 获取不可变交接快照。未收到评审输入时如实说明，不要导入并未真正获得的内容。
+- 评审期间保持 Agent 订阅在线：本地评审使用 `taco-cli listen <file.taco.html>`（或 `taco-cli open <file.taco.html> --listen`），托管评审使用 `taco-cli subscribe <tacoId>`。交接需要活跃监听者，否则页面提供剪贴板复制或展示设置命令。
 - 每次刷新都保留所有已有 bundle 字段，包括存在时的 `checkpoints`；不得编造评论、哈希或验证结论；不得因为某个文件不在 bundle 中就删除 canonical 文件。
 - 启用在线协作的 Taco 可能携带访问凭据。未经用户允许，不要把其内容上传或粘贴到其他服务。
 
