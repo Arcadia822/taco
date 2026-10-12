@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { DatabaseNotConfiguredError, getDatabase } from '@/lib/db'
+import { DatabaseNotConfiguredError, getDatabase, GoneError } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,6 +12,9 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     if (!taco) {
       return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Taco not found' } }, { status: 404 })
     }
+    if (taco.status === 'deleted' || taco.status === 'expired') {
+      return NextResponse.json({ error: { code: 'GONE', message: 'Taco has expired or was deleted' } }, { status: 410 })
+    }
 
     const listeners = await db.listListeners(tacoId)
     return NextResponse.json(
@@ -22,6 +25,9 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       { status: 200 },
     )
   } catch (err) {
+    if (err instanceof GoneError) {
+      return NextResponse.json({ error: { code: 'GONE', message: err.message } }, { status: 410 })
+    }
     if (err instanceof DatabaseNotConfiguredError) {
       return NextResponse.json({ error: { code: 'SERVICE_UNAVAILABLE', message: err.message } }, { status: 503 })
     }
