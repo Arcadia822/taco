@@ -17,7 +17,8 @@ const FIXTURE_TACO = resolve(
 )
 const FIXTURE_DIR = resolve(import.meta.dirname, '../../../specs/008-taco-host-contract')
 
-describe('comment shape & null anchor safety (Finding 1 & 2)', () => {
+// verify/inspect cold-load the embedded Mermaid build: ~4s locally, longer on CI runners.
+describe('comment shape & null anchor safety (Finding 1 & 2)', { timeout: 30_000 }, () => {
   it('verify and inspect on a Taco with an anchor:null open comment exit 0 and report it', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'taco-comment-null-'))
     try {
@@ -76,8 +77,7 @@ describe('comment shape & null anchor safety (Finding 1 & 2)', () => {
     } finally {
       rmSync(tmp, { recursive: true, force: true })
     }
-    // The first verify cold-loads the embedded Mermaid build (~4s alone, longer under suite load).
-  }, 30_000)
+  })
 
   it('refresh rejects a handoff snapshot containing {anchor:{path}} without position/quote (VALIDATION_ERROR) and original Taco stays byte-identical', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'taco-comment-bad-anchor-'))

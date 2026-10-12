@@ -101,7 +101,8 @@ function writeHandoffJson(
   writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8')
 }
 
-describe('Review Lifecycle & Safety regression suite', () => {
+// inspect cold-loads the embedded Mermaid build: ~4s locally, longer on CI runners.
+describe('Review Lifecycle & Safety regression suite', { timeout: 30_000 }, () => {
   it('1. refresh: binds baseline comments and checkpoints to current artifact, rejecting stale review baseline', async () => {
     const docId = 'doc-lifecycle-1'
     const files: TacoFile[] = [
