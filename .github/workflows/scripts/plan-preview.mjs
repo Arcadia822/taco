@@ -23,7 +23,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { validatePreviewPlan } from './plan-schema.mjs'
+import { PLANNER_FALLBACK_SUMMARIES, validatePreviewPlan } from './plan-schema.mjs'
 const DEFAULT_BASE_URL = 'https://api.deepseek.com/v1'
 const DEFAULT_MODEL = 'deepseek-chat'
 const DEFAULT_TIMEOUT_MS = 60000
@@ -55,6 +55,10 @@ Rules:
    - SVG Mermaid nodes have selectors like "g.node", "[data-id]", or "rect.actor", "text.actor". Clicking a diagram node activates the source editor and the node toolbar (".mermaid-node-toolbar").
    - Inspect the provided DOM Outlines to see the actual tags and classes before picking a selector!
    - You can click Mermaid diagram nodes or code buttons to demonstrate interactions!
+5. Decide "ui_change" before planning any scene:
+   - Set "ui_change": true when the PR changes something a reviewer can see or interact with in a preview target, and provide 1-3 scenes that show it.
+   - Set "ui_change": false when the diff changes no such surface (docs, CI, scripts, tests, or host internals with no visible screen); then "summary" states why and "scenes" MUST be [].
+   - A plan with "ui_change": false and a non-empty "scenes" array is invalid: it is discarded and no preview is produced.
 6. Return JSON only conforming to the plan schema:
 {
   "version": 1,
@@ -72,6 +76,15 @@ Rules:
       "steps": [...]
     }
   ]
+}
+
+For a revision with no visible UI change, return this shape instead:
+{
+  "version": 1,
+  "source": "deepseek-planner",
+  "ui_change": false,
+  "summary": "why this revision changes no preview surface",
+  "scenes": []
 }
 `
 export async function requestPlannerPlan(messages, config) {
@@ -137,8 +150,7 @@ export async function planPreview(options = {}) {
       version: 1,
       source: 'deepseek-planner',
       ui_change: false,
-      summary:
-        'Preview planner API key is unavailable in this environment; dynamic planning skipped.',
+      summary: `${PLANNER_FALLBACK_SUMMARIES.keyUnavailable} in this environment; dynamic planning skipped.`,
       scenes: [],
     }
     writeFileSync(outPlanFile, JSON.stringify(emptyPlan, null, 2), 'utf-8')
@@ -173,7 +185,7 @@ Please inspect the diff and available DOM elements (including SVG Mermaid nodes 
       version: 1,
       source: 'deepseek-planner',
       ui_change: false,
-      summary: `Planner error: ${err.message}`,
+      summary: `${PLANNER_FALLBACK_SUMMARIES.plannerError}: ${err.message}`,
       scenes: [],
     }
     writeFileSync(outPlanFile, JSON.stringify(failedPlan, null, 2), 'utf-8')
@@ -205,7 +217,7 @@ Please inspect the diff and available DOM elements (including SVG Mermaid nodes 
       version: 1,
       source: 'deepseek-planner',
       ui_change: false,
-      summary: `Planner produced invalid plan: ${err.message}`,
+      summary: `${PLANNER_FALLBACK_SUMMARIES.invalidPlan}: ${err.message}`,
       scenes: [],
     }
     writeFileSync(outPlanFile, JSON.stringify(invalidPlan, null, 2), 'utf-8')

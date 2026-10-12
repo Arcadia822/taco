@@ -13,6 +13,7 @@
  */
 
 import { FIXED_VIEWS, previewAssetPath } from './view-registry.mjs'
+import { isPlannerFailurePlan } from './plan-schema.mjs'
 
 export const MARKER_START = '<!-- taco:ui-preview:start -->'
 export const MARKER_END = '<!-- taco:ui-preview:end -->'
@@ -129,6 +130,7 @@ export function generatePreviewBlockMarkdown({
   runId = null,
   timestamp = null,
   manifest = null,
+  plan = null,
 }) {
   const shortSha = headSha.slice(0, 7)
   const isoTime = timestamp ?? new Date().toISOString()
@@ -158,7 +160,7 @@ export function generatePreviewBlockMarkdown({
     }
 
     const hasScreenshots = (manifest.scenes || []).some((s) => (s.screenshots || []).length > 0)
-    if (hasScreenshots) {
+    if (hasScreenshots && assetCommitSha) {
       markdown += '| Scene | Status | Caption | Preview (Desktop 1280x800) |\n'
       markdown += '| :--- | :---: | :--- | :---: |\n'
 
@@ -175,8 +177,10 @@ export function generatePreviewBlockMarkdown({
         }
       }
       markdown += '\n'
+    } else if (isPlannerFailurePlan(plan)) {
+      markdown += `> ⚠️ **Preview planning failed.** The planner never produced a usable plan, so the summary above is its error, not a "no UI change" verdict.\n\n`
     } else {
-      markdown += `*No UI preview screenshots were captured for this revision.*\n\n`
+      markdown += `*No UI preview was generated: this revision reports no UI change.*\n\n`
     }
   } else {
     // When no manifest is supplied at all (e.g. fixed legacy views test), render registered desktop views

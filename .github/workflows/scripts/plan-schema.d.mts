@@ -110,6 +110,12 @@ export const MAX_GENERATED_FILENAME_LENGTH: number
 export const VALID_SHOT_NAME: RegExp
 export const RESERVED_SHOT_NAMES: ReadonlySet<string>
 export const FORBIDDEN_TEXT_OR_TARGET: RegExp
+export declare const PLANNER_FALLBACK_SUMMARIES: Readonly<{
+  invalidPlan: string
+  plannerError: string
+  keyUnavailable: string
+}>
+export declare function isPlannerFailurePlan(plan: unknown): boolean
 export declare class PlanValidationError extends Error {
   constructor(message: string)
 }
