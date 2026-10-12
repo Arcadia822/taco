@@ -525,6 +525,11 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
         exitCode: 4,
         recovery: 'The specified --base revision is stale or state version conflicted; pull latest state',
       },
+      {
+        code: 'TACO_GONE',
+        exitCode: 2,
+        recovery: 'The Taco has expired or was deleted',
+      },
     ],
     examples: [
       {
@@ -623,6 +628,11 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
     },
     errors: [
       {
+        code: 'TACO_GONE',
+        exitCode: 2,
+        recovery: 'The Taco has expired or was deleted',
+      },
+      {
         code: 'CURSOR_EXPIRED',
         exitCode: 6,
         recovery: 'Resume from the earliest sequence the Host still retains',
@@ -709,6 +719,11 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
     },
     errors: [
       {
+        code: 'TACO_GONE',
+        exitCode: 2,
+        recovery: 'The Taco has expired or was deleted',
+      },
+      {
         code: 'CURSOR_EXPIRED',
         exitCode: 6,
         recovery: 'Resume from the earliest sequence the Host still retains',
@@ -762,9 +777,14 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
         recovery: 'Provide valid tacoId and handoffId arguments',
       },
       {
+        code: 'TACO_GONE',
+        exitCode: 2,
+        recovery: 'The Taco has expired or was deleted',
+      },
+      {
         code: 'CURSOR_EXPIRED',
         exitCode: 6,
-        recovery: 'The Taco or handoff has expired or was deleted',
+        recovery: 'The event cursor is no longer retained; resume from the earliest sequence',
       },
       {
         code: 'LOCAL_IO_ERROR',
