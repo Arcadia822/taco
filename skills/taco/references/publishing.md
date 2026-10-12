@@ -12,3 +12,8 @@ Open this reference only for explicitly requested remote publication. Local Taco
 - **Unsupported binary fallback guard:** If an older installed CLI does not support network update (or returns an unsupported error), report that network update is unsupported by the installed binary; **never** silently fall back to `publish` which would fragment the review into a new document and URL.
 
 After a successful update, reload the same reviewer URL to read the new revision. Existing open tabs retain their local draft; a stale autosave is rejected by state-version checks.
+## Retention and Expiration (TTL)
+
+- **Default 30-day lifecycle:** Published Tacos are temporary by default and automatically expire after 30 days.
+- **Custom duration:** Pass `taco-cli publish <file.taco.html> --ttl <duration>` to set an explicit expiration window (e.g. `--ttl 7d`, `--ttl 24h`, `--ttl 1h`, or `--ttl 0`/`--ttl none` for permanent within server limits).
+- **Behavior after expiration:** Once a Taco expires, its reviewer URL (`/t/<tacoId>`), state, and event API endpoints return HTTP 410 Gone, and active event subscriptions terminate with `TACO_GONE`.

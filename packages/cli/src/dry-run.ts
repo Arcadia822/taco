@@ -28,12 +28,18 @@ export const extractTacoBundleFromHtml = (htmlContent: string): Record<string, u
 /**
  * Executes a local dry-run projection for publish or update.
  */
+export interface DryRunSummaryWithTtl extends DryRunProjectionSummary {
+  ttlSeconds?: number | null
+  expiresAt?: string | null
+}
+
 export const executeLocalDryRun = async (options: {
   command: 'publish' | 'update'
   filePath: string
   host: string
   baseRevisionId?: string
-}): Promise<DryRunProjectionSummary> => {
+  ttlSeconds?: number | null
+}): Promise<DryRunSummaryWithTtl> => {
   let rawHtml: string
   try {
     rawHtml = readFileSync(options.filePath, 'utf8')
@@ -59,5 +65,11 @@ export const executeLocalDryRun = async (options: {
   })
 
   summary.strippedFieldCategories = projection.strippedCategories
-  return summary
+  const res: DryRunSummaryWithTtl = { ...summary }
+  if (options.command === 'publish') {
+    const ttl = options.ttlSeconds !== undefined ? options.ttlSeconds : 2592000
+    res.ttlSeconds = ttl
+    res.expiresAt = ttl ? new Date(Date.now() + ttl * 1000).toISOString() : null
+  }
+  return res
 }

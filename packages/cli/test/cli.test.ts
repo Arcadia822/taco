@@ -86,6 +86,28 @@ describe('taco-cli (Phase 1)', () => {
     expect(json.contentHash).toMatch(/^sha256:[a-f0-9]{64}$/)
     expect(json.files.length).toBeGreaterThan(0)
     expect(json.payloadBytes).toBeGreaterThan(0)
+    expect(json.ttlSeconds).toBe(2592000)
+    expect(json.expiresAt).toBeDefined()
+  })
+
+  it('supports custom --ttl in publish dry-run and validates invalid duration', async () => {
+    const res7d = await runCli(['publish', FIXTURE_TACO, '--dry-run', '--ttl', '7d'])
+    expect(res7d.exitCode).toBe(0)
+    const json7d = JSON.parse(res7d.stdout!)
+    expect(json7d.ttlSeconds).toBe(7 * 86400)
+    expect(json7d.expiresAt).toBeDefined()
+
+    const resNone = await runCli(['publish', FIXTURE_TACO, '--dry-run', '--ttl', 'none'])
+    expect(resNone.exitCode).toBe(0)
+    const jsonNone = JSON.parse(resNone.stdout!)
+    expect(jsonNone.ttlSeconds).toBeNull()
+    expect(jsonNone.expiresAt).toBeNull()
+
+    const resInvalid = await runCli(['publish', FIXTURE_TACO, '--dry-run', '--ttl', 'invalid-time'])
+    expect(resInvalid.exitCode).toBe(2)
+    const err = JSON.parse(resInvalid.stderr!)
+    expect(err.error.code).toBe('VALIDATION_ERROR')
+    expect(err.error.message).toContain('Invalid duration format for --ttl')
   })
 
   it('includes an explicit base revision in a local update preview', async () => {
