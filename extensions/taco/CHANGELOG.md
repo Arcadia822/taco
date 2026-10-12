@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.16.0](https://github.com/Arcadia822/taco/compare/v0.15.0...v0.16.0) (2026-10-12)
+
+### Features
+
+* **skill**: add prd and interaction template packs and trigger-only description (TACO-70) ([596588a](https://github.com/Arcadia822/taco/commit/596588af182dcb4e7eb9e79238828e3a906cd5b5))
+* **skill**: add integrations module and trigger, depth, and decision guidance (TACO-70) ([e6df7b0](https://github.com/Arcadia822/taco/commit/e6df7b0b8e1483147483102ed6904d59c6161baf))
+* **kernel**: render text/html bundle files as sandboxed single-page HTML (TACO-70) ([2db1d9a](https://github.com/Arcadia822/taco/commit/2db1d9ad71e02395ef94db725346d0cef6cc904b))
+
+### Bug Fixes
+
+* **html**: align refresh extension and hosted consumers (TACO-70) ([4aba363](https://github.com/Arcadia822/taco/commit/4aba363768100fd0adc5b40c5c185cbe4955c7fd))
+* **skill**: make missing SDD engines non-blocking and gate triggers on human review (TACO-70) ([0a572d6](https://github.com/Arcadia822/taco/commit/0a572d6f135aeb00a00bc42af8b41f03a258b6e3))
+
+### Chores & Maintenance
+
+* chore: **release**: tacobin-v0.10.0 ([54f74e3](https://github.com/Arcadia822/taco/commit/54f74e3b86d0d3d82ea17cf7e2cca8ecc3f02802))
+* chore: **release**: taco-cli v0.5.1 ([649ccf7](https://github.com/Arcadia822/taco/commit/649ccf7849b9f523ce059ac54101129586036d60))
+* build: **shell**: regenerate artifacts after main rebase (TACO-70) ([eb2eaa0](https://github.com/Arcadia822/taco/commit/eb2eaa0d6aa835bdff448700444b4869025cac70))
+* docs: **skill**: rewrite skill description as router text with bilingual triggers (TACO-70) ([d28500b](https://github.com/Arcadia822/taco/commit/d28500b2b9ff75db8b03ed6534442bf011f77ae1))
+* docs: sync taco-guide and site copy for embedded HTML pages (TACO-70) ([703c506](https://github.com/Arcadia822/taco/commit/703c5068cf7a5f81ffde9c2980ac5ea927f461a7))
+
 ## [0.15.0](https://github.com/Arcadia822/taco/compare/v0.14.5...v0.15.0) (2026-10-11)
 
 ### Features

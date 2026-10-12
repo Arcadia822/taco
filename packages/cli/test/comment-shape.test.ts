@@ -76,7 +76,8 @@ describe('comment shape & null anchor safety (Finding 1 & 2)', () => {
     } finally {
       rmSync(tmp, { recursive: true, force: true })
     }
-  })
+    // The first verify cold-loads the embedded Mermaid build (~4s alone, longer under suite load).
+  }, 30_000)
 
   it('refresh rejects a handoff snapshot containing {anchor:{path}} without position/quote (VALIDATION_ERROR) and original Taco stays byte-identical', async () => {
     const tmp = mkdtempSync(join(tmpdir(), 'taco-comment-bad-anchor-'))
