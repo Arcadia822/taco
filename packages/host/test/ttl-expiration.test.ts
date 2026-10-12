@@ -277,4 +277,27 @@ describe('TACO-53 TTL Expiration Lifecycle', () => {
     expect(calculateTacoExpiresAt(0, baseTime)).toBeNull()
     expect(calculateTacoExpiresAt(3600, baseTime)).toBe(new Date(baseTime.getTime() + 3600 * 1000).toISOString())
   })
+
+  it('keeps the original expiration deadline across revisions', async () => {
+    const dbPath = `/tmp/test-taco-ttl-revision-${randomUUID()}.db`
+    const adapter = new SqliteDbAdapter(dbPath)
+    try {
+      const tacoId = randomUUID()
+      const res = await adapter.publishTaco(tacoId, 'Deadline Preserve', sampleSnapshot, { ttlSeconds: 3600 })
+      await adapter.createRevision(
+        tacoId,
+        {
+          baseRevisionId: tacoId,
+          expectedStateVersion: '1',
+          expectedCommentsThroughSequence: '0',
+          snapshot: sampleSnapshot,
+        },
+        randomUUID(),
+      )
+      const taco = await adapter.getTaco(tacoId)
+      expect(taco!.expiresAt).toBe(res.expiresAt)
+    } finally {
+      try { unlinkSync(dbPath) } catch {}
+    }
+  })
 })

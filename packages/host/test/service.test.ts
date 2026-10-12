@@ -93,6 +93,74 @@ describe('@taco/host Service (Phase 2)', () => {
     expect((tacoRes.body as { title: string }).title).toBe('Initial Document')
   })
 
+  it('honors advertised TTL: finite expiresAt on publish and 410 after the deadline', async () => {
+    const { service, blob, db } = createTestHost()
+    const anon = (await service.createAnonymousCredentials()).body as { apiKey: { secret: string } }
+    const auth = `Bearer ${anon.apiKey.secret}`
+
+    const stagedPayload = {
+      protocol: 'taco-host/1',
+      snapshot: {
+        format: 'taco/files',
+        version: 1,
+        docId: 'doc_ttl',
+        title: 'TTL Document',
+        root: 'specs/sample',
+        files: [
+          {
+            path: 'specs/sample/spec.md',
+            mediaType: 'text/markdown',
+            content: '# TTL Spec\n',
+          },
+        ],
+      },
+    }
+    const stagedBytes = new TextEncoder().encode(JSON.stringify(stagedPayload))
+    const cryptoHash = await crypto.subtle.digest('SHA-256', stagedBytes)
+    const payloadHash = `sha256:${Array.from(new Uint8Array(cryptoHash))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')}`
+
+    const publishWithTtl = async (ttlSeconds?: number | null) => {
+      const key = randomUUID()
+      const prep = await service.prepareUpload(auth, key, {
+        protocol: 'taco-host/1',
+        purpose: 'publish',
+        payloadHash,
+        payloadBytes: stagedBytes.byteLength,
+      })
+      const prepBody = prep.body as { uploadId: string; uploadUrl: string }
+      const blobPath = prepBody.uploadUrl.match(/vercel-storage\.com\/([^?]+)/)![1]
+      await blob.putObject(blobPath, stagedBytes)
+      return await service.publishTaco(auth, key, {
+        protocol: 'taco-host/1',
+        uploadId: prepBody.uploadId,
+        ...(ttlSeconds === undefined ? {} : { ttlSeconds }),
+      })
+    }
+
+    const finite = await publishWithTtl(3600)
+    expect(finite.status).toBe(201)
+    const finiteBody = finite.body as { tacoId: string; expiresAt: string | null }
+    expect(finiteBody.expiresAt).toBeTruthy()
+
+    const row = db.tacos.get(finiteBody.tacoId)!
+    db.tacos.set(finiteBody.tacoId, { ...row, expiresAt: new Date(Date.now() - 1000).toISOString() })
+    const goneRes = await service.getTaco(finiteBody.tacoId)
+    expect(goneRes.status).toBe(410)
+
+    const byDefault = await publishWithTtl()
+    expect(byDefault.status).toBe(201)
+    expect((byDefault.body as { expiresAt: string | null }).expiresAt).not.toBeNull()
+
+    const permanent = await publishWithTtl(null)
+    expect(permanent.status).toBe(201)
+    expect((permanent.body as { expiresAt: string | null }).expiresAt).toBeNull()
+
+    const invalid = await publishWithTtl(31536001)
+    expect(invalid.status).toBe(400)
+  })
+
   it('accepts and preserves text/html source files in staged upload commit and revision retrieval while rejecting .taco.html', async () => {
     const { service, blob } = createTestHost()
     const anon = (await service.createAnonymousCredentials()).body as { apiKey: { secret: string } }

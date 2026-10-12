@@ -5,6 +5,13 @@ export interface ObjectStorageAdapter {
   getObject(urlOrPath: string): Promise<Uint8Array | null>
 }
 
+const CANONICAL_STORAGE_KEY = /^[A-Za-z0-9._/-]+$/
+
+/** Storage keys must be canonical relative paths: no scheme, query, fragment, escapes, or dot segments. */
+export function isCanonicalStorageKey(key: string): boolean {
+  return CANONICAL_STORAGE_KEY.test(key) && !key.split('/').some((segment) => segment === '' || segment === '.' || segment === '..')
+}
+
 export class VercelBlobStorageAdapter implements ObjectStorageAdapter {
   async putObject(pathname: string, data: Uint8Array, contentType = 'application/json'): Promise<string> {
     const blob = await put(pathname, Buffer.from(data), {

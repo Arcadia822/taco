@@ -1,9 +1,11 @@
 import { notFound } from 'next/navigation'
 import type { DocumentSnapshot } from '@taco/protocol'
 import { getDatabase, GoneError, type SharedStateResult } from '@/lib/db'
-import { getStorageAdapter } from '@/lib/storage-adapter'
+import { getStorageAdapter, isCanonicalStorageKey } from '@/lib/storage-adapter'
 import { getSharedReviewState } from '@/lib/server-state'
 import { renderCanonicalTacoHtml } from '@/lib/taco-shell-template'
+
+const UUID_LIFECYCLE_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export const dynamic = 'force-dynamic'
 
@@ -37,7 +39,7 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
   // publish baseline, used when no shared state exists.
   let state: SharedStateResult | null
   try {
-    state = await getSharedReviewState(pasteId)
+    state = UUID_LIFECYCLE_PATTERN.test(pasteId) ? await getSharedReviewState(pasteId) : null
   } catch (error) {
     if (error instanceof GoneError) {
       return new Response(JSON.stringify({ error: { code: 'GONE', message: error.message } }), {
@@ -59,7 +61,7 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
   let legacy: LegacyPaste = {}
   if (!snapshot) {
     try {
-      const taco = await getDatabase().getTaco(pasteId)
+      const taco = UUID_LIFECYCLE_PATTERN.test(pasteId) ? await getDatabase().getTaco(pasteId) : null
       if (taco && (taco.status === 'deleted' || taco.status === 'expired')) {
         return new Response(JSON.stringify({ error: { code: 'GONE', message: 'Taco has expired or was deleted' } }), {
           status: 410,
@@ -73,9 +75,17 @@ export async function GET(_req: Request, props: { params: Promise<{ id: string }
           headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
         })
       }
+      // Lifecycle unknown for a legacy object: fail closed like the storage gate.
+      const message = err instanceof Error ? err.message : 'Host review storage is unavailable'
+      return new Response(JSON.stringify({ error: { code: 'SERVICE_UNAVAILABLE', message } }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+      })
     }
+    const legacyKey = `pastes/${pasteId}.json`
+    if (!isCanonicalStorageKey(legacyKey)) notFound()
     const storage = getStorageAdapter()
-    const rawBytes = await storage.getObject(`pastes/${pasteId}.json`)
+    const rawBytes = await storage.getObject(legacyKey)
     if (!rawBytes) notFound()
     legacy = JSON.parse(new TextDecoder().decode(rawBytes)) as LegacyPaste
     const baseline = legacy.snapshot

@@ -297,4 +297,62 @@ describe('Subscribe Route Unicode Metadata and Lifecycle', () => {
       } catch {}
     }
   })
+
+  it('terminates with TACO_GONE without emitting events when the Taco expires during a live poll read', async () => {
+    const { testDbPath, db, tacoId } = await setupTestDb()
+    try {
+      const req = new NextRequest(`http://localhost:32167/v1/tacos/${tacoId}/subscribe`)
+      const res = await GET(req, { params: Promise.resolve({ id: tacoId }) })
+      expect(res.status).toBe(200)
+
+      const body = res.body
+      expect(body).not.toBeNull()
+      const reader = body!.getReader()
+
+      const first = await reader.read()
+      expect(first.done).toBe(false)
+      const firstText = new TextDecoder().decode(first.value)
+      expect(firstText).toContain('"kind":"ready"')
+
+      // An event lands after the live cursor was captured, then expiry crosses mid-read.
+      const originalGetEventsAfter = db.getEventsAfter.bind(db)
+      db.getEventsAfter = async (id: string, after: bigint) => {
+        const events = await originalGetEventsAfter(id, after)
+        const directDb = new DatabaseSync(testDbPath)
+        directDb.prepare('UPDATE tacos SET expires_at = ?, status = ? WHERE id = ?').run(
+          '1970-01-01T00:00:00.000Z',
+          'expired',
+          id,
+        )
+        directDb.close()
+        return events
+      }
+      await db.mutateReviewThread(
+        tacoId,
+        {
+          author: 'Tester',
+          action: 'create',
+          body: 'Live comment to verify post-read gating',
+        },
+        randomUUID(),
+      )
+
+      // The live poll must not leak the events it read before noticing the expiry.
+      const second = await reader.read()
+      expect(second.done).toBe(false)
+      const secondText = new TextDecoder().decode(second.value)
+      expect(secondText).toContain('"kind":"diagnostic"')
+      expect(secondText).toContain('"code":"TACO_GONE"')
+      expect(secondText).not.toContain('"sequence"')
+
+      const third = await reader.read()
+      expect(third.done).toBe(true)
+    } finally {
+      vi.restoreAllMocks()
+      currentDb = null
+      try {
+        unlinkSync(testDbPath)
+      } catch {}
+    }
+  })
 })
