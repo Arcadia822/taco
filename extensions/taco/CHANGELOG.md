@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.17.0](https://github.com/Arcadia822/taco/compare/v0.16.0...v0.17.0) (2026-10-12)
+
+### Features
+
+* **cli**: support --ttl expiration duration on publish and subscriber termination ([4fed5b4](https://github.com/Arcadia822/taco/commit/4fed5b455f7cc108e2ebf63a2af57302a7e26fc4))
+* **host**: add TTL expiration handling and capabilities retention update ([f9f0700](https://github.com/Arcadia822/taco/commit/f9f07005db732c700ae6edc6d3d7ecea3ceb81b2))
+* **cli**: add local authoring and Handoff toolbox (#144) ([07a6fe3](https://github.com/Arcadia822/taco/commit/07a6fe38b1bd287921f382ab3a11dcf9df34bd20))
+
+### Bug Fixes
+
+* **cli**: report TACO_GONE exit 2 for expired update/events/handoff ([e7f64fb](https://github.com/Arcadia822/taco/commit/e7f64fbe853ce2dcfa46ef2b69a7c91cdcf23598))
+* **host**: gate upload storage, legacy keys and live reads on TTL ([617ccaf](https://github.com/Arcadia822/taco/commit/617ccafc610d0f947168ededdf261afc1e673c33))
+* **cli**: bound --ttl input and map expired subscriptions to TACO_GONE ([adefcfb](https://github.com/Arcadia822/taco/commit/adefcfb8b108dec3087f07cf5a225fa69530b7ad))
+* **host**: gate public reads on TTL expiry and stop Blob publication ([7ab58a4](https://github.com/Arcadia822/taco/commit/7ab58a423d93293a2f0d8606d16daf300a6ae410))
+* **host**: add PostgreSQL expires_at DDL and permanent-TTL semantics ([2634da2](https://github.com/Arcadia822/taco/commit/2634da2f2c29e3a6332c5c9083c07665c4fc1991))
+
+### Chores & Maintenance
+
+* chore: **release**: tacobin-v0.11.0 ([44e225c](https://github.com/Arcadia822/taco/commit/44e225c0f519ce40f7633dd7eff1c5d854451010))
+* chore: **release**: taco-cli v0.6.0 ([381a930](https://github.com/Arcadia822/taco/commit/381a930743b65713da764eaf8ea7c38e4c787e65))
+* docs: align TTL expiry contracts, skill guide and lessons ([0533640](https://github.com/Arcadia822/taco/commit/0533640433b793cd431d9c6dd0424c85795313f1))
+* test: alias host source modules for route tests ([7ebaf5f](https://github.com/Arcadia822/taco/commit/7ebaf5f2b90ef5203176f690ec287c6f01627b0a))
+
 ## [0.16.0](https://github.com/Arcadia822/taco/compare/v0.15.0...v0.16.0) (2026-10-12)
 
 ### Features
