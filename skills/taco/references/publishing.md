@@ -15,5 +15,6 @@ After a successful update, reload the same reviewer URL to read the new revision
 ## Retention and Expiration (TTL)
 
 - **Default 30-day lifecycle:** Published Tacos are temporary by default and automatically expire after 30 days.
-- **Custom duration:** Pass `taco-cli publish <file.taco.html> --ttl <duration>` to set an explicit expiration window (e.g. `--ttl 7d`, `--ttl 24h`, `--ttl 1h`, or `--ttl 0`/`--ttl none` for permanent within server limits).
-- **Behavior after expiration:** Once a Taco expires, its reviewer URL (`/t/<tacoId>`), state, and event API endpoints return HTTP 410 Gone, and active event subscriptions terminate with `TACO_GONE`.
+- **Custom duration:** Pass `taco-cli publish <file.taco.html> --ttl <duration>` (e.g. `7d`, `24h`, `1h`). Finite durations must be positive whole seconds and at most 365 days; `0`/`none` means permanent. Local dry-run rejects the same invalid durations before any request and reports the expected `expiresAt` (`null` for permanent).
+- **Behavior after expiration:** Reviewer, state, history, review, event, and Host storage endpoints return HTTP 410 Gone. New, reconnecting, and active subscriptions report `TACO_GONE` and exit 2; `CURSOR_EXPIRED`/exit 6 is reserved for an unavailable event cursor.
+- **Storage boundary:** New publications store their canonical content in the transactional database, without a public Blob backup that bypasses expiration. TTL stops future server access; it does not physically reclaim records or revoke copies already downloaded. Old public Blob URLs created before this change require a separate operator action to remove; adding a Host guard cannot revoke their public URL.
