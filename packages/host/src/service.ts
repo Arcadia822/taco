@@ -11,6 +11,7 @@ import {
   type ImportedCommentThread,
 } from '@taco/protocol'
 import type { StorageDriver, MemoryDatabaseDriver } from './storage.ts'
+import { calculateTacoExpiresAt, isTacoExpired } from './lib/db.ts'
 
 export interface HostContext {
   db: MemoryDatabaseDriver
@@ -220,7 +221,7 @@ export class TacoHostService {
       if (!existingTaco) return errorResponse(404, 'NOT_FOUND', 'Target Taco not found')
       if (existingTaco.ownerId !== user.id)
         return errorResponse(403, 'FORBIDDEN', 'User is not the Taco owner')
-      if (existingTaco.status === 'deleted' || existingTaco.status === 'expired') {
+      if (existingTaco.status === 'deleted' || isTacoExpired(existingTaco)) {
         return errorResponse(410, 'GONE', 'Target Taco has been deleted or expired')
       }
       targetScope = payload.tacoId
@@ -314,11 +315,31 @@ export class TacoHostService {
   async publishTaco(
     authHeader: string | undefined,
     idempotencyKey: string | undefined,
-    body: { protocol: string; uploadId: string },
+    body: { protocol: string; uploadId: string; ttlSeconds?: number | null },
   ): Promise<HttpResponse> {
     const user = await this.authenticateBearer(authHeader)
     if (!user) return errorResponse(401, 'UNAUTHORIZED', 'Valid Bearer ApiKey required')
     if (!idempotencyKey) return errorResponse(400, 'BAD_REQUEST', 'Missing Idempotency-Key header')
+
+    let ttlSeconds: number | null | undefined = undefined
+    if (body.ttlSeconds !== undefined) {
+      if (body.ttlSeconds === null || body.ttlSeconds === 0) {
+        ttlSeconds = null
+      } else if (
+        typeof body.ttlSeconds === 'number' &&
+        Number.isInteger(body.ttlSeconds) &&
+        body.ttlSeconds > 0 &&
+        body.ttlSeconds <= 31536000
+      ) {
+        ttlSeconds = body.ttlSeconds
+      } else {
+        return errorResponse(
+          400,
+          'VALIDATION_ERROR',
+          'ttlSeconds must be a positive integer <= 31536000 (365 days), or 0/null for permanent',
+        )
+      }
+    }
 
     const scopeKey = `${user.id}:publish:global:publish:${idempotencyKey}`
     const reservation = this.ctx.db.uploadReservations.get(scopeKey)
@@ -396,7 +417,7 @@ export class TacoHostService {
       lastSequence: 1,
       createdAt: now,
       updatedAt: now,
-      expiresAt: null,
+      expiresAt: calculateTacoExpiresAt(ttlSeconds),
     }
     const revisionRow = {
       id: reservation.revisionId,
@@ -449,7 +470,7 @@ export class TacoHostService {
       contentHash,
       url: `${this.ctx.hostUrl}/t/${tacoRow.id}`,
       revisionUrl: `${this.ctx.hostUrl}/t/${tacoRow.id}/r/${revisionRow.id}`,
-      expiresAt: null,
+      expiresAt: tacoRow.expiresAt,
     })
   }
 
@@ -477,7 +498,7 @@ export class TacoHostService {
     if (taco.ownerId !== user.id) return errorResponse(403, 'FORBIDDEN', 'User is not Taco owner')
     if (taco.status === 'closed')
       return errorResponse(409, 'TACO_CLOSED', 'Cannot update closed Taco')
-    if (taco.status === 'deleted' || taco.status === 'expired')
+    if (taco.status === 'deleted' || isTacoExpired(taco))
       return errorResponse(410, 'GONE', 'Taco is gone')
 
     if (reservation.status === 'committed') {
@@ -620,7 +641,7 @@ export class TacoHostService {
 
     const taco = this.ctx.db.tacos.get(tacoId)
     if (!taco) return errorResponse(404, 'NOT_FOUND', 'Taco not found')
-    if (taco.status === 'deleted' || taco.status === 'expired')
+    if (taco.status === 'deleted' || isTacoExpired(taco))
       return errorResponse(410, 'GONE', 'Taco is gone')
 
     // Idempotent receipt check
@@ -817,7 +838,7 @@ export class TacoHostService {
   async listRevisions(tacoId: string, after?: string, limit = 100): Promise<HttpResponse> {
     const taco = this.ctx.db.tacos.get(tacoId)
     if (!taco) return errorResponse(404, 'NOT_FOUND', 'Taco not found')
-    if (taco.status === 'deleted' || taco.status === 'expired')
+    if (taco.status === 'deleted' || isTacoExpired(taco))
       return errorResponse(410, 'GONE', 'Taco is gone')
 
     const allRevs = Array.from(this.ctx.db.revisions.values())
@@ -856,7 +877,7 @@ export class TacoHostService {
   async getRevision(tacoId: string, revisionId: string): Promise<HttpResponse> {
     const taco = this.ctx.db.tacos.get(tacoId)
     if (!taco) return errorResponse(404, 'NOT_FOUND', 'Taco not found')
-    if (taco.status === 'deleted' || taco.status === 'expired')
+    if (taco.status === 'deleted' || isTacoExpired(taco))
       return errorResponse(410, 'GONE', 'Taco is gone')
 
     const rev = this.ctx.db.revisions.get(revisionId)
@@ -885,7 +906,7 @@ export class TacoHostService {
   async exportTaco(tacoId: string): Promise<HttpResponse> {
     const taco = this.ctx.db.tacos.get(tacoId)
     if (!taco) return errorResponse(404, 'NOT_FOUND', 'Taco not found')
-    if (taco.status === 'deleted' || taco.status === 'expired')
+    if (taco.status === 'deleted' || isTacoExpired(taco))
       return errorResponse(410, 'GONE', 'Taco is gone')
 
     const throughSequence = taco.lastSequence
@@ -951,7 +972,7 @@ export class TacoHostService {
   async getTaco(tacoId: string): Promise<HttpResponse> {
     const taco = this.ctx.db.tacos.get(tacoId)
     if (!taco) return errorResponse(404, 'NOT_FOUND', 'Taco not found')
-    if (taco.status === 'deleted' || taco.status === 'expired')
+    if (taco.status === 'deleted' || isTacoExpired(taco))
       return errorResponse(410, 'GONE', 'Taco is gone')
 
     return jsonResponse(200, {
@@ -978,7 +999,7 @@ export class TacoHostService {
   ): Promise<HttpResponse> {
     const taco = this.ctx.db.tacos.get(tacoId)
     if (!taco) return errorResponse(404, 'NOT_FOUND', 'Taco not found')
-    if (taco.status === 'deleted' || taco.status === 'expired')
+    if (taco.status === 'deleted' || isTacoExpired(taco))
       return errorResponse(410, 'GONE', 'Taco is gone')
 
     const currentH = taco.lastSequence

@@ -241,6 +241,11 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
               return
             }
             const events = await db.getEventsAfter(tacoId, currentSentSequence)
+            const afterReadTaco = await db.getTaco(tacoId)
+            if (!afterReadTaco || afterReadTaco.status === 'deleted' || afterReadTaco.status === 'expired') {
+              emitGoneAndClose()
+              return
+            }
             for (const ev of events) {
               if (streamClosed) break
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(ev)}\n\n`))

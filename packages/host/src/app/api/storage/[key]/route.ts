@@ -1,10 +1,11 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { DatabaseNotConfiguredError, getDatabase, GoneError, NotFoundError, PayloadTooLargeError, sha256Hex } from '@/lib/db'
-import { getStorageAdapter } from '@/lib/storage-adapter'
+import { getStorageAdapter, isCanonicalStorageKey } from '@/lib/storage-adapter'
 
 export const dynamic = 'force-dynamic'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const UUID_LIFECYCLE_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_STORAGE_BYTES = 32 * 1024 * 1024 // 32 MiB
 
 async function readBoundedBody(req: NextRequest, maxBytes: number): Promise<{ bytes: Uint8Array; overflow: boolean }> {
@@ -71,6 +72,14 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ key: st
         return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Upload reservation not found' } }, { status: 404 })
       }
 
+      const parent = await db.getTaco(reservation.tacoId)
+      if (!parent) {
+        return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Upload reservation not found' } }, { status: 404 })
+      }
+      if (parent.status === 'deleted' || parent.status === 'expired') {
+        return NextResponse.json({ error: { code: 'GONE', message: 'Taco has expired or was deleted' } }, { status: 410 })
+      }
+
       if (new Date(reservation.expiresAt).getTime() < Date.now()) {
         return NextResponse.json({ error: { code: 'GONE', message: 'Upload reservation expired' } }, { status: 410 })
       }
@@ -121,6 +130,9 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ key: st
   }
 
   // Non-UUID legacy storage path only
+  if (!isCanonicalStorageKey(decodedKey)) {
+    return NextResponse.json({ error: { code: 'BAD_REQUEST', message: 'Invalid storage key' } }, { status: 400 })
+  }
   try {
     const storage = getStorageAdapter()
     await storage.putObject(decodedKey, bytes)
@@ -142,6 +154,16 @@ export async function GET(req: NextRequest, context: { params: Promise<{ key: st
       if (!reservation) {
         return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Upload reservation not found' } }, { status: 404 })
       }
+      const parent = await db.getTaco(reservation.tacoId)
+      if (!parent) {
+        return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Upload content not found or not committed' } }, { status: 404 })
+      }
+      if (parent.status === 'deleted' || parent.status === 'expired') {
+        return NextResponse.json({ error: { code: 'GONE', message: 'Taco has expired or was deleted' } }, { status: 410 })
+      }
+      if (new Date(reservation.expiresAt).getTime() < Date.now()) {
+        return NextResponse.json({ error: { code: 'GONE', message: 'Upload reservation expired' } }, { status: 410 })
+      }
       const content = await db.getUploadContent(decodedKey)
       if (content === null || reservation.status !== 'committed') {
         return NextResponse.json({ error: { code: 'NOT_FOUND', message: 'Upload content not found or not committed' } }, { status: 404 })
@@ -159,8 +181,11 @@ export async function GET(req: NextRequest, context: { params: Promise<{ key: st
   }
 
   // Non-UUID legacy storage path
+  if (!isCanonicalStorageKey(decodedKey)) {
+    return NextResponse.json({ error: { code: 'BAD_REQUEST', message: 'Invalid storage key' } }, { status: 400 })
+  }
   const pasteMatch = decodedKey.match(/^pastes\/([^/]+)\.json$/i)
-  if (pasteMatch) {
+  if (pasteMatch && UUID_LIFECYCLE_PATTERN.test(pasteMatch[1])) {
     const pasteId = pasteMatch[1]
     try {
       const db = getDatabase()

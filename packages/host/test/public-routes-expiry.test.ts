@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import type { DocumentSnapshot } from '@taco/protocol'
-import { DatabaseNotConfiguredError, SqliteDbAdapter } from '../src/lib/db.ts'
+import { DatabaseNotConfiguredError, sha256Hex, SqliteDbAdapter } from '../src/lib/db.ts'
 import * as dbModule from '../src/lib/db.ts'
 import type { ObjectStorageAdapter } from '../src/lib/storage-adapter.ts'
 import * as storageModule from '../src/lib/storage-adapter.ts'
@@ -17,6 +17,7 @@ import { GET as getListeners } from '../src/app/v1/tacos/[id]/listeners/route.ts
 import { GET as getEvents } from '../src/app/v1/tacos/[id]/events/route.ts'
 import { GET as getCsrf } from '../src/app/v1/tacos/[id]/csrf/route.ts'
 import { GET as getStorage } from '../src/app/api/storage/[key]/route.ts'
+import { GET as getTacoPage } from '../src/app/t/[id]/route.ts'
 
 interface ApiErrorBody {
   error: {
@@ -50,6 +51,7 @@ vi.mock('../src/lib/db.ts', async (importOriginal) => {
 
 const storageMockObjects = new Map<string, Uint8Array>()
 const putObjectCalls: Array<{ key: string; data: Uint8Array }> = []
+const getObjectCalls: string[] = []
 
 const mockStorageAdapter: ObjectStorageAdapter = {
   async putObject(key: string, data: Uint8Array): Promise<string> {
@@ -58,6 +60,7 @@ const mockStorageAdapter: ObjectStorageAdapter = {
     return `https://mock-blob.example.com/${key}`
   },
   async getObject(urlOrPath: string): Promise<Uint8Array | null> {
+    getObjectCalls.push(urlOrPath)
     const data = storageMockObjects.get(urlOrPath)
     if (!data) {
       return null
@@ -73,6 +76,10 @@ vi.mock('../src/lib/storage-adapter.ts', async (importOriginal) => {
     getStorageAdapter: () => mockStorageAdapter,
   }
 })
+
+vi.mock('../src/lib/taco-shell-template.ts', () => ({
+  renderCanonicalTacoHtml: () => '<html><body>legacy-render</body></html>',
+}))
 
 describe('Host Public Routes Expiry & Lifecycle Regression Tests', () => {
   const sampleSnapshot: DocumentSnapshot = {
@@ -507,6 +514,158 @@ describe('Host Public Routes Expiry & Lifecycle Regression Tests', () => {
       } finally {
         currentDb = null
         storageMockObjects.clear()
+        try { unlinkSync(testDbPath) } catch {}
+      }
+    })
+  })
+
+  describe('Upload Reservation TTL Gate', () => {
+    const uploadBytes = new TextEncoder().encode(JSON.stringify({ upload: 'payload' }))
+
+    const createReservation = async (db: SqliteDbAdapter, tacoId: string) =>
+      await db.createUploadReservation(
+        tacoId,
+        {
+          purpose: 'review-edit',
+          payloadBytes: uploadBytes.byteLength,
+          payloadHash: `sha256:${await sha256Hex(uploadBytes)}`,
+        },
+        randomUUID(),
+      )
+
+    it('returns 410 for committed upload content after the parent Taco expires', async () => {
+      const { testDbPath, db, tacoId } = await setupTestDb()
+      try {
+        const reservation = await createReservation(db, tacoId)
+        await db.commitUploadContent(reservation.uploadId, uploadBytes)
+        setTacoLifecycleStatus(testDbPath, tacoId, 'expired')
+
+        const req = new NextRequest(`http://localhost:32167/api/storage/${reservation.uploadId}`)
+        const res = await getStorage(req, { params: Promise.resolve({ key: reservation.uploadId }) })
+        expect(res.status).toBe(410)
+        const body: ApiErrorBody = await res.json()
+        expect(body.error.code).toBe('GONE')
+      } finally {
+        currentDb = null
+        try { unlinkSync(testDbPath) } catch {}
+      }
+    })
+
+    it('rejects upload commits after the parent Taco expires', async () => {
+      const { testDbPath, db, tacoId } = await setupTestDb()
+      try {
+        const reservation = await createReservation(db, tacoId)
+        setTacoLifecycleStatus(testDbPath, tacoId, 'expired')
+
+        const req = new NextRequest(`http://localhost:32167/api/storage/${reservation.uploadId}`, {
+          method: 'PUT',
+          body: uploadBytes,
+        })
+        const res = await getStorage(req, { params: Promise.resolve({ key: reservation.uploadId }) })
+        expect(res.status).toBe(410)
+      } finally {
+        currentDb = null
+        try { unlinkSync(testDbPath) } catch {}
+      }
+    })
+
+    it('returns 410 once the reservation deadline has passed', async () => {
+      const { testDbPath, db, tacoId } = await setupTestDb()
+      try {
+        const reservation = await createReservation(db, tacoId)
+        await db.commitUploadContent(reservation.uploadId, uploadBytes)
+        const directDb = new DatabaseSync(testDbPath)
+        directDb
+          .prepare('UPDATE upload_reservations SET expires_at = ? WHERE id = ?')
+          .run('1970-01-01T00:00:00.000Z', reservation.uploadId)
+        directDb.close()
+
+        const req = new NextRequest(`http://localhost:32167/api/storage/${reservation.uploadId}`)
+        const res = await getStorage(req, { params: Promise.resolve({ key: reservation.uploadId }) })
+        expect(res.status).toBe(410)
+      } finally {
+        currentDb = null
+        try { unlinkSync(testDbPath) } catch {}
+      }
+    })
+  })
+
+  describe('Legacy Storage Key Canonicalization Gate', () => {
+    const aliasCases: Array<[string, (id: string) => string]> = [
+      ['query suffix', (id) => `pastes%2F${id}.json%3Fx%3D1`],
+      ['fragment suffix', (id) => `pastes%2F${id}.json%23frag`],
+      ['absolute URL', (id) => `https%3A%2F%2Fstore.example%2Fpastes%2F${id}.json`],
+      ['escaped slash', (id) => `pastes%252F${id}.json`],
+    ]
+
+    it.each(aliasCases)('rejects %s aliases before touching storage', async (_label, makeKey) => {
+      const { testDbPath, tacoId } = await setupTestDb()
+      try {
+        setTacoLifecycleStatus(testDbPath, tacoId, 'expired')
+        storageMockObjects.set(`pastes/${tacoId}.json`, new Uint8Array([1, 2, 3]))
+        getObjectCalls.length = 0
+
+        const key = makeKey(tacoId)
+        const req = new NextRequest(`http://localhost:32167/api/storage/${key}`)
+        const res = await getStorage(req, { params: Promise.resolve({ key }) })
+        expect(res.status).toBe(400)
+        expect(getObjectCalls).toEqual([])
+      } finally {
+        currentDb = null
+        storageMockObjects.clear()
+        getObjectCalls.length = 0
+        try { unlinkSync(testDbPath) } catch {}
+      }
+    })
+  })
+
+  describe('Legacy Page Lifecycle Fail-Closed', () => {
+    it('returns 503 when the legacy fallback cannot establish lifecycle', async () => {
+      const { testDbPath, tacoId } = await setupTestDb()
+      try {
+        currentDb = {
+          getSharedState: async () => null,
+          getTaco: async () => {
+            throw new Error('database unavailable')
+          },
+        } as unknown as SqliteDbAdapter
+        storageMockObjects.set(
+          `pastes/${tacoId}.json`,
+          new TextEncoder().encode(JSON.stringify({ snapshot: sampleSnapshot })),
+        )
+
+        const req = new Request(`http://localhost:32167/t/${tacoId}`)
+        const res = await getTacoPage(req, { params: Promise.resolve({ id: tacoId }) })
+        expect(res.status).toBe(503)
+      } finally {
+        currentDb = null
+        storageMockObjects.clear()
+        try { unlinkSync(testDbPath) } catch {}
+      }
+    })
+  })
+
+  describe('Legacy Storage Key Lifecycle Lookup Scope', () => {
+    it('serves non-UUID legacy objects without a Taco lookup a UUID database would reject', async () => {
+      const { testDbPath } = await setupTestDb()
+      try {
+        currentDb = {
+          getTaco: async (id: string) => {
+            throw new Error(`invalid input syntax for uuid: ${id}`)
+          },
+        } as unknown as SqliteDbAdapter
+        const bytes = new TextEncoder().encode(JSON.stringify({ legacy: true }))
+        storageMockObjects.set('pastes/example.json', bytes)
+        getObjectCalls.length = 0
+
+        const req = new NextRequest('http://localhost:32167/api/storage/pastes%2Fexample.json')
+        const res = await getStorage(req, { params: Promise.resolve({ key: 'pastes%2Fexample.json' }) })
+        expect(res.status).toBe(200)
+        expect(getObjectCalls).toEqual(['pastes/example.json'])
+      } finally {
+        currentDb = null
+        storageMockObjects.clear()
+        getObjectCalls.length = 0
         try { unlinkSync(testDbPath) } catch {}
       }
     })
