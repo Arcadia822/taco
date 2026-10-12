@@ -182,6 +182,10 @@ export async function uploadAssetsAndCommit({
 }) {
   const dir = resolve(artifactsDir)
   const tree = await createBlobs(repo, dir, prNumber, headSha, manifest)
+  // GitHub rejects an empty tree with "Invalid tree info" (HTTP 422), and a
+  // revision with no screenshots has nothing to commit. Skip the whole data API,
+  // including the assets-branch bootstrap, rather than writing an empty commit.
+  if (tree.length === 0) return null
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const parentSha = await ensureAssetsBranch(repo)
     const parentCommit = await ghFetch(`/repos/${repo}/git/commits/${parentSha}`)
@@ -228,6 +232,7 @@ export async function updatePrDescription({
   currentBody,
   runId,
   manifest = null,
+  plan = null,
 }) {
   const block = generatePreviewBlockMarkdown({
     headSha,
@@ -236,6 +241,7 @@ export async function updatePrDescription({
     assetCommitSha,
     runId,
     manifest,
+    plan,
   })
   await ghFetch(`/repos/${repo}/pulls/${prNumber}`, {
     method: 'PATCH',
@@ -288,6 +294,7 @@ export async function runPublisher() {
     currentBody: beforePatch.body,
     runId,
     manifest: validation.manifest,
+    plan,
   })
 
   return { success: true, assetCommitSha }
@@ -298,8 +305,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     .then((result) => {
       if (result?.skipped) {
         console.log(`Publication skipped: ${result.reason}`)
-      } else {
+      } else if (result?.assetCommitSha) {
         console.log(`Publication complete at assets commit ${result.assetCommitSha}.`)
+      } else {
+        console.log('Publication complete: no screenshots were published for this revision.')
       }
     })
     .catch((err) => {

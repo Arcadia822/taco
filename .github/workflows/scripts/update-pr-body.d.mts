@@ -10,12 +10,14 @@ export interface PreviewBlockInput {
   headSha: string
   prNumber: string | number
   repo: string
-  /** Assets-branch commit that holds the published PNGs. */
-  assetCommitSha: string
+  /** Assets-branch commit holding the published PNGs, or null when none exist. */
+  assetCommitSha: string | null
   runId?: string | null
   /** ISO timestamp; injected so tests can pin the rendered output. */
   timestamp?: string | null
   manifest?: any
+  /** Trusted plan, read to tell a planner failure from a no-UI-change verdict. */
+  plan?: any
 }
 
 export declare const MARKER_START: string

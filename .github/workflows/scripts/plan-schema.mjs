@@ -26,6 +26,30 @@ export class PlanValidationError extends Error {
 }
 
 /**
+ * Summaries plan-preview.mjs writes when it could not compute a usable plan.
+ * The publisher reads the same markers to tell a planner failure apart from a
+ * plan that reports no UI change, so both sides share this table instead of
+ * repeating the strings.
+ */
+export const PLANNER_FALLBACK_SUMMARIES = Object.freeze({
+  invalidPlan: 'Planner produced invalid plan',
+  plannerError: 'Planner error',
+  keyUnavailable: 'Preview planner API key is unavailable',
+})
+
+/**
+ * True when `plan` is one of the plan-preview.mjs fallbacks, meaning the planner
+ * produced no usable plan. Those fallbacks carry `ui_change: false` with empty
+ * scenes exactly like a genuine no-UI-change verdict, so reporting one as the
+ * other misstates the result.
+ */
+export function isPlannerFailurePlan(plan) {
+  const summary = plan && typeof plan.summary === 'string' ? plan.summary : ''
+  if (!summary) return false
+  return Object.values(PLANNER_FALLBACK_SUMMARIES).some((prefix) => summary.startsWith(prefix))
+}
+
+/**
  * Validates a plan object against the strict budget and rules.
  *
  * @param {unknown} plan
