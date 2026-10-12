@@ -210,6 +210,25 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(readyData)}\n\n`))
 
 
+        const emitGoneAndClose = (message = 'Taco has expired or was deleted') => {
+          if (!streamClosed) {
+            streamClosed = true
+            cleanup()
+            try {
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({
+                    kind: 'diagnostic',
+                    code: 'TACO_GONE',
+                    message,
+                  })}\n\n`,
+                ),
+              )
+              controller.close()
+            } catch {}
+          }
+        }
+
         // Sequential polling queue to prevent concurrent overlapping polls
         let isPolling = false
         const pollForNewEvents = async () => {
@@ -218,22 +237,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
           try {
             const currentTaco = await db.getTaco(tacoId)
             if (!currentTaco || currentTaco.status === 'deleted' || currentTaco.status === 'expired') {
-              if (!streamClosed) {
-                streamClosed = true
-                cleanup()
-                try {
-                  controller.enqueue(
-                    encoder.encode(
-                      `data: ${JSON.stringify({
-                        kind: 'diagnostic',
-                        code: 'TACO_GONE',
-                        message: 'Taco has expired or was deleted',
-                      })}\n\n`,
-                    ),
-                  )
-                  controller.close()
-                } catch {}
-              }
+              emitGoneAndClose()
               return
             }
             const events = await db.getEventsAfter(tacoId, currentSentSequence)
@@ -243,6 +247,10 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
               currentSentSequence = BigInt(ev.sequence)
             }
           } catch (err) {
+            if (err instanceof GoneError) {
+              emitGoneAndClose(err.message)
+              return
+            }
             if (!streamClosed) {
               streamClosed = true
               cleanup()
@@ -263,6 +271,11 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
               cleanup()
               return
             }
+            const currentTaco = await db.getTaco(tacoId)
+            if (!currentTaco || currentTaco.status === 'deleted' || currentTaco.status === 'expired') {
+              emitGoneAndClose()
+              return
+            }
             for (const ev of replayEvents) {
               if (streamClosed) break
               controller.enqueue(encoder.encode(`data: ${JSON.stringify(ev)}\n\n`))
@@ -279,6 +292,10 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
             }
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(checkpointFrame)}\n\n`))
           } catch (err) {
+            if (err instanceof GoneError) {
+              emitGoneAndClose(err.message)
+              return
+            }
             streamClosed = true
             cleanup()
             try {
