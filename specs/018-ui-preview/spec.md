@@ -368,3 +368,42 @@ To remove the external font response from the build inputs, `packages/host` was 
 - `npm run test:browser`: 14 files loaded, 7 warnings, 0 errors. Complete/Lite product and skill shell bytes stayed unchanged from the repair baseline shown above.
 - New font binaries total 182,740 bytes versus the 185,000-byte estimate (-2,260 bytes). The prior local build's 12 cached font subsets totaled 186,068 bytes; that cache comparison is not a controlled production before/after measurement. The full font files are both preloaded, increasing Latin-only first-load font transfer versus the prior two Latin subsets (65,628 bytes).
 - No new npm dependencies or skill instructions. The Host README and font provenance record document the local-font contract; removed the unsupported `NEXT_FONT_GOOGLE_MOCKED` flags from both candidate workflow build jobs.
+
+### 9.5 Screenshot-Free Publication Repair (TACO-78, PR #148)
+
+#### Background & Failure Analysis
+
+From 2026-10-12 onward, the `Publish UI Preview` job consistently failed on PR #144 (all 4 runs) and PR #145/146 (3 runs) with `GitHub API 422 Unprocessable Entity` for `POST /repos/Arcadia822/taco/git/trees: {"message":"Invalid tree info"}`. Preceding `collect`, `plan`, and `record` jobs succeeded.
+
+Two defects combined to produce the failure:
+1. **Planner output invalidation**: The planner emitted `ui_change: false` with a non-empty `scenes` array. `plan-schema.mjs` enforces the canonical invariant that `ui_change: false` requires `scenes: []`. `plan-preview.mjs` fell back to a plan with `summary: "Planner produced invalid plan: ..."`, and `execute-preview.mjs` cleanly produced an unavailable manifest with 0 screenshots.
+2. **Empty tree submission**: `publish-preview.mjs` collected 0 blobs from the empty manifest and called `POST /git/trees` with `{ base_tree, tree: [] }`. GitHub rejects an empty tree array with HTTP 422. This is the second call site of `LESSON-007` (occurrences raised to 2).
+
+#### Repair
+
+1. **Guard against empty tree**: `uploadAssetsAndCommit` returns `null` immediately when `tree.length === 0`, bypassing `ensureAssetsBranch`, `POST /git/trees`, `POST /git/commits`, and `PATCH /git/refs`.
+2. **Truthful PR block conclusion**: When no screenshots exist, `generatePreviewBlockMarkdown` inspects the plan via `isPlannerFailurePlan`. If the plan is a fallback (due to validation failure, planner API error, or missing key), it outputs `> ⚠️ **Preview planning failed.** The planner never produced a usable plan, so the summary above is its error, not a "no UI change" verdict.` If the plan legitimately reports no UI change, it outputs `*No UI preview was generated: this revision reports no UI change.*`
+3. **Shared fallback markers**: `PLANNER_FALLBACK_SUMMARIES` and `isPlannerFailurePlan` in `plan-schema.mjs` prevent drift between the planner's fallback generators and the publisher's discriminator.
+4. **Planner prompt invariant**: Rule 5 was added to `PLANNER_SYSTEM_PROMPT` in `plan-preview.mjs`, making explicit that `ui_change: false` requires `scenes: []`, and providing the canonical no-change JSON template.
+
+#### Budget Estimation (Prepare) vs Actual Measurements (Develop)
+
+| Metric / Artifact | Baseline Before | Prepare Estimate | Actual Measured | Deviation / Attribution |
+| :--- | ---: | ---: | ---: | :--- |
+| Complete product shell (`dist-single/Taco_Spec.taco.html`) | 2,853,111 bytes | 0 bytes | 2,853,111 bytes | 0 bytes; CI-only repair |
+| Lite product shell (`dist-single/Taco_Spec_Lite.taco.html`) | 303,897 bytes | 0 bytes | 303,897 bytes | 0 bytes; CI-only repair |
+| Skill Complete shell (`skills/taco/taco-shell.html`) | 2,740,554 bytes | 0 bytes | 2,740,554 bytes | 0 bytes; byte-identical SHA-256 (`6a4a49c6...`) |
+| Skill Lite shell (`skills/taco/taco-shell-lite.html`) | 191,340 bytes | 0 bytes | 191,340 bytes | 0 bytes; byte-identical SHA-256 (`c7a5139b...`) |
+| Skill directory (`skills/taco/`) | 25,616 KB | 0 bytes | 25,616 KB | 0 KB; skill distribution untouched |
+| CI workflow scripts (`.github/workflows/scripts/`) | 39,400 bytes | ~3,000 bytes | 42,514 bytes | +3,114 bytes across 4 scripts and 2 declarations |
+| Added npm runtime dependencies | 0 packages | 0 packages | 0 packages | 0 added dependencies |
+| Added npm dev dependencies | 0 packages | 0 packages | 0 packages | 0 added dependencies |
+| Added network calls in publication | 5 API calls | 0 calls | 0 calls on no-screenshot path | -5 GitHub REST calls (`ref`, `tree`, `commit`, `patch-ref`, `blobs`) when no screenshots exist |
+
+#### Verification
+
+- **Unit & regression tests**: Added 3 new tests in `tests/ui-preview-pipeline.test.ts` covering screenshot-free manifest publication, planner failure reporting, and `uploadAssetsAndCommit` returning `null`. Before the fix, the regression test reproduced GitHub's HTTP 422. After the fix, all 33 pipeline tests and all 788 suite tests pass (`npm test`).
+- **Repository gate**: `npm run check` passes cleanly (Prettier, `check:lessons`, Vitest suite, and TypeScript build).
+- **Real GitHub API verification**: Executed `runPublisher` directly against draft PR #148 (head `4982761`):
+  - With planner-failure plan: exited status 0, assets branch tip untouched (`cf81bea1...`), PR body updated with `⚠️ Preview planning failed`.
+  - With no-UI-change plan: exited status 0, assets branch tip untouched, PR body updated with `*No UI preview was generated: this revision reports no UI change.*`
