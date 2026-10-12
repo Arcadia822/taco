@@ -35,6 +35,7 @@ const mediaType = (path: string): string => {
   if (path.endsWith('.md')) return 'text/markdown'
   if (/\.ya?ml$/.test(path)) return 'application/yaml'
   if (path.endsWith('.json')) return 'application/json'
+  if (/\.html?$/i.test(path)) return 'text/html'
   return 'text/plain'
 }
 
@@ -48,12 +49,10 @@ interface EmbeddedFile {
 const readFiles = (directory: string): EmbeddedFile[] => {
   const files: EmbeddedFile[] = []
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    if (entry.name.startsWith('.') || entry.name.endsWith('.taco.html')) continue
+    if (entry.name.startsWith('.') || /\.taco\.html$/i.test(entry.name)) continue
     const absolute = join(directory, entry.name)
     if (entry.isDirectory()) files.push(...readFiles(absolute))
     else if (entry.isFile()) {
-      // Ordinary HTML source files are unsupported; only the .taco.html container ships.
-      if (/\.html?$/i.test(entry.name)) continue
       const relativePath = relative(specRoot, absolute).split(sep).join('/')
       const path = `${bundleRoot}/${relativePath}`
       files.push({

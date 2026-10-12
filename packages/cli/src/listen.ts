@@ -1,12 +1,16 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { createHash, randomBytes } from 'node:crypto'
-import { lstat, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { link, lstat, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { existsSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
-import { readBundleFromHtml, validateBundle, type TacoBundle } from '../../../skills/taco/scripts/pack.mjs'
+import {
+  readBundleFromHtml,
+  validateBundle,
+  type TacoBundle,
+} from '../../../skills/taco/scripts/pack.mjs'
 import { EXIT_CODES, makeCliError, type CliErrorPayload } from './errors.ts'
 import type { LocalHandoff, LocalReceipt, TacoDocument } from '@taco/protocol'
 
@@ -16,6 +20,7 @@ export interface ListenOptions {
   timeout?: number
   noOpen?: boolean
   openBrowser?: boolean
+  signal?: AbortSignal
 }
 
 export interface CliExecutionResult {
@@ -24,7 +29,11 @@ export interface CliExecutionResult {
   stderr?: string
 }
 
-const MAX_BODY_BYTES = 64 * 1024 * 1024 // 64 MiB limit
+const MAX_BODY_BYTES = 64 * 1024 * 1024 // 64 MiB limit per request
+const MAX_AGGREGATE_BODY_BYTES = 64 * 1024 * 1024 // 64 MiB aggregate limit
+const MAX_CONCURRENT_REQUESTS = 4
+const MAX_TRAVERSAL_DEPTH = 64
+const STALE_LOCK_GRACE_MS = 3000
 
 const isLoopbackHost = (hostHeader: string | undefined): boolean => {
   if (!hostHeader) return false
@@ -54,15 +63,74 @@ const isLoopbackOrigin = (originHeader: string | undefined): boolean => {
 const CREDENTIAL_KEY_PATTERN =
   /^(collab|access|credentials|relay|relayConfig|relay_config|token|secret|apiKey|api_key|password|authToken|auth_token|accessToken|access_token|privateKey|ownerPriv|priv|key|authorization)$/i
 
-const hasCredentials = (obj: unknown): boolean => {
-  if (!obj || typeof obj !== 'object') return false
-  if (Array.isArray(obj)) return obj.some(hasCredentials)
-  const record = obj as Record<string, unknown>
-  for (const [k, v] of Object.entries(record)) {
-    if (CREDENTIAL_KEY_PATTERN.test(k)) return true
-    if (v && typeof v === 'object' && hasCredentials(v)) return true
+export class PayloadTooDeepError extends Error {
+  constructor(message = 'payload too deeply nested') {
+    super(message)
+    this.name = 'PayloadTooDeepError'
   }
+}
+
+export const hasCredentials = (root: unknown): boolean => {
+  if (!root || typeof root !== 'object') return false
+
+  // Iterative so attacker-controlled nesting cannot overflow the call stack. Total work is
+  // bounded by the request body limits; only depth is capped, never legitimate bundle size.
+  const stack: Array<{ value: unknown; depth: number }> = [{ value: root, depth: 0 }]
+
+  while (stack.length > 0) {
+    const { value, depth } = stack.pop()!
+    if (depth > MAX_TRAVERSAL_DEPTH) {
+      throw new PayloadTooDeepError('payload too deeply nested')
+    }
+
+    if (!value || typeof value !== 'object') continue
+
+    if (Array.isArray(value)) {
+      for (let i = value.length - 1; i >= 0; i--) {
+        const item = value[i]
+        if (item && typeof item === 'object') {
+          stack.push({ value: item, depth: depth + 1 })
+        }
+      }
+    } else {
+      const record = value as Record<string, unknown>
+      for (const [k, v] of Object.entries(record)) {
+        if (CREDENTIAL_KEY_PATTERN.test(k)) return true
+        if (v && typeof v === 'object') {
+          stack.push({ value: v, depth: depth + 1 })
+        }
+      }
+    }
+  }
+
   return false
+}
+
+export const ensureReceiptsDir = async (): Promise<string> => {
+  const userSuffix =
+    typeof process.getuid === 'function' ? String(process.getuid()) : process.env.USER || 'user'
+  const receiptsDir = join(tmpdir(), `taco-receipts-${userSuffix}`)
+  await mkdir(receiptsDir, { recursive: true, mode: 0o700 })
+
+  const dirStat = await lstat(receiptsDir)
+  if (dirStat.isSymbolicLink()) {
+    throw new Error(`Receipt directory ${receiptsDir} cannot be a symbolic link`)
+  }
+  if (!dirStat.isDirectory()) {
+    throw new Error(`Receipt path ${receiptsDir} is not a directory`)
+  }
+  if (typeof process.getuid === 'function' && dirStat.uid !== process.getuid()) {
+    throw new Error(
+      `Receipt directory ${receiptsDir} owned by uid ${dirStat.uid}, expected ${process.getuid()}`,
+    )
+  }
+  if ((dirStat.mode & 0o077) !== 0) {
+    throw new Error(
+      `Receipt directory ${receiptsDir} has insecure permissions (mode 0o${dirStat.mode.toString(8)})`,
+    )
+  }
+
+  return receiptsDir
 }
 
 const credentialFreeDocument = (doc: Record<string, unknown>): TacoDocument => {
@@ -130,10 +198,21 @@ export const executeListen = (options: ListenOptions): Promise<CliExecutionResul
     const sessionToken = randomBytes(16).toString('hex')
     const requestedPort = options.port ? Number(options.port) : 0
     const timeoutSec = options.timeout ? Number(options.timeout) : 300
+    try {
+      await ensureReceiptsDir()
+    } catch (err: unknown) {
+      const error = makeCliError(
+        'LOCAL_IO_ERROR',
+        `Insecure or invalid receipt directory: ${(err as Error).message}`,
+      )
+      resolvePromise({ exitCode: EXIT_CODES.LOCAL_IO_ERROR, stderr: JSON.stringify(error) })
+      return
+    }
 
     const lockFilePath = join(dirname(artifactPath), `.${basename(artifactPath)}.listen.lock`)
     const lockInstanceId = randomBytes(16).toString('hex')
     let lockAcquired = false
+    let lockInode: number | null = null
 
     const acquireLock = async (
       port: number,
@@ -147,19 +226,34 @@ export const executeListen = (options: ListenOptions): Promise<CliExecutionResul
       })
 
       for (let attempt = 0; attempt < 3; attempt++) {
+        const tempLockPath = join(
+          dirname(artifactPath),
+          `.${basename(artifactPath)}.listen.lock.tmp-${lockInstanceId}-${randomBytes(8).toString('hex')}`,
+        )
+
         try {
-          await writeFile(lockFilePath, lockPayload, { flag: 'wx', encoding: 'utf8' })
+          await writeFile(tempLockPath, lockPayload, { encoding: 'utf8', mode: 0o600 })
+          await link(tempLockPath, lockFilePath)
+          const stat = await lstat(lockFilePath)
+          lockInode = stat.ino
           lockAcquired = true
           return { ok: true }
         } catch (err: unknown) {
           const nodeErr = err as NodeJS.ErrnoException
           if (nodeErr?.code === 'EEXIST') {
+            let stat
+            try {
+              stat = await lstat(lockFilePath)
+            } catch {
+              continue
+            }
+
             let lockData: { pid?: number; lockInstanceId?: string } | null = null
             try {
               const content = await readFile(lockFilePath, 'utf8')
               lockData = JSON.parse(content) as { pid?: number; lockInstanceId?: string }
             } catch {
-              // Unreadable / corrupted lockfile treated as stale
+              // Unreadable / corrupted lockfile
             }
 
             if (lockData && typeof lockData.pid === 'number') {
@@ -183,10 +277,37 @@ export const executeListen = (options: ListenOptions): Promise<CliExecutionResul
                   ),
                 }
               }
+            } else {
+              // Unparsable lock: treat as stale only if older than a few seconds (mtime)
+              const age = Date.now() - stat.mtimeMs
+              if (age < STALE_LOCK_GRACE_MS) {
+                return {
+                  ok: false,
+                  error: makeCliError(
+                    'CONFLICT_ERROR',
+                    `Another listener lock for ${basename(artifactPath)} is being initialized`,
+                  ),
+                }
+              }
             }
 
-            // Stale lock: await its removal before retry
+            // Stale lock: verify the same inode and lockInstanceId before unlink
             try {
+              const verifyStat = await lstat(lockFilePath)
+              if (verifyStat.ino !== stat.ino) {
+                continue
+              }
+              if (lockData?.lockInstanceId) {
+                const verifyContent = await readFile(lockFilePath, 'utf8').catch(() => null)
+                if (verifyContent) {
+                  try {
+                    const verifyData = JSON.parse(verifyContent) as { lockInstanceId?: string }
+                    if (verifyData.lockInstanceId !== lockData.lockInstanceId) {
+                      continue
+                    }
+                  } catch {}
+                }
+              }
               await unlink(lockFilePath)
             } catch (unlinkErr: unknown) {
               const unlinkErrNode = unlinkErr as NodeJS.ErrnoException
@@ -208,6 +329,8 @@ export const executeListen = (options: ListenOptions): Promise<CliExecutionResul
             ok: false,
             error: makeCliError('CONFLICT_ERROR', `Failed to acquire listener lock: ${errMsg}`),
           }
+        } finally {
+          await unlink(tempLockPath).catch(() => {})
         }
       }
 
@@ -226,13 +349,22 @@ export const executeListen = (options: ListenOptions): Promise<CliExecutionResul
       try {
         if (existsSync(lockFilePath)) {
           try {
+            const currentStat = await lstat(lockFilePath)
+            if (lockInode !== null && currentStat.ino !== lockInode) {
+              return
+            }
             const content = await readFile(lockFilePath, 'utf8')
             const current = JSON.parse(content) as { lockInstanceId?: string; pid?: number }
             if (current?.lockInstanceId === lockInstanceId || current?.pid === process.pid) {
               await unlink(lockFilePath).catch(() => {})
             }
           } catch {
-            await unlink(lockFilePath).catch(() => {})
+            if (lockInode !== null) {
+              const currentStat = await lstat(lockFilePath).catch(() => null)
+              if (currentStat && currentStat.ino === lockInode) {
+                await unlink(lockFilePath).catch(() => {})
+              }
+            }
           }
         }
       } catch {}
@@ -251,10 +383,10 @@ export const executeListen = (options: ListenOptions): Promise<CliExecutionResul
     let completedPayloadHash: string | null = null
     let completedReceipt: LocalReceipt | null = null
 
-    const cleanupAndClose = async (
-      exitCode: number,
-      errorPayload?: CliErrorPayload,
-    ) => {
+    let activeBodyRequests = 0
+    let currentAggregateBodyBytes = 0
+
+    const cleanupAndClose = async (exitCode: number, errorPayload?: CliErrorPayload) => {
       if (cleanedUp) return
       cleanedUp = true
       isClosing = true
@@ -286,17 +418,25 @@ export const executeListen = (options: ListenOptions): Promise<CliExecutionResul
       })
     }
 
+    if (options.signal) {
+      if (options.signal.aborted) {
+        await cleanupAndClose(EXIT_CODES.OK)
+        return
+      }
+      options.signal.addEventListener(
+        'abort',
+        () => {
+          void cleanupAndClose(EXIT_CODES.OK)
+        },
+        { once: true },
+      )
+    }
+
     const persistReceipt = async (
       cleanPayload: LocalHandoff,
       handoffId: string,
     ): Promise<LocalReceipt> => {
-      const receiptsDir = join(tmpdir(), 'taco-receipts')
-      await mkdir(receiptsDir, { recursive: true, mode: 0o700 })
-
-      const dirStat = await lstat(receiptsDir)
-      if (dirStat.isSymbolicLink()) {
-        throw new Error('Receipt directory cannot be a symbolic link')
-      }
+      const receiptsDir = await ensureReceiptsDir()
 
       const safeDoc = docId.replace(/[^a-zA-Z0-9_-]/g, '_')
       const safeSession = sessionId.replace(/[^a-zA-Z0-9_-]/g, '_')
@@ -394,6 +534,28 @@ export const executeListen = (options: ListenOptions): Promise<CliExecutionResul
           res.end(JSON.stringify({ ok: false, error: 'Mismatched sessionId in header' }))
           return
         }
+        if (activeBodyRequests >= MAX_CONCURRENT_REQUESTS) {
+          res.writeHead(429, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: 'Too many concurrent requests' }))
+          return
+        }
+
+        activeBodyRequests++
+        let requestAllocatedBytes = 0
+        let requestReleased = false
+
+        const releaseRequestResources = () => {
+          if (requestReleased) return
+          requestReleased = true
+          activeBodyRequests = Math.max(0, activeBodyRequests - 1)
+          currentAggregateBodyBytes = Math.max(0, currentAggregateBodyBytes - requestAllocatedBytes)
+          requestAllocatedBytes = 0
+        }
+
+        req.on('close', releaseRequestResources)
+        req.on('error', releaseRequestResources)
+        res.on('close', releaseRequestResources)
+        res.on('finish', releaseRequestResources)
 
         const chunks: Buffer[] = []
         let bodyBytes = 0
@@ -403,250 +565,379 @@ export const executeListen = (options: ListenOptions): Promise<CliExecutionResul
           bodyBytes += chunk.length
           if (bodyBytes > MAX_BODY_BYTES) {
             aborted = true
+            releaseRequestResources()
             req.destroy()
             res.writeHead(413, { 'Content-Type': 'application/json' })
             res.end(JSON.stringify({ ok: false, error: 'Payload Too Large' }))
             return
           }
+          if (currentAggregateBodyBytes + chunk.length > MAX_AGGREGATE_BODY_BYTES) {
+            aborted = true
+            releaseRequestResources()
+            req.destroy()
+            res.writeHead(413, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ ok: false, error: 'Aggregate payload byte budget exceeded' }))
+            return
+          }
+          currentAggregateBodyBytes += chunk.length
+          requestAllocatedBytes += chunk.length
           chunks.push(chunk)
         })
-
         req.on('end', async () => {
           if (aborted) return
-
-          let body: string
           try {
-            body = Buffer.concat(chunks).toString('utf8')
-          } catch {
-            res.writeHead(400, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: 'Invalid UTF-8 payload' }))
-            return
-          }
-
-          let parsed: Record<string, unknown>
-          try {
-            parsed = JSON.parse(body) as Record<string, unknown>
-          } catch {
-            res.writeHead(400, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: 'Invalid JSON payload' }))
-            return
-          }
-          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-            res.writeHead(400, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: 'Invalid payload: must be an object' }))
-            return
-          }
-
-          const payload = (parsed.payload ?? parsed) as Record<string, unknown>
-          if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-            res.writeHead(400, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: 'Invalid payload: must be an object' }))
-            return
-          }
-
-          if (payload.schema !== 'taco-local-handoff/1') {
-            res.writeHead(400, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: 'Invalid schema: expected taco-local-handoff/1' }))
-            return
-          }
-
-          if (typeof payload.createdAt !== 'string' || !payload.createdAt || isNaN(Date.parse(payload.createdAt))) {
-            res.writeHead(400, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: 'Invalid or missing createdAt timestamp' }))
-            return
-          }
-
-          if (payload.docId !== docId) {
-            res.writeHead(400, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: 'Mismatched docId in payload' }))
-            return
-          }
-
-          if (payload.sessionId !== sessionId) {
-            res.writeHead(400, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: 'Mismatched sessionId in payload' }))
-            return
-          }
-
-          const rawHandoffId = typeof payload.handoffId === 'string' ? payload.handoffId : ''
-          if (!rawHandoffId || !/^[a-zA-Z0-9_-]+$/.test(rawHandoffId)) {
-            res.writeHead(400, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: 'Invalid handoffId: must be alphanumeric/dash/underscore' }))
-            return
-          }
-          const handoffId = rawHandoffId
-
-          // Reject credentials/token in incoming payload
-          if ('token' in payload || hasCredentials(payload)) {
-            res.writeHead(400, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: 'Credentials not permitted in handoff payload' }))
-            return
-          }
-
-          const baselineBundle = payload.baseline as Record<string, unknown>
-          const snapshotBundle = payload.snapshot as Record<string, unknown>
-          if (!baselineBundle || !snapshotBundle || typeof baselineBundle !== 'object' || typeof snapshotBundle !== 'object') {
-            res.writeHead(400, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: 'Missing baseline or snapshot in payload' }))
-            return
-          }
-
-          // Bind baseline AND snapshot docId/root to original artifact
-          if (baselineBundle.docId !== originalBundle.docId) {
-            res.writeHead(400, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: 'Baseline docId does not match artifact docId' }))
-            return
-          }
-          if (snapshotBundle.docId !== originalBundle.docId) {
-            res.writeHead(400, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: 'Snapshot docId does not match artifact docId' }))
-            return
-          }
-          if (baselineBundle.root !== originalBundle.root) {
-            res.writeHead(400, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: 'Baseline root does not match artifact root' }))
-            return
-          }
-          if (snapshotBundle.root !== originalBundle.root) {
-            res.writeHead(400, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: 'Snapshot root does not match artifact root' }))
-            return
-          }
-
-          // Validate bundle structures and paths
-          try {
-            validateBundle(baselineBundle)
-            validateBundle(snapshotBundle)
-          } catch (valErr) {
-            res.writeHead(400, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: `Invalid bundle in handoff: ${(valErr as Error).message}` }))
-            return
-          }
-
-          // Project credential-free versions
-          const cleanBaseline = credentialFreeDocument(baselineBundle)
-          const cleanSnapshot = credentialFreeDocument(snapshotBundle)
-          const cleanPayload: LocalHandoff = {
-            schema: 'taco-local-handoff/1',
-            handoffId,
-            sessionId,
-            docId,
-            createdAt: payload.createdAt as string,
-            baseline: cleanBaseline,
-            snapshot: cleanSnapshot,
-          }
-
-          const payloadHash = createHash('sha256')
-            .update(JSON.stringify(cleanPayload))
-            .digest('hex')
-
-          // State checking for closing, completed, and in-flight
-          if (isClosing) {
-            if (completedHandoffId === handoffId && completedPayloadHash === payloadHash) {
-              res.writeHead(200, { 'Content-Type': 'application/json' })
-              res.end(JSON.stringify({ ok: true, handoffId, receiptId: handoffId }))
-              return
-            }
-            if (completedHandoffId === handoffId) {
+            let body: string
+            try {
+              body = Buffer.concat(chunks).toString('utf8')
+            } catch {
               res.writeHead(400, { 'Content-Type': 'application/json' })
-              res.end(JSON.stringify({ ok: false, error: 'Changed content for same handoffId rejected' }))
+              res.end(JSON.stringify({ ok: false, error: 'Invalid UTF-8 payload' }))
               return
             }
-            res.writeHead(409, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: 'Listener is closing, distinct handoff rejected' }))
-            return
-          }
 
-          if (completedHandoffId !== null) {
-            if (completedHandoffId === handoffId) {
-              if (completedPayloadHash === payloadHash) {
-                res.writeHead(200, { 'Content-Type': 'application/json' })
-                res.end(JSON.stringify({ ok: true, handoffId, receiptId: handoffId }))
-                return
-              }
-              res.writeHead(400, { 'Content-Type': 'application/json' })
-              res.end(JSON.stringify({ ok: false, error: 'Changed content for same handoffId rejected' }))
-              return
-            }
-            res.writeHead(409, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: 'Listener already completed a handoff' }))
-            return
-          }
-
-          if (inFlightHandoffId !== null) {
-            if (inFlightHandoffId === handoffId) {
-              if (inFlightPayloadHash !== payloadHash) {
+            let parsed: Record<string, unknown>
+            try {
+              parsed = JSON.parse(body) as Record<string, unknown>
+            } catch (jsonErr: unknown) {
+              if (
+                jsonErr instanceof RangeError ||
+                (jsonErr instanceof Error && /call stack|nesting|depth/i.test(jsonErr.message))
+              ) {
                 res.writeHead(400, { 'Content-Type': 'application/json' })
-                res.end(JSON.stringify({ ok: false, error: 'Changed content for same handoffId rejected' }))
+                res.end(JSON.stringify({ ok: false, error: 'payload too deeply nested' }))
                 return
               }
-              // Share same in-flight persistence
-              try {
-                await inFlightPromise
-                res.writeHead(200, { 'Content-Type': 'application/json' })
-                res.end(JSON.stringify({ ok: true, handoffId, receiptId: handoffId }))
-              } catch {
-                res.writeHead(500, { 'Content-Type': 'application/json' })
-                res.end(JSON.stringify({ ok: false, error: 'Failed to persist handoff receipt' }))
-              }
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ ok: false, error: 'Invalid JSON payload' }))
               return
             }
-            res.writeHead(409, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: 'Another handoff is currently in flight' }))
-            return
-          }
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ ok: false, error: 'Invalid payload: must be an object' }))
+              return
+            }
 
-          // First persistence attempt
-          inFlightHandoffId = handoffId
-          inFlightPayloadHash = payloadHash
-          inFlightPromise = persistReceipt(cleanPayload, handoffId)
+            const payload = (parsed.payload ?? parsed) as Record<string, unknown>
+            if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ ok: false, error: 'Invalid payload: must be an object' }))
+              return
+            }
 
-          let receipt: LocalReceipt
-          try {
-            receipt = await inFlightPromise
-          } catch {
-            inFlightHandoffId = null
-            inFlightPayloadHash = null
-            inFlightPromise = null
-            res.writeHead(500, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ ok: false, error: 'Failed to persist handoff receipt' }))
-            return
-          }
+            if (payload.schema !== 'taco-local-handoff/1') {
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(
+                JSON.stringify({
+                  ok: false,
+                  error: 'Invalid schema: expected taco-local-handoff/1',
+                }),
+              )
+              return
+            }
 
-          completedHandoffId = handoffId
-          completedPayloadHash = payloadHash
-          completedReceipt = receipt
-          inFlightHandoffId = null
-          inFlightPromise = null
+            if (
+              typeof payload.createdAt !== 'string' ||
+              !payload.createdAt ||
+              isNaN(Date.parse(payload.createdAt))
+            ) {
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(
+                JSON.stringify({ ok: false, error: 'Invalid or missing createdAt timestamp' }),
+              )
+              return
+            }
 
-          // ACK response to browser
-          res.writeHead(200, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ ok: true, handoffId, receiptId: handoffId }))
+            if (payload.docId !== docId) {
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ ok: false, error: 'Mismatched docId in payload' }))
+              return
+            }
 
-          // Emit delivery event line on stdout
-          const deliveryEvent = {
-            type: 'handoff',
-            receipt: {
-              schema: receipt.schema,
-              docId,
-              sessionId,
+            if (payload.sessionId !== sessionId) {
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ ok: false, error: 'Mismatched sessionId in payload' }))
+              return
+            }
+
+            const rawHandoffId = typeof payload.handoffId === 'string' ? payload.handoffId : ''
+            if (!rawHandoffId || !/^[a-zA-Z0-9_-]+$/.test(rawHandoffId)) {
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(
+                JSON.stringify({
+                  ok: false,
+                  error: 'Invalid handoffId: must be alphanumeric/dash/underscore',
+                }),
+              )
+              return
+            }
+            const handoffId = rawHandoffId
+
+            // Reject credentials/token in incoming payload
+            let credentialsFound = false
+            try {
+              credentialsFound = 'token' in payload || hasCredentials(payload)
+            } catch (credErr: unknown) {
+              if (
+                credErr instanceof PayloadTooDeepError ||
+                (credErr instanceof RangeError && /call stack|nesting|depth/i.test(credErr.message))
+              ) {
+                res.writeHead(400, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ ok: false, error: 'payload too deeply nested' }))
+                return
+              }
+              throw credErr
+            }
+
+            if (credentialsFound) {
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(
+                JSON.stringify({
+                  ok: false,
+                  error: 'Credentials not permitted in handoff payload',
+                }),
+              )
+              return
+            }
+
+            const baselineBundle = payload.baseline as Record<string, unknown>
+            const snapshotBundle = payload.snapshot as Record<string, unknown>
+            if (
+              !baselineBundle ||
+              !snapshotBundle ||
+              typeof baselineBundle !== 'object' ||
+              typeof snapshotBundle !== 'object'
+            ) {
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(
+                JSON.stringify({ ok: false, error: 'Missing baseline or snapshot in payload' }),
+              )
+              return
+            }
+
+            // Bind baseline AND snapshot docId/root to original artifact
+            if (baselineBundle.docId !== originalBundle.docId) {
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(
+                JSON.stringify({
+                  ok: false,
+                  error: 'Baseline docId does not match artifact docId',
+                }),
+              )
+              return
+            }
+            if (snapshotBundle.docId !== originalBundle.docId) {
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(
+                JSON.stringify({
+                  ok: false,
+                  error: 'Snapshot docId does not match artifact docId',
+                }),
+              )
+              return
+            }
+            if (baselineBundle.root !== originalBundle.root) {
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(
+                JSON.stringify({ ok: false, error: 'Baseline root does not match artifact root' }),
+              )
+              return
+            }
+            if (snapshotBundle.root !== originalBundle.root) {
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(
+                JSON.stringify({ ok: false, error: 'Snapshot root does not match artifact root' }),
+              )
+              return
+            }
+
+            // Validate bundle structures and paths
+            try {
+              validateBundle(baselineBundle)
+              validateBundle(snapshotBundle)
+            } catch (valErr) {
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(
+                JSON.stringify({
+                  ok: false,
+                  error: `Invalid bundle in handoff: ${(valErr as Error).message}`,
+                }),
+              )
+              return
+            }
+
+            // Project credential-free versions
+            const cleanBaseline = credentialFreeDocument(baselineBundle)
+            const cleanSnapshot = credentialFreeDocument(snapshotBundle)
+            const cleanPayload: LocalHandoff = {
+              schema: 'taco-local-handoff/1',
               handoffId,
-              path: receipt.path,
-            },
-            path: receipt.path,
-            payload: cleanPayload,
-          }
-          process.stdout.write(`${JSON.stringify(deliveryEvent)}\n`)
+              sessionId,
+              docId,
+              createdAt: payload.createdAt as string,
+              baseline: cleanBaseline,
+              snapshot: cleanSnapshot,
+            }
 
-          // Mark closing and begin bounded grace period for concurrent / immediate retry
-          if (timeoutTimer) {
-            clearTimeout(timeoutTimer)
-            timeoutTimer = undefined
+            const payloadHash = createHash('sha256')
+              .update(JSON.stringify(cleanPayload))
+              .digest('hex')
+
+            // State checking for closing, completed, and in-flight
+            if (isClosing) {
+              if (completedHandoffId === handoffId && completedPayloadHash === payloadHash) {
+                res.writeHead(200, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ ok: true, handoffId, receiptId: handoffId }))
+                return
+              }
+              if (completedHandoffId === handoffId) {
+                res.writeHead(400, { 'Content-Type': 'application/json' })
+                res.end(
+                  JSON.stringify({
+                    ok: false,
+                    error: 'Changed content for same handoffId rejected',
+                  }),
+                )
+                return
+              }
+              res.writeHead(409, { 'Content-Type': 'application/json' })
+              res.end(
+                JSON.stringify({
+                  ok: false,
+                  error: 'Listener is closing, distinct handoff rejected',
+                }),
+              )
+              return
+            }
+
+            if (completedHandoffId !== null) {
+              if (completedHandoffId === handoffId) {
+                if (completedPayloadHash === payloadHash) {
+                  res.writeHead(200, { 'Content-Type': 'application/json' })
+                  res.end(JSON.stringify({ ok: true, handoffId, receiptId: handoffId }))
+                  return
+                }
+                res.writeHead(400, { 'Content-Type': 'application/json' })
+                res.end(
+                  JSON.stringify({
+                    ok: false,
+                    error: 'Changed content for same handoffId rejected',
+                  }),
+                )
+                return
+              }
+              res.writeHead(409, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ ok: false, error: 'Listener already completed a handoff' }))
+              return
+            }
+
+            if (inFlightHandoffId !== null) {
+              if (inFlightHandoffId === handoffId) {
+                if (inFlightPayloadHash !== payloadHash) {
+                  res.writeHead(400, { 'Content-Type': 'application/json' })
+                  res.end(
+                    JSON.stringify({
+                      ok: false,
+                      error: 'Changed content for same handoffId rejected',
+                    }),
+                  )
+                  return
+                }
+                // Share same in-flight persistence
+                try {
+                  await inFlightPromise
+                  res.writeHead(200, { 'Content-Type': 'application/json' })
+                  res.end(JSON.stringify({ ok: true, handoffId, receiptId: handoffId }))
+                } catch {
+                  res.writeHead(500, { 'Content-Type': 'application/json' })
+                  res.end(JSON.stringify({ ok: false, error: 'Failed to persist handoff receipt' }))
+                }
+                return
+              }
+              res.writeHead(409, { 'Content-Type': 'application/json' })
+              res.end(
+                JSON.stringify({ ok: false, error: 'Another handoff is currently in flight' }),
+              )
+              return
+            }
+
+            // First persistence attempt
+            inFlightHandoffId = handoffId
+            inFlightPayloadHash = payloadHash
+            inFlightPromise = persistReceipt(cleanPayload, handoffId)
+
+            let receipt: LocalReceipt
+            try {
+              receipt = await inFlightPromise
+            } catch {
+              inFlightHandoffId = null
+              inFlightPayloadHash = null
+              inFlightPromise = null
+              res.writeHead(500, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ ok: false, error: 'Failed to persist handoff receipt' }))
+              return
+            }
+
+            completedHandoffId = handoffId
+            completedPayloadHash = payloadHash
+            completedReceipt = receipt
+            inFlightHandoffId = null
+            inFlightPromise = null
+
+            // ACK response to browser
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ ok: true, handoffId, receiptId: handoffId }))
+
+            // Emit delivery event line on stdout
+            const deliveryEvent = {
+              type: 'handoff',
+              receipt: {
+                schema: receipt.schema,
+                docId,
+                sessionId,
+                handoffId,
+                path: receipt.path,
+              },
+              path: receipt.path,
+              payload: cleanPayload,
+            }
+            process.stdout.write(`${JSON.stringify(deliveryEvent)}\n`)
+
+            // Mark closing and begin bounded grace period for concurrent / immediate retry
+            if (timeoutTimer) {
+              clearTimeout(timeoutTimer)
+              timeoutTimer = undefined
+            }
+            isClosing = true
+            graceTimer = setTimeout(async () => {
+              await cleanupAndClose(EXIT_CODES.OK)
+            }, 150)
+          } catch (err: unknown) {
+            if (res.writableEnded || res.headersSent) {
+              return
+            }
+            if (inFlightHandoffId !== null && completedHandoffId === null) {
+              inFlightHandoffId = null
+              inFlightPayloadHash = null
+              inFlightPromise = null
+            }
+            if (
+              err instanceof PayloadTooDeepError ||
+              (err instanceof RangeError && /call stack|nesting|depth/i.test(err.message))
+            ) {
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ ok: false, error: 'payload too deeply nested' }))
+              return
+            }
+            res.writeHead(500, { 'Content-Type': 'application/json' })
+            res.end(
+              JSON.stringify({
+                ok: false,
+                error: (err as Error)?.message || 'Internal server error',
+              }),
+            )
+          } finally {
+            releaseRequestResources()
           }
-          isClosing = true
-          graceTimer = setTimeout(async () => {
-            await cleanupAndClose(EXIT_CODES.OK)
-          }, 150)
         })
         return
       }
@@ -707,8 +998,8 @@ export const executeListen = (options: ListenOptions): Promise<CliExecutionResul
             platform === 'darwin'
               ? spawn('open', [readyUrl], { detached: true, stdio: 'ignore' })
               : platform === 'win32'
-              ? spawn('cmd', ['/c', 'start', '""', readyUrl], { detached: true, stdio: 'ignore' })
-              : spawn('xdg-open', [readyUrl], { detached: true, stdio: 'ignore' })
+                ? spawn('cmd', ['/c', 'start', '""', readyUrl], { detached: true, stdio: 'ignore' })
+                : spawn('xdg-open', [readyUrl], { detached: true, stdio: 'ignore' })
           child.on('error', () => {
             // Handled: avoid unhandled error event
           })

@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.16.0](https://github.com/Arcadia822/taco/compare/v0.15.0...v0.16.0) (2026-10-12)
+
+### Features
+
+* **skill**: add prd and interaction template packs and trigger-only description (TACO-70) ([596588a](https://github.com/Arcadia822/taco/commit/596588af182dcb4e7eb9e79238828e3a906cd5b5))
+* **skill**: add integrations module and trigger, depth, and decision guidance (TACO-70) ([e6df7b0](https://github.com/Arcadia822/taco/commit/e6df7b0b8e1483147483102ed6904d59c6161baf))
+* **kernel**: render text/html bundle files as sandboxed single-page HTML (TACO-70) ([2db1d9a](https://github.com/Arcadia822/taco/commit/2db1d9ad71e02395ef94db725346d0cef6cc904b))
+
+### Bug Fixes
+
+* **html**: align refresh extension and hosted consumers (TACO-70) ([4aba363](https://github.com/Arcadia822/taco/commit/4aba363768100fd0adc5b40c5c185cbe4955c7fd))
+* **skill**: make missing SDD engines non-blocking and gate triggers on human review (TACO-70) ([0a572d6](https://github.com/Arcadia822/taco/commit/0a572d6f135aeb00a00bc42af8b41f03a258b6e3))
+
+### Chores & Maintenance
+
+* chore: **release**: tacobin-v0.10.0 ([54f74e3](https://github.com/Arcadia822/taco/commit/54f74e3b86d0d3d82ea17cf7e2cca8ecc3f02802))
+* chore: **release**: taco-cli v0.5.1 ([649ccf7](https://github.com/Arcadia822/taco/commit/649ccf7849b9f523ce059ac54101129586036d60))
+* build: **shell**: regenerate artifacts after main rebase (TACO-70) ([eb2eaa0](https://github.com/Arcadia822/taco/commit/eb2eaa0d6aa835bdff448700444b4869025cac70))
+* docs: **skill**: rewrite skill description as router text with bilingual triggers (TACO-70) ([d28500b](https://github.com/Arcadia822/taco/commit/d28500b2b9ff75db8b03ed6534442bf011f77ae1))
+* docs: sync taco-guide and site copy for embedded HTML pages (TACO-70) ([703c506](https://github.com/Arcadia822/taco/commit/703c5068cf7a5f81ffde9c2980ac5ea927f461a7))
+
+## [0.15.0](https://github.com/Arcadia822/taco/compare/v0.14.5...v0.15.0) (2026-10-11)
+
+### Features
+
+* **ci**: 实现隔离动态桌面预览并稳定 Host 字体构建 (#132) ([a718c98](https://github.com/Arcadia822/taco/commit/a718c9884cc16b7f9a93e9ddae79468903ac35ff))
+* **host**: preserve hosted reviews across revisions ([a5d7d38](https://github.com/Arcadia822/taco/commit/a5d7d384219fb862ed9c9f116f842f13aba747b3))
+
+### Bug Fixes
+
+* **cli**: make update base revision optional ([2693d13](https://github.com/Arcadia822/taco/commit/2693d133ee8acfc3798bad6ec0384aebd72ac877))
+* **taco**: refresh the original review after feedback ([5f79d4b](https://github.com/Arcadia822/taco/commit/5f79d4b99b171da29801ec4c4e15b377be3dc864))
+
+### Chores & Maintenance
+
+* chore: **release**: tacobin-v0.9.0 ([87e9f0f](https://github.com/Arcadia822/taco/commit/87e9f0f186bf7e3bc00ba36dcef0dd29be12a888))
+* chore: **release**: taco-cli v0.5.0 ([1827b65](https://github.com/Arcadia822/taco/commit/1827b6579ef05963752c152b015311502b1c19b3))
+
 ## Unreleased
 
 ### Features
@@ -23,11 +61,14 @@
 * test: **mermaid**: add regression test for sequenceDiagram interaction and neo theme (TACO-67) ([f3c1664](https://github.com/Arcadia822/taco/commit/f3c1664f85a9adf98cd7a1620218f80e5e444c7f))
 
 ## [0.14.4](https://github.com/Arcadia822/taco/compare/v0.14.3...v0.14.4) (2026-10-10)
+
 ### Features
 
 * **ci**: dynamic desktop UI preview pipeline driven by PR diff and DOM outlines with strict network and secret isolation (TACO-68, TACO-62)
 
+### Bug Fixes
 
+* **extension**: support HTML source files as text/html while rejecting nested containers (TACO-70)
 * **governance**: resolve review findings for lessons validator and evidence counts (TACO-66) ([0e61c3e](https://github.com/Arcadia822/taco/commit/0e61c3e6905f3d32bc0a388e2e2c453e8fe129ae))
 * **ci**: keep a CI verdict for every commit on main (TACO-63) ([0d7d30e](https://github.com/Arcadia822/taco/commit/0d7d30eeee2cf184c3aee7170efda559d50dabaa))
 

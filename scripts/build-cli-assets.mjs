@@ -27,7 +27,7 @@ if (!liteShell.includes('id="taco-document"')) {
 
 // Template files from extensions/taco/templates/
 const templatesDir = join(root, 'extensions/taco/templates')
-const templateNames = ['spec', 'architecture', 'api-reference', 'adr']
+const templateNames = ['spec', 'architecture', 'api-reference', 'adr', 'prd', 'interaction']
 const templates = {}
 
 for (const name of templateNames) {

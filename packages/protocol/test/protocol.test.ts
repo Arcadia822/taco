@@ -138,13 +138,37 @@ describe('@taco/protocol', () => {
     expect(hostileProjection.ok).toBe(false)
     expect(hostileProjection.err).toContain('Undeclared top-level property rejected')
 
-    // Unsupported HTML source entries and legacy sourceUrl fail closed
+    // HTML source entries are accepted; nested .taco.html containers and legacy sourceUrl fail closed
     const htmlProjection = projectLocalBundleToUploadContent({
       ...localBundle,
-      files: [{ path: 'specs/test/view.html', mediaType: 'text/html', content: '<p>hi</p>' }],
+      files: [
+        { path: 'specs/test/view.html', mediaType: 'text/html', content: '<p>hi</p>' },
+        { path: 'specs/test/report.htm', mediaType: 'text/html', content: '<h1>report</h1>' },
+      ],
     })
-    expect(htmlProjection.ok).toBe(false)
-    if (!htmlProjection.ok) expect(htmlProjection.err).toContain('HTML source files are not supported')
+    expect(htmlProjection.ok).toBe(true)
+    if (htmlProjection.ok) {
+      expect(htmlProjection.content.snapshot.files).toEqual([
+        { path: 'specs/test/view.html', mediaType: 'text/html', content: '<p>hi</p>' },
+        { path: 'specs/test/report.htm', mediaType: 'text/html', content: '<h1>report</h1>' },
+      ])
+      const validatedHtml = validateStagedUploadContent(htmlProjection.content)
+      expect(validatedHtml.ok).toBe(true)
+    }
+
+    const tacoProjection = projectLocalBundleToUploadContent({
+      ...localBundle,
+      files: [{ path: 'specs/test/nested.taco.html', mediaType: 'text/html', content: '<p>nested</p>' }],
+    })
+    expect(tacoProjection.ok).toBe(false)
+    if (!tacoProjection.ok) expect(tacoProjection.err).toContain('bundle file path must not end in .taco.html')
+
+    const directTacoValidation = validateDocumentSnapshot({
+      ...localBundle,
+      files: [{ path: 'specs/test/nested.taco.html', mediaType: 'text/html', content: '<p>nested</p>' }],
+    })
+    expect(directTacoValidation.ok).toBe(false)
+    if (!directTacoValidation.ok) expect(directTacoValidation.err).toContain('bundle file path must not end in .taco.html')
     const sourceUrlProjection = projectLocalBundleToUploadContent({
       ...localBundle,
       files: [{

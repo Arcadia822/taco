@@ -35,7 +35,7 @@ const ALLOWED_TOP_LEVEL_PROPERTIES = new Set([
 /**
  * Projects a local Taco document bundle into a safe StagedUploadContent payload for upload to Taco Host.
  * Known local-only and secret fields (collab credentials, packOptions, access) are cleanly stripped.
- * Unsupported HTML source entries and `sourceUrl` metadata are rejected instead of silently removed.
+ * Nested `.taco.html` containers and `sourceUrl` metadata are rejected instead of silently removed.
  * Any unknown / undeclared extensions trigger an explicit error with the property path.
  */
 export const projectLocalBundleToUploadContent = (
@@ -89,8 +89,8 @@ export const projectLocalBundleToUploadContent = (
     if (fRecord.sourceUrl !== undefined) {
       return { ok: false, err: `Unsupported sourceUrl rejected: ${fRecord.path}` }
     }
-    if (fRecord.mediaType === 'text/html' || /\.html?$/i.test(String(fRecord.path ?? ''))) {
-      return { ok: false, err: `HTML source files are not supported: ${fRecord.path}` }
+    if (String(fRecord.path ?? '').toLowerCase().endsWith('.taco.html')) {
+      return { ok: false, err: `bundle file path must not end in .taco.html: ${fRecord.path}` }
     }
 
     projectedFiles.push({

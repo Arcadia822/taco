@@ -1,6 +1,6 @@
 ---
 name: taco
-description: Use when the user asks to create or refresh a .taco.html, make a Taco, prepare technical documents for review, or handle Taco edits and comments. Works in ordinary documentation directories and Spec Kit projects without installing a CLI.
+description: Human-agent document review in one portable .taco.html. Use when asked to create or refresh a .taco.html, make a Taco, "打包成 Taco", prepare documents for human review (spec, plan, RFC, ADR, PRD, API reference, data model), or handle Taco edits, comments, and Handoff. Use proactively when a multi-part design or plan needs a human to decide or sign off before it lands ("规划一下", "出个方案", "评审一下这个方案", "design this", "RFC", "which approach"). Not for quick answers, exploratory chat, or self-contained changes nobody needs to review.
 ---
 
 # Taco: human-agent document review in one file
@@ -11,16 +11,33 @@ Taco turns a Markdown documentation directory into one portable `.taco.html`. A 
 canonical doc directory → one .taco.html → human review (browser) → agent reads Handoff → canonical doc directory
 ```
 
-Nothing to install. A `.taco.html` is plain HTML with one plaintext JSON data block, and **you write that block yourself** (or use the optional CLI toolbox commands when `taco-cli` is installed): `references/bundle-format.md` is the write contract (fields, escaping, atomic replace, shape rules) and `references/output-path.md` decides where the file goes. When `taco-cli` is present on `PATH`, prefer its local commands (`taco-cli new`, `init`, `pack`, `verify`, `refresh`, `diff`, `inspect`, `extract`, `open`, `listen`). When `taco-cli` is absent, write the data block directly or use the bundled `scripts/pack.mjs` helper; no CLI or package manager is required for core local review. `taco-cli` also supports hosted Tacobin publishing, event streaming, and handoff retrieval, and the `taco` binary in a Taco checkout is the optional Spec Kit extension CLI.
+A `.taco.html` is plain HTML with one plaintext JSON data block. `references/bundle-format.md` defines the write contract; `references/output-path.md` decides where it goes. No CLI or package manager is required for core local review: write the data block directly or use the bundled `scripts/pack.mjs` helper. When `taco-cli` is installed, inspect `taco-cli help` and prefer the local commands it actually lists; an older hosted-only binary is not a reason to stop or install an upgrade. The CLI automates authoring and transport, while this Skill still decides review need, design depth, project conventions and human decisions. `taco-cli` also supports hosted Tacobin publishing; the `taco` binary in a Taco checkout is the separate optional Spec Kit extension CLI.
+
 ## When to use
 
-- Any directory of Markdown (plus JSON/YAML/PNG) that needs human review: system design, RFC, ADR, data model, API reference, or a plain spec.
+- Any directory of Markdown (plus JSON/YAML/PNG/HTML single pages) that needs human review: system design, RFC, ADR, data model, API reference, or a plain spec.
 - No project scaffolding is required. Taco works in any repository or sandbox on a plain directory.
 - Spec Kit projects: if the project already has the Taco Spec Kit extension installed (`.specify/extensions/taco/` and the `taco-speckit` skill), use that flow. Otherwise this skill handles a Spec Kit feature directory exactly the same way — installing the extension is an optional deeper integration, never a requirement.
 
+### Trigger judgment: when a human needs to look
+
+**Taco exists for human review — that is the trigger.** Pack one only when the result needs a person to review it, decide something, or sign off — one human judgment per document is the point. If nobody needs to look, do not make a Taco: answer or ship in the conversation and the repository.
+
+Needs a human → use this skill proactively (the request rarely says "Taco" or "review"):
+
+- a multi-part design, plan, RFC, or spec with decision points, contracts, migrations, or irreversible choices ("规划一下", "出个方案", "design this", "RFC", "which approach", a phased roadmap, a data model, an API contract);
+- the project's review contract, checkpoint, or sign-off convention calls for a review;
+- the user asks to review, edit, or comment on documents.
+
+Does not need a human → no Taco: a one-sentence answer, a single-point fix, a copy edit, open-ended brainstorming still taking shape, and any self-contained change you can implement and verify alone — **even when it spans several files or would make a long write-up**. Size and length are not reasons for a Taco; a document nobody reads is noise.
+
+Early requirement refinement is exploration: stay in the conversation until there is something to confirm, decide, or sign off; do not turn every message into a document edit or a comment task. When exploration settles into a proposal that needs a human decision, that proposal is the Taco.
+
+When you do trigger, the chat reply carries only the summary, the open decisions, and the file entry point; the canonical Markdown and the `.taco.html` carry the work.
+
 ### Optional document and Checkpoint examples
 
-This skill bundles optional document examples in `templates/` next to this `SKILL.md`: `spec/`, `architecture/`, `api-reference/`, and `adr/`. (A Taco source checkout carries the same packs at `extensions/taco/templates/`; an installed Spec Kit extension exposes them at `.specify/extensions/taco/templates/`.) First use the user's instructions and the project's own Checkpoint convention (see *Project Checkpoint convention* below), if present. Read a bundled pack's `README.md` and `template.md` only when it is useful as a starting reference; its fields, files, and Checkpoint graph are not required structure.
+This skill bundles optional document examples in `templates/` next to this `SKILL.md`: `spec/`, `architecture/`, `api-reference/`, `adr/`, `prd/`, and `interaction/`. (A Taco source checkout carries the same packs at `extensions/taco/templates/`; an installed Spec Kit extension exposes them at `.specify/extensions/taco/templates/`.) Match the pack to the depth ladder in *How much to design and write*: light needs no pack, medium takes `interaction/` for the flow layer, heavy takes `prd/` + `interaction/` + `architecture/` + `api-reference/`; `spec/` covers staged spec/plan/tasks review and `adr/` decision records. First use the user's instructions and the project's own Checkpoint convention (see *Project Checkpoint convention* below), if present. Read a bundled pack's `README.md` and `template.md` only when it is useful as a starting reference; its fields, files, and Checkpoint graph are not required structure.
 
 Decide whether to use Checkpoints from the review contract, not the task label or document count. Use them when the team needs named review milestones, dependencies, or explicit status tracking; follow any project-specific Checkpoint policy or reviewer request. Otherwise omit `checkpoints` and use Taco's ordinary document review. For comparison, a small copy edit or straightforward bug fix often needs no Checkpoint, while a `spec.md` → `plan.md` → `tasks.md` review can draw on the bundled `spec/` **SDD example**. Neither shape is mandatory: a small change may require client sign-off, and a complex change may use a different project-defined graph. If adapting an example, update every `checkpoints.nodes[].documents[].path` to the new root; never import sample status records as real review progress.
 
@@ -53,6 +70,16 @@ Contract:
 - Keep the raw output to yourself: the user sees at most one sentence, at the end of the final reply, using the wording in `references/update-notice.md`.
 - The script runs `taco-cli --version` on this machine when that CLI exists (the only program it starts). Disable the whole check with `TACO_UPDATE_CHECK=off`, or just the CLI probe with `--no-cli`.
 
+### Optional local CLI toolbox
+
+Use this route only after *Trigger judgment* and *How much to design and write* determine the review shape. CLI availability never creates a review requirement. Read `references/reviewing.md` for local receipt handling and the hosted distinction.
+
+- **Create:** `new <file.taco.html>` creates an empty Agent authoring container; populate and verify it before presenting it for review. `init <target> --template <name>` supplies prose from `spec`, `adr`, `architecture`, `api-reference`, `prd`, or `interaction`; choose it by the user's and project's conventions, not as an imposed phase or Checkpoint graph. A directory target creates canonical Markdown plus the Taco; a `.taco.html` target creates only a container. When the selected project convention requires Checkpoints, add its mapped definition through the data block before review; `new` and `init` do not choose that policy.
+- **Assemble:** `pack <dir> --dry-run` previews output path, entry and groups; `pack` creates a new review. New artifacts use the installed CLI's bundled Complete/Lite Shell. The manual Shell search below applies when using the Skill/helper; never prefer an older installed Skill Shell over the CLI's own assets.
+- **Check:** `verify` reports V2 structural findings; `inspect` reports structure and credential presence without values; `extract` returns credential-free file projections. Rendering still requires V1 browser verification. Inspect command help for supported arguments; JSON/NDJSON is the established output, with no extra format flag.
+- **Receive:** `open <file.taco.html> --listen` opens and waits for one explicit Handoff; `listen` emits a ready URL for a clickable file when automatic opening is unavailable. `open` alone does not subscribe. The browser and listener must share a reachable local machine; otherwise use clipboard, review-tab API or saved-file feedback. A finite listener exits after a persisted receipt, cancellation or timeout; start a new listener for each round.
+- **Revise:** `diff <file.taco.html> --handoff <receipt-path> --dir <canonical-dir>` is read-only. Read comments and decisions, check conflicts, and apply authorized changes to canonical files yourself. Then `refresh <file.taco.html> --dir <canonical-dir> --handoff <receipt-path>` rebuilds the same review, preserving identity and history. Handoff is feedback; neither a receipt nor a Checkpoint status authorizes the next design or implementation stage. HTML pages stay derived, read-only content: revise their Markdown source and regenerate them.
+
 ### Optional hosted review
 
 Local assembly and Handoff never require `taco-cli` or a Host. When explicitly publishing a Taco to a Host, read `references/publishing.md` first; when consuming hosted review events, read `references/reviewing.md` first. Both references are part of this same skill, not a second CLI-only guide. A hosted publication is public by default; inspect the payload and credential boundary with `--dry-run` before sending it. Publishing creates that Taco's baseline revision; a later review round updates the same Taco in place with `taco-cli update <tacoId> <file> --base <revisionId>`, keeping the same reviewer URL and preserving existing comments and Checkpoints, rather than re-publishing a new document. Public visitors can edit and comment under self-reported names with real-time autosave. Comments and autosaves do not wake the agent session or signal review completion: only an explicit human **Handoff** emits `review.handed_off`. Clicking Handoff checks for active agent listeners; if none are connected, the Host blocks handoff without emitting an event and prompts with install instructions for the Taco skill and taco-cli plus `taco-cli subscribe`. The agent subscribes or replays events via `taco-cli`, retrieves the immutable handoff snapshot, verifies it against canonical files for conflicts, and applies changes.
@@ -66,6 +93,8 @@ Choose the smallest useful carrier for each kind of information; keep full machi
 - HTTP APIs live in `contracts/openapi.yaml` (or `.json`) as the single authoritative definition. Markdown explains usage scenarios, semantic constraints, and trade-offs — never restate the full endpoint table in a second place.
 - Data structures: `data-model.md` for entity relationships, invariants, and lifecycle; JSON Schema (or the target protocol's native format) when machine validation is needed. Distinguish conceptual model, transport schema, and database structure.
 - WebSocket/event protocols use message schemas plus sequence/state diagrams and short semantic notes — do not force them into OpenAPI.
+- High-density one-pagers — comparison cards, timelines, review or report pages that must stay readable as one screen — go in a sibling `report.html` (single-page HTML) and are embedded read-only in the Taco (media type `text/html`).
+- When a local skill generates one of these artifacts (`answer-me-with-html` for single-page HTML, a Mermaid/diagram or infographic/image skill), have that skill produce the file in the document folder instead of hand-rolling it; `references/integrations.md` is the paradigm. The artifact is derived content — the Markdown stays canonical.
 
 Rules:
 
@@ -86,6 +115,38 @@ small task "fix-pagination-copy"
   spec.md                 the only file; no diagrams/, contracts/, or data-model.md
 ```
 
+## How much to design and write
+
+Once the trigger above says a review is actually needed, choose depth from the task, not from a template directory. Apply precedence **per question** — what to design first, which documents, which template and whether to ask — and say which level applied:
+
+1. **P0** the user's explicit instruction in this request;
+2. **P1** project guidance (the loaded `AGENTS.md`, project skills, `.sdlc/`, `.specify/`, `docs/templates/`);
+3. **P2** this skill's contracts (artifact carriers, bundle format, review loop);
+4. **P3** the adaptive defaults below.
+
+P3 depth ladder:
+
+- **light** — a fix, copy change, or local refactor that still needs sign-off: one `spec.md` with background, goal, scope, and Given/When/Then. No user-story document, no PRD, no diagrams.
+- **medium** — standalone feature: `spec.md` + `interaction.md` or `diagrams/flow.mmd`; confirm the user flow before interface and storage design. Add `architecture.md` only for real multi-store or complex-chain impact.
+- **heavy** — cross-platform or multi-module system: align goal and metrics → journey and interaction → architecture and data flow → contracts and task breakdown, each layer reviewed before the next is called decided (PRD + IxD + Architecture + Contracts).
+
+Never pad: importance is not a reason for a bigger document set, user stories are optional, and a diagram only earns its place when text would be ambiguous.
+
+Decisions that need a human: irreversible API changes, core model or migration choices, architecture either/or, key experience-path trade-offs. Record each as `## Pending Decisions` (`## 待决决策项 (Pending Decisions)`) with background, 2–3 concrete options, same-dimension trade-offs, your recommendation and why, and which later work depends on it. A recommendation is not authorization: leave the item pending until the human chooses, pause only the dependent work, and record the choice and its impact. Never ask when there is no real fork, and never re-ask a decided one.
+
+Presentation minimums:
+
+- One stable heading hierarchy so a reviewer can find conclusions, risks, alternatives, pending items, and acceptance items without reading everything.
+- Callouts for note/warning/risk; status labels only for real states (never show an undecided item as approved); comparison tables share one dimension set; checklist items are decidable.
+- Mermaid by problem type: flowchart for branching flows, sequence for cross-component calls, stateDiagram for lifecycle and triggers, layered graph for boundaries. Same participants, states, and terms as the prose, and the diagram check in step 2 must pass before you ship.
+
+## Working with other skills
+
+`references/integrations.md` is the authority for combining Taco with other installed skills; read it before you run another skill's design process or call a generator skill.
+
+- **SDD process skill sets** (pstack, gstack, superpowers, spec-kit): they own the method — investigate, design, plan, verify. Taco owns the review container: the engine's design and plan land in the Checkpoint node files, humans review them there, and a Handoff returns feedback, never authorization to implement. Detect installed engines by file signals and apply the P0–P3 precedence above; when nothing is installed, skip the process integration and run Taco's normal workflow — a missing engine never blocks Taco. If the user explicitly named a missing engine, say so in one line and continue.
+- **Artifact-generating skills** (`answer-me-with-html`, Mermaid/diagram, infographic, image skills): have the installed skill produce the file into the document folder and link it from the prose. Markdown stays canonical; the artifact is regenerated when its source changes. Single-page HTML packs as `text/html` and renders inline in a sandbox.
+
 ## Locate the shell
 
 A `.taco.html` = fixed shell (runtime viewer/editor) + one JSON data block. Choose by the **recipient's opening environment**: the larger Complete shell is the default when the recipient may be offline; the smaller Lite shell is for reliable network access. Lite loads pinned public CDN editor/highlighter/Mermaid libraries for file types in the bundle. If its rich editor cannot load, writable Markdown remains editable in plain-text source mode, including comments, saving, and Handoff. Do not select Lite merely because the Agent currently has network access. Never silently replace an existing Complete Taco with Lite on refresh; preserve the existing shell variant unless the user explicitly chooses a different one.
@@ -100,6 +161,10 @@ Find the selected variant in the first location that exists:
 
 Both skill shells have an empty `#taco-document` block. Fill it before opening; an unfilled shell shows the runtime's empty-bundle recovery screen, not a document. Template and checkout fallbacks may contain starter data: use their runtime, not their identity or content. Only write the data block and `<title>`.
 
+When a refresh introduces HTML source pages, inspect the shell outside `#taco-document` for `<meta name="taco-shell-features" content="embedded-html">` (the content is a space-separated feature list). If it is absent, reassemble using the current stock shell of the same Complete/Lite variant, preserving the entire prior bundle and review history. Unmarked legacy shells are Complete. Report the stock-shell replacement; never patch shell code or silently convert variants. An explicitly selected custom shell must declare this capability, or stop before writing. Ordinary compatible refreshes keep their existing shell unchanged.
+
+The CLI follows this same compatibility rule using its bundled stock Shell. This is a targeted reassembly when HTML is added, not background version scanning or a general upgrade. `listen` does not rewrite an older file to add transport support; use a supported review-tab or clipboard channel if that file's Shell cannot send local Handoff.
+
 ## The bundle format (`taco/files` v1)
 
 The document lives in one plaintext block near the top of the shell:
@@ -112,7 +177,7 @@ The document lives in one plaintext block near the top of the shell:
 
 The runtime's `parseBundle` validates this; anything corrupt puts the file into Recovery mode, so validate before you write. Read `references/bundle-format.md` before writing or debugging the block: it is the authority for required and optional fields, the exact rejection rules, and the serialization contract. An optional `scripts/pack.mjs` helper implements that contract when you have Node and would rather use it.
 
-Link documents to each other with ordinary relative Markdown links (`[Plan](plan.md#rollout)`), the same links that work in the repository; Taco opens them in place. See *Links between documents* in `references/bundle-format.md`.
+Link documents to each other with ordinary relative Markdown links (`[Plan](plan.md#rollout)`), the same links that work in the repository; Taco opens them in place — including a link to a bundled `.html` page, which opens as the embedded single-page view instead of jumping to a local file. See *Links between documents* in `references/bundle-format.md`.
 
 Bundle fields:
 
@@ -120,7 +185,7 @@ Bundle fields:
 - `docId`: stable identity. Preserve it when refreshing an existing Taco; for a brand-new document mint a **unique** id (`crypto.randomUUID()`, not the directory slug — same-named directories and copies would collide).
 - `title`: document title. The runtime normalizes it to the persisted `.taco.html` filename stem, so name the file after the title.
 - `root`: the directory the bundle covers, as a safe relative POSIX path (no leading `/`, no `\`, no empty, `.`, or `..` segments). Every `path` must sit under `root/`.
-- `files`: `{ id?, title?, path, mediaType, content, sourceHash?, blocks? }[]`, `path` safe, unique, and starting with `root/`. Ordinary `.html` and `.htm` source entries and the legacy `sourceUrl` field are unsupported.
+- `files`: `{ id?, title?, path, mediaType, content, sourceHash?, blocks? }[]`, `path` safe, unique, and starting with `root/`. `.html`/`.htm` entries (`text/html`) are read-only single-page HTML embedded in a sandbox; `*.taco.html` container paths and the legacy `sourceUrl` field are unsupported.
 - `comments`, `navigation`, `checkpoints`, `access`, `collab`, `packOptions`, and any other field: carry over from the previous bundle when present.
 - Sidebar groups are **derived at load**, not stored: `checkpoints` first, then `navigation`, then first-level directory names, with every file directly under `root/` landing in `Unassigned`. Omitting `navigation` and `checkpoints` does **not** produce a flat file list, so predict the groups and state them instead of letting the reviewer discover them.
 
@@ -141,7 +206,8 @@ When creating, modifying, inspecting, or reporting a Checkpoint graph or its doc
 | `.yaml` / `.yml`     | `application/yaml` | editable syntax-highlighted source                                |
 | `diagrams/*.mmd`     | `text/plain`       | editable Mermaid source and diagram preview; routed by extension |
 | `.png`               | `image/png`        | `content` is a `data:image/png;base64,…` URI                      |
-| any other UTF-8 text | `text/plain`       | plain-text source; excludes `.html` and `.htm`                    |
+| `.html` / `.htm`     | `text/html`        | read-only single-page HTML, embedded in a sandboxed frame         |
+| any other UTF-8 text | `text/plain`       | plain-text source                                                 |
 
 Per-file fields:
 
@@ -164,7 +230,7 @@ Writing rules:
 - `<title>` in the head must be `<bundle title> — Taco` (with `&`, `<`, `>` escaped).
 - Validate before writing: `JSON.parse` the exact escaped string you will insert (it must round-trip), then check the shape rules above. Write the whole file to a temporary sibling and rename it over the destination, so a failure never truncates the existing Taco.
 - Only the data block and `<title>` change. Everything else in the shell stays byte-identical.
-- Keep bundled content self-contained: PNG assets as data URIs and no external document assets. Complete never fetches runtime dependencies; Lite fetches only its pinned public CDN libraries.
+- Keep bundled content self-contained: PNG assets as data URIs, HTML pages as complete standalone documents, and no external document assets. The embedded HTML frame blocks all external network access, so a page built around a CDN renders without those resources — generate it self-contained instead. Complete never fetches runtime dependencies; Lite fetches only its pinned public CDN libraries.
 
 ## Where to write `.taco.html`
 
@@ -210,16 +276,19 @@ You are authoring one document model — the bundle. A directory of Markdown is 
    - `JSON.parse` the exact escaped string you will insert — it must round-trip — then check the shape: required fields, `root` consistent with every `path`, paths unique and safe;
    - insert it into `#taco-document` and set `<title>` with a callback `replace` or by splicing — never a plain string replacement, where `$&`, `` $` ``, `$'`, and `$1` in the JSON would be treated as replacement patterns;
    - write a temporary sibling, then `rename` it over the destination, so a failure leaves the previous Taco untouched.
-   If `taco-cli` is available, use `taco-cli pack <DOC_DIR> --title "<Title>" --out <resolved absolute destination> [--lite] [--entry <relpath>] [--group "<Title>=<relPath,relPath>"]... [--ignore <glob>]... [--dry-run]`. Alternatively, use `node scripts/pack.mjs` or write the `#taco-document` block directly.
-3. Start from the skill's shell (or, on a refresh, the existing Taco) held in memory: only the `#taco-document` block and the escaped `<title>` may change, and every other byte stays identical.
+
+   When the installed CLI's help lists `pack`, use `taco-cli pack <DOC_DIR> --title "<Title>" --out <resolved absolute destination> [--lite] [--entry <relpath>] [--group "<Title>=<relPath,relPath>"]... [--ignore <glob>]... [--dry-run]`. For an existing review, follow the refresh workflow instead of packing over it.
+
+   If you have Node and would rather not do this by hand, the optional `scripts/pack.mjs` helper performs these steps. **It does not resolve the destination** — resolve it first (see `## Where to write .taco.html`) and pass the result explicitly, because the helper's default `--out` is inside the directory being packaged: `node scripts/pack.mjs --dir <DOC_DIR> --title "<Title>" --out <resolved absolute destination> [--shell <shell.html>] [--root <relpath>] [--entry <relpath>] [--group "<Title>=<relPath,relPath>"]... [--ignore <glob>]... [--dry-run]`. `node scripts/pack.mjs verify <name.taco.html>` prints the structure a reviewer will see. Report its `excluded:` list unless you closed the loop yourself.
+3. Start from the skill's shell (or, on a compatible refresh, the existing Taco) held in memory: only the `#taco-document` block and the escaped `<title>` may change within the selected shell. For legacy shells lacking `embedded-html`, follow *Locate the shell* to reassemble with the current stock shell of the same variant; preserve the prior bundle before replacing the carrier.
 4. For a new document, set `format: "taco/files"`, `version: 1`, a fresh unique `docId`, `title`, `root` and `files`. Choose the Checkpoint definition from the user's or project's review requirements, if any; otherwise omit `checkpoints`, even if a starter pack contains one. The bundled `spec/` SDD graph is an example to adapt only if it fits; its stage names, document paths, and display template are not defaults that override project conventions. For a refresh, preserve the previous bundle wholesale—including `checkpoints.nodes`, `checkpoints.documents`, and any unknown fields—and replace only intended fields; keep `root`, format/version and identity unchanged. Stop on an unsupported format/version rather than downgrading it. Match existing file entries by path, preserve unknown fields and stable ids, and update content-dependent fields using the rules above.
 
 ### 2. Check what the reviewer will see
 
-- Verification has two levels (`references/output-path.md` §7). **V1**: with a review tab open, run `window.taco.validate()` in its console — it checks what the renderer actually did (comment anchors, cross-document links, navigation and Checkpoint paths, unmigrated blocks) and must return `ok: true` with no error. **V2**: no browser available — parse the block you wrote and check the shape rules, then state plainly that you did not verify rendering. When `taco-cli` is installed, run `taco-cli verify <name.taco.html>`. Where Node is available, `node scripts/pack.mjs verify <name.taco.html>` prints the structure a reviewer will see; it is a convenience, not a required step.
+- Verification has two levels (`references/output-path.md` §7). **V1**: with a review tab open, run `window.taco.validate()` in its console — it checks what the renderer actually did (comment anchors, cross-document links, navigation and Checkpoint paths, unmigrated blocks) and must return `ok: true` with no error. **V2**: no browser available — parse the block you wrote and check the shape rules, then state plainly that you did not verify rendering. When installed `taco-cli help` lists `verify`, run `taco-cli verify <name.taco.html>`; older binaries use the same manual/helper checks without an upgrade. Where Node is available, `node scripts/pack.mjs verify <name.taco.html>` prints the structure a reviewer will see; it is a convenience, not a required step.
 - Fix a mismatch, or state it plainly, before handing the file over. A warning you shipped silently is a surprise the reviewer finds instead. Report the verification level you reached and every `warning`/`error` finding it produced.
 - A Checkpoint document shown as `not created` is expected only when you deliberately scheduled work that does not exist yet, including documents a `.taco/` template chosen for this request declares. Otherwise the structure was transplanted from a template: remove it.
-- Validate every diagram before you ship it. `node scripts/lint-mermaid.mjs <file.mmd|file.md>...` (or `--dir <docDir>`) parses each `.mmd` file and every ```` ```mermaid ```` fence with the same Mermaid build the Complete shell embeds, so a pass here means it parses in the file the reviewer opens. Exit code `0` = all parsed, `1` = diagnostics (each with kind, `line:column` and the raw parser text), `2` = the check could not run at all — `2` is never a pass. A diagram that fails here would otherwise reach the reviewer as one generic browser error.
+- Validate every diagram before you ship it. `node scripts/lint-mermaid.mjs <file.mmd|file.md>...` (or `--dir <docDir>`) parses each `.mmd` file and every ```` ```mermaid ```` fence with the same Mermaid build the Complete shell embeds, so a pass here means it parses in the file the reviewer opens. Exit code `0` = all parsed, `1` = diagnostics (each with kind, `line:column` and the raw parser text), `2` = the check could not run at all — `2` is never a pass. When this skill's `scripts/` directory is not installed but `taco-cli help` lists `verify`, run `taco-cli verify <name.taco.html>` instead: it parses the same diagrams with the Mermaid build embedded in that CLI release and reports each failure as a finding with exit code `2`. A diagram that fails here would otherwise reach the reviewer as one generic browser error.
 - Confirm the artifact loads: the data block must parse and satisfy the shape rules. A Recovery-mode file is a failed hand-off, not a preview.
 
 ### 3. Present and open it for the human
@@ -251,7 +320,9 @@ Then:
 
 ### 5. Refresh: rebuild after canonical edits
 
-After canonical edits, review feedback triggers an in-place refresh of the exact same Issue Taco path (`.taco.html`) and stable `docId`. When `taco-cli` is installed, use `taco-cli refresh <file.taco.html> --handoff <path|->` (or let refresh read the canonical directory). Never reinitialize from a template, mint a new `docId`, or create a second file even if research files are added or the document title changes. Only refresh when pending direct review edits are handled. If any edits remain conflicted or unavailable, preserve the reviewed file unchanged and report the blocker.
+After canonical edits, refresh the exact same Issue Taco path (`.taco.html`) and stable `docId`. When the installed CLI supports `refresh`, provide both the canonical directory and the received local payload or receipt: `taco-cli refresh <file.taco.html> --dir <canonical-dir> --handoff <path|->`. `--handoff` is required for this CLI path; it accepts a local file or stdin, not a remote URL. Clipboard-only feedback and older CLIs use the manual/helper workflow after the same conflict checks. Never reinitialize from a template, mint a new `docId`, or create a second file when research notes or titles change. Pending or unavailable direct review edits stop refresh and preserve the reviewed file. Compatible refreshes preserve the Shell; adding HTML to an incompatible legacy Shell follows *Locate the shell*.
+
+Preserve:
 
 - the exact local file path and `docId`;
 - all `files[].id` mappings so comment anchors remain stable;
@@ -273,5 +344,7 @@ Verify the path, review history, and Checkpoint statuses are preserved; runtime 
 ## Report format
 
 End each round with: files assembled/imported, exclusions, the presented structure (entry document, each group with its files, and what sits under `Unassigned`), the destination level and basis with the absolute path, the verification level (V1/V2) and its findings, open comments handled/deferred by thread ID, files changed while handling comments, refreshed Taco path, and presentation status (`presented as a clickable file` / `opened (user-visible)` / `opened and verified (user-visible)`; report a headless boot check separately as evidence, not as opening).
+
+In a successful round, lead with what actually changed, the open questions, and the entry point to keep reviewing; keep conflict and security findings visible in the main report and leave full diagnostics for an explicit ask. Never bury a conflict or a safety risk in an appendix.
 
 If the session's update check found an available update (`updateAvailable === true`), close the final reply with exactly one sentence from `references/update-notice.md`, in the conversation's language. Say nothing when there is no update, when the check could not run, or when this skill directory has no `scripts/check-update.mjs` (a minimal install may omit `scripts/**` and `VERSION`).

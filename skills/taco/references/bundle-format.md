@@ -65,7 +65,7 @@ Every `files[].path` must be safe and start with `${root}/`. A path equal to `ro
 | `sourceHash`  | optional 64-char lowercase hex sha256 of the file bytes at pack time                      |
 | `blocks`      | optional runtime render cache; keep only while `content` is byte-identical to the previous bundle |
 
-`sourceUrl` is no longer supported. Ordinary `.html` and `.htm` source entries are rejected: exclude them explicitly.
+`sourceUrl` is no longer supported. `.html`/`.htm` entries are ordinary files (`text/html`) that the viewer embeds as read-only single-page HTML; a path ending in `.taco.html` is rejected, because the container is never bundle content.
 
 ## Fields preserved across a refresh
 
@@ -95,11 +95,12 @@ Document content never decides classification: frontmatter keys do not route a f
 | `.yaml` / `.yml`     | `application/yaml` | UTF-8 text                         |
 | `.mmd`               | `text/plain`       | UTF-8 Mermaid source               |
 | `.png`               | `image/png`        | `data:image/png;base64,…` ≤ 10 MiB |
+| `.html` / `.htm`     | `text/html`        | UTF-8 HTML document, embedded read-only in a sandbox |
 | other UTF-8 text     | `text/plain`       | UTF-8 text                         |
 
 Non-UTF-8 bytes, symbolic links, and non-regular files are not silently skipped: stop, or exclude them explicitly.
 
-`.mmd` content is carried as opaque text: the bundle rules below validate its path and media type, never its diagram syntax. Run `node scripts/lint-mermaid.mjs` (see `SKILL.md` step 2) before handing the file over — otherwise the reviewer's browser is the first thing to parse the diagram, and it reports a failure as one generic sentence.
+`.mmd` content is carried as opaque text: the bundle rules below validate its path and media type, never its diagram syntax. Run `node scripts/lint-mermaid.mjs`, or `taco-cli verify <name.taco.html>` when only the CLI is installed (see `SKILL.md` step 2), before handing the file over — otherwise the reviewer's browser is the first thing to parse the diagram, and it reports a failure as one generic sentence.
 
 ## Links between documents
 
@@ -110,7 +111,7 @@ Write links exactly as you would for a repository viewer; no Taco-specific synta
 - `[Roadmap](/roadmap.md)`: relative to the bundle `root`;
 - `http(s):` and `mailto:` links open in a new tab.
 
-In a Taco, an in-bundle link switches to that document in place (a hosted page also records a browser history entry). A link to a Checkpoint document that does not exist yet opens its placeholder; a link to anything outside the bundle shows a notice instead of navigating. Never rewrite links into `file://`, absolute disk paths, `#` hashes, or Tacobin URLs: that breaks them in the repository and turns a refresh into a content change.
+In a Taco, an in-bundle link switches to that document in place (a hosted page also records a browser history entry) — including a link to an in-bundle `.html` page, which opens as the embedded single-page view rather than a jump to a local file. A link to a Checkpoint document that does not exist yet opens its placeholder; a link to anything outside the bundle shows a notice instead of navigating. Never rewrite links into `file://`, absolute disk paths, `#` hashes, or Tacobin URLs: that breaks them in the repository and turns a refresh into a content change.
 
 ## Writing the data block
 
@@ -125,11 +126,11 @@ In a Taco, an in-bundle link switches to that document in place (a hosted page a
 3. `JSON.parse` the exact escaped string you are about to insert — it must round-trip — then check the shape rules above.
 4. Write the whole file to a temporary sibling and `rename` it over the destination. A direct `writeFile` truncates the previous Taco first and loses it on failure.
 5. `<title>` becomes `<bundle title> — Taco`, with `&`, `<`, `>` escaped as HTML entities.
-6. Nothing outside the data block and `<title>` changes; the shell stays byte-identical.
+6. Nothing outside the data block and `<title>` changes within the selected shell. A refresh introducing HTML into a shell without the `taco-shell-features` token `embedded-html` must reassemble from the current stock shell of the same Complete/Lite variant, preserving all prior bundle fields. Unmarked legacy shells are Complete. Report the replacement; never hand-edit shell code. An explicitly supplied shell lacking the token is rejected before any write.
 
 ## Rejecting input
 
-A bundle fails to load when: `format` is not `taco/files`; `version`/`docId`/`title`/`root`/`files` are missing or malformed; a file path escapes `root`, duplicates another, or is an `.html`/`.htm` source; `sourceUrl` is present; a `sourceHash` is not 64 lowercase hex; `blocks` contain an unsupported type or HTML over 512 KiB; a comment thread is malformed or anchors a missing file; `access` is anything but `reader`; `collab` holds invalid sharing credentials. `packOptions.ignore` must be an array of strings with no absolute, empty, `.` or `..` segments.
+A bundle fails to load when: `format` is not `taco/files`; `version`/`docId`/`title`/`root`/`files` are missing or malformed; a file path escapes `root`, duplicates another, or ends in `.taco.html`; `sourceUrl` is present; a `sourceHash` is not 64 lowercase hex; `blocks` contain an unsupported type or HTML over 512 KiB; a comment thread is malformed or anchors a missing file; `access` is anything but `reader`; `collab` holds invalid sharing credentials. `packOptions.ignore` must be an array of strings with no absolute, empty, `.` or `..` segments.
 
 ## Verifying before you hand over
 

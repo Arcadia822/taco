@@ -1,0 +1,37 @@
+{
+  "format": "taco/files",
+  "version": 1,
+  "docId": "prd-template",
+  "title": "Product Requirements",
+  "root": "prd",
+  "files": [
+    {
+      "id": "prd-md",
+      "path": "prd/prd.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: '[FEATURE NAME] PRD'\nprd_id: '[###-feature-name]'\ncreated: '[DATE]'\nstatus: 'Draft'\n---\n\n## 1. Problem & Context\n\n[What is failing or missing today, for whom, and the evidence that it matters.]\n\n## 2. Goals & Success Metrics\n\n- **Goal**: [outcome this product change creates]\n- **Metric**: [signal, target, and how it is observed]\n\n## 3. Non-Goals\n\n[Out of scope for this round.]\n\n## 4. Users & Scenarios\n\n- **User**: [role]\n- **Scenario**: [what they do today, what changes after]\n\n## 5. Requirements\n\n- **P0**: [must-have behavior]\n- **P1**: [should-have behavior]\n\n## 6. Constraints & Dependencies\n\n[Platform limits, compatibility promises, upstream services, migration constraints.]\n\n## 7. Risks\n\n| Risk | Impact | Mitigation |\n| --- | --- | --- |\n| [risk] | [what breaks] | [plan] |\n\n## 8. Pending Decisions\n\n### [Decision title]\n\n- **Background**: [why this fork exists]\n- **Options**: A) [option with trade-off] · B) [option with trade-off]\n- **Recommendation**: [and why]\n- **Blocks**: [which later work depends on this]\n"
+    },
+    {
+      "id": "metrics-md",
+      "path": "prd/metrics.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: 'Success Metrics & Acceptance'\n---\n\n## Metrics\n\n| Metric | Target | How observed |\n| --- | --- | --- |\n| [signal] | [target] | [tool or query] |\n\n## Acceptance\n\n1. **Given** [state], **When** [action], **Then** [observable result]\n"
+    }
+  ],
+  "navigation": {
+    "version": 1,
+    "entry": "prd/prd.md",
+    "groups": [
+      {
+        "id": "group-requirements",
+        "title": "Requirements",
+        "paths": ["prd/prd.md"]
+      },
+      {
+        "id": "group-validation",
+        "title": "Validation",
+        "paths": ["prd/metrics.md"]
+      }
+    ]
+  }
+}

@@ -70,7 +70,7 @@ Creates a new blank `.taco.html` specification review container with an empty `f
 
 ### `taco-cli init [target] --template <name>`
 
-Initializes a new specification from bundled templates (`spec`, `adr`, `architecture`, `api-reference`). A directory target creates canonical Markdown and a Taco; a `.taco.html` target creates only the container.
+Initializes a new specification from bundled templates (`spec`, `adr`, `architecture`, `api-reference`, `prd`, `interaction`). A directory target creates canonical Markdown and a Taco; a `.taco.html` target creates only the container.
 
 - `--title <title>`: Custom document title.
 - `--lite`: Use the Lite shell variant.
@@ -78,7 +78,7 @@ Initializes a new specification from bundled templates (`spec`, `adr`, `architec
 
 ### `taco-cli pack <dir>`
 
-Packs a local documentation directory into a standalone `.taco.html` review artifact.
+Packs a local documentation directory into a standalone `.taco.html` review artifact. Supports Markdown, code, diagrams, images, and single-page HTML (`text/html`, rendered read-only in a sandbox).
 
 - `--title <title>`: Document title (defaults to directory name).
 - `--out <path>`: Explicit output path.
@@ -96,7 +96,7 @@ Performs read-only validation of the `#taco-document` data block, path security,
 
 ### `taco-cli refresh <file.taco.html>`
 
-Refreshes an existing `.taco.html` in place after canonical source edits, preserving stable `docId`, comments, checkpoints, navigation, and unknown metadata fields.
+Refreshes an existing `.taco.html` in place after canonical source edits, preserving stable `docId`, comments, checkpoints, navigation, and unknown metadata fields. When refreshed with embedded HTML sources, legacy shells lacking `embedded-html` capability are compatibly upgraded to the current stock shell while preserving Complete/Lite variant.
 
 - `--dir <path>`: Canonical source directory (defaults to the bundle root relative to the Taco).
 - `--handoff <path|->`: Required local handoff receipt or payload, or `-` for stdin. Rejects remote URLs.
@@ -106,7 +106,7 @@ Refreshes an existing `.taco.html` in place after canonical source edits, preser
 
 Performs read-only structural diff between two Tacos, between a Taco and its canonical directory, or from a local Handoff payload.
 
-- `--handoff <path|->`: Diff using a local handoff payload or stdin receipt.
+- `--handoff <path|->`: Diff using a local handoff payload or stdin receipt. With `--dir`, pass the reviewed Taco as the first argument to bind the receipt to it; only then is `trustedBaseline` reported as `true`.
 - Does not modify files on disk or resolve comments.
 
 ### `taco-cli inspect <file.taco.html>`
@@ -126,6 +126,7 @@ Extracts credential-free file projections from a Taco to stdout or writes them t
 Starts a finite loopback HTTP listener (`127.0.0.1`) with a short-lived token and returns a ready fragment URL for the browser.
 
 - When the reviewer clicks **Handoff** in the browser, the listener receives the unsaved review snapshot, atomically writes a local receipt, emits JSON to stdout, and exits with code 0.
+- Receipts are stored in a per-user `taco-receipts-<uid>` directory under the system temporary directory. The listener refuses to start when that directory is a symbolic link, belongs to another user, or grants group/other permissions.
 - `--port <number>`: Preferred loopback port.
 - `--timeout <seconds>`: Idle timeout (default 300s).
 

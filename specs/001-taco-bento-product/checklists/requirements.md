@@ -16,7 +16,7 @@ title: "Specification Quality Checklist: Taco File Browser"
 - [x] First-level directories form Categories and root files appear under Unassigned without special handling of `README.md`, `spec.md`, `plan.md`, or `tasks.md`.
 - [x] A navigation manifest changes virtual grouping without moving files or rewriting comment anchors.
 - [x] Frontmatter keys such as `taco_scope` and `category` do not route files.
-- [x] Ordinary HTML/HTM source files are unsupported while the `.taco.html` review container remains supported.
+- [x] Ordinary HTML/HTM source files render read-only in an isolated sandbox while nested `.taco.html` containers remain excluded.
 - [x] Path containment and duplicate-path behavior are specified.
 - [x] Markdown sanitization and relative-link behavior are specified.
 - [x] Unknown formats fall back to source without fabricating semantics.

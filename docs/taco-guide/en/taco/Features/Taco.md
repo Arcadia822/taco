@@ -25,6 +25,7 @@ One Taco covers one topic. The agent packs a folder from the repository into a T
 | Mermaid (`.mmd` or code blocks in Markdown) | Diagram preview plus source; switch theme and direction, zoom full screen; syntax errors point to the line and column | [System components](../Architecture/System.mmd) |
 | JSON / YAML | Syntax-highlighted source editor | — |
 | OpenAPI (JSON / YAML) | An extra **Overview** of operations, parameters, and responses | [Tacobin API](../Architecture/Tacobin-API.yaml) |
+| Single-page HTML (`.html`) | Embedded read-only page in a sandboxed frame | — |
 | PNG and SVG images, audio, video | Embedded previews | — |
 | Other text files | Shown as source, with no guessing about the format | — |
 

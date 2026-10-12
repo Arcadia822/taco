@@ -18,7 +18,7 @@ const listFiles = (directory: string, base = directory): string[] =>
   })
 
 describe('Template Packs integrity and empty Taco files', () => {
-  const packs = ['spec', 'architecture', 'api-reference', 'adr']
+  const packs = ['spec', 'architecture', 'api-reference', 'adr', 'prd', 'interaction']
 
   it('ships only the supported document example packs', () => {
     const shipped = readdirSync(canonicalTemplatesDir, { withFileTypes: true })

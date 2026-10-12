@@ -8,35 +8,55 @@ import { createServer } from 'node:http'
 import { chromium } from 'playwright'
 
 const root = resolve(process.cwd())
-const cli = process.argv.slice(2).length ? process.argv.slice(2) : [process.execPath, resolve(root, 'packages/cli/dist/main.js')]
+const cli = process.argv.slice(2).length
+  ? process.argv.slice(2)
+  : [process.execPath, resolve(root, 'packages/cli/dist/main.js')]
 const scratch = await mkdtemp(join(tmpdir(), 'taco-toolbox-smoke-'))
 const source = join(scratch, 'source')
 const artifact = join(scratch, 'Review.taco.html')
 await mkdir(source)
-const initial = '---\ntitle: Review\n---\n\n## Review\n\nOriginal paragraph.\n\nLiteral `</script>` $& $` $\' $1 and 中文.\n'
+const initial =
+  "---\ntitle: Review\n---\n\n## Review\n\nOriginal paragraph.\n\nLiteral `</script>` $& $` $' $1 and 中文.\n"
 await writeFile(join(source, 'review.md'), initial)
-
-const run = (args, expected = 0) => new Promise((resolveRun, reject) => {
-  const child = spawn(cli[0], [...cli.slice(1), ...args], { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] })
-  let stdout = ''
-  let stderr = ''
-  child.stdout.on('data', (chunk) => { stdout += chunk })
-  child.stderr.on('data', (chunk) => { stderr += chunk })
-  child.on('error', reject)
-  child.on('close', (code) => {
-    try {
-      assert.equal(code, expected, `${args.join(' ')}: ${stderr || stdout}`)
-      resolveRun({ stdout, stderr, json: stdout.trim() ? JSON.parse(stdout) : null })
-    } catch (error) { reject(error) }
+const htmlSource =
+  '<!doctype html><html><body><h1>Sample Embedded HTML</h1><p>Read-only page</p></body></html>'
+await writeFile(join(source, 'sample.html'), htmlSource)
+const run = (args, expected = 0) =>
+  new Promise((resolveRun, reject) => {
+    const child = spawn(cli[0], [...cli.slice(1), ...args], {
+      cwd: root,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk
+    })
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk
+    })
+    child.on('error', reject)
+    child.on('close', (code) => {
+      try {
+        assert.equal(code, expected, `${args.join(' ')}: ${stderr || stdout}`)
+        resolveRun({ stdout, stderr, json: stdout.trim() ? JSON.parse(stdout) : null })
+      } catch (error) {
+        reject(error)
+      }
+    })
   })
-})
-const parseBundle = (html) => JSON.parse(html.match(/<script\b[^>]*\bid=["']taco-document["'][^>]*>([\s\S]*?)<\/script>/i)[1])
-const replaceBundle = (html, bundle) => html.replace(/(<script\b[^>]*\bid=["']taco-document["'][^>]*>)[\s\S]*?(<\/script>)/i,
-  (_match, opener, closer) => `${opener}${JSON.stringify(bundle).replace(/</g, '\\u003c')}${closer}`)
+const parseBundle = (html) =>
+  JSON.parse(html.match(/<script\b[^>]*\bid=["']taco-document["'][^>]*>([\s\S]*?)<\/script>/i)[1])
+const replaceBundle = (html, bundle) =>
+  html.replace(
+    /(<script\b[^>]*\bid=["']taco-document["'][^>]*>)[\s\S]*?(<\/script>)/i,
+    (_match, opener, closer) =>
+      `${opener}${JSON.stringify(bundle).replace(/</g, '\\u003c')}${closer}`,
+  )
 
 await run(['new', join(scratch, 'Empty.taco.html'), '--title', 'Empty'])
 assert.deepEqual(parseBundle(await readFile(join(scratch, 'Empty.taco.html'), 'utf8')).files, [])
-for (const template of ['spec', 'architecture', 'api-reference', 'adr']) {
+for (const template of ['spec', 'architecture', 'api-reference', 'adr', 'prd', 'interaction']) {
   const target = join(scratch, template)
   await run(['init', target, '--template', template])
   const initialized = join(target, `${template}.taco.html`)
@@ -56,7 +76,14 @@ bundled.files[0].reviewMetadata = { preserve: 'file metadata' }
 bundled.files[0].id = 'review-file'
 bundled.checkpoints = {
   version: 1,
-  nodes: [{ id: 'review', title: 'Review', after: [], documents: [{ path: `${bundled.root}/review.md` }] }],
+  nodes: [
+    {
+      id: 'review',
+      title: 'Review',
+      after: [],
+      documents: [{ path: `${bundled.root}/review.md` }],
+    },
+  ],
   documents: [],
 }
 await writeFile(artifact, replaceBundle(html, bundled))
@@ -73,13 +100,19 @@ assert.equal(bundled.files[0].content, initial)
 await run(['new', join(scratch, 'Empty.taco.html'), '--title', 'Empty'], 4)
 assert.deepEqual(parseBundle(await readFile(join(scratch, 'Empty.taco.html'), 'utf8')).files, [])
 const listener = () => {
-  const child = spawn(cli[0], [...cli.slice(1), 'listen', artifact, '--no-open', '--timeout', '45'],
-    { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] })
+  const child = spawn(
+    cli[0],
+    [...cli.slice(1), 'listen', artifact, '--no-open', '--timeout', '45'],
+    { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] },
+  )
   let buffer = ''
   let errors = ''
   let readyResolve
   let readyReject
-  const ready = new Promise((resolveReady, rejectReady) => { readyResolve = resolveReady; readyReject = rejectReady })
+  const ready = new Promise((resolveReady, rejectReady) => {
+    readyResolve = resolveReady
+    readyReject = rejectReady
+  })
   const events = []
   child.stdout.on('data', (chunk) => {
     buffer += chunk
@@ -92,18 +125,28 @@ const listener = () => {
         const event = JSON.parse(line)
         events.push(event)
         if (event.type === 'ready') readyResolve(event)
-      } catch (error) { readyReject(error) }
+      } catch (error) {
+        readyReject(error)
+      }
     }
   })
-  child.stderr.on('data', (chunk) => { errors += chunk })
+  child.stderr.on('data', (chunk) => {
+    errors += chunk
+  })
   const done = new Promise((resolveDone, rejectDone) => {
-    child.on('error', (error) => { readyReject(error); rejectDone(error) })
+    child.on('error', (error) => {
+      readyReject(error)
+      rejectDone(error)
+    })
     child.on('close', (code) => {
-      if (!events.some((event) => event.type === 'ready')) readyReject(new Error(errors || 'listener closed before ready'))
+      if (!events.some((event) => event.type === 'ready'))
+        readyReject(new Error(errors || 'listener closed before ready'))
       try {
         assert.equal(code, 0, errors || JSON.stringify(events))
         resolveDone(events)
-      } catch (error) { rejectDone(error) }
+      } catch (error) {
+        rejectDone(error)
+      }
     })
   })
   void done.catch(() => {})
@@ -133,17 +176,51 @@ try {
     const ready = await waiting.ready
     assert.equal(ready.docId, bundled.docId)
     const endpoint = `http://127.0.0.1:${ready.port}/handoff`
-    const rejected = await fetch(endpoint, { method: 'POST', headers: {
-      'Authorization': 'Bearer invalid-token', 'X-Taco-Doc-Id': ready.docId,
-      'X-Taco-Session-Id': ready.sessionId, 'Content-Type': 'application/json', 'Origin': 'null',
-    }, body: '{}' })
-    assert.equal(rejected.status, 401, 'listener refuses unauthenticated delivery and remains available')
+    const rejected = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer invalid-token',
+        'X-Taco-Doc-Id': ready.docId,
+        'X-Taco-Session-Id': ready.sessionId,
+        'Content-Type': 'application/json',
+        Origin: 'null',
+      },
+      body: '{}',
+    })
+    assert.equal(
+      rejected.status,
+      401,
+      'listener refuses unauthenticated delivery and remains available',
+    )
     const page = await browser.newPage({ acceptDownloads: true })
     const pageErrors = []
     page.on('pageerror', (error) => pageErrors.push(error.message))
-    await page.goto(`${previewOrigin}/Review.taco.html${new URL(ready.url).hash}`, { waitUntil: 'load' })
+    await page.goto(`${previewOrigin}/Review.taco.html${new URL(ready.url).hash}`, {
+      waitUntil: 'load',
+    })
     await page.waitForFunction(() => window.taco && document.querySelector('.ProseMirror'))
-    assert.equal(await page.locator('nav.file-sidebar button.file-row.is-selected').getAttribute('data-path'), `${bundled.root}/review.md`)
+    assert.equal(
+      await page.locator('nav.file-sidebar button.file-row.is-selected').getAttribute('data-path'),
+      `${bundled.root}/review.md`,
+    )
+    const htmlFileRow = page.locator(
+      `nav.file-sidebar button.file-row[data-path="${bundled.root}/sample.html"]`,
+    )
+    // With a Checkpoint graph the HTML page lands in the collapsed "Unassigned files" group.
+    const htmlGroup = page.locator('nav.file-sidebar details', {
+      has: page.locator(`button.file-row[data-path="${bundled.root}/sample.html"]`),
+    })
+    if (!(await htmlGroup.evaluate((details) => details.open))) {
+      await htmlGroup.locator(':scope > summary').click()
+    }
+    await htmlFileRow.waitFor({ state: 'visible', timeout: 5000 })
+    await htmlFileRow.click()
+    await page.waitForFunction(() => document.querySelector('iframe'))
+    assert(await page.locator('iframe').isVisible(), 'HTML is rendered inside an iframe')
+    await page
+      .locator(`nav.file-sidebar button.file-row[data-path="${bundled.root}/review.md"]`)
+      .click()
+    await page.waitForFunction(() => document.querySelector('.ProseMirror'))
     const reviewed = `Round ${round} reviewed paragraph.`
     await page.locator('.ProseMirror').first().click()
     await page.keyboard.press('ControlOrMeta+End')
@@ -151,18 +228,28 @@ try {
     await page.keyboard.type(reviewed)
     await page.keyboard.press('ControlOrMeta+Shift+ArrowLeft')
     await page.locator('.selection-comment-button').click()
-    await page.locator('.comment-composer textarea.comment-input').fill(`Please retain round ${round} feedback.`)
+    await page
+      .locator('.comment-composer textarea.comment-input')
+      .fill(`Please retain round ${round} feedback.`)
     await page.locator('.comment-composer button.comment-submit').click()
     const authorInput = page.locator('.author-name-dialog input.author-name-input')
     if (await authorInput.isVisible()) {
       await authorInput.fill('Reviewer')
       await page.locator('.author-name-dialog .control-button-primary').click()
     }
-    const threadId = await page.locator('article.comment-thread').last().getAttribute('data-thread-id')
+    const threadId = await page
+      .locator('article.comment-thread')
+      .last()
+      .getAttribute('data-thread-id')
     await page.locator('.checkpoint-status-button').first().click()
-    await page.locator('.checkpoint-status-option').nth(round === 1 ? 1 : 2).click()
+    await page
+      .locator('.checkpoint-status-option')
+      .nth(round === 1 ? 1 : 2)
+      .click()
     if (round === 2) {
-      await page.evaluate(() => { window.showSaveFilePicker = undefined })
+      await page.evaluate(() => {
+        window.showSaveFilePicker = undefined
+      })
       const download = page.waitForEvent('download')
       await page.locator('.save-button').click()
       await page.locator('dialog.confirmation-dialog[open] .control-button-primary').click()
@@ -173,15 +260,28 @@ try {
       const attempted = []
       await page.route(endpoint, async (route) => {
         attempted.push(JSON.parse(route.request().postData()))
-        await route.fulfill({ status: 503, contentType: 'application/json', body: '{"ok":false,"error":"Smoke delivery unavailable"}' })
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: '{"ok":false,"error":"Smoke delivery unavailable"}',
+        })
       })
       for (let attempt = 0; attempt < 2; attempt += 1) {
         await page.locator('button.copy-review-main').click()
-        await page.waitForFunction(() => document.querySelector('button.copy-review-main')?.disabled === false)
+        await page.waitForFunction(
+          () => document.querySelector('button.copy-review-main')?.disabled === false,
+        )
       }
       assert.equal(attempted.length, 2)
-      assert.deepEqual(attempted[0], attempted[1], 'retry preserves the entire pending Handoff including timestamp')
-      assert((await page.locator('.ProseMirror').first().innerText()).includes(reviewed), 'failed delivery preserves editor content')
+      assert.deepEqual(
+        attempted[0],
+        attempted[1],
+        'retry preserves the entire pending Handoff including timestamp',
+      )
+      assert(
+        (await page.locator('.ProseMirror').first().innerText()).includes(reviewed),
+        'failed delivery preserves editor content',
+      )
       await page.unroute(endpoint)
     }
     await page.locator('button.copy-review-main').click()
@@ -195,24 +295,74 @@ try {
     assert.equal(receipt.docId, bundled.docId)
     const snapshot = receipt.payload.snapshot
     const receivedFile = snapshot.files.find((file) => file.path === `${bundled.root}/review.md`)
-    assert(receivedFile.content.includes(reviewed), 'receipt contains actual unsaved editor content')
-    assert(snapshot.comments.some((thread) => thread.id === threadId), 'receipt contains current comment')
-    assert.equal(snapshot.checkpoints.documents.find((record) => record.path === `${bundled.root}/review.md`).status,
-      round === 1 ? 'in_progress' : 'complete', 'Handoff contains actual unsaved Checkpoint status')
+    assert(
+      receivedFile.content.includes(reviewed),
+      'receipt contains actual unsaved editor content',
+    )
+    assert(
+      snapshot.comments.some((thread) => thread.id === threadId),
+      'receipt contains current comment',
+    )
+    assert.equal(
+      snapshot.checkpoints.documents.find((record) => record.path === `${bundled.root}/review.md`)
+        .status,
+      round === 1 ? 'in_progress' : 'complete',
+      'Handoff contains actual unsaved Checkpoint status',
+    )
     assert.equal(receipt.payload.baseline.docId, bundled.docId)
-    const baselineFile = receipt.payload.baseline.files.find((file) => file.path === `${bundled.root}/review.md`)
-    assert.equal(baselineFile.content, round === 1 ? initial : roundOneContent, 'Save does not advance review-start baseline')
+    const baselineFile = receipt.payload.baseline.files.find(
+      (file) => file.path === `${bundled.root}/review.md`,
+    )
+    assert.equal(
+      baselineFile.content,
+      round === 1 ? initial : roundOneContent,
+      'Save does not advance review-start baseline',
+    )
+    assert(
+      snapshot.files.some((file) => file.path === `${bundled.root}/sample.html`),
+      'snapshot carries HTML file for archival',
+    )
+    assert(
+      receipt.payload.baseline.files.some((file) => file.path === `${bundled.root}/sample.html`),
+      'baseline carries HTML file',
+    )
+    const tamperedReceiptPath = join(scratch, `tampered-round-${round}.json`)
+    const tamperedReceipt = JSON.parse(await readFile(receiptPath, 'utf8'))
+    const htmlInSnap = tamperedReceipt.payload.snapshot.files.find((file) =>
+      file.path.endsWith('.html'),
+    )
+    if (htmlInSnap) {
+      htmlInSnap.content = '<h1>Tampered</h1>'
+      await writeFile(tamperedReceiptPath, JSON.stringify(tamperedReceipt))
+      await run(['refresh', artifact, '--dir', source, '--handoff', tamperedReceiptPath], 4)
+      await run(['diff', artifact, '--handoff', tamperedReceiptPath], 4)
+    }
     const beforeRefresh = await readFile(artifact, 'utf8')
     await run(['refresh', artifact, '--dir', source, '--handoff', receiptPath], 4)
-    assert.equal(await readFile(artifact, 'utf8'), beforeRefresh, 'pending review edits refuse refresh without replacing artifact')
+    assert.equal(
+      await readFile(artifact, 'utf8'),
+      beforeRefresh,
+      'pending review edits refuse refresh without replacing artifact',
+    )
     assert.deepEqual(pageErrors, [])
     await writeFile(join(source, 'review.md'), receivedFile.content)
     await run(['refresh', artifact, '--dir', source, '--handoff', receiptPath])
     const refreshed = parseBundle(await readFile(artifact, 'utf8'))
     assert.equal(refreshed.docId, bundled.docId)
-    assert(refreshed.comments.some((thread) => thread.id === (round === 1 ? threadId : roundOneThreadId)), 'next round retains earlier comments')
-    assert(refreshed.comments.some((thread) => thread.id === threadId), 'refresh retains received feedback')
-    assert.equal(refreshed.files.find((file) => file.path === `${bundled.root}/review.md`).content, receivedFile.content)
+    assert(
+      refreshed.comments.some(
+        (thread) => thread.id === (round === 1 ? threadId : roundOneThreadId),
+      ),
+      'next round retains earlier comments',
+    )
+    assert(
+      refreshed.comments.some((thread) => thread.id === threadId),
+      'refresh retains received feedback',
+    )
+    assert.equal(
+      refreshed.files.find((file) => file.path === `${bundled.root}/review.md`).content,
+      receivedFile.content,
+    )
     assert.deepEqual(refreshed.navigation, bundled.navigation)
     assert.deepEqual(refreshed.reviewMetadata, bundled.reviewMetadata)
     assert.deepEqual(refreshed.checkpoints, snapshot.checkpoints)
@@ -226,11 +376,72 @@ try {
     } else {
       const afterRefresh = await readFile(artifact, 'utf8')
       await run(['refresh', artifact, '--dir', source, '--handoff', roundOneReceiptPath], 4)
-      assert.equal(await readFile(artifact, 'utf8'), afterRefresh, 'stale first-round feedback refuses after second refresh')
+      assert.equal(
+        await readFile(artifact, 'utf8'),
+        afterRefresh,
+        'stale first-round feedback refuses after second refresh',
+      )
     }
     await page.screenshot({ path: join(scratch, `round-${round}.png`), fullPage: true })
     await page.close()
   }
+  // Test legacy Complete and Lite capability replacement and variant retention
+  for (const variant of ['complete', 'lite']) {
+    const legacyDir = join(scratch, `legacy-${variant}`)
+    await mkdir(legacyDir, { recursive: true })
+    await writeFile(join(legacyDir, 'page.html'), '<h1>Legacy</h1>')
+    const legacyArtifact = join(scratch, `Legacy_${variant}.taco.html`)
+    await run([
+      'pack',
+      legacyDir,
+      '--title',
+      `Legacy_${variant}`,
+      '--out',
+      legacyArtifact,
+      ...(variant === 'lite' ? ['--lite'] : []),
+    ])
+    const legacyHtml = await readFile(legacyArtifact, 'utf8')
+    const strippedHtml = legacyHtml.replace(
+      /<meta\b(?=[^>]*\bname=["']taco-shell-features["'])[^>]*>/i,
+      '',
+    )
+    await writeFile(legacyArtifact, strippedHtml)
+
+    const legacyBundle = parseBundle(strippedHtml)
+    const legacyHandoff = {
+      schema: 'taco-local-receipt/1',
+      docId: legacyBundle.docId,
+      payload: {
+        schema: 'taco-local-handoff/1',
+        docId: legacyBundle.docId,
+        baseline: legacyBundle,
+        snapshot: legacyBundle,
+      },
+    }
+    const legacyReceiptPath = join(scratch, `legacy-receipt-${variant}.json`)
+    await writeFile(legacyReceiptPath, JSON.stringify(legacyHandoff))
+
+    const refreshRes = await run([
+      'refresh',
+      legacyArtifact,
+      '--dir',
+      legacyDir,
+      '--handoff',
+      legacyReceiptPath,
+    ])
+    assert(
+      refreshRes.stdout.includes(
+        'Replaced legacy shell with the current stock shell of the same variant for embedded HTML',
+      ),
+    )
+    const refreshedHtml = await readFile(legacyArtifact, 'utf8')
+    assert(refreshedHtml.includes('name="taco-shell-features"'))
+    assert.equal(parseBundle(refreshedHtml).docId, legacyBundle.docId)
+    if (variant === 'lite') {
+      assert(refreshedHtml.includes('content="lite"'))
+    }
+  }
+
   console.log(JSON.stringify({ ok: true, rounds: 2, artifact, scratch, cli }))
 } finally {
   for (const child of active) child.kill('SIGTERM')

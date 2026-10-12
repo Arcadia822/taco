@@ -2432,6 +2432,35 @@ describe('FileBrowser', () => {
 
     browser.destroy()
   })
+  it('renders html standalone files in a sandboxed iframe with CSP srcdoc', () => {
+    const htmlBundle: TacoBundle = {
+      format: 'taco/files',
+      version: 1,
+      docId: 'html-browser-test',
+      title: 'HTML Test',
+      root: 'specs/html',
+      files: [
+        {
+          path: 'specs/html/demo.html',
+          title: 'Interactive Demo',
+          mediaType: 'text/html',
+          content: '<!doctype html><html><head><title>Demo</title></head><body><h1>Hello</h1></body></html>',
+        },
+      ],
+    }
+
+    const browser = new FileBrowser(document.getElementById('app')!, htmlBundle)
+    const iframe = document.querySelector<HTMLIFrameElement>('.media-document-preview.html-document-preview')
+    expect(iframe).not.toBeNull()
+    expect(iframe?.title).toBe('Interactive Demo')
+    expect(iframe?.getAttribute('referrerpolicy')).toBe('no-referrer')
+    expect(iframe?.getAttribute('sandbox')).toContain('allow-scripts')
+    expect(iframe?.getAttribute('sandbox')).not.toContain('allow-same-origin')
+    expect(iframe?.getAttribute('sandbox')).not.toContain('allow-top-navigation')
+    expect(iframe?.getAttribute('srcdoc')).toContain('Content-Security-Policy')
+    expect(iframe?.getAttribute('srcdoc')).toContain("default-src 'none'")
+    browser.destroy()
+  })
 
   it('caps SVG previews at the authored viewBox size instead of stretching to the viewer', () => {
     const svgBundle: TacoBundle = {

@@ -30,7 +30,7 @@ const EMBEDDED_SKILLS: Record<
 > = {
   taco: {
     version: '1.2.0',
-    description: 'Post-install workflow for AI agents publishing and reviewing Taco workspaces',
+    description: 'Canonical Taco Skill guidance for human review, optional local tooling and hosted collaboration',
     files: tacoFiles,
   },
 }

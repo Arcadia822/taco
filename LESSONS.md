@@ -16,23 +16,26 @@ Guided by the principle **Encode Lessons in Structure**:
 
 ## Escalation Index
 
-| ID                                                                                        | Title                                                           | Occurrences |    Status     | Guard                                                                                |
-| :---------------------------------------------------------------------------------------- | :-------------------------------------------------------------- | :---------: | :-----------: | :----------------------------------------------------------------------------------- |
-| [LESSON-001](#lesson-001-local-dependency-drift-pollutes-test-runs)                       | Local Dependency Drift Pollutes Test Runs                       |      1      |   **open**    | `package-lock.json`, `.github/workflows/ci.yml`                                      |
-| [LESSON-002](#lesson-002-version-triples-desync-across-release-surfaces)                  | Version Triples Desync Across Release Surfaces                  |      2      |   **open**    | `scripts/sync-skill-version.mjs`, `tests/version.test.ts`                            |
-| [LESSON-003](#lesson-003-tiptap-prosemirror-crash-on-markdown-code-in-bold)               | Tiptap ProseMirror Crash on Markdown Code-in-Bold               |      3      | **escalated** | `src/tiptap-editor.ts`, `tests/markdown-emphasis-code.test.ts`                       |
-| [LESSON-004](#lesson-004-headless-mermaid-execution-fails-without-dom-mock)               | Headless Mermaid Execution Fails Without DOM Mock               |      1      |   **open**    | `skills/taco/scripts/lint-mermaid.mjs`, `tests/mermaid-lint.test.ts`                 |
-| [LESSON-005](#lesson-005-artifact-id-downloads-nest-the-consumed-files)                   | Artifact-ID Downloads Nest the Consumed Files                   |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
-| [LESSON-006](#lesson-006-empty-docker-volume-copy-up-overrides-ownership)                 | Empty Docker Volume Copy-Up Overrides Ownership                 |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
-| [LESSON-007](#lesson-007-github-rejects-empty-asset-bootstrap-trees)                      | GitHub Rejects Empty Asset Bootstrap Trees                      |      1      |   **open**    | `.github/workflows/scripts/publish-preview.mjs`, `tests/ui-preview-pipeline.test.ts` |
-| [LESSON-008](#lesson-008-occupied-preview-port-serves-another-worktree)                   | Occupied Preview Port Serves Another Worktree                   |      1      |   **open**    | Unique preview ports and rendered workflow verification                              |
-| [LESSON-009](#lesson-009-legacy-service-tests-do-not-prove-production-routes)             | Legacy Service Tests Do Not Prove Production Routes             |      1      |   **open**    | CLI-to-Next runtime smoke                                                            |
-| [LESSON-010](#lesson-010-revision-migrations-must-preserve-legacy-tables-and-event-order) | Revision Migrations Must Preserve Legacy Tables and Event Order |      1      |   **open**    | `packages/host/test/taco-60.test.ts`                                                 |
-| [LESSON-011](#lesson-011-dynamic-preview-boundary-discrepancies-and-marker-injection)     | Dynamic Preview Boundary Discrepancies & Marker Injection       |      1      |   **open**    | `.github/workflows/scripts/plan-schema.mjs`, `tests/dynamic-preview-plan.test.ts`    |
-| [LESSON-012](#lesson-012-nextjs-google-font-loader-crashes-on-non-extension-endpoints)    | Next.js Google Font Loader Crashes on Non-Extension Endpoints   |      1      |   **open**    | `packages/host/src/app/fonts/`, `packages/host/src/app/page.tsx`                     |
-| [LESSON-013](#lesson-013-cli-bundling-changes-helper-entrypoint-identity)                 | CLI Bundling Changes Helper Entrypoint Identity                 |      1      |   **open**    | Installed npm/native runtime smoke and deferred helper defaults                      |
-| [LESSON-014](#lesson-014-runtime-ddl-and-expiry-consumers-diverge)                        | Runtime DDL and Expiry Consumers Diverge                        |      1      |   **open**    | Real PostgreSQL bootstrap/upgrade and expired-route regression smoke                 |
-| [LESSON-015](#lesson-015-temporary-postgresql-binaries-omit-dylib-aliases)                | Temporary PostgreSQL Binaries Omit Dylib Aliases                |      1      |   **open**    | Inspect otool dependencies and restore aliases only in disposable runtime            |
+| ID                                                                                             | Title                                                                | Occurrences |    Status     | Guard                                                                                |
+| :--------------------------------------------------------------------------------------------- | :------------------------------------------------------------------- | :---------: | :-----------: | :----------------------------------------------------------------------------------- |
+| [LESSON-001](#lesson-001-local-dependency-drift-pollutes-test-runs)                            | Local Dependency Drift Pollutes Test Runs                            |      1      |   **open**    | `package-lock.json`, `.github/workflows/ci.yml`                                      |
+| [LESSON-002](#lesson-002-version-triples-desync-across-release-surfaces)                       | Version Triples Desync Across Release Surfaces                       |      2      |   **open**    | `scripts/sync-skill-version.mjs`, `tests/version.test.ts`                            |
+| [LESSON-003](#lesson-003-tiptap-prosemirror-crash-on-markdown-code-in-bold)                    | Tiptap ProseMirror Crash on Markdown Code-in-Bold                    |      3      | **escalated** | `src/tiptap-editor.ts`, `tests/markdown-emphasis-code.test.ts`                       |
+| [LESSON-004](#lesson-004-headless-mermaid-execution-fails-without-dom-mock)                    | Headless Mermaid Execution Fails Without DOM Mock                    |      1      |   **open**    | `skills/taco/scripts/lint-mermaid.mjs`, `tests/mermaid-lint.test.ts`                 |
+| [LESSON-005](#lesson-005-artifact-id-downloads-nest-the-consumed-files)                        | Artifact-ID Downloads Nest the Consumed Files                        |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
+| [LESSON-006](#lesson-006-empty-docker-volume-copy-up-overrides-ownership)                      | Empty Docker Volume Copy-Up Overrides Ownership                      |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
+| [LESSON-007](#lesson-007-github-rejects-empty-asset-bootstrap-trees)                           | GitHub Rejects Empty Asset Bootstrap Trees                           |      1      |   **open**    | `.github/workflows/scripts/publish-preview.mjs`, `tests/ui-preview-pipeline.test.ts` |
+| [LESSON-008](#lesson-008-occupied-preview-port-serves-another-worktree)                        | Occupied Preview Port Serves Another Worktree                        |      1      |   **open**    | Unique preview ports and rendered workflow verification                              |
+| [LESSON-009](#lesson-009-legacy-service-tests-do-not-prove-production-routes)                  | Legacy Service Tests Do Not Prove Production Routes                  |      1      |   **open**    | CLI-to-Next runtime smoke                                                            |
+| [LESSON-010](#lesson-010-revision-migrations-must-preserve-legacy-tables-and-event-order)      | Revision Migrations Must Preserve Legacy Tables and Event Order      |      1      |   **open**    | `packages/host/test/taco-60.test.ts`                                                 |
+| [LESSON-011](#lesson-011-dynamic-preview-boundary-discrepancies-and-marker-injection)          | Dynamic Preview Boundary Discrepancies & Marker Injection            |      1      |   **open**    | `.github/workflows/scripts/plan-schema.mjs`, `tests/dynamic-preview-plan.test.ts`    |
+| [LESSON-012](#lesson-012-nextjs-google-font-loader-crashes-on-non-extension-endpoints)         | Next.js Google Font Loader Crashes on Non-Extension Endpoints        |      1      |   **open**    | `packages/host/src/app/fonts/`, `packages/host/src/app/page.tsx`                     |
+| [LESSON-013](#lesson-013-green-vitest-does-not-prove-type-level-integrity)                     | Green vitest Does Not Prove Type-Level Integrity                     |      1      |   **open**    | `npm run check` (`tsc -b`), `scripts/build-shells.mjs`                               |
+| [LESSON-014](#lesson-014-browser-action-receipts-do-not-prove-iframe-interaction)              | Browser Action Receipts Do Not Prove Iframe Interaction              |      1      |   **open**    | Observe frame output; explicit frame interaction                                     |
+| [LESSON-015](#lesson-015-cli-bundling-changes-helper-entrypoint-identity)                      | CLI Bundling Changes Helper Entrypoint Identity                      |      1      |   **open**    | Installed npm/native runtime smoke and deferred helper defaults                      |
+| [LESSON-016](#lesson-016-conditional-assertions-and-default-environments-create-hollow-greens) | Conditional Assertions and Default Environments Create Hollow Greens |      1      |   **open**    | `scripts/smoke-local-toolbox.mjs`, `packages/cli/test/write-safety.test.ts`          |
+| [LESSON-017](#lesson-017-runtime-ddl-and-expiry-consumers-diverge)                             | Runtime DDL and Expiry Consumers Diverge                             |      1      |   **open**    | Real PostgreSQL bootstrap/upgrade and expired-route regression smoke                 |
+| [LESSON-018](#lesson-018-temporary-postgresql-binaries-omit-dylib-aliases)                     | Temporary PostgreSQL Binaries Omit Dylib Aliases                     |      1      |   **open**    | Inspect otool dependencies and restore aliases only in disposable runtime            |
 
 ---
 
@@ -377,9 +380,63 @@ The public review model reused a legacy table name with incompatible required co
 
 ---
 
-### LESSON-013: CLI Bundling Changes Helper Entrypoint Identity
+### LESSON-013: Green vitest Does Not Prove Type-Level Integrity
 
 - **ID**: `LESSON-013`
+- **Category**: `tooling`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: `npm run check` (`tsc -b`), `scripts/build-shells.mjs`
+
+#### Symptom
+
+A change reports a fully green test run while `tsc -b` fails: widening `FileKind` in `src/model.ts` left `Record<FileKind, IconName>` in `src/ui-primitives.ts` without the new `html` key (TS2741), and `tests/model.test.ts` used `TacoFile` without importing it (TS2304).
+
+#### Root Cause
+
+vitest transpiles TypeScript without type-checking, so exhaustiveness of `Record<union, …>` maps and missing type imports pass the test runner and surface only in the compiler step of `npm run build`.
+
+#### Evidence
+
+- 2026-10-11 — TACO-70: the inline-HTML slice extended `FileKind` with `html`; 57 test files / 663 tests passed, then `npm run build` failed on the icon map and the missing type import.
+
+#### Prevention & Escalation
+
+- Treat `tsc -b` (via `npm run check`) as the completion gate for any TypeScript change; a green test run alone is not verification.
+- When widening a union type, change its exhaustive `Record<…>` maps in the same edit and grep for other consumers.
+
+---
+
+### LESSON-014: Browser Action Receipts Do Not Prove Iframe Interaction
+
+- **ID**: `LESSON-014`
+- **Category**: `tooling`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: Observe iframe output after interaction; use an explicit frame handle when wrapper targeting is ambiguous.
+
+#### Symptom
+
+An Ego browser click on a button inside the HTML preview returned successfully, but the iframe output stayed `Ready`. Screenshot capture subsequently timed out.
+
+#### Root Cause
+
+The wrapper action receipt did not establish that the cross-origin iframe handler ran. A direct managed Chromium frame click on the same artifact executed the handler and showed the expected result; the exact wrapper failure remains unconfirmed.
+
+#### Evidence
+
+- 2026-10-11, TACO-70 review repair: direct frame interaction showed `Action passed; parent access blocked` in both local and canonical Host shells. The wrapper mismatch was reported through the tool QA channel.
+
+#### Prevention & Escalation
+
+- Verify the visible result inside the frame before claiming an action succeeded.
+- Classify a wrapper or screenshot timeout separately from product behavior, and retain the successful frame-level runtime evidence.
+
+---
+
+### LESSON-015: CLI Bundling Changes Helper Entrypoint Identity
+
+- **ID**: `LESSON-015`
 - **Category**: `tooling`
 - **Occurrences**: 1
 - **Status**: `open`
@@ -405,9 +462,37 @@ The helper eagerly converted its module-relative default Shell URL into an OS pa
 
 ---
 
-### LESSON-014: Runtime DDL and Expiry Consumers Diverge
+### LESSON-016: Conditional Assertions and Default Environments Create Hollow Greens
 
-- **ID**: `LESSON-014`
+- **ID**: `LESSON-016`
+- **Category**: `tooling`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: `scripts/smoke-local-toolbox.mjs`, `packages/cli/test/write-safety.test.ts` (node environment pragma)
+
+#### Symptom
+
+`scripts/smoke-local-toolbox.mjs` reported `ok: true` for HTML iframe rendering while it never opened the HTML page: the check ran only `if (await htmlFileRow.isVisible())`, and with a Checkpoint graph the page sits in the collapsed `Unassigned files` group. New CLI regression tests reported passing by their authors but failed under the repository default: the embedded Mermaid parser does not load under the root `jsdom` environment, so `verify` exited 2 before reaching the code under test.
+
+#### Root Cause
+
+A guard that skips an assertion when its precondition fails turns a regression into a silent pass. `vite.config.ts` sets `test.environment: 'jsdom'` for browser tests; CLI tests inherit it unless they opt out.
+
+#### Evidence
+
+- 2026-10-12 — PR #144 independent review: hiding the HTML row still produced `ok: true`. After the assertion became mandatory it failed on the collapsed group, proving the check had never run. Two new CLI suites failed with `Bundled Mermaid parser failed to load from embedded shell` until marked `// @vitest-environment node`.
+
+#### Prevention & Escalation
+
+- Assert a smoke precondition instead of branching on it; expand collapsed UI explicitly before asserting visibility.
+- Start every `packages/cli/test/*.test.ts` file that exercises the embedded Shell with `// @vitest-environment node`.
+- Run the full suite from the repository root after integrating parallel slices; a per-file pass in another worker's environment is not evidence.
+
+---
+
+### LESSON-017: Runtime DDL and Expiry Consumers Diverge
+
+- **ID**: `LESSON-017`
 - **Category**: `architecture`
 - **Occurrences**: 1
 - **Status**: `open`
@@ -433,9 +518,9 @@ The standalone schema.sql contained expires_at, but the actual PG_SCHEMA and run
 
 ---
 
-### LESSON-015: Temporary PostgreSQL Binaries Omit Dylib Aliases
+### LESSON-018: Temporary PostgreSQL Binaries Omit Dylib Aliases
 
-- **ID**: `LESSON-015`
+- **ID**: `LESSON-018`
 - **Category**: `tooling`
 - **Occurrences**: 1
 - **Status**: `open`
