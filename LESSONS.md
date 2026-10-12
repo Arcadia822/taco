@@ -24,7 +24,7 @@ Guided by the principle **Encode Lessons in Structure**:
 | [LESSON-004](#lesson-004-headless-mermaid-execution-fails-without-dom-mock)                    | Headless Mermaid Execution Fails Without DOM Mock                    |      1      |   **open**    | `skills/taco/scripts/lint-mermaid.mjs`, `tests/mermaid-lint.test.ts`                 |
 | [LESSON-005](#lesson-005-artifact-id-downloads-nest-the-consumed-files)                        | Artifact-ID Downloads Nest the Consumed Files                        |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
 | [LESSON-006](#lesson-006-empty-docker-volume-copy-up-overrides-ownership)                      | Empty Docker Volume Copy-Up Overrides Ownership                      |      1      |   **open**    | `.github/workflows/ui-preview.yml`                                                   |
-| [LESSON-007](#lesson-007-github-rejects-empty-asset-bootstrap-trees)                           | GitHub Rejects Empty Asset Bootstrap Trees                           |      1      |   **open**    | `.github/workflows/scripts/publish-preview.mjs`, `tests/ui-preview-pipeline.test.ts` |
+| [LESSON-007](#lesson-007-github-rejects-empty-asset-bootstrap-trees)                           | GitHub Rejects Empty Asset Bootstrap Trees                           |      2      |   **open**    | `.github/workflows/scripts/publish-preview.mjs`, `tests/ui-preview-pipeline.test.ts` |
 | [LESSON-008](#lesson-008-occupied-preview-port-serves-another-worktree)                        | Occupied Preview Port Serves Another Worktree                        |      1      |   **open**    | Unique preview ports and rendered workflow verification                              |
 | [LESSON-009](#lesson-009-legacy-service-tests-do-not-prove-production-routes)                  | Legacy Service Tests Do Not Prove Production Routes                  |      1      |   **open**    | CLI-to-Next runtime smoke                                                            |
 | [LESSON-010](#lesson-010-revision-migrations-must-preserve-legacy-tables-and-event-order)      | Revision Migrations Must Preserve Legacy Tables and Event Order      |      1      |   **open**    | `packages/host/test/taco-60.test.ts`                                                 |
@@ -214,26 +214,28 @@ The image's pre-existing `/home/pwuser/.npm` cache is also root-owned: after dis
 
 - **ID**: `LESSON-007`
 - **Category**: `ci`
-- **Occurrences**: 1
+- **Occurrences**: 2
 - **Status**: `open`
 - **Guard**: `.github/workflows/scripts/publish-preview.mjs`, `tests/ui-preview-pipeline.test.ts`
 
 #### Symptom
 
-Capture, sanitization, validation, and upload succeed, but the first publisher run fails with GitHub API 422 `Invalid tree info`.
+Capture, sanitization, validation, and upload succeed, but a publisher run fails with GitHub API 422 `Invalid tree info`. It first appeared while bootstrapping the absent assets branch, and it recurs on an ordinary upload whenever the revision produced no screenshots.
 
 #### Root Cause
 
-The absent assets branch bootstrap submitted `{ tree: [] }` to the Git Trees API, which rejects an empty tree. Existing mocks accepted that payload and never exercised first-publication API behavior.
+Two call sites submitted an empty `tree` array to the Git Trees API, which rejects it: the absent-branch bootstrap, and the per-upload tree that collected no blobs because the manifest held no screenshots. Existing mocks accepted the empty payload and never exercised the real API contract.
 
 #### Evidence
 
 - 2026-10-10 — disposable PR #127, [repair probe 38044557106](https://github.com/Arcadia822/taco/actions/runs/38044557106): Record succeeded; Publish failed at `POST /git/trees`.
+- 2026-10-12 — PR #146, [run 38238299098](https://github.com/Arcadia822/taco/actions/runs/38238299098): Collect, Plan and Record succeeded; Publish failed at `POST /git/trees` with an empty tree because an invalid plan left the manifest without screenshots. A local run of the publisher against PR #148 reproduced the identical 422.
 
 #### Prevention & Escalation
 
 - Initialize the orphan branch with a valid tree containing its generated-assets README. Retain `parents: []` and the existing create-ref race handling.
 - The first-publication regression rejects empty tree requests and checks the orphan commit references the initialized tree.
+- Never send an empty tree to the Git data API. A revision with no screenshots skips the tree, commit, ref, and branch-bootstrap calls, so the job ends without an API error.
 
 ---
 
