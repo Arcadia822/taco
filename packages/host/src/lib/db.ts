@@ -123,9 +123,34 @@ export interface RevisionCommit {
   event: StoredEvent
 }
 
+export interface PublishTacoOptions {
+  ttlSeconds?: number | null
+}
+
+export interface PublishTacoResult {
+  tacoId: string
+  revisionId: string
+  stateVersion: string
+  expiresAt?: string | null
+}
+
+export interface TacoRecord {
+  id: string
+  title: string
+  currentRevisionId?: string
+  status: string
+  lastSequence: string
+  expiresAt?: string | null
+}
+
+export const isTacoExpired = (row: { status?: string; expires_at?: string | null; expiresAt?: string | null }): boolean => {
+  const expiresAt = row.expires_at ?? row.expiresAt
+  return Boolean(row.status === 'expired' || (expiresAt && new Date(expiresAt).getTime() <= Date.now()))
+}
+
 export interface TacoDb {
-  publishTaco(tacoId: string, title: string, snapshot: DocumentSnapshot): Promise<{ tacoId: string; revisionId: string; stateVersion: string }>
-  getTaco(tacoId: string): Promise<{ id: string; title: string; currentRevisionId?: string; status: string; lastSequence: string } | null>
+  publishTaco(tacoId: string, title: string, snapshot: DocumentSnapshot, options?: PublishTacoOptions): Promise<PublishTacoResult>
+  getTaco(tacoId: string): Promise<TacoRecord | null>
   getSharedState(tacoId: string): Promise<SharedStateResult | null>
   createRevision(
     tacoId: string,
@@ -345,7 +370,8 @@ CREATE TABLE IF NOT EXISTS tacos (
   status TEXT NOT NULL CHECK (status IN ('open', 'closed', 'expired', 'deleted')) DEFAULT 'open',
   last_sequence INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  expires_at TEXT NULL
 );
 
 CREATE TABLE IF NOT EXISTS publish_baselines (
@@ -883,7 +909,7 @@ export class PostgresDbAdapter implements TacoDb {
     }
   }
 
-  async publishTaco(tacoId: string, title: string, snapshot: DocumentSnapshot): Promise<{ tacoId: string; revisionId: string; stateVersion: string }> {
+  async publishTaco(tacoId: string, title: string, snapshot: DocumentSnapshot, options?: PublishTacoOptions): Promise<PublishTacoResult> {
     await this.ensureSchema()
     const client = await this.pool.connect()
     try {
@@ -894,33 +920,42 @@ export class PostgresDbAdapter implements TacoDb {
         throw new ConflictError('Taco already has an immutable publish baseline')
       }
 
-      const now = new Date().toISOString()
+      const now = new Date()
+      const nowIso = now.toISOString()
       const revisionId = tacoId
       const contentHash = computeSnapshotContentHashSync(snapshot)
+      let expiresAt: string | null = null
+      if (options?.ttlSeconds !== undefined && options.ttlSeconds !== null) {
+        if (options.ttlSeconds > 0) {
+          expiresAt = new Date(now.getTime() + options.ttlSeconds * 1000).toISOString()
+        }
+      } else {
+        expiresAt = new Date(now.getTime() + 30 * 86400 * 1000).toISOString()
+      }
 
       await client.query(
-        `INSERT INTO tacos (id, title, current_revision_id, status, last_sequence, created_at, updated_at)
-         VALUES ($1, $2, $3, 'open', 1, $4, $4)
-         ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, current_revision_id = EXCLUDED.current_revision_id, updated_at = EXCLUDED.updated_at`,
-        [tacoId, title, revisionId, now],
+        `INSERT INTO tacos (id, title, current_revision_id, status, last_sequence, created_at, updated_at, expires_at)
+         VALUES ($1, $2, $3, 'open', 1, $4, $4, $5)
+         ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, current_revision_id = EXCLUDED.current_revision_id, updated_at = EXCLUDED.updated_at, expires_at = EXCLUDED.expires_at`,
+        [tacoId, title, revisionId, nowIso, expiresAt],
       )
 
       await client.query(
         `INSERT INTO publish_baselines (taco_id, title, root, snapshot_ref, snapshot_json, created_at)
          VALUES ($1, $2, $3, $4, $5, $6)`,
-        [tacoId, title, snapshot.root, `tacos/${tacoId}/publish.json`, JSON.stringify(snapshot), now],
+        [tacoId, title, snapshot.root, `tacos/${tacoId}/publish.json`, JSON.stringify(snapshot), nowIso],
       )
 
       await client.query(
         `INSERT INTO published_revisions (id, taco_id, parent_revision_id, sequence, content_hash, snapshot_ref, snapshot_json, created_at)
          VALUES ($1, $2, NULL, 1, $3, $4, $5, $6)`,
-        [revisionId, tacoId, contentHash, `tacos/${tacoId}/revisions/${revisionId}.json`, JSON.stringify(snapshot), now],
+        [revisionId, tacoId, contentHash, `tacos/${tacoId}/revisions/${revisionId}.json`, JSON.stringify(snapshot), nowIso],
       )
 
       await client.query(
         `INSERT INTO shared_states (taco_id, state_version, comments_through_sequence, snapshot_ref, snapshot_json, updated_at)
          VALUES ($1, '1', '0', $2, $3, $4)`,
-        [tacoId, `tacos/${tacoId}/state.json`, JSON.stringify(snapshot), now],
+        [tacoId, `tacos/${tacoId}/state.json`, JSON.stringify(snapshot), nowIso],
       )
 
       await client.query(
@@ -930,14 +965,14 @@ export class PostgresDbAdapter implements TacoDb {
           `ev_${tacoId}_1`,
           tacoId,
           revisionId,
-          now,
+          nowIso,
           JSON.stringify({ kind: 'user', id: 'agent', displayName: 'Agent', verified: true }),
           JSON.stringify({ revisionId, title, root: snapshot.root }),
         ],
       )
 
       await client.query('COMMIT')
-      return { tacoId, revisionId, stateVersion: '1' }
+      return { tacoId, revisionId, stateVersion: '1', expiresAt }
     } catch (err) {
       await client.query('ROLLBACK')
       throw err
@@ -946,24 +981,27 @@ export class PostgresDbAdapter implements TacoDb {
     }
   }
 
-  async getTaco(tacoId: string): Promise<{ id: string; title: string; currentRevisionId?: string; status: string; lastSequence: string } | null> {
+  async getTaco(tacoId: string): Promise<TacoRecord | null> {
     await this.ensureSchema()
-    const res = await this.pool.query('SELECT id, title, current_revision_id, status, last_sequence FROM tacos WHERE id = $1', [tacoId])
+    const res = await this.pool.query('SELECT id, title, current_revision_id, status, last_sequence, expires_at FROM tacos WHERE id = $1', [tacoId])
     if (res.rowCount === 0) return null
     const row = res.rows[0]
+    const expired = isTacoExpired(row)
+    const status = (row.status === 'open' && expired) ? 'expired' : row.status
     return {
       id: row.id,
       title: row.title,
       currentRevisionId: row.current_revision_id || row.id,
-      status: row.status,
+      status,
       lastSequence: String(row.last_sequence),
+      expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null,
     }
   }
 
   async getSharedState(tacoId: string): Promise<SharedStateResult | null> {
     await this.ensureSchema()
     const res = await this.pool.query(
-      `SELECT ss.state_version, ss.comments_through_sequence, ss.snapshot_json, COALESCE(t.current_revision_id, t.id) AS current_revision_id
+      `SELECT ss.state_version, ss.comments_through_sequence, ss.snapshot_json, COALESCE(t.current_revision_id, t.id) AS current_revision_id, t.status, t.expires_at
        FROM shared_states ss
        JOIN tacos t ON ss.taco_id = t.id
        WHERE ss.taco_id = $1`,
@@ -971,6 +1009,9 @@ export class PostgresDbAdapter implements TacoDb {
     )
     if (res.rowCount === 0) return null
     const row = res.rows[0]
+    if (row.status === 'deleted' || isTacoExpired(row)) {
+      throw new GoneError('Taco has expired or was deleted')
+    }
     const snapshot = typeof row.snapshot_json === 'string' ? JSON.parse(row.snapshot_json) : row.snapshot_json
     return {
       stateVersion: row.state_version,
@@ -1029,11 +1070,11 @@ export class PostgresDbAdapter implements TacoDb {
       await client.query('BEGIN')
 
       const tacoRes = await client.query(
-        'SELECT id, title, status, last_sequence, current_revision_id FROM tacos WHERE id = $1 FOR UPDATE',
+        'SELECT id, title, status, last_sequence, current_revision_id, expires_at FROM tacos WHERE id = $1 FOR UPDATE',
         [tacoId],
       )
       if (tacoRes.rowCount === 0) throw new NotFoundError('Taco not found')
-      if (tacoRes.rows[0].status === 'deleted' || tacoRes.rows[0].status === 'expired') {
+      if (tacoRes.rows[0].status === 'deleted' || isTacoExpired(tacoRes.rows[0])) {
         throw new GoneError('Taco is deleted or expired')
       }
 
@@ -1243,9 +1284,9 @@ export class PostgresDbAdapter implements TacoDb {
     try {
       await client.query('BEGIN')
       // 1. Lock taco row for concurrency & serialization
-      const tacoRes = await client.query('SELECT id, status FROM tacos WHERE id = $1 FOR UPDATE', [tacoId])
+      const tacoRes = await client.query('SELECT id, status, expires_at FROM tacos WHERE id = $1 FOR UPDATE', [tacoId])
       if (tacoRes.rowCount === 0) throw new NotFoundError('Taco not found')
-      if (tacoRes.rows[0].status === 'deleted' || tacoRes.rows[0].status === 'expired') {
+      if (tacoRes.rows[0].status === 'deleted' || isTacoExpired(tacoRes.rows[0])) {
         throw new GoneError('Taco is closed, expired, or deleted')
       }
 
@@ -1733,9 +1774,9 @@ export class PostgresDbAdapter implements TacoDb {
     const client = await this.pool.connect()
     try {
       await client.query('BEGIN')
-      const tacoRes = await client.query('SELECT id, last_sequence, status FROM tacos WHERE id = $1 FOR UPDATE', [tacoId])
+      const tacoRes = await client.query('SELECT id, last_sequence, status, expires_at FROM tacos WHERE id = $1 FOR UPDATE', [tacoId])
       if (tacoRes.rowCount === 0) throw new NotFoundError('Taco not found')
-      if (tacoRes.rows[0].status === 'deleted' || tacoRes.rows[0].status === 'expired') {
+      if (tacoRes.rows[0].status === 'deleted' || isTacoExpired(tacoRes.rows[0])) {
         throw new GoneError('Taco is closed, expired, or deleted')
       }
 
@@ -1957,9 +1998,9 @@ export class PostgresDbAdapter implements TacoDb {
       await client.query('BEGIN')
 
       // 1. Lock taco row for concurrency & serialization
-      const tacoRes = await client.query('SELECT id, last_sequence, status FROM tacos WHERE id = $1 FOR UPDATE', [tacoId])
+      const tacoRes = await client.query('SELECT id, last_sequence, status, expires_at FROM tacos WHERE id = $1 FOR UPDATE', [tacoId])
       if (tacoRes.rowCount === 0) throw new NotFoundError('Taco not found')
-      if (tacoRes.rows[0].status === 'deleted' || tacoRes.rows[0].status === 'expired') {
+      if (tacoRes.rows[0].status === 'deleted' || isTacoExpired(tacoRes.rows[0])) {
         throw new GoneError('Taco is closed, expired, or deleted')
       }
 
@@ -2223,9 +2264,9 @@ export class PostgresDbAdapter implements TacoDb {
 
   async getHandoff(tacoId: string, handoffId: string): Promise<HandoffRecord | null> {
     await this.ensureSchema()
-    const tacoRes = await this.pool.query('SELECT status FROM tacos WHERE id = $1', [tacoId])
+    const tacoRes = await this.pool.query('SELECT status, expires_at FROM tacos WHERE id = $1', [tacoId])
     if (tacoRes.rowCount === 0) return null
-    if (tacoRes.rows[0].status === 'deleted' || tacoRes.rows[0].status === 'expired') {
+    if (tacoRes.rows[0].status === 'deleted' || isTacoExpired(tacoRes.rows[0])) {
       throw new GoneError('Taco is deleted or expired')
     }
 
@@ -2308,9 +2349,9 @@ export class PostgresDbAdapter implements TacoDb {
     try {
       await client.query('BEGIN')
       // Serialize quota check + insert per Taco using row lock
-      const tacoRes = await client.query('SELECT id, status FROM tacos WHERE id = $1 FOR UPDATE', [tacoId])
+      const tacoRes = await client.query('SELECT id, status, expires_at FROM tacos WHERE id = $1 FOR UPDATE', [tacoId])
       if (tacoRes.rowCount === 0) throw new NotFoundError('Taco not found')
-      if (tacoRes.rows[0].status === 'deleted' || tacoRes.rows[0].status === 'expired') {
+      if (tacoRes.rows[0].status === 'deleted' || isTacoExpired(tacoRes.rows[0])) {
         throw new GoneError('Taco is closed, expired, or deleted')
       }
 
@@ -2504,6 +2545,7 @@ interface SqliteTacoRow {
   last_sequence: number | bigint
   created_at: string
   updated_at: string
+  expires_at?: string | null
 }
 
 interface SqliteSharedStateRow {
@@ -2631,7 +2673,9 @@ export class SqliteDbAdapter implements TacoDb {
     try {
       this.db.exec('ALTER TABLE listener_leases ADD COLUMN connected_at TEXT;')
     } catch {}
-
+    try {
+      this.db.exec('ALTER TABLE tacos ADD COLUMN expires_at TEXT;')
+    } catch {}
     const columns = this.db.prepare('PRAGMA table_info(events)').all()
     if (!columns.some((column) => column.name === 'revision_id')) this.db.exec('ALTER TABLE events ADD COLUMN revision_id TEXT;')
     const handoffColumns = this.db.prepare('PRAGMA table_info(handoffs)').all()
@@ -2660,11 +2704,20 @@ export class SqliteDbAdapter implements TacoDb {
     }
   }
 
-  async publishTaco(tacoId: string, title: string, snapshot: DocumentSnapshot): Promise<{ tacoId: string; revisionId: string; stateVersion: string }> {
+  async publishTaco(tacoId: string, title: string, snapshot: DocumentSnapshot, options?: PublishTacoOptions): Promise<PublishTacoResult> {
     this.ensureSchema()
-    const now = new Date().toISOString()
+    const now = new Date()
+    const nowIso = now.toISOString()
     const revisionId = tacoId
     const contentHash = computeSnapshotContentHashSync(snapshot)
+    let expiresAt: string | null = null
+    if (options?.ttlSeconds !== undefined && options.ttlSeconds !== null) {
+      if (options.ttlSeconds > 0) {
+        expiresAt = new Date(now.getTime() + options.ttlSeconds * 1000).toISOString()
+      }
+    } else {
+      expiresAt = new Date(now.getTime() + 30 * 86400 * 1000).toISOString()
+    }
 
     this.db.exec('BEGIN IMMEDIATE')
     try {
@@ -2675,32 +2728,31 @@ export class SqliteDbAdapter implements TacoDb {
 
       this.db
         .prepare(
-          `INSERT INTO tacos (id, title, current_revision_id, status, last_sequence, created_at, updated_at)
-           VALUES (?, ?, ?, 'open', 1, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET title = excluded.title, current_revision_id = excluded.current_revision_id, updated_at = excluded.updated_at`,
+          `INSERT INTO tacos (id, title, current_revision_id, status, last_sequence, created_at, updated_at, expires_at)
+           VALUES (?, ?, ?, 'open', 1, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET title = excluded.title, current_revision_id = excluded.current_revision_id, updated_at = excluded.updated_at, expires_at = excluded.expires_at`,
         )
-        .run(tacoId, title, revisionId, now, now)
-
+        .run(tacoId, title, revisionId, nowIso, nowIso, expiresAt)
       this.db
         .prepare(
           `INSERT INTO publish_baselines (taco_id, title, root, snapshot_ref, snapshot_json, created_at)
            VALUES (?, ?, ?, ?, ?, ?)`,
         )
-        .run(tacoId, title, snapshot.root, `tacos/${tacoId}/publish.json`, JSON.stringify(snapshot), now)
+        .run(tacoId, title, snapshot.root, `tacos/${tacoId}/publish.json`, JSON.stringify(snapshot), nowIso)
 
       this.db
         .prepare(
           `INSERT INTO published_revisions (id, taco_id, parent_revision_id, sequence, content_hash, snapshot_ref, snapshot_json, created_at)
            VALUES (?, ?, NULL, 1, ?, ?, ?, ?)`,
         )
-        .run(revisionId, tacoId, contentHash, `tacos/${tacoId}/revisions/${revisionId}.json`, JSON.stringify(snapshot), now)
+        .run(revisionId, tacoId, contentHash, `tacos/${tacoId}/revisions/${revisionId}.json`, JSON.stringify(snapshot), nowIso)
 
       this.db
         .prepare(
           `INSERT INTO shared_states (taco_id, state_version, comments_through_sequence, snapshot_ref, snapshot_json, updated_at)
            VALUES (?, '1', '0', ?, ?, ?)`,
         )
-        .run(tacoId, `tacos/${tacoId}/state.json`, JSON.stringify(snapshot), now)
+        .run(tacoId, `tacos/${tacoId}/state.json`, JSON.stringify(snapshot), nowIso)
 
       this.db
         .prepare(
@@ -2711,31 +2763,34 @@ export class SqliteDbAdapter implements TacoDb {
           `ev_${tacoId}_1`,
           tacoId,
           revisionId,
-          now,
+          nowIso,
           JSON.stringify({ kind: 'user', id: 'agent', displayName: 'Agent', verified: true }),
           JSON.stringify({ revisionId, title, root: snapshot.root }),
         )
 
       this.db.exec('COMMIT')
-      return { tacoId, revisionId, stateVersion: '1' }
+      return { tacoId, revisionId, stateVersion: '1', expiresAt }
     } catch (err) {
       this.db.exec('ROLLBACK')
       throw err
     }
   }
 
-  async getTaco(tacoId: string): Promise<{ id: string; title: string; currentRevisionId?: string; status: string; lastSequence: string } | null> {
+  async getTaco(tacoId: string): Promise<TacoRecord | null> {
     this.ensureSchema()
     const row = this.db
-      .prepare('SELECT id, title, status, current_revision_id, last_sequence FROM tacos WHERE id = ?')
+      .prepare('SELECT id, title, status, current_revision_id, last_sequence, expires_at FROM tacos WHERE id = ?')
       .get(tacoId) as unknown as SqliteTacoRow | undefined
     if (!row) return null
+    const expired = isTacoExpired(row)
+    const status = (row.status === 'open' && expired) ? 'expired' : row.status
     return {
       id: row.id,
       title: row.title,
       currentRevisionId: row.current_revision_id || row.id,
-      status: row.status,
+      status,
       lastSequence: String(row.last_sequence),
+      expiresAt: row.expires_at ?? null,
     }
   }
 
@@ -2743,12 +2798,15 @@ export class SqliteDbAdapter implements TacoDb {
     this.ensureSchema()
     const row = this.db
       .prepare(
-        `SELECT ss.state_version, ss.comments_through_sequence, ss.snapshot_json, COALESCE(t.current_revision_id, t.id) AS current_revision_id
+        `SELECT ss.state_version, ss.comments_through_sequence, ss.snapshot_json, COALESCE(t.current_revision_id, t.id) AS current_revision_id, t.status, t.expires_at
          FROM shared_states ss JOIN tacos t ON ss.taco_id = t.id
          WHERE ss.taco_id = ?`,
       )
-      .get(tacoId) as unknown as (SqliteSharedStateRow & { current_revision_id: string | null }) | undefined
+      .get(tacoId) as unknown as (SqliteSharedStateRow & { current_revision_id: string | null; status: string; expires_at?: string | null }) | undefined
     if (!row) return null
+    if (row.status === 'deleted' || isTacoExpired(row)) {
+      throw new GoneError('Taco has expired or was deleted')
+    }
     return {
       stateVersion: row.state_version,
       commentsThroughSequence: row.comments_through_sequence,
@@ -2786,10 +2844,10 @@ export class SqliteDbAdapter implements TacoDb {
     this.db.exec('BEGIN IMMEDIATE')
     try {
       const taco = this.db
-        .prepare('SELECT id, title, status, last_sequence, current_revision_id FROM tacos WHERE id = ?')
+        .prepare('SELECT id, title, status, last_sequence, current_revision_id, expires_at FROM tacos WHERE id = ?')
         .get(tacoId) as unknown as SqliteTacoRow | undefined
       if (!taco) throw new NotFoundError('Taco not found')
-      if (taco.status === 'deleted' || taco.status === 'expired') {
+      if (taco.status === 'deleted' || isTacoExpired(taco)) {
         throw new GoneError('Taco is deleted or expired')
       }
 
@@ -2983,9 +3041,9 @@ export class SqliteDbAdapter implements TacoDb {
     this.ensureSchema()
     this.db.exec('BEGIN IMMEDIATE')
     try {
-      const taco = this.db.prepare('SELECT id, status FROM tacos WHERE id = ?').get(tacoId) as unknown as SqliteTacoRow | undefined
+      const taco = this.db.prepare('SELECT id, status, expires_at FROM tacos WHERE id = ?').get(tacoId) as unknown as SqliteTacoRow | undefined
       if (!taco) throw new NotFoundError('Taco not found')
-      if (taco.status === 'deleted' || taco.status === 'expired') {
+      if (taco.status === 'deleted' || isTacoExpired(taco)) {
         throw new GoneError('Taco is closed, expired, or deleted')
       }
       const requestHash = sha256HexSync(canonicalJsonStringify(patch))
@@ -3374,9 +3432,9 @@ export class SqliteDbAdapter implements TacoDb {
     this.ensureSchema()
     this.db.exec('BEGIN IMMEDIATE')
     try {
-      const taco = this.db.prepare('SELECT id, last_sequence, status FROM tacos WHERE id = ?').get(tacoId) as unknown as SqliteTacoRow | undefined
+      const taco = this.db.prepare('SELECT id, last_sequence, status, expires_at FROM tacos WHERE id = ?').get(tacoId) as unknown as SqliteTacoRow | undefined
       if (!taco) throw new NotFoundError('Taco not found')
-      if (taco.status === 'deleted' || taco.status === 'expired') {
+      if (taco.status === 'deleted' || isTacoExpired(taco)) {
         throw new GoneError('Taco is closed, expired, or deleted')
       }
       const requestHash = sha256HexSync(canonicalJsonStringify(actionPayload))
@@ -3556,9 +3614,9 @@ export class SqliteDbAdapter implements TacoDb {
     this.ensureSchema()
     this.db.exec('BEGIN IMMEDIATE')
     try {
-      const taco = this.db.prepare('SELECT id, last_sequence, status FROM tacos WHERE id = ?').get(tacoId) as unknown as SqliteTacoRow | undefined
+      const taco = this.db.prepare('SELECT id, last_sequence, status, expires_at FROM tacos WHERE id = ?').get(tacoId) as unknown as SqliteTacoRow | undefined
       if (!taco) throw new NotFoundError('Taco not found')
-      if (taco.status === 'deleted' || taco.status === 'expired') {
+      if (taco.status === 'deleted' || isTacoExpired(taco)) {
         throw new GoneError('Taco is closed, expired, or deleted')
       }
       const requestHash = sha256HexSync(canonicalJsonStringify(payloadReq))
@@ -3780,9 +3838,9 @@ export class SqliteDbAdapter implements TacoDb {
 
   async getHandoff(tacoId: string, handoffId: string): Promise<HandoffRecord | null> {
     this.ensureSchema()
-    const taco = this.db.prepare('SELECT status FROM tacos WHERE id = ?').get(tacoId) as unknown as SqliteTacoRow | undefined
+    const taco = this.db.prepare('SELECT status, expires_at FROM tacos WHERE id = ?').get(tacoId) as unknown as SqliteTacoRow | undefined
     if (!taco) return null
-    if (taco.status === 'deleted' || taco.status === 'expired') {
+    if (taco.status === 'deleted' || isTacoExpired(taco)) {
       throw new GoneError('Taco is deleted or expired')
     }
 
@@ -3867,9 +3925,9 @@ export class SqliteDbAdapter implements TacoDb {
     try {
       this.db.prepare("DELETE FROM upload_reservations WHERE expires_at < ?").run(nowIso)
 
-      const taco = this.db.prepare('SELECT id, status FROM tacos WHERE id = ?').get(tacoId) as unknown as SqliteTacoRow | undefined
+      const taco = this.db.prepare('SELECT id, status, expires_at FROM tacos WHERE id = ?').get(tacoId) as unknown as SqliteTacoRow | undefined
       if (!taco) throw new NotFoundError('Taco not found')
-      if (taco.status === 'deleted' || taco.status === 'expired') {
+      if (taco.status === 'deleted' || isTacoExpired(taco)) {
         throw new GoneError('Taco is closed, expired, or deleted')
       }
 
