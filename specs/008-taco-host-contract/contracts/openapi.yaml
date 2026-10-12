@@ -85,12 +85,16 @@ paths:
                       policy:
                         type: string
                         enum: [ttl, manual_only]
-                        example: manual_only
-                        description: 数据保留策略；未配置自动清理时为 manual_only (需手动删除)，配置存活期时为 ttl
+                        example: ttl
+                        description: ttl 表示到期停止服务端访问；不承诺物理回收数据或撤回访问者已下载的副本
                       defaultTtlSeconds:
                         type: [integer, 'null']
-                        example: null
-                        description: 默认存活秒数；无自动到期时为 null
+                        example: 2592000
+                        description: 未指定 ttlSeconds 时的默认有效期，当前为 30 天；旧记录没有期限时保持永久
+                      maxTtlSeconds:
+                        type: integer
+                        const: 31536000
+                        description: 显式有限 TTL 上限，365 天；0/null 表示永久
         default:
           $ref: '#/components/responses/ErrorResponse'
 
@@ -310,28 +314,19 @@ paths:
     post:
       summary: 首次发布新 Taco 及其初始 Revision (轻量级原子提交)
       description: >-
-        需要 Bearer ApiKey (包含匿名 User 持有的 Key)。
-        必须提供与此前调用 POST /v1/uploads 时完全相同的 Idempotency-Key Header (UUID)。
-        所有发布内容默认全网公开，不提供公开/私有开关。
-        为突破网关体积限制并支撑 32 MiB 快照，本接口采用轻量控制提交：客户端先通过 POST /v1/uploads 获得预签名 uploadUrl 并直接 PUT 上传完整快照，
-        随后调用本接口传入 uploadId 触发服务端原子验证与提交。
-        服务端从内部私有 Blob 加载快照流，实测字节大小与 SHA-256 哈希值，必须与预约中锁定的 payloadHash/payloadBytes 严格一致；
-        绝不信任客户端未经验证的声明。
-        Blob 校验在数据库事务外完成；最终事务按 Key、reservation、Taco 锁序重验身份与 uploadId 归属，
-        匹配 purpose/目标/base/原幂等键；先拒绝 deleted/expired，再读取成功收据，再处理新提交。
-        原子写 Taco、Revision、导入评论、revision.published、投影与收据，reservation 标记 committed。
-        同键已提交返回原 201 结果，不要求重新上传；closed 不阻止先前成功结果重放。
+        当前匿名发布路径直接提交 protocol=taco-host/1 与 snapshot，不需要账户或 ApiKey。
+        ttlSeconds 未指定时使用 2592000 秒（30 天）；0/null 表示永久；正整数不得超过 31536000 秒（365 天）。
+        到期后页面、状态、历史、评论、事件和受 Host 控制的存储读取返回 410。
+        活跃订阅发送 diagnostic/TACO_GONE 后断开；到期后的订阅握手返回 410/GONE。
+        发布正文只存入事务数据库，不生成可绕过到期检查的公开 Blob 副本。
       operationId: publishTaco
-      security:
-        - ApiKeyAuth: []
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CommitPublishPayload'
+              $ref: '#/components/schemas/DirectPublishPayload'
       responses:
         '201':
           description: 成功发布 Taco 与初始版本
@@ -1212,6 +1207,28 @@ components:
           pending: '#/components/schemas/UploadPreparePendingResponse'
           committed: '#/components/schemas/UploadPrepareCommittedResponse'
 
+    DirectPublishPayload:
+      type: object
+      description: 当前匿名发布接口的直接快照请求
+      required:
+        - protocol
+        - snapshot
+      properties:
+        protocol:
+          const: taco-host/1
+        snapshot:
+          $ref: './protocol.schema.json#/$defs/Snapshot'
+        importedComments:
+          type: array
+          items:
+            $ref: './protocol.schema.json#/$defs/ImportedThread'
+        ttlSeconds:
+          type: [integer, 'null']
+          minimum: 0
+          maximum: 31536000
+          default: 2592000
+          description: 省略为 30 天；0/null 永久；有限有效期使用正整数秒
+
     CommitPublishPayload:
       type: object
       description: 首次发布轻量级原子提交请求体 (控制请求大小上限 64 KiB)
@@ -1305,7 +1322,7 @@ components:
         expiresAt:
           type: [string, 'null']
           format: date-time
-          description: Taco 到期清理时间
+          description: Taco 服务端访问截止时间；永久时为 null，不表示物理数据清理期限
 
     RevisionMetadata:
       type: object

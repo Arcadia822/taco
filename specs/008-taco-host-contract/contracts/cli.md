@@ -88,6 +88,9 @@ subscribe stdout 只含 Schema 中 ready/event/checkpoint；WebSocket error 转�
 - 关闭后的有效 after 可补读至关闭事件；checkpoint 后收到 close code=1000、reason=taco.closed 才确认最终边界。after 已等于关闭序号时允许空补读再正常结束。没有 after 的关闭空间返回 TACO_CLOSED。
 - Vercel Function 达到最长时长前主动轮换，建议 240 秒以 code=1012 结束，自动用当前游标连接可能不同的新实例；不能误报 Taco 已关闭，也不要求用户重启命令。轮换短断不算重试耗尽；网络持续不可达仍受 5 分钟上限约束。
 - 未确认最终状态的断线/普通 EOF 不能直接退出 0。删除/到期是错误而非“评审结束”。
+- TTL 发布：`publish <file> --ttl <duration>` 默认 `30d`；`0`/`none` 永久；有限 TTL 为正整数秒且最多 `365d`。本地 dry-run 与发布使用同一范围校验，非法时退出 2，成功结果含 `expiresAt`（永久为 null）。
+- 到期订阅：首次连接、断线重连和在线到期统一报告 `TACO_GONE` 并退出 2；只有实际历史游标失效才报告 `CURSOR_EXPIRED` 并退出 6。服务端 SSE `diagnostic/TACO_GONE` 是终止通知，不进入数据 stdout。
+- 过期阻止服务端继续提供文档、历史快照与评论；不承诺物理回收，也不能撤回访问者在到期前已下载的本地副本。
 - Ctrl-C/TERM 停止连接；EPIPE 退出 1；不保存隐式跨进程恢复游标，不拉起 daemon。
 
 HTTP events 的 `--through` 映射 throughSequence。首次请求捕获 H，后续页同时带上该 H 和上一页 nextCursor；不自动跨页拉到无限增长日志，也不把 sequence 转成浮点数。

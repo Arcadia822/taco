@@ -31,6 +31,8 @@ Guided by the principle **Encode Lessons in Structure**:
 | [LESSON-011](#lesson-011-dynamic-preview-boundary-discrepancies-and-marker-injection)     | Dynamic Preview Boundary Discrepancies & Marker Injection       |      1      |   **open**    | `.github/workflows/scripts/plan-schema.mjs`, `tests/dynamic-preview-plan.test.ts`    |
 | [LESSON-012](#lesson-012-nextjs-google-font-loader-crashes-on-non-extension-endpoints)    | Next.js Google Font Loader Crashes on Non-Extension Endpoints   |      1      |   **open**    | `packages/host/src/app/fonts/`, `packages/host/src/app/page.tsx`                     |
 | [LESSON-013](#lesson-013-cli-bundling-changes-helper-entrypoint-identity)                 | CLI Bundling Changes Helper Entrypoint Identity                 |      1      |   **open**    | Installed npm/native runtime smoke and deferred helper defaults                      |
+| [LESSON-014](#lesson-014-runtime-ddl-and-expiry-consumers-diverge)                        | Runtime DDL and Expiry Consumers Diverge                        |      1      |   **open**    | Real PostgreSQL bootstrap/upgrade and expired-route regression smoke                 |
+| [LESSON-015](#lesson-015-temporary-postgresql-binaries-omit-dylib-aliases)                | Temporary PostgreSQL Binaries Omit Dylib Aliases                |      1      |   **open**    | Inspect otool dependencies and restore aliases only in disposable runtime            |
 
 ---
 
@@ -400,3 +402,58 @@ The helper eagerly converted its module-relative default Shell URL into an OS pa
 - Resolve standalone helper defaults only when that standalone path is invoked.
 - Keep helper entrypoint guards false in npm and native CLI bundles.
 - Exercise the installed npm package and native binary without an installed Skill. A successful source import does not establish the packaged runtime contract.
+
+---
+
+### LESSON-014: Runtime DDL and Expiry Consumers Diverge
+
+- **ID**: `LESSON-014`
+- **Category**: `architecture`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: Real PostgreSQL bootstrap/upgrade and expired-route regression smoke
+
+#### Symptom
+
+PR #145 passed 87 Host/CLI tests, while a real PostgreSQL publish failed with SQLSTATE 42703. Expired history remained readable, permanent TTL became 30 days, and an expired subscription handshake exited as a cursor gap.
+
+#### Root Cause
+
+The standalone schema.sql contained expires_at, but the actual PG_SCHEMA and runtime migration did not. SQLite-only TTL tests and PostgreSQL mocks bypassed initialization. Consumers treated a non-null expired Taco as readable, null was conflated with omission, and nested HTTP 410 handlers intercepted the new outer error mapping.
+
+#### Evidence
+
+- 2026-10-12 — PR #145 review and repair: original PostgresDbAdapter against a disposable real PostgreSQL cluster raised `column "expires_at" of relation "tacos" does not exist`; live Next/CLI probes reproduced permanent-value, history-read, and subscription-exit failures.
+
+#### Prevention & Escalation
+
+- Validate both runtime DDL and existing-database migration against real SQL, not only a schema reference or mock Pool.
+- Test the same expired resource across all public content readers and both subscription handshake/online termination paths.
+- Keep undefined (default) distinct from null/zero (permanent), and keep expiry access control distinct from physical reclamation.
+
+---
+
+### LESSON-015: Temporary PostgreSQL Binaries Omit Dylib Aliases
+
+- **ID**: `LESSON-015`
+- **Category**: `tooling`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: Inspect otool dependencies and restore aliases only in disposable runtime
+
+#### Symptom
+
+The isolated @embedded-postgres/darwin-arm64 package's initdb aborted before database initialization: dyld could not find libicudata.77.dylib, then postgres could not load libzstd.1.dylib.
+
+#### Root Cause
+
+The archive includes versioned dylib files but omits shorter alias names referenced by its binaries and libraries.
+
+#### Evidence
+
+- 2026-10-12 — TACO-53 PostgreSQL smoke: otool -L identified missing ICU, zstd, lz4 and z aliases. Creating aliases to the packaged versioned libraries in the temporary runtime allowed initdb and postgres to start.
+
+#### Prevention & Escalation
+
+- Classify loader failures as verification setup failures; inspect linked dependencies before retrying.
+- Restore aliases only inside a disposable runtime. Do not add verification tooling to project dependencies or modify system libraries.

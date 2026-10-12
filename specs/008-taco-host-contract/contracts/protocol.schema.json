@@ -935,7 +935,7 @@
     },
     "ServerFrame": {
       "type": "object",
-      "description": "WebSocket 服务端推送帧。包括就绪帧（ready）、事件帧（event）、检查点帧（checkpoint）与协议错误帧（error）。注意：文本心跳 ping/pong 在应用传输层处理，不属于 JSON 帧",
+      "description": "服务端 WebSocket/SSE JSON 帧：ready、event、checkpoint、error，以及终止连接的 diagnostic。文本心跳 ping/pong 在传输层处理，不属于 JSON 帧",
       "oneOf": [
         {
           "description": "ready (live mode): 实时模式就绪帧。客户端首次订阅且 after 为 null 时下发，cursor 为注册时捕获的高水位 H，后续仅推送 > H 的实时事件；历史记录通过 HTTP API 查询。禁止包含 replayThrough 字段",
@@ -974,6 +974,16 @@
             "kind": { "type": "string", "const": "checkpoint" },
             "tacoId": { "$ref": "#/$defs/Uuid" },
             "cursor": { "$ref": "#/$defs/Sequence" }
+          }
+        },
+        {
+          "description": "diagnostic: Taco 到期或删除时发送 TACO_GONE 并终止 SSE；CLI 将其写入 stderr 并退出 2，不报告游标缺口",
+          "required": ["kind", "code", "message"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "diagnostic" },
+            "code": { "const": "TACO_GONE" },
+            "message": { "type": "string", "minLength": 1 }
           }
         },
         {
