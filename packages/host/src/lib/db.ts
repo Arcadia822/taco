@@ -148,6 +148,24 @@ export const isTacoExpired = (row: { status?: string; expires_at?: string | null
   return Boolean(row.status === 'expired' || (expiresAt && new Date(expiresAt).getTime() <= Date.now()))
 }
 
+export const DEFAULT_TTL_SECONDS = 30 * 86400
+
+export function calculateTacoExpiresAt(
+  ttlSeconds: number | null | undefined,
+  now: Date = new Date(),
+): string | null {
+  if (ttlSeconds === undefined) {
+    return new Date(now.getTime() + DEFAULT_TTL_SECONDS * 1000).toISOString()
+  }
+  if (ttlSeconds === null || ttlSeconds === 0) {
+    return null
+  }
+  if (ttlSeconds > 0) {
+    return new Date(now.getTime() + ttlSeconds * 1000).toISOString()
+  }
+  return null
+}
+
 export interface TacoDb {
   publishTaco(tacoId: string, title: string, snapshot: DocumentSnapshot, options?: PublishTacoOptions): Promise<PublishTacoResult>
   getTaco(tacoId: string): Promise<TacoRecord | null>
@@ -206,7 +224,8 @@ CREATE TABLE IF NOT EXISTS tacos (
   status TEXT NOT NULL CHECK (status IN ('open', 'closed', 'expired', 'deleted')) DEFAULT 'open',
   last_sequence BIGINT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NULL
 );
 
 CREATE TABLE IF NOT EXISTS publish_baselines (
@@ -867,6 +886,7 @@ export class PostgresDbAdapter implements TacoDb {
     try {
       await client.query(PG_SCHEMA)
       await client.query('ALTER TABLE tacos ADD COLUMN IF NOT EXISTS current_revision_id UUID;')
+      await client.query('ALTER TABLE tacos ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;')
       await client.query('ALTER TABLE events ADD COLUMN IF NOT EXISTS revision_id UUID;')
       await client.query('ALTER TABLE handoffs ADD COLUMN IF NOT EXISTS snapshot_json JSONB;')
       await client.query('ALTER TABLE published_revisions ADD COLUMN IF NOT EXISTS sequence BIGINT NOT NULL DEFAULT 0;')
@@ -924,14 +944,7 @@ export class PostgresDbAdapter implements TacoDb {
       const nowIso = now.toISOString()
       const revisionId = tacoId
       const contentHash = computeSnapshotContentHashSync(snapshot)
-      let expiresAt: string | null = null
-      if (options?.ttlSeconds !== undefined && options.ttlSeconds !== null) {
-        if (options.ttlSeconds > 0) {
-          expiresAt = new Date(now.getTime() + options.ttlSeconds * 1000).toISOString()
-        }
-      } else {
-        expiresAt = new Date(now.getTime() + 30 * 86400 * 1000).toISOString()
-      }
+      const expiresAt = calculateTacoExpiresAt(options?.ttlSeconds, now)
 
       await client.query(
         `INSERT INTO tacos (id, title, current_revision_id, status, last_sequence, created_at, updated_at, expires_at)
@@ -987,7 +1000,7 @@ export class PostgresDbAdapter implements TacoDb {
     if (res.rowCount === 0) return null
     const row = res.rows[0]
     const expired = isTacoExpired(row)
-    const status = (row.status === 'open' && expired) ? 'expired' : row.status
+    const status = (row.status !== 'deleted' && expired) ? 'expired' : row.status
     return {
       id: row.id,
       title: row.title,
@@ -2710,14 +2723,7 @@ export class SqliteDbAdapter implements TacoDb {
     const nowIso = now.toISOString()
     const revisionId = tacoId
     const contentHash = computeSnapshotContentHashSync(snapshot)
-    let expiresAt: string | null = null
-    if (options?.ttlSeconds !== undefined && options.ttlSeconds !== null) {
-      if (options.ttlSeconds > 0) {
-        expiresAt = new Date(now.getTime() + options.ttlSeconds * 1000).toISOString()
-      }
-    } else {
-      expiresAt = new Date(now.getTime() + 30 * 86400 * 1000).toISOString()
-    }
+    const expiresAt = calculateTacoExpiresAt(options?.ttlSeconds, now)
 
     this.db.exec('BEGIN IMMEDIATE')
     try {
@@ -2783,7 +2789,7 @@ export class SqliteDbAdapter implements TacoDb {
       .get(tacoId) as unknown as SqliteTacoRow | undefined
     if (!row) return null
     const expired = isTacoExpired(row)
-    const status = (row.status === 'open' && expired) ? 'expired' : row.status
+    const status = (row.status !== 'deleted' && expired) ? 'expired' : row.status
     return {
       id: row.id,
       title: row.title,
