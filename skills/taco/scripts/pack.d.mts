@@ -14,14 +14,25 @@ export interface TacoCommentThread {
     path: string
     position?: { start: number; end: number }
     quote?: { exact: string; prefix?: string; suffix?: string }
-  }
+    block?: {
+      id: string
+      type: 'codeBlock'
+      language: string
+      [key: string]: unknown
+    }
+  } | null
   status: 'open' | 'resolved'
   messages: Array<{
     id: string
     author: string
+    authorId?: string
     body: string
     createdAt: string
+    updatedAt?: string
+    deletedAt?: string
   }>
+  createdAt?: string
+  updatedAt?: string
 }
 
 export interface TacoCheckpoints {
@@ -73,6 +84,7 @@ export interface PackDirectoryOptions {
   dryRun?: boolean
   lite?: boolean
   customShellHtml?: string
+  exclusive?: boolean
 }
 
 export interface PackResult {
@@ -108,9 +120,16 @@ export function verifyTaco(pathOrHtml: string): Promise<VerifyResult>
 export function verify(path: string): Promise<VerifyResult>
 export function pack(parsed: unknown): Promise<PackResult>
 export function readBundleFromHtml(path: string): Promise<{ html: string; bundle: TacoBundle }>
-export function readBundleFrom(html: string, label: string): Promise<{ html: string; bundle: TacoBundle }>
+export function readBundleFrom(
+  html: string,
+  label: string,
+): Promise<{ html: string; bundle: TacoBundle }>
 export function embedBundle(shell: string, bundle: TacoBundle): string
-export function atomicWrite(path: string, text: string): Promise<void>
+export function atomicWrite(
+  path: string,
+  text: string,
+  options?: { mode?: number; exclusive?: boolean },
+): Promise<void>
 export function validateBundle(raw: unknown): TacoBundle
 export function structureOf(bundle: TacoBundle): { warnings: string[]; [key: string]: unknown }
 export function shellVariantOf(html: string): string
@@ -120,8 +139,16 @@ export function isSafeRootPath(value: unknown): boolean
 export function mediaTypeOf(path: string): string
 export function portableTitleBase(value: string): string
 export function tacoFileBase(path: string): string
-export function directoryGroups(files: TacoFile[], root: string): Array<{ id: string; title: string; paths: string[] }>
-export function collectFiles(featureDir: string, rootPath: string, existingByPath: Map<string, TacoFile>, ignorePatterns: string[]): Promise<{ files: TacoFile[]; skipped: Array<{ path: string; reason: string }> }>
+export function directoryGroups(
+  files: TacoFile[],
+  root: string,
+): Array<{ id: string; title: string; paths: string[] }>
+export function collectFiles(
+  featureDir: string,
+  rootPath: string,
+  existingByPath: Map<string, TacoFile>,
+  ignorePatterns: string[],
+): Promise<{ files: TacoFile[]; skipped: Array<{ path: string; reason: string }> }>
 export function sha256Hex(bytes: Uint8Array | string): Promise<string>
 export function isCommentThread(value: unknown): boolean
 export function isCommentMessage(value: unknown): boolean

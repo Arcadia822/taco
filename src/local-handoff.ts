@@ -1,6 +1,7 @@
 import type { LocalHandoff, LocalHandoffAck, TacoDocument } from '@taco/protocol'
 
-const CREDENTIAL_KEY_PATTERN = /^(collab|access|credentials|relay|relayConfig|relay_config|token|secret|apiKey|api_key|password|authToken|auth_token|accessToken|access_token|privateKey|ownerPriv|priv|key|authorization)$/i
+const CREDENTIAL_KEY_PATTERN =
+  /^(collab|access|credentials|relay|relayConfig|relay_config|token|secret|apiKey|api_key|password|authToken|auth_token|accessToken|access_token|privateKey|ownerPriv|priv|key|authorization)$/i
 
 function stripCredentials(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -74,10 +75,11 @@ export async function sendLocalHandoff({
     }
 
     const data = (await res.json()) as Partial<LocalHandoffAck>
-    const isOk = data.ok === true
-      && data.handoffId === payload.handoffId
-      && typeof data.receiptId === 'string'
-      && data.receiptId.length > 0
+    const isOk =
+      data.ok === true &&
+      data.handoffId === payload.handoffId &&
+      typeof data.receiptId === 'string' &&
+      data.receiptId.length > 0
 
     if (!isOk) {
       return {
@@ -99,4 +101,22 @@ export async function sendLocalHandoff({
       error: (error as Error).message || 'Network error sending local handoff',
     }
   }
+}
+
+export function stripListenCapabilityFromUrl(url: string): string {
+  if (!url) return ''
+  const hashIndex = url.indexOf('#')
+  if (hashIndex === -1) return url
+
+  const baseUrl = url.slice(0, hashIndex)
+  const hash = url.slice(hashIndex + 1)
+  const parts = hash.split('::')
+  const filtered = parts.filter(
+    (part) => !part.startsWith('taco-listen=') && !part.includes('taco-listen='),
+  )
+
+  if (filtered.length === 0) {
+    return baseUrl
+  }
+  return `${baseUrl}#${filtered.join('::')}`
 }

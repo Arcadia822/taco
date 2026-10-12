@@ -14,9 +14,25 @@ import {
   type TacoFile,
 } from './model.ts'
 import { EMBEDDED_HTML_SANDBOX, embeddedHtmlDocument } from './embedded-html.ts'
-import { resolveCheckpoints, setDocumentStatus, type DocumentStatus, type ResolvedCheckpoints } from '@taco/protocol'
-import { canSaveAndUnpack, canWriteInPlace, saveAndUnpack, saveCopy, saveFile, type SaveResult } from './kernel/save.ts'
-import { getDefaultRichEditorAdapter, type RichEditorAdapter, type RichEditorHandle } from './rich-editor.ts'
+import {
+  resolveCheckpoints,
+  setDocumentStatus,
+  type DocumentStatus,
+  type ResolvedCheckpoints,
+} from '@taco/protocol'
+import {
+  canSaveAndUnpack,
+  canWriteInPlace,
+  saveAndUnpack,
+  saveCopy,
+  saveFile,
+  type SaveResult,
+} from './kernel/save.ts'
+import {
+  getDefaultRichEditorAdapter,
+  type RichEditorAdapter,
+  type RichEditorHandle,
+} from './rich-editor.ts'
 import type { SourceHighlighter } from './source-editor.ts'
 import { TacoStore } from './store.ts'
 
@@ -32,10 +48,19 @@ import {
   usesUrlHashForFileSelection,
 } from './file-selection.ts'
 import { createBrandMarkContainer } from './brand.ts'
-import { createSourceEditor, setDefaultHighlighter, type SourceEditorController } from './source-editor.ts'
+import {
+  createSourceEditor,
+  setDefaultHighlighter,
+  type SourceEditorController,
+} from './source-editor.ts'
 import { FileNavigation } from './file-navigation.ts'
 import { getAvailableGroups } from './group-selector.ts'
-import { assignFileToGroup, createInitialManifest, removeFileFromManifest, renameFileInManifest } from './navigation-editor.ts'
+import {
+  assignFileToGroup,
+  createInitialManifest,
+  removeFileFromManifest,
+  renameFileInManifest,
+} from './navigation-editor.ts'
 import { showNewFileDialog } from './new-file-dialog.ts'
 import {
   createControlButton,
@@ -57,9 +82,16 @@ import { createUnifiedDiff } from './kernel/diff.ts'
 
 import { OutlineController } from './outline-controller.ts'
 
-import { applyNaturalSize, isSvgFileKind, mediaSource, openPngPreview, svgIntrinsicSize } from './markdown-assets.ts'
+import {
+  applyNaturalSize,
+  isSvgFileKind,
+  mediaSource,
+  openPngPreview,
+  svgIntrinsicSize,
+} from './markdown-assets.ts'
 import { hasCollabSecrets } from './security.ts'
 import { frontmatterTitle, parseFrontmatter } from './frontmatter.ts'
+import { stripListenCapabilityFromUrl } from './local-handoff.ts'
 
 import { resolveFileCategory } from './category.ts'
 import { commentLineReference } from './comment-position.ts'
@@ -71,7 +103,8 @@ import { checkpointCopy } from './i18n.ts'
 type AuxiliaryTab = 'outline' | 'comments' | 'instruction'
 
 export interface FileBrowserOptions {
-  richEditorAdapter?: RichEditorAdapter | Promise<RichEditorAdapter> | (() => Promise<RichEditorAdapter>)
+  richEditorAdapter?:
+    RichEditorAdapter | Promise<RichEditorAdapter> | (() => Promise<RichEditorAdapter>)
   highlighter?: SourceHighlighter | Promise<SourceHighlighter>
   mermaidRuntime?: MermaidRuntime
 }
@@ -157,10 +190,13 @@ export class FileBrowser {
   private primaryHandoffTooltip?: string
   private primaryHandoffIcon?: Parameters<typeof svgIcon>[0]
   private primaryHandoffLabel?: string
-  private copyReviewMenuCustomizer?: ((menu: HTMLElement, defaultItems: HTMLElement[]) => void)
+  private copyReviewMenuCustomizer?: (menu: HTMLElement, defaultItems: HTMLElement[]) => void
   private pendingWritesCheck?: () => boolean
   private durableActionsOnlyCheck?: () => boolean
-  private readonly headerExtraControls: Array<{ control: HTMLElement; position: 'left' | 'right' }> = []
+  private readonly headerExtraControls: Array<{
+    control: HTMLElement
+    position: 'left' | 'right'
+  }> = []
   private readonly changeListeners = new Set<(kind: 'content' | 'comments') => void>()
   private readonly localeListeners = new Set<(locale: Locale) => void>()
   private readonly destructListeners = new Set<() => void>()
@@ -204,12 +240,13 @@ export class FileBrowser {
   private getReviewDirtyFileIds(): Set<string> {
     const dirty = new Set<string>()
     const baselineMap = new Map<string, TacoFile>(
-      this.reviewBaselineDoc.files.map((f) => [f.id ?? f.path, f])
+      this.reviewBaselineDoc.files.map((f) => [f.id ?? f.path, f]),
     )
     for (const file of this.bundle.files) {
       if (isInternalFile(file.path)) continue
       const id = file.id ?? file.path
-      const base = baselineMap.get(id) ?? this.reviewBaselineDoc.files.find((f) => f.path === file.path)
+      const base =
+        baselineMap.get(id) ?? this.reviewBaselineDoc.files.find((f) => f.path === file.path)
       if (!base) {
         dirty.add(id)
       } else if (base.content !== file.content || base.title !== file.title) {
@@ -219,18 +256,32 @@ export class FileBrowser {
     return dirty
   }
 
-  getModifiedReviewFiles(): Array<{ path: string; mediaType: string; content: string; diff?: string }> {
+  getModifiedReviewFiles(): Array<{
+    path: string
+    mediaType: string
+    content: string
+    diff?: string
+  }> {
     const dirtyIds = this.getReviewDirtyFileIds()
     const baselineMap = new Map<string, TacoFile>(
-      this.reviewBaselineDoc.files.map((f) => [f.id ?? f.path, f])
+      this.reviewBaselineDoc.files.map((f) => [f.id ?? f.path, f]),
     )
     return this.bundle.files
-      .filter((file) => !isInternalFile(file.path) && fileKind(file) !== 'html' && dirtyIds.has(file.id ?? file.path))
+      .filter(
+        (file) =>
+          !isInternalFile(file.path) &&
+          fileKind(file) !== 'html' &&
+          dirtyIds.has(file.id ?? file.path),
+      )
       .map((file) => {
         const rel = relativePath(this.bundle, file)
-        const base = baselineMap.get(file.id ?? file.path) ?? this.reviewBaselineDoc.files.find((f) => f.path === file.path)
+        const base =
+          baselineMap.get(file.id ?? file.path) ??
+          this.reviewBaselineDoc.files.find((f) => f.path === file.path)
         const baseline = base?.content ?? ''
-        const diff = isMediaFileKind(fileKind(file)) ? undefined : createUnifiedDiff(baseline, file.content, rel)
+        const diff = isMediaFileKind(fileKind(file))
+          ? undefined
+          : createUnifiedDiff(baseline, file.content, rel)
         return {
           path: rel,
           mediaType: file.mediaType,
@@ -255,29 +306,41 @@ export class FileBrowser {
     const current = resolveCheckpoints(this.bundle)
     if (!current.valid) return null
     const to = current.state?.template?.trim() || null
-    return this.checkpointTemplateBaseline === to ? null : { from: this.checkpointTemplateBaseline, to }
+    return this.checkpointTemplateBaseline === to
+      ? null
+      : { from: this.checkpointTemplateBaseline, to }
   }
 
   getCheckpointDocumentAdditions(): Array<{ checkpointId: string; path: string }> {
     const current = resolveCheckpoints(this.bundle)
     if (!current.valid) return []
-    return current.nodes.flatMap((node) => node.documents
-      .filter((doc) => !this.checkpointDocumentBaseline.has(`${node.id}\u0000${doc.path}`))
-      .map((doc) => ({ checkpointId: node.id, path: doc.path })))
+    return current.nodes.flatMap((node) =>
+      node.documents
+        .filter((doc) => !this.checkpointDocumentBaseline.has(`${node.id}\u0000${doc.path}`))
+        .map((doc) => ({ checkpointId: node.id, path: doc.path })),
+    )
   }
 
   private captureCheckpointBaseline(): void {
     const result = resolveCheckpoints(this.bundle)
-    this.checkpointBaseline = new Map(result.valid ? result.state?.documents.map(({ path, status }) => [path, status]) : [])
+    this.checkpointBaseline = new Map(
+      result.valid ? result.state?.documents.map(({ path, status }) => [path, status]) : [],
+    )
     this.checkpointTemplateBaseline = result.valid ? result.state?.template?.trim() || null : null
-    this.checkpointDocumentBaseline = new Set(result.valid
-      ? result.nodes.flatMap((node) => node.documents.map((doc) => `${node.id}\u0000${doc.path}`))
-      : [])
+    this.checkpointDocumentBaseline = new Set(
+      result.valid
+        ? result.nodes.flatMap((node) => node.documents.map((doc) => `${node.id}\u0000${doc.path}`))
+        : [],
+    )
   }
 
-  get currentBundle(): TacoBundle { return this.bundle }
+  get currentBundle(): TacoBundle {
+    return this.bundle
+  }
 
-  get currentLocale(): Locale { return this.locale }
+  get currentLocale(): Locale {
+    return this.locale
+  }
 
   getRenderErrors(): Array<{ path: string; message: string }> {
     const current = new Map(this.bundle.files.map((file) => [file.path, file.content]))
@@ -286,7 +349,11 @@ export class FileBrowser {
       .map(([path, failure]) => ({ path, message: failure.message }))
   }
 
-  constructor(private root: HTMLElement, private bundle: TacoBundle, private readonly options: FileBrowserOptions = {}) {
+  constructor(
+    private root: HTMLElement,
+    private bundle: TacoBundle,
+    private readonly options: FileBrowserOptions = {},
+  ) {
     // The Host controller shares this live bundle; adopting remote content mutates it in place.
     this.store = new TacoStore(bundle)
     const embedParams = new URLSearchParams(location.search)
@@ -301,41 +368,55 @@ export class FileBrowser {
     this.applyAppearance()
     const highlighter = options.highlighter
     if (highlighter && typeof (highlighter as Promise<SourceHighlighter>).then === 'function') {
-      void (highlighter as Promise<SourceHighlighter>).then((ready) => {
-        this.highlighter = ready
-        setDefaultHighlighter(ready)
-        this.sourceEditor?.refreshHighlight()
-      }).catch(() => {
-        // Source editing is available without syntax highlighting.
-      })
+      void (highlighter as Promise<SourceHighlighter>)
+        .then((ready) => {
+          this.highlighter = ready
+          setDefaultHighlighter(ready)
+          this.sourceEditor?.refreshHighlight()
+        })
+        .catch(() => {
+          // Source editing is available without syntax highlighting.
+        })
     } else {
       this.highlighter = highlighter as SourceHighlighter | undefined
       if (this.highlighter) setDefaultHighlighter(this.highlighter)
     }
     const adapterOption = options.richEditorAdapter ?? getDefaultRichEditorAdapter()
     const adapterPromise = typeof adapterOption === 'function' ? adapterOption() : adapterOption
-    if (adapterPromise && typeof (adapterPromise as Promise<RichEditorAdapter>).then === 'function') {
+    if (
+      adapterPromise &&
+      typeof (adapterPromise as Promise<RichEditorAdapter>).then === 'function'
+    ) {
       this.richEditorLoading = true
-      void (adapterPromise as Promise<RichEditorAdapter>).then((adapter) => {
-        this.richEditorLoading = false
-        this.richEditorAdapter = adapter
-        for (const failure of adapter.migrateBundleBlocks(this.bundle, this.mermaidLabels())) {
-          this.recordMigrationFailure(failure)
-        }
-        this.promoteAwaitingMarkdown()
-      }).catch((error: unknown) => {
-        this.richEditorLoading = false
-        this.richEditorFailure = error instanceof Error ? error.message : String(error)
-        const waiting = this.awaitingRichEditor
-        this.awaitingRichEditor = null
-        if (waiting && this.selected?.path === waiting.path && this.editorMountSerial === waiting.serial) {
-          this.viewer.removeAttribute('aria-busy')
-          this.mountMarkdownFallback(this.viewer, this.selected, this.richEditorFailure)
-        }
-      })
+      void (adapterPromise as Promise<RichEditorAdapter>)
+        .then((adapter) => {
+          this.richEditorLoading = false
+          this.richEditorAdapter = adapter
+          for (const failure of adapter.migrateBundleBlocks(this.bundle, this.mermaidLabels())) {
+            this.recordMigrationFailure(failure)
+          }
+          this.promoteAwaitingMarkdown()
+        })
+        .catch((error: unknown) => {
+          this.richEditorLoading = false
+          this.richEditorFailure = error instanceof Error ? error.message : String(error)
+          const waiting = this.awaitingRichEditor
+          this.awaitingRichEditor = null
+          if (
+            waiting &&
+            this.selected?.path === waiting.path &&
+            this.editorMountSerial === waiting.serial
+          ) {
+            this.viewer.removeAttribute('aria-busy')
+            this.mountMarkdownFallback(this.viewer, this.selected, this.richEditorFailure)
+          }
+        })
     } else if (adapterOption) {
       this.richEditorAdapter = adapterOption as RichEditorAdapter
-      for (const failure of this.richEditorAdapter.migrateBundleBlocks(bundle, this.mermaidLabels())) {
+      for (const failure of this.richEditorAdapter.migrateBundleBlocks(
+        bundle,
+        this.mermaidLabels(),
+      )) {
         this.recordMigrationFailure(failure)
       }
     }
@@ -343,20 +424,31 @@ export class FileBrowser {
     this.reviewBaselineDoc = JSON.parse(JSON.stringify(bundle)) as TacoBundle
     this.narrowLayout = matchMedia('(max-width: 820px)')
     this.sidebarClosed = this.narrowLayout.matches
-    this.desktopCommentPanelOpen = storageGet(`taco-right-panel:${bundle.docId}`, 'session') !== 'closed'
+    this.desktopCommentPanelOpen =
+      storageGet(`taco-right-panel:${bundle.docId}`, 'session') !== 'closed'
     this.commentPanelOpen = !this.narrowLayout.matches && this.desktopCommentPanelOpen
     const selectionKey = fileSelectionSessionKey(bundle.docId)
-    const initialPath = selectedPathForLoad(location.protocol, location.hash, storageGet(selectionKey, 'session'))
+    const initialPath = selectedPathForLoad(
+      location.protocol,
+      location.hash,
+      storageGet(selectionKey, 'session'),
+    )
     const initialFile = fileByPath(bundle, initialPath)
     this.selected = initialFile ?? defaultFile(bundle)
     this.initialPath = initialFile || !initialPath ? null : initialPath
-    if (this.selected && fileKind(this.selected) === 'mermaid') this.initialPreviewPath = this.selected.path
+    if (this.selected && fileKind(this.selected) === 'mermaid')
+      this.initialPreviewPath = this.selected.path
     this.initialPreviewReady = this.initialPreviewPath
-      ? new Promise<void>((resolve) => { this.resolveInitialPreview = resolve })
+      ? new Promise<void>((resolve) => {
+          this.resolveInitialPreview = resolve
+        })
       : Promise.resolve()
     if (this.initialPath) this.rememberOfflineSelection(this.initialPath)
     else if (this.selected) this.rememberOfflineSelection(this.selected.path)
-    this.auxiliaryTab = this.embedded || !this.selected || fileKind(this.selected) !== 'markdown' ? 'comments' : 'outline'
+    this.auxiliaryTab =
+      this.embedded || !this.selected || fileKind(this.selected) !== 'markdown'
+        ? 'comments'
+        : 'outline'
     this.comments = new CommentsController({
       bundle: this.bundle,
       store: this.store,
@@ -375,18 +467,22 @@ export class FileBrowser {
       onSelectHeading: (file, headingId) => this.updateSelectionLocation(file, true, headingId),
       onVisibilityChange: () => this.syncAuxiliaryTabs(),
     })
-    this.cleanups.push(this.store.onChange(({ change }) => {
-      this.dirtyTracker.note(change)
-      if (this.saveButton) this.syncDirtyState()
-      for (const listener of this.changeListeners) listener(change.kind === 'comments' ? 'comments' : 'content')
-    }))
+    this.cleanups.push(
+      this.store.onChange(({ change }) => {
+        this.dirtyTracker.note(change)
+        if (this.saveButton) this.syncDirtyState()
+        for (const listener of this.changeListeners)
+          listener(change.kind === 'comments' ? 'comments' : 'content')
+      }),
+    )
 
     this.build()
     if (this.initialPath) this.selectPlaceholder(this.initialPath)
     window.addEventListener('hashchange', this.handleHashChange)
     this.dirtyTracker.markSaved()
     // An embedding page may present the file as a reviewer's in-progress session (e.g. the Tacobin demo).
-    if (this.embedded && new URLSearchParams(location.search).has('pending')) this.dirtyTracker.markCommentsPending()
+    if (this.embedded && new URLSearchParams(location.search).has('pending'))
+      this.dirtyTracker.markCommentsPending()
     this.captureCheckpointBaseline()
     this.syncDirtyState()
     document.addEventListener('keydown', this.handleDocumentKeyDown)
@@ -488,29 +584,74 @@ export class FileBrowser {
     const workspaceHeader = el('header', 'panel-header workspace-header')
     const collapsedBrandMark = createBrandMarkContainer('collapsed-brand-mark brand-mark')
     const collapsedBrandName = el('strong', 'collapsed-brand-name', 'Taco')
-    const leftHeaderToggle = createControlButton('panel-left', this.t.expandFiles, () => this.toggleSidebar(), 'header-panel-toggle workspace-left-toggle')
-    const checkpointPageTitle = el('span', 'checkpoint-page-title', checkpointCopy(this.locale).checkpoints)
+    const leftHeaderToggle = createControlButton(
+      'panel-left',
+      this.t.expandFiles,
+      () => this.toggleSidebar(),
+      'header-panel-toggle workspace-left-toggle',
+    )
+    const checkpointPageTitle = el(
+      'span',
+      'checkpoint-page-title',
+      checkpointCopy(this.locale).checkpoints,
+    )
     this.workspacePath = el('div', 'workspace-path')
     this.syncWorkspaceHeader()
     this.workspaceHeaderSpacer = el('span', 'workspace-header-spacer')
 
-    this.copyButton = createControlButton(this.primaryHandoffIcon ?? 'copy', this.primaryHandoffLabel ?? this.t.copyReview, () => { void this.primaryHandoff() }, 'copy-review-main', true)
+    this.copyButton = createControlButton(
+      this.primaryHandoffIcon ?? 'copy',
+      this.primaryHandoffLabel ?? this.t.copyReview,
+      () => {
+        void this.primaryHandoff()
+      },
+      'copy-review-main',
+      true,
+    )
     this.copyButton.title = this.primaryHandoffTooltip ?? this.t.copyReview
-    this.copyButton.querySelector('.button-label')!.textContent = this.primaryHandoffLabel ?? this.t.copyReviewLabel
+    this.copyButton.querySelector('.button-label')!.textContent =
+      this.primaryHandoffLabel ?? this.t.copyReviewLabel
 
-    const copyMore = createControlButton('chevron-down', this.t.copyReview, () => this.openCopyReviewMenu(copyMore), 'copy-review-more')
+    const copyMore = createControlButton(
+      'chevron-down',
+      this.t.copyReview,
+      () => this.openCopyReviewMenu(copyMore),
+      'copy-review-more',
+    )
     copyMore.setAttribute('aria-label', this.t.copyReview)
     copyMore.title = this.t.copyReview
     this.copyReviewGroup = el('div', 'copy-review-group v2-button-group')
     this.copyReviewGroup.append(this.copyButton, copyMore)
 
-    this.saveButton = createControlButton('save', this.t.save, () => { void this.handleSave('save') }, 'save-button', true, true)
-    const saveMore = createControlButton('chevron-down', this.t.saveCopy, () => this.openSaveMenu(saveMore), 'save-more', false, true)
+    this.saveButton = createControlButton(
+      'save',
+      this.t.save,
+      () => {
+        void this.handleSave('save')
+      },
+      'save-button',
+      true,
+      true,
+    )
+    const saveMore = createControlButton(
+      'chevron-down',
+      this.t.saveCopy,
+      () => this.openSaveMenu(saveMore),
+      'save-more',
+      false,
+      true,
+    )
     const saveGroup = el('div', 'save-group v2-button-group')
     saveGroup.append(this.saveButton, saveMore)
-    const language = createControlButton('globe', this.t.language, () => { if (!this.embedded) this.openLanguageMenu(language) })
+    const language = createControlButton('globe', this.t.language, () => {
+      if (!this.embedded) this.openLanguageMenu(language)
+    })
     const theme = createControlButton(
-      this.themePreference === 'system' ? 'monitor' : this.themePreference === 'dark' ? 'moon' : 'sun',
+      this.themePreference === 'system'
+        ? 'monitor'
+        : this.themePreference === 'dark'
+          ? 'moon'
+          : 'sun',
       this.t.mermaidTheme,
       () => {
         if (this.embedded) return
@@ -521,25 +662,44 @@ export class FileBrowser {
           dark: 'moon',
         }
         for (const preference of ['system', 'light', 'dark'] as const) {
-          const label = preference === 'system' ? this.t.systemTheme : preference === 'light' ? this.t.lightTheme : this.t.darkTheme
-          menu.append(this.menuButton(label, () => {
-            this.themePreference = preference
-            storageSet('taco-theme', preference)
-            setButtonIcon(theme, preference === 'system' ? 'monitor' : preference === 'dark' ? 'moon' : 'sun')
-            this.applyAppearance()
-            menu.remove()
-          }, { active: preference === this.themePreference, icon: themeIcons[preference] }))
+          const label =
+            preference === 'system'
+              ? this.t.systemTheme
+              : preference === 'light'
+                ? this.t.lightTheme
+                : this.t.darkTheme
+          menu.append(
+            this.menuButton(
+              label,
+              () => {
+                this.themePreference = preference
+                storageSet('taco-theme', preference)
+                setButtonIcon(
+                  theme,
+                  preference === 'system' ? 'monitor' : preference === 'dark' ? 'moon' : 'sun',
+                )
+                this.applyAppearance()
+                menu.remove()
+              },
+              { active: preference === this.themePreference, icon: themeIcons[preference] },
+            ),
+          )
         }
       },
       'theme-toggle',
     )
-    this.commentToggle = createControlButton('panel-right', this.t.expandRightPanel, () => this.toggleCommentPanel())
+    this.commentToggle = createControlButton('panel-right', this.t.expandRightPanel, () =>
+      this.toggleCommentPanel(),
+    )
     this.commentToggle.classList.add('comment-toggle')
     this.commentToggle.setAttribute('aria-controls', 'taco-comments')
-    this.commentToggle.addEventListener('click', (event) => {
-      this.root.classList.toggle('panel-motion-disabled', event.detail === 0)
-    }, { capture: true })
-
+    this.commentToggle.addEventListener(
+      'click',
+      (event) => {
+        this.root.classList.toggle('panel-motion-disabled', event.detail === 0)
+      },
+      { capture: true },
+    )
 
     workspaceHeader.append(
       collapsedBrandMark,
@@ -547,9 +707,13 @@ export class FileBrowser {
       leftHeaderToggle,
       this.workspacePath,
       checkpointPageTitle,
-      ...this.headerExtraControls.filter(({ position }) => position === 'left').map(({ control }) => control),
+      ...this.headerExtraControls
+        .filter(({ position }) => position === 'left')
+        .map(({ control }) => control),
       this.workspaceHeaderSpacer,
-      ...this.headerExtraControls.filter(({ position }) => position === 'right').map(({ control }) => control),
+      ...this.headerExtraControls
+        .filter(({ position }) => position === 'right')
+        .map(({ control }) => control),
       this.copyReviewGroup,
       saveGroup,
       theme,
@@ -567,10 +731,13 @@ export class FileBrowser {
     this.viewer = el('main', 'file-viewer')
     this.viewer.id = 'taco-main'
     this.viewer.addEventListener('click', (event) => this.comments.openHighlightedComment(event))
-    this.viewer.addEventListener('scroll', () => {
-
-      this.outline.scheduleActive()
-    }, { passive: true })
+    this.viewer.addEventListener(
+      'scroll',
+      () => {
+        this.outline.scheduleActive()
+      },
+      { passive: true },
+    )
     this.commentPanel = this.buildCommentPanel()
     this.comments.mount(this.commentList, this.commentToggle)
     this.outline.mount(this.outlineList)
@@ -602,7 +769,10 @@ export class FileBrowser {
     const instruction = this.getSelectedInstruction()
     if (this.auxiliaryTab === 'instruction' && !instruction) {
       this.auxiliaryTab = this.embedded || fileKind(file) !== 'markdown' ? 'comments' : 'outline'
-    } else if (this.auxiliaryTab === 'outline' && (!this.selected || fileKind(file) !== 'markdown')) {
+    } else if (
+      this.auxiliaryTab === 'outline' &&
+      (!this.selected || fileKind(file) !== 'markdown')
+    ) {
       this.auxiliaryTab = instruction ? 'instruction' : 'comments'
     } else if (!this.auxiliaryTab) {
       this.auxiliaryTab = this.embedded || fileKind(file) !== 'markdown' ? 'comments' : 'outline'
@@ -640,7 +810,11 @@ export class FileBrowser {
 
   private selectPlaceholder(path: string): void {
     const result = resolveCheckpoints(this.bundle)
-    if (!result.valid || !result.nodes.some((node) => node.documents.some((doc) => doc.path === path && !doc.exists))) return
+    if (
+      !result.valid ||
+      !result.nodes.some((node) => node.documents.some((doc) => doc.path === path && !doc.exists))
+    )
+      return
     this.checkpointView = false
     this.root.classList.remove('is-checkpoint-view')
     this.selectedPlaceholder = path
@@ -661,7 +835,9 @@ export class FileBrowser {
     if (!current.nodes.some((node) => node.documents.some((doc) => doc.path === path))) return
     const next = setDocumentStatus(current.state, path, status, new Date().toISOString())
     if (next === current.state) return
-    this.store.commit({ kind: 'document' }, () => { this.bundle.checkpoints = next })
+    this.store.commit({ kind: 'document' }, () => {
+      this.bundle.checkpoints = next
+    })
     this.fileNavigation?.refresh(this.selected, this.checkpointView, this.selectedPlaceholder)
     if (this.checkpointView || this.selectedPlaceholder) this.paintViewer()
   }
@@ -675,7 +851,12 @@ export class FileBrowser {
     )
   }
 
-  private updateSelectionLocation(file: TacoFile, writeHash: boolean, headingId?: string, push = false): void {
+  private updateSelectionLocation(
+    file: TacoFile,
+    writeHash: boolean,
+    headingId?: string,
+    push = false,
+  ): void {
     if (!usesUrlHashForFileSelection(location.protocol)) {
       this.rememberOfflineSelection(file.path)
       return
@@ -694,7 +875,10 @@ export class FileBrowser {
 
   private paintViewer(animateEntrance = false): void {
     const mountSerial = ++this.editorMountSerial
-    if (this.initialPreviewPath && (this.checkpointView || this.selected?.path !== this.initialPreviewPath)) {
+    if (
+      this.initialPreviewPath &&
+      (this.checkpointView || this.selected?.path !== this.initialPreviewPath)
+    ) {
       this.finishInitialPreview()
     }
     this.richEditor?.destroy()
@@ -704,16 +888,18 @@ export class FileBrowser {
     this.viewer.innerHTML = ''
     this.viewer.removeAttribute('aria-busy')
     if (this.checkpointView) {
-      this.viewer.append(createCheckpointView(resolveCheckpoints(this.bundle), checkpointCopy(this.locale), {
-        readOnly: !bundleCanWrite(this.bundle),
-        onSelect: (path) => {
-          const file = fileByPath(this.bundle, path)
-          if (file) this.selectFile(file)
-          else this.selectPlaceholder(path)
-        },
-        onSet: (path, status) => this.changeCheckpointStatus(path, status),
-        onOpenView: () => this.showCheckpoints(),
-      }))
+      this.viewer.append(
+        createCheckpointView(resolveCheckpoints(this.bundle), checkpointCopy(this.locale), {
+          readOnly: !bundleCanWrite(this.bundle),
+          onSelect: (path) => {
+            const file = fileByPath(this.bundle, path)
+            if (file) this.selectFile(file)
+            else this.selectPlaceholder(path)
+          },
+          onSet: (path, status) => this.changeCheckpointStatus(path, status),
+          onOpenView: () => this.showCheckpoints(),
+        }),
+      )
       return
     }
     if (this.selectedPlaceholder) {
@@ -723,7 +909,8 @@ export class FileBrowser {
     const file = this.selected
     if (!file) {
       this.viewer.append(el('div', 'empty-state', this.t.empty))
-      if (animateEntrance) this.animateSurfaceEntrance(this.viewer.firstElementChild as HTMLElement | null, 'file')
+      if (animateEntrance)
+        this.animateSurfaceEntrance(this.viewer.firstElementChild as HTMLElement | null, 'file')
       return
     }
     const kind = fileKind(file)
@@ -782,12 +969,16 @@ export class FileBrowser {
         labels: structuredFileLabels(this.locale),
         mermaidLabels: this.mermaidLabels(),
         mermaidRuntime: this.options.mermaidRuntime,
-        onPreviewSettled: file.path === this.initialPreviewPath ? () => {
-          if (this.editorMountSerial === mountSerial) this.finishInitialPreview()
-        } : undefined,
+        onPreviewSettled:
+          file.path === this.initialPreviewPath
+            ? () => {
+                if (this.editorMountSerial === mountSerial) this.finishInitialPreview()
+              }
+            : undefined,
         readOnly: !bundleCanWrite(this.bundle),
         sourceLabel: this.t.sourceEditor(kind),
-        onNodeComment: (source) => this.comments.captureSourceSelection(source, file, undefined, true),
+        onNodeComment: (source) =>
+          this.comments.captureSourceSelection(source, file, undefined, true),
         onChange: (content) => {
           this.updateFileContent(file.path, content, undefined)
           requestAnimationFrame(() => this.comments.refreshHighlights())
@@ -796,7 +987,9 @@ export class FileBrowser {
       })
       this.sourceEditor = structured.sourceEditor
       this.viewer.append(structured.element)
-      structured.sourceEditor.input.addEventListener('mouseup', (event) => this.comments.captureSourceSelection(structured.sourceEditor, file, event))
+      structured.sourceEditor.input.addEventListener('mouseup', (event) =>
+        this.comments.captureSourceSelection(structured.sourceEditor, file, event),
+      )
       structured.sourceEditor.input.addEventListener('keyup', (event) => {
         if (event.key === 'Shift' || event.key === 'Escape') return
         this.comments.captureSourceSelection(structured.sourceEditor, file)
@@ -815,14 +1008,17 @@ export class FileBrowser {
       })
       this.sourceEditor = sourceEditor
       this.viewer.append(sourceEditor.element)
-      sourceEditor.input.addEventListener('mouseup', (event) => this.comments.captureSourceSelection(sourceEditor, file, event))
+      sourceEditor.input.addEventListener('mouseup', (event) =>
+        this.comments.captureSourceSelection(sourceEditor, file, event),
+      )
       sourceEditor.input.addEventListener('keyup', (event) => {
         if (event.key === 'Shift' || event.key === 'Escape') return
         this.comments.captureSourceSelection(sourceEditor, file)
       })
       this.comments.refreshHighlights()
     }
-    if (animateEntrance) this.animateSurfaceEntrance(this.viewer.firstElementChild as HTMLElement | null, 'file')
+    if (animateEntrance)
+      this.animateSurfaceEntrance(this.viewer.firstElementChild as HTMLElement | null, 'file')
   }
 
   private paintCheckpointPlaceholder(path: string): void {
@@ -833,12 +1029,26 @@ export class FileBrowser {
     if (!node || !doc) return
     const labels = checkpointCopy(this.locale)
     const surface = el('section', 'checkpoint-placeholder')
-    surface.append(svgIcon('file-text'), el('h1', '', fileName(path)), el('p', 'checkpoint-placeholder-path', path))
+    surface.append(
+      svgIcon('file-text'),
+      el('h1', '', fileName(path)),
+      el('p', 'checkpoint-placeholder-path', path),
+    )
     const meta = el('div', 'checkpoint-placeholder-meta')
-    meta.append(el('span', '', `${node.title} · ${doc.optional ? labels.checkpointOptional : labels.checkpointRequired}`))
+    meta.append(
+      el(
+        'span',
+        '',
+        `${node.title} · ${doc.optional ? labels.checkpointOptional : labels.checkpointRequired}`,
+      ),
+    )
     surface.append(meta)
     if (bundleCanWrite(this.bundle)) {
-      const create = el('button', 'checkpoint-create-button', labels.checkpointCreateFile) as HTMLButtonElement
+      const create = el(
+        'button',
+        'checkpoint-create-button',
+        labels.checkpointCreateFile,
+      ) as HTMLButtonElement
       create.type = 'button'
       create.addEventListener('click', () => this.createCheckpointFile(path))
       surface.append(create)
@@ -849,28 +1059,44 @@ export class FileBrowser {
   private createCheckpointFile(path: string): void {
     if (!bundleCanWrite(this.bundle) || fileByPath(this.bundle, path)) return
     const ext = path.split('.').at(-1)?.toLowerCase()
-    const mediaType = ext === 'md' ? 'text/markdown'
-      : ext === 'yaml' || ext === 'yml' ? 'application/yaml'
-        : ext === 'json' ? 'application/json'
-          : 'text/plain'
+    const mediaType =
+      ext === 'md'
+        ? 'text/markdown'
+        : ext === 'yaml' || ext === 'yml'
+          ? 'application/yaml'
+          : ext === 'json'
+            ? 'application/json'
+            : 'text/plain'
     const file: TacoFile = { id: `file-${crypto.randomUUID()}`, path, mediaType, content: '' }
-    this.store.commit({ kind: 'file', fileId: file.id! }, () => { this.bundle.files.push(file) })
+    this.store.commit({ kind: 'file', fileId: file.id! }, () => {
+      this.bundle.files.push(file)
+    })
     this.selectFile(file)
     this.fileNavigation?.refresh(this.selected)
   }
 
-  private animateSurfaceEntrance(surface: HTMLElement | null, profile: 'file' | 'panel' = 'panel'): void {
-    if (!surface || matchMedia('(prefers-reduced-motion: reduce)').matches || typeof surface.animate !== 'function') return
+  private animateSurfaceEntrance(
+    surface: HTMLElement | null,
+    profile: 'file' | 'panel' = 'panel',
+  ): void {
+    if (
+      !surface ||
+      matchMedia('(prefers-reduced-motion: reduce)').matches ||
+      typeof surface.animate !== 'function'
+    )
+      return
     const fileSwitch = profile === 'file'
-    surface.animate([
-      { opacity: fileSwitch ? .84 : .68, transform: `translateY(${fileSwitch ? 2 : 4}px)` },
-      { opacity: 1, transform: 'translateY(0)' },
-    ], {
-      duration: fileSwitch ? 220 : 160,
-      easing: 'cubic-bezier(.23, 1, .32, 1)',
-    })
+    surface.animate(
+      [
+        { opacity: fileSwitch ? 0.84 : 0.68, transform: `translateY(${fileSwitch ? 2 : 4}px)` },
+        { opacity: 1, transform: 'translateY(0)' },
+      ],
+      {
+        duration: fileSwitch ? 220 : 160,
+        easing: 'cubic-bezier(.23, 1, .32, 1)',
+      },
+    )
   }
-
 
   private promoteAwaitingMarkdown(): void {
     if (!this.richEditorAdapter || !this.awaitingRichEditor) return
@@ -897,20 +1123,28 @@ export class FileBrowser {
       },
     })
     this.sourceEditor = source
-    source.input.addEventListener('mouseup', (event) => this.comments.captureSourceSelection(source, file, event))
+    source.input.addEventListener('mouseup', (event) =>
+      this.comments.captureSourceSelection(source, file, event),
+    )
     source.input.addEventListener('keyup', (event) => {
       if (event.key === 'Shift' || event.key === 'Escape') return
       this.comments.captureSourceSelection(source, file)
     })
     if (message) {
       const canWrite = bundleCanWrite(this.bundle)
-      const permissionText = canWrite ? this.t.editorFallbackEditable : this.t.editorFallbackReadOnly
+      const permissionText = canWrite
+        ? this.t.editorFallbackEditable
+        : this.t.editorFallbackReadOnly
       const isInvalidMarks = message.includes('Invalid collection of marks')
       const explanation = isInvalidMarks ? ` ${this.t.editorFallbackIncompatibleMarks}` : ''
       const primaryNotice = `${this.t.editorFallbackNotice} (${permissionText})${explanation}`
 
       const errorContainer = el('div', 'editor-error')
-      const primaryText = el('p', 'editor-error-primary', `${this.t.editorFailed} ${file.path}: ${primaryNotice}`)
+      const primaryText = el(
+        'p',
+        'editor-error-primary',
+        `${this.t.editorFailed} ${file.path}: ${primaryNotice}`,
+      )
 
       const details = el('details', 'editor-error-details')
       const summary = el('summary', 'editor-error-summary', this.t.editorFallbackDetails)
@@ -965,7 +1199,11 @@ export class FileBrowser {
     const titleIcon = fileTypeIcon(file)
     titleIcon.classList.add('document-inline-title-icon')
     titleIcon.setAttribute('aria-hidden', 'true')
-    const title = el('h1', 'document-inline-title-text', file.title?.trim() || fallbackFileTitle(file))
+    const title = el(
+      'h1',
+      'document-inline-title-text',
+      file.title?.trim() || fallbackFileTitle(file),
+    )
     title.contentEditable = bundleCanWrite(this.bundle) ? 'plaintext-only' : 'false'
     title.spellcheck = true
     title.setAttribute('role', 'textbox')
@@ -1015,7 +1253,8 @@ export class FileBrowser {
           if (mountSerial !== this.editorMountSerial) return
           this.updateFileContent(file.path, nextMarkdown, blocks)
         },
-        onCodeBlockComment: (target) => this.comments.startCodeBlockComment(editorHost, file, target),
+        onCodeBlockComment: (target) =>
+          this.comments.startCodeBlockComment(editorHost, file, target),
         onLinkClick: (event) => this.handleEditorLink(event, file),
         onSelectionChange: () => this.comments.captureEditorSelection(editorHost, file),
         onRefreshHighlights: (host) => this.comments.refreshHighlights(host),
@@ -1023,7 +1262,11 @@ export class FileBrowser {
         scrollToHeading: (headingHash) => this.outline.scrollToHeading(headingHash, 'auto'),
       })
     } catch (error) {
-      this.mountMarkdownFallback(editorHost, file, error instanceof Error ? error.message : String(error))
+      this.mountMarkdownFallback(
+        editorHost,
+        file,
+        error instanceof Error ? error.message : String(error),
+      )
       return
     }
   }
@@ -1076,14 +1319,22 @@ export class FileBrowser {
     const link = (event.target as Element | null)?.closest<HTMLAnchorElement>('a[href]')
     if (!link) return
     event.preventDefault()
-    const resolved = resolveDocumentLink(this.bundle.root, file.path, link.getAttribute('href') ?? '')
+    const resolved = resolveDocumentLink(
+      this.bundle.root,
+      file.path,
+      link.getAttribute('href') ?? '',
+    )
     if (resolved.kind === 'external') {
       window.open(resolved.href, '_blank', 'noopener,noreferrer')
       return
     }
     const target = resolved.kind === 'internal' ? fileByPath(this.bundle, resolved.path) : undefined
-    const placeholder = resolved.kind === 'internal' && !target && resolveCheckpoints(this.bundle).nodes
-      .some((node) => node.documents.some((doc) => doc.path === resolved.path && !doc.exists))
+    const placeholder =
+      resolved.kind === 'internal' &&
+      !target &&
+      resolveCheckpoints(this.bundle).nodes.some((node) =>
+        node.documents.some((doc) => doc.path === resolved.path && !doc.exists),
+      )
     if (resolved.kind !== 'internal' || (!target && !placeholder)) {
       this.toast(this.t.linkTargetMissing)
       return
@@ -1098,7 +1349,8 @@ export class FileBrowser {
     if (target) {
       if (target.path !== this.selected?.path) this.selectFile(target, false)
       this.updateSelectionLocation(target, true, resolved.heading, true)
-      if (resolved.heading) requestAnimationFrame(() => this.outline.scrollToHeading(resolved.heading, 'auto'))
+      if (resolved.heading)
+        requestAnimationFrame(() => this.outline.scrollToHeading(resolved.heading, 'auto'))
       return
     }
     this.selectPlaceholder(resolved.path)
@@ -1174,13 +1426,26 @@ export class FileBrowser {
     else if (tab === 'comments') this.commentList.scrollTop = 0
     else if (tab === 'instruction') this.instructionPanel.scrollTop = 0
     if (changed) {
-      const activeSurface = tab === 'outline' ? this.outlineList : tab === 'instruction' ? this.instructionPanel : this.commentList
+      const activeSurface =
+        tab === 'outline'
+          ? this.outlineList
+          : tab === 'instruction'
+            ? this.instructionPanel
+            : this.commentList
       this.animateSurfaceEntrance(activeSurface)
     }
   }
 
   private syncAuxiliaryTabs(): void {
-    if (!this.outlineTab || !this.commentsTab || !this.instructionTab || !this.outlineList || !this.commentList || !this.instructionPanel) return
+    if (
+      !this.outlineTab ||
+      !this.commentsTab ||
+      !this.instructionTab ||
+      !this.outlineList ||
+      !this.commentList ||
+      !this.instructionPanel
+    )
+      return
     const hasOutline = Boolean(this.selected && fileKind(this.selected) === 'markdown')
     const instruction = this.getSelectedInstruction()
     const hasInstruction = Boolean(instruction)
@@ -1205,7 +1470,11 @@ export class FileBrowser {
       this.instructionTab.hidden = true
     }
 
-    for (const [tab, button] of [['outline', this.outlineTab], ['comments', this.commentsTab], ['instruction', this.instructionTab]] as const) {
+    for (const [tab, button] of [
+      ['outline', this.outlineTab],
+      ['comments', this.commentsTab],
+      ['instruction', this.instructionTab],
+    ] as const) {
       const active = this.auxiliaryTab === tab
       button.classList.toggle('is-active', active)
       button.setAttribute('aria-selected', String(active))
@@ -1259,17 +1528,22 @@ export class FileBrowser {
       results.innerHTML = ''
       const query = input.value.trim().toLocaleLowerCase()
       if (!query) return
-      const matches = this.bundle.files.filter((file) =>
-        !isInternalFile(file.path)
-        && (relativePath(this.bundle, file).toLocaleLowerCase().includes(query)
-        || file.content.toLocaleLowerCase().includes(query)))
+      const matches = this.bundle.files.filter(
+        (file) =>
+          !isInternalFile(file.path) &&
+          (relativePath(this.bundle, file).toLocaleLowerCase().includes(query) ||
+            file.content.toLocaleLowerCase().includes(query)),
+      )
       for (const file of matches.slice(0, 50)) {
         const button = el('button', 'search-result') as HTMLButtonElement
         button.type = 'button'
         const type = fileTypeIcon(file)
         type.setAttribute('aria-hidden', 'true')
         button.append(type, el('span', '', relativePath(this.bundle, file)))
-        button.addEventListener('click', () => { dialog.close(); this.selectFile(file) })
+        button.addEventListener('click', () => {
+          dialog.close()
+          this.selectFile(file)
+        })
         results.append(button)
       }
       if (!matches.length) results.append(el('p', 'empty-state', this.t.noMatches))
@@ -1283,13 +1557,14 @@ export class FileBrowser {
     input.focus()
   }
 
-  private get t() { return copy[this.locale] }
+  private get t() {
+    return copy[this.locale]
+  }
   private syncWorkspaceHeader(): void {
     const path = this.selected?.path ?? this.selectedPlaceholder
     this.workspacePath.textContent = path?.split('/').pop() ?? ''
     this.workspacePath.title = this.workspacePath.textContent
   }
-
 
   private toggleSidebar(): void {
     this.sidebarClosed = !this.sidebarClosed
@@ -1297,7 +1572,8 @@ export class FileBrowser {
   }
 
   private syncPanelToggles(): void {
-    const layoutChanged = this.root.classList.contains('comment-panel-open') !== this.commentPanelOpen
+    const layoutChanged =
+      this.root.classList.contains('comment-panel-open') !== this.commentPanelOpen
     const sidebarClosed = this.sidebarClosed
     this.root.classList.toggle('sidebar-closed', sidebarClosed)
     this.sidebar.toggleAttribute('inert', sidebarClosed)
@@ -1319,12 +1595,13 @@ export class FileBrowser {
     this.commentToggle.setAttribute('aria-pressed', String(commentsOpen))
     this.commentToggle.setAttribute('aria-expanded', String(commentsOpen))
     this.syncAuxiliaryTabs()
-    if (layoutChanged) requestAnimationFrame(() => {
-      if (!this.root.isConnected) return
-      this.comments.refreshHighlights()
+    if (layoutChanged)
+      requestAnimationFrame(() => {
+        if (!this.root.isConnected) return
+        this.comments.refreshHighlights()
 
-      this.outline.scheduleActive()
-    })
+        this.outline.scheduleActive()
+      })
   }
 
   private updateFileContent(path: string, content: string, blocks: TacoFile['blocks']): void {
@@ -1334,11 +1611,16 @@ export class FileBrowser {
     const previousTitle = canonical.title
     const parsedFrontmatter = parseFrontmatter(content)
     const nextTitle = frontmatterTitle(content)
-    const sameBlocks = canonical.blocks === blocks
-      || (canonical.blocks?.length === blocks?.length
-        && canonical.blocks?.every((block, index) => {
+    const sameBlocks =
+      canonical.blocks === blocks ||
+      (canonical.blocks?.length === blocks?.length &&
+        canonical.blocks?.every((block, index) => {
           const candidate = blocks?.[index]
-          return candidate?.id === block.id && candidate.type === block.type && candidate.html === block.html
+          return (
+            candidate?.id === block.id &&
+            candidate.type === block.type &&
+            candidate.html === block.html
+          )
         }))
     if (canonical.content === content && sameBlocks) return
     this.store.commit({ kind: 'file', fileId: canonical.id! }, () => {
@@ -1353,11 +1635,13 @@ export class FileBrowser {
         else if (parsedFrontmatter.kind === 'valid') delete this.selected.title
       }
     })
-    if (previousNavigation !== navigationSignature(this.bundle, canonical)) this.fileNavigation?.refresh(this.selected)
+    if (previousNavigation !== navigationSignature(this.bundle, canonical))
+      this.fileNavigation?.refresh(this.selected)
     if (previousTitle !== canonical.title && this.selected?.path === path) {
       this.syncWorkspaceHeader()
       const title = this.viewer.querySelector<HTMLElement>('.document-inline-title-text')
-      if (title && document.activeElement !== title) title.textContent = canonical.title?.trim() || fallbackFileTitle(canonical)
+      if (title && document.activeElement !== title)
+        title.textContent = canonical.title?.trim() || fallbackFileTitle(canonical)
     }
   }
 
@@ -1378,12 +1662,16 @@ export class FileBrowser {
 
     // Handoff reflects actual file, comment, and Checkpoint changes.
     const hasFileChanges = this.getReviewDirtyFileIds().size > 0
-    const hasCommentChanges = this.dirtyTracker.isCommentsDirty()
-      || (this.bundle.comments?.length ?? 0) > (this.reviewBaselineDoc.comments?.length ?? 0)
+    const hasCommentChanges =
+      this.dirtyTracker.isCommentsDirty() ||
+      (this.bundle.comments?.length ?? 0) > (this.reviewBaselineDoc.comments?.length ?? 0)
     const hasOpenComments = (this.bundle.comments ?? []).some((c) => c.status === 'open')
-    const hasCheckpointChanges = (this.getCheckpointChanges().length > 0 || this.getCheckpointTemplateChange() !== null
-        || this.getCheckpointDocumentAdditions().length > 0)
-    const handoffDirty = hasFileChanges || hasCommentChanges || hasCheckpointChanges || hasOpenComments
+    const hasCheckpointChanges =
+      this.getCheckpointChanges().length > 0 ||
+      this.getCheckpointTemplateChange() !== null ||
+      this.getCheckpointDocumentAdditions().length > 0
+    const handoffDirty =
+      hasFileChanges || hasCommentChanges || hasCheckpointChanges || hasOpenComments
     this.copyButton.classList.toggle('is-dirty', handoffDirty)
   }
 
@@ -1403,13 +1691,16 @@ export class FileBrowser {
     await this.copyReviewFull()
   }
 
-  adoptBundleContent(content: {
-    title?: string
-    files: TacoFile[]
-    navigation?: NavigationManifest
-    checkpoints?: unknown
-    comments: TacoCommentThread[]
-  }, options?: { establishReviewBaseline?: boolean }): void {
+  adoptBundleContent(
+    content: {
+      title?: string
+      files: TacoFile[]
+      navigation?: NavigationManifest
+      checkpoints?: unknown
+      comments: TacoCommentThread[]
+    },
+    options?: { establishReviewBaseline?: boolean },
+  ): void {
     const previousPath = this.selected?.path ?? this.selectedPlaceholder
     const wasCheckpointView = this.checkpointView
     this.bundle.title = content.title || this.bundle.title
@@ -1422,7 +1713,9 @@ export class FileBrowser {
     this.bundle.comments = content.comments
     document.title = `${this.bundle.title} — Taco`
     this.checkpointView = wasCheckpointView && content.checkpoints !== undefined
-    this.selected = this.checkpointView ? null : ((previousPath ? fileByPath(this.bundle, previousPath) : null) ?? defaultFile(this.bundle))
+    this.selected = this.checkpointView
+      ? null
+      : ((previousPath ? fileByPath(this.bundle, previousPath) : null) ?? defaultFile(this.bundle))
     this.selectedPlaceholder = null
     this.cachedResolvedCheckpoints = null
     if (options?.establishReviewBaseline) {
@@ -1448,7 +1741,12 @@ export class FileBrowser {
     }
   }
 
-  setPrimaryHandoffHandler(handler: (() => Promise<void>) | null, tooltip?: string, icon?: Parameters<typeof svgIcon>[0], label?: string): void {
+  setPrimaryHandoffHandler(
+    handler: (() => Promise<void>) | null,
+    tooltip?: string,
+    icon?: Parameters<typeof svgIcon>[0],
+    label?: string,
+  ): void {
     this.primaryHandoffHandler = handler ?? undefined
     this.primaryHandoffTooltip = tooltip
     this.primaryHandoffIcon = handler ? icon : undefined
@@ -1457,10 +1755,13 @@ export class FileBrowser {
       this.copyButton.title = tooltip ?? this.t.copyReview
       this.copyButton.setAttribute('aria-label', this.primaryHandoffLabel ?? this.t.copyReview)
       setButtonIcon(this.copyButton, this.primaryHandoffIcon ?? 'copy')
-      this.copyButton.querySelector('.button-label')!.textContent = this.primaryHandoffLabel ?? this.t.copyReviewLabel
+      this.copyButton.querySelector('.button-label')!.textContent =
+        this.primaryHandoffLabel ?? this.t.copyReviewLabel
     }
   }
-  setCopyReviewMenuCustomizer(customizer: ((menu: HTMLElement, defaultItems: HTMLElement[]) => void) | null): void {
+  setCopyReviewMenuCustomizer(
+    customizer: ((menu: HTMLElement, defaultItems: HTMLElement[]) => void) | null,
+  ): void {
     this.copyReviewMenuCustomizer = customizer ?? undefined
   }
 
@@ -1506,17 +1807,23 @@ export class FileBrowser {
 
   onDocumentChange(listener: (kind: 'content' | 'comments') => void): () => void {
     this.changeListeners.add(listener)
-    return () => { this.changeListeners.delete(listener) }
+    return () => {
+      this.changeListeners.delete(listener)
+    }
   }
 
   onLocaleChange(listener: (locale: Locale) => void): () => void {
     this.localeListeners.add(listener)
-    return () => { this.localeListeners.delete(listener) }
+    return () => {
+      this.localeListeners.delete(listener)
+    }
   }
 
   onDestruct(listener: () => void): () => void {
     this.destructListeners.add(listener)
-    return () => { this.destructListeners.delete(listener) }
+    return () => {
+      this.destructListeners.delete(listener)
+    }
   }
 
   startDocumentComment(): void {
@@ -1524,13 +1831,14 @@ export class FileBrowser {
   }
 
   private readonly handleBeforeUnload = (event: BeforeUnloadEvent): void => {
-    const isDirty = this.pendingWritesCheck ? Boolean(this.pendingWritesCheck()) : this.dirtyTracker.isDirty()
+    const isDirty = this.pendingWritesCheck
+      ? Boolean(this.pendingWritesCheck())
+      : this.dirtyTracker.isDirty()
     if (isDirty) {
       event.preventDefault()
       event.returnValue = ''
     }
   }
-
 
   openPopover(anchor: HTMLElement, className: string): HTMLElement {
     document.querySelector('.topbar-popover')?.remove()
@@ -1540,7 +1848,10 @@ export class FileBrowser {
     popover.style.right = `${Math.max(8, innerWidth - rect.right)}px`
     document.body.append(popover)
     const popoverRect = popover.getBoundingClientRect()
-    const originX = Math.min(popoverRect.width - 8, Math.max(8, rect.left + (rect.width / 2) - popoverRect.left))
+    const originX = Math.min(
+      popoverRect.width - 8,
+      Math.max(8, rect.left + rect.width / 2 - popoverRect.left),
+    )
     const originY = Math.min(popoverRect.height, Math.max(0, rect.bottom - popoverRect.top))
     popover.style.setProperty('--popover-origin-x', `${originX}px`)
     popover.style.setProperty('--popover-origin-y', `${originY}px`)
@@ -1557,7 +1868,12 @@ export class FileBrowser {
   menuButton(
     label: string,
     action: () => void | Promise<void>,
-    options: { active?: boolean; icon?: Parameters<typeof svgIcon>[0]; leading?: Element; menuitem?: boolean } = {},
+    options: {
+      active?: boolean
+      icon?: Parameters<typeof svgIcon>[0]
+      leading?: Element
+      menuitem?: boolean
+    } = {},
   ): HTMLButtonElement {
     const check = options.active ? el('span', 'popover-check', '✓') : undefined
     const button = sidebarRow('button', {
@@ -1570,14 +1886,19 @@ export class FileBrowser {
     button.type = 'button'
     if (options.menuitem !== false) button.setAttribute('role', 'menuitem')
     button.classList.toggle('is-active', options.active === true)
-    button.addEventListener('click', () => { void action() })
+    button.addEventListener('click', () => {
+      void action()
+    })
     return button
   }
 
   private applyAppearance(): void {
-    const appearance = this.themePreference === 'system'
-      ? this.systemAppearance.matches ? 'dark' : 'light'
-      : this.themePreference
+    const appearance =
+      this.themePreference === 'system'
+        ? this.systemAppearance.matches
+          ? 'dark'
+          : 'light'
+        : this.themePreference
     if (document.documentElement.dataset.theme === appearance) return
     document.documentElement.dataset.theme = appearance
     document.querySelectorAll('.tiptap-mermaid-container').forEach((container) => {
@@ -1590,14 +1911,18 @@ export class FileBrowser {
     const langBadges: Record<Locale, string> = { 'zh-Hans': '简', en: 'EN' }
     for (const { code: locale, label } of LOCALE_CHOICES) {
       const badge = el('span', 'lang-badge', langBadges[locale])
-      const button = this.menuButton(label, () => {
-        this.locale = locale
-        storageSet('taco-locale', locale)
-        document.documentElement.lang = locale
-        this.build()
-        for (const listener of this.localeListeners) listener(locale)
-        menu.remove()
-      }, { active: locale === this.locale, leading: badge })
+      const button = this.menuButton(
+        label,
+        () => {
+          this.locale = locale
+          storageSet('taco-locale', locale)
+          document.documentElement.lang = locale
+          this.build()
+          for (const listener of this.localeListeners) listener(locale)
+          menu.remove()
+        },
+        { active: locale === this.locale, leading: badge },
+      )
       menu.append(button)
     }
   }
@@ -1605,20 +1930,32 @@ export class FileBrowser {
   private openCopyReviewMenu(anchor: HTMLElement): void {
     const menu = this.openPopover(anchor, 'copy-review-menu')
     const manualHandoffLabel = this.primaryHandoffHandler
-      ? (this.locale === 'zh-Hans' ? '手动交接' : 'Manual Handoff')
+      ? this.locale === 'zh-Hans'
+        ? '手动交接'
+        : 'Manual Handoff'
       : this.t.copyAllChanges
     const manualHandoffNoDataLabel = this.primaryHandoffHandler
-      ? (this.locale === 'zh-Hans' ? '手动交接（不含数据）' : 'Manual Handoff (w/o data)')
+      ? this.locale === 'zh-Hans'
+        ? '手动交接（不含数据）'
+        : 'Manual Handoff (w/o data)'
       : this.t.copyTabInspect
     const defaultItems = [
-      this.menuButton(manualHandoffLabel, () => {
-        menu.remove()
-        void this.copyReviewFull()
-      }, { icon: 'copy', menuitem: false }),
-      this.menuButton(manualHandoffNoDataLabel, () => {
-        menu.remove()
-        void this.copyReviewInspectPrompt()
-      }, { icon: 'eye', menuitem: false }),
+      this.menuButton(
+        manualHandoffLabel,
+        () => {
+          menu.remove()
+          void this.copyReviewFull()
+        },
+        { icon: 'copy', menuitem: false },
+      ),
+      this.menuButton(
+        manualHandoffNoDataLabel,
+        () => {
+          menu.remove()
+          void this.copyReviewInspectPrompt()
+        },
+        { icon: 'eye', menuitem: false },
+      ),
     ]
     if (this.copyReviewMenuCustomizer) {
       this.copyReviewMenuCustomizer(menu, defaultItems)
@@ -1629,89 +1966,112 @@ export class FileBrowser {
 
   async copyReviewFull(): Promise<void> {
     const changedFiles = this.getModifiedReviewFiles()
-    const comments = (this.bundle.comments ?? []).filter((c) => c.status === 'open').map((c) => {
-      // A whole-document comment quotes nothing, so it is reported by scope instead of by position.
-      const anchor = c.anchor
-      let location = this.t.documentComment
-      let quote = ''
-      if (anchor) {
-        // Line numbers follow the file's current body text, never the stored creation-time offsets.
-        const file = fileByPath(this.bundle, anchor.path)
-        const lines = file ? commentLineReference(file.content, anchor) : null
-        location = lines ? `${anchor.path}:${lines}` : `${anchor.path} (${this.t.positionLost})`
-        quote = anchor.quote.exact
-      }
-      if (anchor?.block) {
-        const b = anchor.block
-        if (b.language === 'mermaid') {
-          if (b.nodeId || b.nodeLabel) {
-            const label = b.nodeLabel && b.nodeId && b.nodeLabel !== b.nodeId
-              ? `${b.nodeLabel} [${b.nodeId}]`
-              : b.nodeLabel || b.nodeId!
-            quote = label
-            location += ` (${this.t.handoffMermaidNode(label)})`
-          } else if (b.lineNumber) {
-            location += ` (${this.t.handoffMermaidLine(b.lineNumber)})`
-            quote = b.lineText ?? this.t.handoffMermaidLine(b.lineNumber)
-          } else {
-            location += ` (${this.t.handoffMermaidDiagram})`
-            quote = this.t.handoffMermaidDiagram
-          }
-        } else if (b.language) {
-          location += ` (${this.t.handoffCodeBlock(b.language)})`
+    const comments = (this.bundle.comments ?? [])
+      .filter((c) => c.status === 'open')
+      .map((c) => {
+        // A whole-document comment quotes nothing, so it is reported by scope instead of by position.
+        const anchor = c.anchor
+        let location = this.t.documentComment
+        let quote = ''
+        if (anchor) {
+          // Line numbers follow the file's current body text, never the stored creation-time offsets.
+          const file = fileByPath(this.bundle, anchor.path)
+          const lines = file ? commentLineReference(file.content, anchor) : null
+          location = lines ? `${anchor.path}:${lines}` : `${anchor.path} (${this.t.positionLost})`
+          quote = anchor.quote.exact
         }
-      }
-      return {
-        id: c.id,
-        path: anchor?.path ?? null,
-        location,
-        quote,
-        status: c.status,
-        messages: c.messages.map((m) => ({
-          author: m.author,
-          body: m.deletedAt ? this.t.messageDeleted : m.body,
-          createdAt: m.createdAt,
-        })),
-      }
-    })
+        if (anchor?.block) {
+          const b = anchor.block
+          if (b.language === 'mermaid') {
+            if (b.nodeId || b.nodeLabel) {
+              const label =
+                b.nodeLabel && b.nodeId && b.nodeLabel !== b.nodeId
+                  ? `${b.nodeLabel} [${b.nodeId}]`
+                  : b.nodeLabel || b.nodeId!
+              quote = label
+              location += ` (${this.t.handoffMermaidNode(label)})`
+            } else if (b.lineNumber) {
+              location += ` (${this.t.handoffMermaidLine(b.lineNumber)})`
+              quote = b.lineText ?? this.t.handoffMermaidLine(b.lineNumber)
+            } else {
+              location += ` (${this.t.handoffMermaidDiagram})`
+              quote = this.t.handoffMermaidDiagram
+            }
+          } else if (b.language) {
+            location += ` (${this.t.handoffCodeBlock(b.language)})`
+          }
+        }
+        return {
+          id: c.id,
+          path: anchor?.path ?? null,
+          location,
+          quote,
+          status: c.status,
+          messages: c.messages.map((m) => ({
+            author: m.author,
+            body: m.deletedAt ? this.t.messageDeleted : m.body,
+            createdAt: m.createdAt,
+          })),
+        }
+      })
     const checkpointChanges = this.getCheckpointChanges()
     const checkpointTemplateChange = this.getCheckpointTemplateChange()
     const checkpointDocumentAdditions = this.getCheckpointDocumentAdditions()
-    const hasDocTitleChange = this.bundle.title !== this.reviewBaselineDoc.title && !this.bundle.navigation
-    const hasFileOrCommentChanges = changedFiles.length > 0 || comments.length > 0 || checkpointChanges.length > 0
-      || checkpointTemplateChange !== null || checkpointDocumentAdditions.length > 0
-      || this.getReviewDirtyFileIds().size > 0
+    const hasDocTitleChange =
+      this.bundle.title !== this.reviewBaselineDoc.title && !this.bundle.navigation
+    const hasFileOrCommentChanges =
+      changedFiles.length > 0 ||
+      comments.length > 0 ||
+      checkpointChanges.length > 0 ||
+      checkpointTemplateChange !== null ||
+      checkpointDocumentAdditions.length > 0 ||
+      this.getReviewDirtyFileIds().size > 0
     if (!hasDocTitleChange && !hasFileOrCommentChanges) {
       this.toast(this.t.noReviewChanges)
       return
     }
     const originPath = new URLSearchParams(location.search).get('origin_path')
-    const diffSections = changedFiles.map((f) => {
-      if (f.diff) return `\n### \`${f.path}\`\n\`\`\`diff\n${f.diff}\n\`\`\``
-      return `\n### \`${f.path}\`\n*${this.t.handoffBinaryNotice}*\n`
-    }).join('\n')
-    const checkpointSections = checkpointChanges.map(({ path, from, to }) =>
-      `- \`${path}\`: ${from} → ${to}`).join('\n')
+    const diffSections = changedFiles
+      .map((f) => {
+        if (f.diff) return `\n### \`${f.path}\`\n\`\`\`diff\n${f.diff}\n\`\`\``
+        return `\n### \`${f.path}\`\n*${this.t.handoffBinaryNotice}*\n`
+      })
+      .join('\n')
+    const checkpointSections = checkpointChanges
+      .map(({ path, from, to }) => `- \`${path}\`: ${from} → ${to}`)
+      .join('\n')
     const checkpointDefinitionSections = [
       checkpointTemplateChange
         ? `- template: ${JSON.stringify(checkpointTemplateChange.from)} → ${JSON.stringify(checkpointTemplateChange.to)}`
         : '',
-      ...checkpointDocumentAdditions.map(({ checkpointId, path }) => `- ${JSON.stringify(checkpointId)}: add \`${path}\``),
-    ].filter(Boolean).join('\n')
-    const commentSections = comments.map((c) => {
-      const msgs = c.messages.map((m) => `  - **${m.author}**: ${m.body}`).join('\n')
-      const head = c.quote ? `- [${c.location}] ${this.t.handoffQuoteLabel}: "${c.quote}"` : `- [${c.location}]`
-      return `${head}\n${msgs}`
-    }).join('\n\n')
+      ...checkpointDocumentAdditions.map(
+        ({ checkpointId, path }) => `- ${JSON.stringify(checkpointId)}: add \`${path}\``,
+      ),
+    ]
+      .filter(Boolean)
+      .join('\n')
+    const commentSections = comments
+      .map((c) => {
+        const msgs = c.messages.map((m) => `  - **${m.author}**: ${m.body}`).join('\n')
+        const head = c.quote
+          ? `- [${c.location}] ${this.t.handoffQuoteLabel}: "${c.quote}"`
+          : `- [${c.location}]`
+        return `${head}\n${msgs}`
+      })
+      .join('\n\n')
     const prompt = [
       this.t.handoffIntro,
       `- ${this.t.handoffDocTitle}: "${this.bundle.title}"`,
       originPath ? `- ${this.t.handoffLocalPath}: ${originPath}` : '',
       diffSections ? `\n## ${this.t.handoffDiffHeader}${diffSections}` : '',
       checkpointSections ? `\n## Checkpoint status changes\n${checkpointSections}` : '',
-      checkpointDefinitionSections ? `\n## Checkpoint definition changes\n${checkpointDefinitionSections}` : '',
+      checkpointDefinitionSections
+        ? `\n## Checkpoint definition changes\n${checkpointDefinitionSections}`
+        : '',
       commentSections ? `\n## ${this.t.handoffCommentsHeader}\n${commentSections}` : '',
-    ].filter(Boolean).join('\n')
+    ]
+      .filter(Boolean)
+      .join('\n')
     const text = prompt
     // Same-origin host pages (e.g. the Tacobin homepage demo) may react to a handoff; other origins get nothing.
     if (this.embedded && window.parent !== window && location.origin !== 'null') {
@@ -1733,7 +2093,7 @@ export class FileBrowser {
   }
   private async copyReviewInspectPrompt(): Promise<void> {
     const title = document.title
-    const url = location.href
+    const url = stripListenCapabilityFromUrl(location.href)
     const originPath = new URLSearchParams(location.search).get('origin_path')
     const prompt = [
       this.t.handoffInspectIntro,
@@ -1741,7 +2101,9 @@ export class FileBrowser {
       `- ${this.t.handoffTabUrl}: ${url}`,
       originPath ? `- ${this.t.handoffLocalPath}: ${originPath}` : '',
       this.t.handoffInspectAction,
-    ].filter(Boolean).join('\n')
+    ]
+      .filter(Boolean)
+      .join('\n')
 
     try {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable')
@@ -1761,9 +2123,30 @@ export class FileBrowser {
   private openSaveMenu(anchor: HTMLElement): void {
     const menu = this.openPopover(anchor, 'save-menu')
     menu.append(
-      this.menuButton(this.t.save, () => { menu.remove(); void this.handleSave('save') }, { icon: 'save' }),
-      this.menuButton(this.t.saveCopy, () => { menu.remove(); void this.handleSave('copy') }, { icon: 'template' }),
-      this.menuButton(this.t.saveAndUnpack, () => { menu.remove(); void this.handleSave('unpack') }, { icon: 'folder-open' }),
+      this.menuButton(
+        this.t.save,
+        () => {
+          menu.remove()
+          void this.handleSave('save')
+        },
+        { icon: 'save' },
+      ),
+      this.menuButton(
+        this.t.saveCopy,
+        () => {
+          menu.remove()
+          void this.handleSave('copy')
+        },
+        { icon: 'template' },
+      ),
+      this.menuButton(
+        this.t.saveAndUnpack,
+        () => {
+          menu.remove()
+          void this.handleSave('unpack')
+        },
+        { icon: 'folder-open' },
+      ),
     )
   }
 
@@ -1774,15 +2157,15 @@ export class FileBrowser {
     }
     const credentialBearing = hasCollabSecrets(this.bundle)
     if (mode !== 'unpack' && !canWriteInPlace()) {
-      if (!await this.confirmDownloadFallback(credentialBearing)) return
+      if (!(await this.confirmDownloadFallback(credentialBearing))) return
     } else if (credentialBearing && !window.confirm(this.t.credentialSaveConfirm)) return
     try {
-
-      const result = mode === 'copy'
-        ? await saveCopy(this.bundle)
-        : mode === 'unpack'
-          ? await saveAndUnpack(this.bundle)
-          : await saveFile(this.bundle)
+      const result =
+        mode === 'copy'
+          ? await saveCopy(this.bundle)
+          : mode === 'unpack'
+            ? await saveAndUnpack(this.bundle)
+            : await saveFile(this.bundle)
       this.reportSave(result)
     } catch {
       this.toast(this.t.saveFailed)
@@ -1790,21 +2173,31 @@ export class FileBrowser {
   }
 
   reportSave(result: SaveResult): void {
-    if (result === 'cancelled') { this.toast(this.t.saveCancelled); return }
-    if (result === 'directory-unavailable') { this.toast(this.t.directoryUnavailable); return }
+    if (result === 'cancelled') {
+      this.toast(this.t.saveCancelled)
+      return
+    }
+    if (result === 'directory-unavailable') {
+      this.toast(this.t.directoryUnavailable)
+      return
+    }
     this.dirtyTracker.markSaved()
     this.syncDirtyState()
-    if (result !== 'downloaded') this.saveButton.querySelector('.button-label')!.textContent = this.t.saved
-    this.toast(result === 'downloaded'
-      ? this.t.downloadStarted
-      : result === 'saved-and-unpacked'
-        ? this.t.saveUnpacked(this.bundle.files.length)
-        : this.t.saved)
+    if (result !== 'downloaded')
+      this.saveButton.querySelector('.button-label')!.textContent = this.t.saved
+    this.toast(
+      result === 'downloaded'
+        ? this.t.downloadStarted
+        : result === 'saved-and-unpacked'
+          ? this.t.saveUnpacked(this.bundle.files.length)
+          : this.t.saved,
+    )
     if (result !== 'downloaded') {
-      setTimeout(() => { this.saveButton.querySelector('.button-label')!.textContent = this.t.save }, 1800)
+      setTimeout(() => {
+        this.saveButton.querySelector('.button-label')!.textContent = this.t.save
+      }, 1800)
     }
   }
-
 
   private confirmDownloadFallback(credentialBearing: boolean): Promise<boolean> {
     return showConfirmDialog({
@@ -1828,7 +2221,9 @@ export class FileBrowser {
   }
   private async handleCreateFile(targetGroupId: string | null): Promise<void> {
     // When structure is locked, there is no grouping choice: a new file lands in its category-derived group.
-    const groups = this.structureLocked ? [] : getAvailableGroups(this.bundle, checkpointCopy(this.locale).checkpoint)
+    const groups = this.structureLocked
+      ? []
+      : getAvailableGroups(this.bundle, checkpointCopy(this.locale).checkpoint)
     const result = await showNewFileDialog({
       title: this.t.addFile,
       typeLabel: this.t.newFileType,
@@ -1836,13 +2231,19 @@ export class FileBrowser {
       categoryLabel: this.t.newFileCategory,
       ungroupedLabel: this.t.ungrouped,
       groups,
-      initialGroupId: targetGroupId && groups.some((group) => group.id === targetGroupId) ? targetGroupId : null,
+      initialGroupId:
+        targetGroupId && groups.some((group) => group.id === targetGroupId) ? targetGroupId : null,
       confirmLabel: this.t.create,
       cancelLabel: this.t.cancel,
     })
     if (!result) return
 
-    const fileNameClean = result.fileName.trim().replaceAll('\\', '/').split('/').filter(Boolean).join('/')
+    const fileNameClean = result.fileName
+      .trim()
+      .replaceAll('\\', '/')
+      .split('/')
+      .filter(Boolean)
+      .join('/')
     const fullPath = `${this.bundle.root}/${fileNameClean}`
     if (fileByPath(this.bundle, fullPath)) return
     if (result.groupId && !groups.some(({ id }) => id === result.groupId)) return
@@ -1858,7 +2259,13 @@ export class FileBrowser {
     this.store.commit({ kind: 'all' }, () => {
       this.bundle.files.push(newFile)
       if (navigation) {
-        this.bundle.navigation = assignFileToGroup(navigation, fullPath, result.groupId, this.bundle.root, this.bundle)
+        this.bundle.navigation = assignFileToGroup(
+          navigation,
+          fullPath,
+          result.groupId,
+          this.bundle.root,
+          this.bundle,
+        )
       }
     })
 
@@ -1896,14 +2303,24 @@ export class FileBrowser {
 
     const oldPath = file.path
     const checkpoints = resolveCheckpoints(this.bundle)
-    const wasTracked = checkpoints.valid && checkpoints.nodes.some((node) => node.documents.some((document) => document.path === oldPath))
+    const wasTracked =
+      checkpoints.valid &&
+      checkpoints.nodes.some((node) => node.documents.some((document) => document.path === oldPath))
     this.store.commit({ kind: 'document' }, () => {
       file.path = newPath
       if (this.bundle.navigation) {
-        this.bundle.navigation = renameFileInManifest(this.bundle.navigation, oldPath, newPath, this.bundle.root)
+        this.bundle.navigation = renameFileInManifest(
+          this.bundle.navigation,
+          oldPath,
+          newPath,
+          this.bundle.root,
+        )
       }
       if (wasTracked && checkpoints.state) {
-        this.bundle.checkpoints = { ...checkpoints.state, documents: checkpoints.state.documents.filter((record) => record.path !== oldPath) }
+        this.bundle.checkpoints = {
+          ...checkpoints.state,
+          documents: checkpoints.state.documents.filter((record) => record.path !== oldPath),
+        }
       }
     })
 
@@ -1923,14 +2340,25 @@ export class FileBrowser {
     if (!confirmed) return
     const filePath = file.path
     const checkpoints = resolveCheckpoints(this.bundle)
-    const wasTracked = checkpoints.valid && checkpoints.nodes.some((node) => node.documents.some((document) => document.path === filePath))
+    const wasTracked =
+      checkpoints.valid &&
+      checkpoints.nodes.some((node) =>
+        node.documents.some((document) => document.path === filePath),
+      )
     this.store.commit({ kind: 'document' }, () => {
       this.bundle.files = this.bundle.files.filter((f) => f.path !== filePath)
       if (this.bundle.navigation) {
-        this.bundle.navigation = removeFileFromManifest(this.bundle.navigation, filePath, this.bundle.root)
+        this.bundle.navigation = removeFileFromManifest(
+          this.bundle.navigation,
+          filePath,
+          this.bundle.root,
+        )
       }
       if (wasTracked && checkpoints.state) {
-        this.bundle.checkpoints = { ...checkpoints.state, documents: checkpoints.state.documents.filter((record) => record.path !== filePath) }
+        this.bundle.checkpoints = {
+          ...checkpoints.state,
+          documents: checkpoints.state.documents.filter((record) => record.path !== filePath),
+        }
       }
     })
 
@@ -1951,9 +2379,6 @@ export class FileBrowser {
     }
     this.fileNavigation?.refresh(this.selected, this.checkpointView, this.selectedPlaceholder)
   }
-
-
-
 
   private onKey(event: KeyboardEvent): void {
     if (event.defaultPrevented || event.isComposing || !this.root.isConnected) return

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { lstat, realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
@@ -79,6 +79,7 @@ export interface ResolvedPackDestination {
   outputPath: string
   level: string
   basis: string
+  title?: string
 }
 
 export const resolvePackDestination = (
@@ -102,10 +103,16 @@ export const resolvePackDestination = (
         Object.assign(error, { code: 'VALIDATION_ERROR' })
         throw error
       }
-      return { outputPath: resolvedOut, level: 'L0', basis: 'user instruction (file)' }
+      const title = titleOption ?? stem
+      return { outputPath: resolvedOut, level: 'L0', basis: 'user instruction (file)', title }
     } else {
       const targetFile = join(resolvedOut, `${canonicalStem}.taco.html`)
-      return { outputPath: targetFile, level: 'L0', basis: 'user instruction (dir)' }
+      return {
+        outputPath: targetFile,
+        level: 'L0',
+        basis: 'user instruction (dir)',
+        title: titleOption ?? canonicalStem,
+      }
     }
   }
 
@@ -118,23 +125,47 @@ export const resolvePackDestination = (
       throw error
     }
     const target = join(home, 'Documents', 'tacos', `${canonicalStem}.taco.html`)
-    return { outputPath: target, level: 'L5', basis: 'outside repository' }
+    return {
+      outputPath: target,
+      level: 'L5',
+      basis: 'outside repository',
+      title: titleOption ?? canonicalStem,
+    }
   }
 
   if (resolvedInput === repoRoot) {
     const target = join(repoRoot, 'tacos', `${canonicalStem}.taco.html`)
-    return { outputPath: target, level: 'L2', basis: 'repository root' }
+    return {
+      outputPath: target,
+      level: 'L2',
+      basis: 'repository root',
+      title: titleOption ?? canonicalStem,
+    }
   }
 
   const candidateDirs = ['docs', 'doc', 'documents', 'specs']
   for (const dirName of candidateDirs) {
     const probe = join(repoRoot, dirName)
-    if (existsSync(probe)) {
-      const target = join(probe, 'tacos', `${canonicalStem}.taco.html`)
-      return { outputPath: target, level: 'L3', basis: `repository contains ${dirName}/` }
+    try {
+      if (statSync(probe).isDirectory()) {
+        const target = join(probe, 'tacos', `${canonicalStem}.taco.html`)
+        return {
+          outputPath: target,
+          level: 'L3',
+          basis: `repository contains ${dirName}/`,
+          title: titleOption ?? canonicalStem,
+        }
+      }
+    } catch {
+      // Skip non-existent or inaccessible paths and continue cascade
     }
   }
 
   const target = join(repoRoot, 'tacos', `${canonicalStem}.taco.html`)
-  return { outputPath: target, level: 'L4', basis: 'repository without doc directories' }
+  return {
+    outputPath: target,
+    level: 'L4',
+    basis: 'repository without doc directories',
+    title: titleOption ?? canonicalStem,
+  }
 }

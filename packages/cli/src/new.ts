@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs'
+import { mkdir } from 'node:fs/promises'
 import { basename, dirname, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import {
@@ -46,7 +47,10 @@ export const executeNew = async (
     await verifyNotForbidden(targetPath)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', msg)) }
+    return {
+      exitCode: EXIT_CODES.VALIDATION_ERROR,
+      stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', msg)),
+    }
   }
 
   const rawTitle = options.title ?? tacoFileBase(targetPath)
@@ -75,7 +79,10 @@ export const executeNew = async (
     validateBundle(bundle)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', msg)) }
+    return {
+      exitCode: EXIT_CODES.VALIDATION_ERROR,
+      stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', msg)),
+    }
   }
 
   const shell = options.lite ? LITE_SHELL_HTML : COMPLETE_SHELL_HTML
@@ -85,10 +92,24 @@ export const executeNew = async (
   }
 
   try {
+    await mkdir(dirname(targetPath), { recursive: true })
     const html = embedBundle(shell, bundle)
-    await atomicWrite(targetPath, html)
+    await atomicWrite(targetPath, html, { exclusive: true })
   } catch (err) {
-    const error = makeCliError('LOCAL_IO_ERROR', `Failed to write taco file: ${(err as Error).message}`)
+    if (
+      (err as NodeJS.ErrnoException).code === 'EEXIST' ||
+      (err instanceof Error && err.message.includes('Refusing to overwrite'))
+    ) {
+      const error = makeCliError(
+        'CONFLICT_ERROR',
+        `Target file already exists: ${targetPath}. Refusing to overwrite.`,
+      )
+      return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+    }
+    const error = makeCliError(
+      'LOCAL_IO_ERROR',
+      `Failed to write taco file: ${(err as Error).message}`,
+    )
     return { exitCode: EXIT_CODES.LOCAL_IO_ERROR, stderr: JSON.stringify(error) }
   }
 

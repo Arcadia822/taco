@@ -368,8 +368,14 @@ export function createUnifiedDiff(oldText: string, newText: string, path: string
       curPos++
     }
 
-    const oldStart = oldCount === 0 ? (hunkOldStartLine === 1 ? 0 : hunkOldStartLine - 1) : hunkOldStartLine
-    const newStart = newCount === 0 ? (hunkNewLineStartLine === 1 ? 0 : hunkNewLineStartLine - 1) : hunkNewLineStartLine
+    const oldStart =
+      oldCount === 0 ? (hunkOldStartLine === 1 ? 0 : hunkOldStartLine - 1) : hunkOldStartLine
+    const newStart =
+      newCount === 0
+        ? hunkNewLineStartLine === 1
+          ? 0
+          : hunkNewLineStartLine - 1
+        : hunkNewLineStartLine
 
     hunks.push({
       oldStart,
@@ -404,7 +410,13 @@ interface GenericCommentRecord {
   id: string
   status: 'open' | 'resolved'
   anchor: { path: string } | null
-  messages: Array<{ id: string; body?: string | null; author?: string }>
+  messages: Array<{
+    id: string
+    body?: string | null
+    author?: string
+    updatedAt?: string
+    deletedAt?: string
+  }>
 }
 
 interface GenericBundle {
@@ -414,7 +426,12 @@ interface GenericBundle {
   files: GenericFileRecord[]
   comments: GenericCommentRecord[]
   checkpoints: {
-    nodes?: Array<{ id: string; title?: string; after?: string[]; documents?: Array<{ path: string }> }>
+    nodes?: Array<{
+      id: string
+      title?: string
+      after?: string[]
+      documents?: Array<{ path: string }>
+    }>
     documents?: Array<{ path: string; status: string }>
   } | null
   ignorePatterns: string[]
@@ -424,11 +441,19 @@ function readIgnorePatterns(source: Record<string, unknown>): string[] {
   const packOptions = source.packOptions
   if (typeof packOptions !== 'object' || packOptions === null) return []
   const ignore = (packOptions as Record<string, unknown>).ignore
-  return Array.isArray(ignore) ? ignore.filter((pattern): pattern is string => typeof pattern === 'string') : []
+  return Array.isArray(ignore)
+    ? ignore.filter((pattern): pattern is string => typeof pattern === 'string')
+    : []
 }
 
 async function readTacoArtifact(filePath: string): Promise<GenericBundle> {
-  const html = await readFile(filePath, 'utf8')
+  const resolved = resolve(filePath)
+  if (!existsSync(resolved)) {
+    const error = new Error(`File not found: ${filePath}`) as Error & { code: string }
+    error.code = 'LOCAL_IO_ERROR'
+    throw error
+  }
+  const html = await readFile(resolved, 'utf8')
   const rawBundle = extractTacoBundleFromHtml(html)
 
   const docId = typeof rawBundle.docId === 'string' ? rawBundle.docId : ''
@@ -454,7 +479,10 @@ async function readTacoArtifact(filePath: string): Promise<GenericBundle> {
   for (const c of rawComments) {
     if (typeof c === 'object' && c !== null) {
       const rec = c as Record<string, unknown>
-      const anchor = typeof rec.anchor === 'object' && rec.anchor !== null ? (rec.anchor as { path: string }) : null
+      const anchor =
+        typeof rec.anchor === 'object' && rec.anchor !== null
+          ? (rec.anchor as { path: string })
+          : null
       const rawMsgs = Array.isArray(rec.messages) ? rec.messages : []
       const messages = rawMsgs.map((m) => {
         const mr = m as Record<string, unknown>
@@ -462,6 +490,8 @@ async function readTacoArtifact(filePath: string): Promise<GenericBundle> {
           id: String(mr.id ?? ''),
           body: typeof mr.body === 'string' ? mr.body : null,
           author: typeof mr.author === 'string' ? mr.author : undefined,
+          updatedAt: typeof mr.updatedAt === 'string' ? mr.updatedAt : undefined,
+          deletedAt: typeof mr.deletedAt === 'string' ? mr.deletedAt : undefined,
         }
       })
       comments.push({
@@ -473,11 +503,20 @@ async function readTacoArtifact(filePath: string): Promise<GenericBundle> {
     }
   }
 
-  const checkpoints = typeof rawBundle.checkpoints === 'object' && rawBundle.checkpoints !== null
-    ? (rawBundle.checkpoints as GenericBundle['checkpoints'])
-    : null
+  const checkpoints =
+    typeof rawBundle.checkpoints === 'object' && rawBundle.checkpoints !== null
+      ? (rawBundle.checkpoints as GenericBundle['checkpoints'])
+      : null
 
-  return { docId, title, root, files, comments, checkpoints, ignorePatterns: readIgnorePatterns(rawBundle) }
+  return {
+    docId,
+    title,
+    root,
+    files,
+    comments,
+    checkpoints,
+    ignorePatterns: readIgnorePatterns(rawBundle),
+  }
 }
 
 interface HostedDeltaPayload {
@@ -541,16 +580,42 @@ function parseLocalBundle(raw: Record<string, unknown>, label: string): GenericB
     mediaType: String(f.mediaType ?? 'text/plain'),
     content: typeof f.content === 'string' ? f.content : null,
   }))
-  const comments = (Array.isArray(raw.comments) ? raw.comments : []).map((c) => ({
-    id: String(c.id ?? ''),
-    status: (c.status === 'resolved' ? 'resolved' : 'open') as 'open' | 'resolved',
-    anchor: c.anchor ? { path: String(c.anchor.path ?? '') } : null,
-    messages: Array.isArray(c.messages) ? c.messages : [],
-  }))
-  const checkpoints = typeof raw.checkpoints === 'object' && raw.checkpoints !== null
-    ? (raw.checkpoints as GenericBundle['checkpoints'])
-    : null
-  return { docId, title, root, files, comments, checkpoints, ignorePatterns: readIgnorePatterns(raw) }
+  const rawComments = Array.isArray(raw.comments) ? raw.comments : []
+  const comments: GenericCommentRecord[] = rawComments.map((c) => {
+    const rec = c && typeof c === 'object' ? (c as Record<string, unknown>) : {}
+    const anchorRec =
+      rec.anchor && typeof rec.anchor === 'object' ? (rec.anchor as Record<string, unknown>) : null
+    const rawMsgs = Array.isArray(rec.messages) ? rec.messages : []
+    const messages = rawMsgs.map((m) => {
+      const mr = m && typeof m === 'object' ? (m as Record<string, unknown>) : {}
+      return {
+        id: String(mr.id ?? ''),
+        body: typeof mr.body === 'string' ? mr.body : null,
+        author: typeof mr.author === 'string' ? mr.author : undefined,
+        updatedAt: typeof mr.updatedAt === 'string' ? mr.updatedAt : undefined,
+        deletedAt: typeof mr.deletedAt === 'string' ? mr.deletedAt : undefined,
+      }
+    })
+    return {
+      id: String(rec.id ?? ''),
+      status: (rec.status === 'resolved' ? 'resolved' : 'open') as 'open' | 'resolved',
+      anchor: anchorRec ? { path: String(anchorRec.path ?? '') } : null,
+      messages,
+    }
+  })
+  const checkpoints =
+    typeof raw.checkpoints === 'object' && raw.checkpoints !== null
+      ? (raw.checkpoints as GenericBundle['checkpoints'])
+      : null
+  return {
+    docId,
+    title,
+    root,
+    files,
+    comments,
+    checkpoints,
+    ignorePatterns: readIgnorePatterns(raw),
+  }
 }
 
 function isHostedDeltaPayload(payload: Record<string, unknown>): boolean {
@@ -574,7 +639,9 @@ function parseHostedDeltaPayload(payload: Record<string, unknown>): HostedDeltaP
     }
     const changeType = fr.changeType
     if (changeType !== undefined && !((changeType as string) in CHANGE_TYPE_FLAGS)) {
-      throw validationError(`Hosted handoff file change has unsupported changeType: ${String(changeType)}`)
+      throw validationError(
+        `Hosted handoff file change has unsupported changeType: ${String(changeType)}`,
+      )
     }
     return {
       id: typeof fr.id === 'string' ? fr.id : undefined,
@@ -599,16 +666,26 @@ function parseHostedDeltaPayload(payload: Record<string, unknown>): HostedDeltaP
   }
 
   return {
-    changedFiles: Array.isArray(payload.changedFiles) ? payload.changedFiles.map(mapFile) : undefined,
-    incrementalFiles: Array.isArray(payload.incrementalFiles) ? payload.incrementalFiles.map(mapFile) : undefined,
-    checkpointChanges: Array.isArray(payload.checkpointChanges) ? payload.checkpointChanges.map(mapCp) : undefined,
+    changedFiles: Array.isArray(payload.changedFiles)
+      ? payload.changedFiles.map(mapFile)
+      : undefined,
+    incrementalFiles: Array.isArray(payload.incrementalFiles)
+      ? payload.incrementalFiles.map(mapFile)
+      : undefined,
+    checkpointChanges: Array.isArray(payload.checkpointChanges)
+      ? payload.checkpointChanges.map(mapCp)
+      : undefined,
     incrementalCheckpointChanges: Array.isArray(payload.incrementalCheckpointChanges)
       ? payload.incrementalCheckpointChanges.map(mapCp)
       : undefined,
-    checkpointDefinitionDelta: (payload.checkpointDefinitionDelta as CheckpointDefinitionDelta | undefined) ?? null,
+    checkpointDefinitionDelta:
+      (payload.checkpointDefinitionDelta as CheckpointDefinitionDelta | undefined) ?? null,
     incrementalCheckpointDefinitionDelta:
-      (payload.incrementalCheckpointDefinitionDelta as CheckpointDefinitionDelta | undefined) ?? null,
-    comments: Array.isArray(payload.comments) ? (payload.comments as GenericCommentRecord[]) : undefined,
+      (payload.incrementalCheckpointDefinitionDelta as CheckpointDefinitionDelta | undefined) ??
+      null,
+    comments: Array.isArray(payload.comments)
+      ? (payload.comments as GenericCommentRecord[])
+      : undefined,
     checkpoints: (payload.checkpoints as GenericBundle['checkpoints']) ?? null,
   }
 }
@@ -622,7 +699,13 @@ async function readHandoffPayload(sourceOrPath: string): Promise<HandoffParseRes
     }
     jsonText = Buffer.concat(chunks).toString('utf8')
   } else {
-    jsonText = await readFile(sourceOrPath, 'utf8')
+    const resolvedHandoff = resolve(sourceOrPath)
+    if (!existsSync(resolvedHandoff)) {
+      const error = new Error(`Handoff file not found: ${sourceOrPath}`) as Error & { code: string }
+      error.code = 'LOCAL_IO_ERROR'
+      throw error
+    }
+    jsonText = await readFile(resolvedHandoff, 'utf8')
   }
 
   let parsed: Record<string, unknown>
@@ -638,8 +721,7 @@ async function readHandoffPayload(sourceOrPath: string): Promise<HandoffParseRes
   const schema = typeof parsed.schema === 'string' ? parsed.schema : undefined
   if (schema === 'taco-local-receipt/1' || schema === 'taco-local-handoff/1') {
     const container = (schema === 'taco-local-receipt/1' ? parsed.payload : parsed) as
-      | Record<string, unknown>
-      | undefined
+      Record<string, unknown> | undefined
     const baselineRaw = container?.baseline as Record<string, unknown> | undefined
     const snapshotRaw = container?.snapshot as Record<string, unknown> | undefined
     if (!baselineRaw || !snapshotRaw) {
@@ -693,7 +775,12 @@ async function readDirectoryMap(
   // Reuse the canonical pack enumerator so the diff sees exactly what `pack` would:
   // dotfiles, `.taco.html` artifacts and `--ignore` matches are skipped, while symlinks,
   // unsupported HTML and invalid PNG/UTF-8 entries are rejected instead of silently compared.
-  const { files } = await collectFiles(resolvedRoot, rootPath, new Map<string, TacoFile>(), ignorePatterns)
+  const { files } = await collectFiles(
+    resolvedRoot,
+    rootPath,
+    new Map<string, TacoFile>(),
+    ignorePatterns,
+  )
   const fileMap = new Map<string, { content: string; mediaType: string; size: number }>()
   for (const file of files) {
     fileMap.set(file.path, {
@@ -705,7 +792,10 @@ async function readDirectoryMap(
   return fileMap
 }
 
-function computeCommentDiffs(oldComments: GenericCommentRecord[], newComments: GenericCommentRecord[]): CommentChange[] {
+function computeCommentDiffs(
+  oldComments: GenericCommentRecord[],
+  newComments: GenericCommentRecord[],
+): CommentChange[] {
   const oldMap = new Map(oldComments.map((c) => [c.id, c]))
   const newMap = new Map(newComments.map((c) => [c.id, c]))
   const changes: CommentChange[] = []
@@ -722,11 +812,35 @@ function computeCommentDiffs(oldComments: GenericCommentRecord[], newComments: G
       changes.push({ id, path: anchorPath, changeType: 'resolved', author, snippet })
     } else if (oldThread.status === 'resolved' && newThread.status === 'open') {
       changes.push({ id, path: anchorPath, changeType: 'reopened', author, snippet })
-    } else if (
-      oldThread.messages.length !== newThread.messages.length ||
-      oldThread.messages[oldThread.messages.length - 1]?.body !== newThread.messages[newThread.messages.length - 1]?.body
-    ) {
-      changes.push({ id, path: anchorPath, changeType: 'modified', author, snippet })
+    } else {
+      let messagesModified = false
+      if (oldThread.messages.length !== newThread.messages.length) {
+        messagesModified = true
+      } else {
+        const oldMsgMap = new Map(oldThread.messages.map((m) => [m.id, m]))
+        for (const newMsg of newThread.messages) {
+          const oldMsg = oldMsgMap.get(newMsg.id)
+          if (!oldMsg) {
+            messagesModified = true
+            break
+          }
+          if (oldMsg.body !== newMsg.body) {
+            messagesModified = true
+            break
+          }
+          if (oldMsg.updatedAt !== newMsg.updatedAt) {
+            messagesModified = true
+            break
+          }
+          if (oldMsg.deletedAt !== newMsg.deletedAt) {
+            messagesModified = true
+            break
+          }
+        }
+      }
+      if (messagesModified) {
+        changes.push({ id, path: anchorPath, changeType: 'modified', author, snippet })
+      }
     }
   }
 
@@ -779,7 +893,8 @@ function computeCheckpointDiffs(
     }
   }
 
-  const graphChanged = (oldCp?.nodes?.length ?? 0) !== (newCp?.nodes?.length ?? 0) || activeNodeChanges.length > 0
+  const graphChanged =
+    (oldCp?.nodes?.length ?? 0) !== (newCp?.nodes?.length ?? 0) || activeNodeChanges.length > 0
 
   return {
     statusChanges,
@@ -851,7 +966,9 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
           newSize: newF.content ? Buffer.byteLength(newF.content, 'utf8') : 0,
         })
       } else if (oldF.content !== newF.content) {
-        const diffText = isPng ? null : createUnifiedDiff(oldF.content ?? '', newF.content ?? '', path)
+        const diffText = isPng
+          ? null
+          : createUnifiedDiff(oldF.content ?? '', newF.content ?? '', path)
         changedFiles.push({
           id: newF.id,
           path,
@@ -887,10 +1004,16 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
     checkpointChanges = computeCheckpointDiffs(sourceBundle.checkpoints, targetBundle.checkpoints)
   } else if (mode === 'taco-vs-dir') {
     trustedBaseline = false
-    unverifiedWarnings.push('Missing trusted review-start baseline: canonical conflict status is unverified; cannot guarantee safe apply.')
+    unverifiedWarnings.push(
+      'Missing trusted review-start baseline: canonical conflict status is unverified; cannot guarantee safe apply.',
+    )
 
     const sourceBundle = await readTacoArtifact(options.source)
-    const dirMap = await readDirectoryMap(options.dir!, sourceBundle.root, sourceBundle.ignorePatterns)
+    const dirMap = await readDirectoryMap(
+      options.dir!,
+      sourceBundle.root,
+      sourceBundle.ignorePatterns,
+    )
 
     const bundleFilesMap = new Map(sourceBundle.files.map((f) => [f.path, f]))
 
@@ -911,7 +1034,9 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
           newSize: bundleF.content ? Buffer.byteLength(bundleF.content, 'utf8') : 0,
         })
       } else if (dirF.content !== bundleF.content) {
-        const diffText = isPng ? null : createUnifiedDiff(dirF.content, bundleF.content ?? '', bundleF.path)
+        const diffText = isPng
+          ? null
+          : createUnifiedDiff(dirF.content, bundleF.content ?? '', bundleF.path)
         changedFiles.push({
           id: bundleF.id,
           path: bundleF.path,
@@ -947,7 +1072,9 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
 
     if (handoff.hostedPayload) {
       trustedBaseline = false
-      unverifiedWarnings.push('Hosted delta-only review payload has no local baseline text; baseline trust is unverified.')
+      unverifiedWarnings.push(
+        'Hosted delta-only review payload has no local baseline text; baseline trust is unverified.',
+      )
       if (handoff.hostedPayload.changedFiles) {
         changedFiles.push(...handoff.hostedPayload.changedFiles)
       }
@@ -958,14 +1085,16 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
         checkpointChanges.statusChanges = handoff.hostedPayload.checkpointChanges
       }
       if (handoff.hostedPayload.incrementalCheckpointChanges) {
-        checkpointChanges.incrementalStatusChanges = handoff.hostedPayload.incrementalCheckpointChanges
+        checkpointChanges.incrementalStatusChanges =
+          handoff.hostedPayload.incrementalCheckpointChanges
       }
       if (handoff.hostedPayload.checkpointDefinitionDelta) {
         checkpointChanges.definitionChanges = handoff.hostedPayload.checkpointDefinitionDelta
         checkpointChanges.graphChanged = true
       }
       if (handoff.hostedPayload.incrementalCheckpointDefinitionDelta) {
-        checkpointChanges.incrementalDefinitionChanges = handoff.hostedPayload.incrementalCheckpointDefinitionDelta
+        checkpointChanges.incrementalDefinitionChanges =
+          handoff.hostedPayload.incrementalCheckpointDefinitionDelta
         checkpointChanges.graphChanged = true
       }
       if (handoff.hostedPayload.comments) {
@@ -974,7 +1103,10 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
     } else if (handoff.snapshot) {
       const baseline = handoff.baseline
       if (baseline) {
-        if (baseline.docId !== sourceBundle.docId || handoff.snapshot.docId !== sourceBundle.docId) {
+        if (
+          baseline.docId !== sourceBundle.docId ||
+          handoff.snapshot.docId !== sourceBundle.docId
+        ) {
           throw conflictError('Handoff baseline/snapshot docId does not match artifact docId')
         }
         if (baseline.root !== sourceBundle.root || handoff.snapshot.root !== sourceBundle.root) {
@@ -988,7 +1120,9 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
         }
       } else {
         trustedBaseline = false
-        unverifiedWarnings.push('Missing trusted review-start baseline: canonical conflict status is unverified.')
+        unverifiedWarnings.push(
+          'Missing trusted review-start baseline: canonical conflict status is unverified.',
+        )
       }
       const baseFiles = baseline ? baseline.files : sourceBundle.files
       const snapFiles = handoff.snapshot.files
@@ -996,12 +1130,43 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
       const oldFilesMap = new Map(baseFiles.map((f) => [f.path, f]))
       const newFilesMap = new Map(snapFiles.map((f) => [f.path, f]))
 
+      const oldFilesById = new Map<string, GenericFileRecord>()
+      for (const f of baseFiles) {
+        if (f.id) oldFilesById.set(f.id, f)
+      }
+
+      for (const newF of snapFiles) {
+        let pairedOld: GenericFileRecord | undefined = undefined
+        if (newF.id && oldFilesById.has(newF.id)) {
+          pairedOld = oldFilesById.get(newF.id)
+        } else {
+          pairedOld = oldFilesMap.get(newF.path)
+        }
+        if (pairedOld) {
+          const isHtml =
+            /\.html?$/i.test(newF.path) ||
+            /\.html?$/i.test(pairedOld.path) ||
+            newF.mediaType === 'text/html' ||
+            pairedOld.mediaType === 'text/html'
+          if (isHtml && pairedOld.content !== newF.content) {
+            throw conflictError(
+              `Tampering detected: read-only HTML file '${newF.path}' content was modified in review handoff`,
+            )
+          }
+        }
+      }
+
       for (const [path, newF] of newFilesMap.entries()) {
         const oldF = oldFilesMap.get(path)
         const isPng = newF.mediaType === 'image/png' || path.endsWith('.png')
-        const isHtml = /\.html?$/i.test(path) || newF.mediaType === 'text/html' || oldF?.mediaType === 'text/html'
+        const isHtml =
+          /\.html?$/i.test(path) ||
+          newF.mediaType === 'text/html' ||
+          oldF?.mediaType === 'text/html'
         if (isHtml && oldF && newF && oldF.content !== newF.content) {
-          throw conflictError(`Tampering detected: read-only HTML file '${path}' content was modified in review handoff`)
+          throw conflictError(
+            `Tampering detected: read-only HTML file '${path}' content was modified in review handoff`,
+          )
         }
 
         if (!oldF) {
@@ -1017,7 +1182,9 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
             newSize: newF.content ? Buffer.byteLength(newF.content, 'utf8') : 0,
           })
         } else if (oldF.content !== newF.content) {
-          const diffText = isPng ? null : createUnifiedDiff(oldF.content ?? '', newF.content ?? '', path)
+          const diffText = isPng
+            ? null
+            : createUnifiedDiff(oldF.content ?? '', newF.content ?? '', path)
           changedFiles.push({
             id: newF.id,
             path,
@@ -1034,7 +1201,6 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
 
       for (const [path, oldF] of oldFilesMap.entries()) {
         if (!newFilesMap.has(path)) {
-
           const isPng = oldF.mediaType === 'image/png' || path.endsWith('.png')
           const diffText = isPng ? null : createUnifiedDiff(oldF.content ?? '', '', path)
           changedFiles.push({
@@ -1068,7 +1234,34 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
       if (handoff.baseline.root !== handoff.snapshot.root) {
         throw conflictError('Handoff root does not match')
       }
-      trustedBaseline = true
+
+      const hasSourceTaco = Boolean(
+        options.source && options.source !== options.dir && options.source !== options.handoff,
+      )
+      if (hasSourceTaco) {
+        const sourceBundle = await readTacoArtifact(options.source)
+        if (
+          handoff.baseline.docId !== sourceBundle.docId ||
+          handoff.snapshot.docId !== sourceBundle.docId
+        ) {
+          throw conflictError('Handoff baseline/snapshot docId does not match artifact docId')
+        }
+        if (
+          handoff.baseline.root !== sourceBundle.root ||
+          handoff.snapshot.root !== sourceBundle.root
+        ) {
+          throw conflictError('Handoff root does not match artifact root')
+        }
+        if (!baselineMatchesArtifact(handoff.baseline, sourceBundle)) {
+          throw conflictError('Review-start baseline text does not match the artifact')
+        }
+        trustedBaseline = true
+      } else {
+        trustedBaseline = false
+        unverifiedWarnings.push(
+          'Missing trusted review-start baseline: canonical conflict status is unverified.',
+        )
+      }
       const root = handoff.snapshot.root
       const dirMap = await readDirectoryMap(
         options.dir!,
@@ -1081,12 +1274,43 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
       const baselineFilesMap = new Map(handoff.baseline.files.map((f) => [f.path, f]))
       const snapshotFilesMap = new Map(handoff.snapshot.files.map((f) => [f.path, f]))
 
+      const baselineFilesById = new Map<string, GenericFileRecord>()
+      for (const f of handoff.baseline.files) {
+        if (f.id) baselineFilesById.set(f.id, f)
+      }
+
+      for (const snapF of handoff.snapshot.files) {
+        let pairedBase: GenericFileRecord | undefined = undefined
+        if (snapF.id && baselineFilesById.has(snapF.id)) {
+          pairedBase = baselineFilesById.get(snapF.id)
+        } else {
+          pairedBase = baselineFilesMap.get(snapF.path)
+        }
+        if (pairedBase) {
+          const isHtml =
+            /\.html?$/i.test(snapF.path) ||
+            /\.html?$/i.test(pairedBase.path) ||
+            snapF.mediaType === 'text/html' ||
+            pairedBase.mediaType === 'text/html'
+          if (isHtml && pairedBase.content !== snapF.content) {
+            throw conflictError(
+              `Tampering detected: read-only HTML file '${snapF.path}' content was modified in review handoff`,
+            )
+          }
+        }
+      }
+
       for (const [path, snapF] of snapshotFilesMap.entries()) {
         const baseF = baselineFilesMap.get(path)
         const isPng = snapF.mediaType === 'image/png' || path.endsWith('.png')
-        const isHtml = /\.html?$/i.test(path) || snapF.mediaType === 'text/html' || baseF?.mediaType === 'text/html'
+        const isHtml =
+          /\.html?$/i.test(path) ||
+          snapF.mediaType === 'text/html' ||
+          baseF?.mediaType === 'text/html'
         if (isHtml && baseF && snapF && baseF.content !== snapF.content) {
-          throw conflictError(`Tampering detected: read-only HTML file '${path}' content was modified in review handoff`)
+          throw conflictError(
+            `Tampering detected: read-only HTML file '${path}' content was modified in review handoff`,
+          )
         }
 
         if (!baseF) {
@@ -1102,7 +1326,9 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
             newSize: snapF.content ? Buffer.byteLength(snapF.content, 'utf8') : 0,
           })
         } else if (baseF.content !== snapF.content) {
-          const diffText = isPng ? null : createUnifiedDiff(baseF.content ?? '', snapF.content ?? '', snapF.path)
+          const diffText = isPng
+            ? null
+            : createUnifiedDiff(baseF.content ?? '', snapF.content ?? '', snapF.path)
           changedFiles.push({
             id: snapF.id,
             path: snapF.path,
@@ -1119,7 +1345,6 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
 
       for (const [path, baseF] of baselineFilesMap.entries()) {
         if (!snapshotFilesMap.has(path)) {
-
           const isPng = baseF.mediaType === 'image/png' || path.endsWith('.png')
           const diffText = isPng ? null : createUnifiedDiff(baseF.content ?? '', '', baseF.path)
           changedFiles.push({
@@ -1136,9 +1361,16 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
       }
 
       commentChanges = computeCommentDiffs(handoff.baseline.comments, handoff.snapshot.comments)
-      checkpointChanges = computeCheckpointDiffs(handoff.baseline.checkpoints, handoff.snapshot.checkpoints)
+      checkpointChanges = computeCheckpointDiffs(
+        handoff.baseline.checkpoints,
+        handoff.snapshot.checkpoints,
+      )
 
-      const allKnownPaths = new Set([...baselineFilesMap.keys(), ...snapshotFilesMap.keys(), ...dirMap.keys()])
+      const allKnownPaths = new Set([
+        ...baselineFilesMap.keys(),
+        ...snapshotFilesMap.keys(),
+        ...dirMap.keys(),
+      ])
       for (const path of allKnownPaths) {
         const baseF = baselineFilesMap.get(path)
         const snapF = snapshotFilesMap.get(path)
@@ -1163,7 +1395,9 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
       }
     } else if (handoff.hostedPayload) {
       trustedBaseline = false
-      unverifiedWarnings.push('Hosted delta-only review payload has no local baseline text; 3-way canonical conflict detection is unverified.')
+      unverifiedWarnings.push(
+        'Hosted delta-only review payload has no local baseline text; 3-way canonical conflict detection is unverified.',
+      )
       if (handoff.hostedPayload.changedFiles) {
         changedFiles.push(...handoff.hostedPayload.changedFiles)
       }
@@ -1174,14 +1408,16 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
         checkpointChanges.statusChanges = handoff.hostedPayload.checkpointChanges
       }
       if (handoff.hostedPayload.incrementalCheckpointChanges) {
-        checkpointChanges.incrementalStatusChanges = handoff.hostedPayload.incrementalCheckpointChanges
+        checkpointChanges.incrementalStatusChanges =
+          handoff.hostedPayload.incrementalCheckpointChanges
       }
       if (handoff.hostedPayload.checkpointDefinitionDelta) {
         checkpointChanges.definitionChanges = handoff.hostedPayload.checkpointDefinitionDelta
         checkpointChanges.graphChanged = true
       }
       if (handoff.hostedPayload.incrementalCheckpointDefinitionDelta) {
-        checkpointChanges.incrementalDefinitionChanges = handoff.hostedPayload.incrementalCheckpointDefinitionDelta
+        checkpointChanges.incrementalDefinitionChanges =
+          handoff.hostedPayload.incrementalCheckpointDefinitionDelta
         checkpointChanges.graphChanged = true
       }
       if (handoff.hostedPayload.comments) {
@@ -1189,14 +1425,18 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
       }
     } else {
       trustedBaseline = false
-      unverifiedWarnings.push('Missing trusted review-start baseline: 3-way canonical conflict detection is unverified.')
+      unverifiedWarnings.push(
+        'Missing trusted review-start baseline: 3-way canonical conflict detection is unverified.',
+      )
     }
   }
   for (const cf of changedFiles) {
     if (cf.binary && (cf.changeType === 'added' || cf.changeType === 'modified')) {
       if (!cf.content || !cf.content.startsWith('data:image/png;base64,')) {
         cf.unverified = true
-        unverifiedWarnings.push(`Binary PNG file '${cf.path}' missing verified content; cannot apply.`)
+        unverifiedWarnings.push(
+          `Binary PNG file '${cf.path}' missing verified content; cannot apply.`,
+        )
       }
     }
   }
@@ -1232,7 +1472,10 @@ export async function executeDiff(options: DiffOptions): Promise<DiffOutput> {
       hasConflicts: conflicts.length > 0,
       hasIncremental:
         Boolean(incrementalFiles && incrementalFiles.length > 0) ||
-        Boolean(checkpointChanges.incrementalStatusChanges && checkpointChanges.incrementalStatusChanges.length > 0) ||
+        Boolean(
+          checkpointChanges.incrementalStatusChanges &&
+          checkpointChanges.incrementalStatusChanges.length > 0,
+        ) ||
         Boolean(checkpointChanges.incrementalDefinitionChanges),
     },
   }

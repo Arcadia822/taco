@@ -1,10 +1,7 @@
 import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
-import {
-  packDirectory,
-  type PackResult,
-} from '../../../skills/taco/scripts/pack.mjs'
+import { packDirectory, type PackResult } from '../../../skills/taco/scripts/pack.mjs'
 import { EXIT_CODES, makeCliError } from './errors.ts'
 import { COMPLETE_SHELL_HTML, LITE_SHELL_HTML } from './generated/assets.ts'
 import {
@@ -60,7 +57,7 @@ export const executePack = async (
     const result: PackResult = await packDirectory({
       dir: resolve(options.dir),
       out: destinationPath,
-      title: options.title,
+      title: options.title ?? resolvedDestination.title,
       entry: options.entry,
       root: options.root,
       group: options.group,
@@ -68,6 +65,7 @@ export const executePack = async (
       lite: options.lite,
       dryRun: options.dryRun,
       customShellHtml: options.lite ? LITE_SHELL_HTML : COMPLETE_SHELL_HTML,
+      exclusive: true,
     })
 
     const payload = {
@@ -93,7 +91,10 @@ export const executePack = async (
       msg.includes('symbolic link') ||
       msg.includes('Non-canonical') ||
       msg.includes('required directory')
-    const isConflict = msg.includes('already exists')
+    const isConflict =
+      msg.includes('already exists') ||
+      msg.includes('Refusing to overwrite') ||
+      (err as NodeJS.ErrnoException).code === 'EEXIST'
     if (isConflict) {
       const error = makeCliError('CONFLICT_ERROR', msg)
       return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }

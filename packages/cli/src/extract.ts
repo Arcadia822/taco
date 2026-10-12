@@ -1,10 +1,18 @@
-import { lstat, mkdir, readFile, rm, rmdir, writeFile } from 'node:fs/promises'
-import { dirname, resolve, sep } from 'node:path'
+import { constants as fsConstants } from 'node:fs'
 import {
-  isSafePath,
-  validateBundle,
-  type TacoBundle,
-} from '../../../skills/taco/scripts/pack.mjs'
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  realpath,
+  rm,
+  rmdir,
+  unlink,
+  writeFile,
+  type FileHandle,
+} from 'node:fs/promises'
+import { dirname, relative, resolve, sep } from 'node:path'
+import { isSafePath, validateBundle, type TacoBundle } from '../../../skills/taco/scripts/pack.mjs'
 import { decodePng } from '../../../skills/taco/scripts/png.mjs'
 import { extractTacoBundleFromHtml } from './inspect.ts'
 import { canonicalizeSystemPrefix, verifyNotForbidden } from './local-paths.ts'
@@ -35,11 +43,45 @@ export interface ExtractOutput {
   }>
 }
 
+export interface OwnedResource {
+  path: string
+  dev: number
+  ino: number
+}
+
 export interface ExtractOptions {
   filePath: string
   outDir?: string
   files?: string[]
   dryRun?: boolean
+  _faultSeam?: 'before-write' | 'during-write' | 'after-close'
+}
+
+export async function rollbackExtraction(
+  createdFiles: OwnedResource[],
+  createdDirs: Iterable<OwnedResource>,
+): Promise<void> {
+  for (const created of [...createdFiles].reverse()) {
+    try {
+      const st = await lstat(created.path)
+      if (st.dev === created.dev && st.ino === created.ino) {
+        await unlink(created.path)
+      }
+    } catch {
+      // ignore best-effort removal
+    }
+  }
+  const sortedDirs = Array.from(createdDirs).sort((a, b) => b.path.length - a.path.length)
+  for (const dir of sortedDirs) {
+    try {
+      const st = await lstat(dir.path)
+      if (st.isDirectory() && st.dev === dir.dev && st.ino === dir.ino) {
+        await rmdir(dir.path)
+      }
+    } catch {
+      // ignore if non-empty or unable to remove
+    }
+  }
 }
 
 interface ErrorWithCode extends Error {
@@ -80,7 +122,10 @@ async function verifyNoSymlinksInAncestry(targetPath: string): Promise<void> {
     try {
       const stats = await lstat(current)
       if (stats.isSymbolicLink()) {
-        throw createTypedError('VALIDATION_ERROR', `Symlinks are rejected: '${current}' is a symbolic link`)
+        throw createTypedError(
+          'VALIDATION_ERROR',
+          `Symlinks are rejected: '${current}' is a symbolic link`,
+        )
       }
     } catch (err) {
       if (hasErrorCode(err)) {
@@ -88,10 +133,16 @@ async function verifyNoSymlinksInAncestry(targetPath: string): Promise<void> {
         if (err.code === 'ENOENT') {
           // Path component does not exist yet, continue checking parent
         } else {
-          throw createTypedError('LOCAL_IO_ERROR', `Failed to inspect path '${current}': ${getErrorMessage(err)}`)
+          throw createTypedError(
+            'LOCAL_IO_ERROR',
+            `Failed to inspect path '${current}': ${getErrorMessage(err)}`,
+          )
         }
       } else {
-        throw createTypedError('LOCAL_IO_ERROR', `Failed to inspect path '${current}': ${getErrorMessage(err)}`)
+        throw createTypedError(
+          'LOCAL_IO_ERROR',
+          `Failed to inspect path '${current}': ${getErrorMessage(err)}`,
+        )
       }
     }
     const parent = dirname(current)
@@ -105,7 +156,10 @@ export async function executeExtract(options: ExtractOptions): Promise<ExtractOu
   try {
     rawHtml = await readFile(options.filePath, 'utf8')
   } catch (err) {
-    throw createTypedError('LOCAL_IO_ERROR', `Failed to read input file '${options.filePath}': ${getErrorMessage(err)}`)
+    throw createTypedError(
+      'LOCAL_IO_ERROR',
+      `Failed to read input file '${options.filePath}': ${getErrorMessage(err)}`,
+    )
   }
 
   const rawBundle = extractTacoBundleFromHtml(rawHtml)
@@ -126,9 +180,10 @@ export async function executeExtract(options: ExtractOptions): Promise<ExtractOu
     const matchedFiles: typeof bundle.files = []
 
     for (const file of bundle.files) {
-      const relFromRoot = root !== '.' && file.path.startsWith(`${root}/`)
-        ? file.path.slice(root.length + 1)
-        : file.path
+      const relFromRoot =
+        root !== '.' && file.path.startsWith(`${root}/`)
+          ? file.path.slice(root.length + 1)
+          : file.path
 
       let matched = false
       requestedFilters.forEach((filterPath, index) => {
@@ -151,7 +206,10 @@ export async function executeExtract(options: ExtractOptions): Promise<ExtractOu
 
     for (let i = 0; i < requestedFilters.length; i++) {
       if (!matchedFilterIndices.has(i)) {
-        throw createTypedError('VALIDATION_ERROR', `Filter file not found in bundle: '${requestedFilters[i]}'`)
+        throw createTypedError(
+          'VALIDATION_ERROR',
+          `Filter file not found in bundle: '${requestedFilters[i]}'`,
+        )
       }
     }
 
@@ -186,7 +244,10 @@ export async function executeExtract(options: ExtractOptions): Promise<ExtractOu
           size: pngBytes.byteLength,
         })
       } catch (err) {
-        throw createTypedError('VALIDATION_ERROR', `Invalid PNG image '${file.path}': ${getErrorMessage(err)}`)
+        throw createTypedError(
+          'VALIDATION_ERROR',
+          `Invalid PNG image '${file.path}': ${getErrorMessage(err)}`,
+        )
       }
     } else {
       prepared.push({
@@ -237,16 +298,25 @@ export async function executeExtract(options: ExtractOptions): Promise<ExtractOu
   try {
     const stats = await lstat(resolvedOutDir)
     if (!stats.isDirectory()) {
-      throw createTypedError('CONFLICT_ERROR', `Output path '${resolvedOutDir}' exists and is not a directory`)
+      throw createTypedError(
+        'CONFLICT_ERROR',
+        `Output path '${resolvedOutDir}' exists and is not a directory`,
+      )
     }
   } catch (err) {
     if (hasErrorCode(err)) {
       if (err.code === 'CONFLICT_ERROR' || err.code === 'VALIDATION_ERROR') throw err
       if (err.code !== 'ENOENT') {
-        throw createTypedError('LOCAL_IO_ERROR', `Failed to inspect output directory '${resolvedOutDir}': ${getErrorMessage(err)}`)
+        throw createTypedError(
+          'LOCAL_IO_ERROR',
+          `Failed to inspect output directory '${resolvedOutDir}': ${getErrorMessage(err)}`,
+        )
       }
     } else {
-      throw createTypedError('LOCAL_IO_ERROR', `Failed to inspect output directory '${resolvedOutDir}': ${getErrorMessage(err)}`)
+      throw createTypedError(
+        'LOCAL_IO_ERROR',
+        `Failed to inspect output directory '${resolvedOutDir}': ${getErrorMessage(err)}`,
+      )
     }
   }
 
@@ -255,9 +325,10 @@ export async function executeExtract(options: ExtractOptions): Promise<ExtractOu
   const plannedDirPrefixes = new Set<string>()
 
   for (const item of prepared) {
-    const relPath = root !== '.' && item.file.path.startsWith(`${root}/`)
-      ? item.file.path.slice(root.length + 1)
-      : item.file.path
+    const relPath =
+      root !== '.' && item.file.path.startsWith(`${root}/`)
+        ? item.file.path.slice(root.length + 1)
+        : item.file.path
     const safeRel = relPath.replace(/^(\.\/)+/, '').replace(/^\/+/, '')
     const targetPath = canonicalizeSystemPrefix(resolve(resolvedOutDir, safeRel))
 
@@ -318,15 +389,24 @@ export async function executeExtract(options: ExtractOptions): Promise<ExtractOu
     // Check if targetPath already exists on disk (refuse overwrite)
     try {
       await lstat(targetPath)
-      throw createTypedError('CONFLICT_ERROR', `Refusing to overwrite existing file at '${targetPath}'`)
+      throw createTypedError(
+        'CONFLICT_ERROR',
+        `Refusing to overwrite existing file at '${targetPath}'`,
+      )
     } catch (err) {
       if (hasErrorCode(err)) {
         if (err.code === 'CONFLICT_ERROR' || err.code === 'VALIDATION_ERROR') throw err
         if (err.code !== 'ENOENT') {
-          throw createTypedError('LOCAL_IO_ERROR', `Failed to inspect target path '${targetPath}': ${getErrorMessage(err)}`)
+          throw createTypedError(
+            'LOCAL_IO_ERROR',
+            `Failed to inspect target path '${targetPath}': ${getErrorMessage(err)}`,
+          )
         }
       } else {
-        throw createTypedError('LOCAL_IO_ERROR', `Failed to inspect target path '${targetPath}': ${getErrorMessage(err)}`)
+        throw createTypedError(
+          'LOCAL_IO_ERROR',
+          `Failed to inspect target path '${targetPath}': ${getErrorMessage(err)}`,
+        )
       }
     }
 
@@ -345,10 +425,16 @@ export async function executeExtract(options: ExtractOptions): Promise<ExtractOu
         if (hasErrorCode(err)) {
           if (err.code === 'CONFLICT_ERROR' || err.code === 'VALIDATION_ERROR') throw err
           if (err.code !== 'ENOENT') {
-            throw createTypedError('LOCAL_IO_ERROR', `Failed to inspect ancestor directory '${ancestor}': ${getErrorMessage(err)}`)
+            throw createTypedError(
+              'LOCAL_IO_ERROR',
+              `Failed to inspect ancestor directory '${ancestor}': ${getErrorMessage(err)}`,
+            )
           }
         } else {
-          throw createTypedError('LOCAL_IO_ERROR', `Failed to inspect ancestor directory '${ancestor}': ${getErrorMessage(err)}`)
+          throw createTypedError(
+            'LOCAL_IO_ERROR',
+            `Failed to inspect ancestor directory '${ancestor}': ${getErrorMessage(err)}`,
+          )
         }
       }
       if (ancestor === resolvedOutDir) break
@@ -382,24 +468,15 @@ export async function executeExtract(options: ExtractOptions): Promise<ExtractOu
   }
 
   // 5. Write all prepared files with exclusive creation (wx) and rollback on failure
-  const createdFiles: string[] = []
-  const createdDirs = new Set<string>()
+  const createdFiles: OwnedResource[] = []
+  const createdDirs = new Map<string, OwnedResource>()
 
-  // Track directories that do not exist yet before creating them
+  // Collect all directories that need to exist, from resolvedOutDir down to leaf directories
+  const dirsToEnsure = new Set<string>()
   for (const item of prepared) {
     let curDir = dirname(item.targetPath!)
     while (curDir.length >= resolvedOutDir.length) {
-      try {
-        await lstat(curDir)
-        // Directory already exists on disk
-        break
-      } catch (err) {
-        if (hasErrorCode(err) && err.code === 'ENOENT') {
-          createdDirs.add(curDir)
-        } else {
-          throw createTypedError('LOCAL_IO_ERROR', `Failed to inspect directory '${curDir}': ${getErrorMessage(err)}`)
-        }
-      }
+      dirsToEnsure.add(curDir)
       if (curDir === resolvedOutDir) break
       const parent = dirname(curDir)
       if (parent === curDir) break
@@ -407,17 +484,84 @@ export async function executeExtract(options: ExtractOptions): Promise<ExtractOu
     }
   }
 
+  // Sort shortest length to longest length (parent before child)
+  const sortedDirsToEnsure = Array.from(dirsToEnsure).sort((a, b) => a.length - b.length)
+  for (const dir of sortedDirsToEnsure) {
+    let exists = false
+    try {
+      await lstat(dir)
+      exists = true
+    } catch (err) {
+      if (!hasErrorCode(err) || err.code !== 'ENOENT') {
+        throw createTypedError(
+          'LOCAL_IO_ERROR',
+          `Failed to inspect directory '${dir}': ${getErrorMessage(err)}`,
+        )
+      }
+    }
+    if (!exists) {
+      await mkdir(dir)
+      const st = await lstat(dir)
+      createdDirs.set(dir, { path: dir, dev: st.dev, ino: st.ino })
+    }
+  }
+
+  const realOutDir = canonicalizeSystemPrefix(await realpath(resolvedOutDir))
+  const openFlags =
+    fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY | (fsConstants.O_NOFOLLOW ?? 0)
+
   try {
     for (const item of prepared) {
       const targetPath = item.targetPath!
-      await mkdir(dirname(targetPath), { recursive: true })
 
-      if (item.buffer) {
-        await writeFile(targetPath, item.buffer, { flag: 'wx' })
-      } else if (item.text !== undefined) {
-        await writeFile(targetPath, item.text, { flag: 'wx', encoding: 'utf8' })
+      let handle: FileHandle | null = null
+      try {
+        handle = await open(targetPath, openFlags, 0o666)
+        const fileStat = await handle.stat()
+        // Register ownership immediately after exclusive open succeeds (before writing)
+        createdFiles.push({ path: targetPath, dev: fileStat.dev, ino: fileStat.ino })
+
+        if (options._faultSeam === 'before-write') {
+          throw Object.assign(new Error('ENOSPC: test simulated write fault'), { code: 'ENOSPC' })
+        }
+
+        // Before writing, verify realpath(dirname(target)) equals expected resolved directory
+        const relDir = relative(resolvedOutDir, dirname(targetPath))
+        const expectedDir = canonicalizeSystemPrefix(resolve(realOutDir, relDir))
+        const actualDirBefore = canonicalizeSystemPrefix(await realpath(dirname(targetPath)))
+        if (actualDirBefore !== expectedDir) {
+          throw createTypedError(
+            'CONFLICT_ERROR',
+            `Ancestor directory path verification failed for '${dirname(targetPath)}': expected '${expectedDir}', got '${actualDirBefore}'`,
+          )
+        }
+
+        if (item.buffer) {
+          await handle.writeFile(item.buffer)
+        } else if (item.text !== undefined) {
+          await handle.writeFile(item.text, 'utf8')
+        }
+        await handle.sync()
+
+        if (options._faultSeam === 'during-write') {
+          throw Object.assign(new Error('ENOSPC: test simulated write fault'), { code: 'ENOSPC' })
+        }
+      } finally {
+        if (handle) {
+          await handle.close().catch(() => {})
+        }
       }
-      createdFiles.push(targetPath)
+
+      // After closing, verify realpath(dirname(target)) equals expected resolved directory
+      const relDir = relative(resolvedOutDir, dirname(targetPath))
+      const expectedDir = canonicalizeSystemPrefix(resolve(realOutDir, relDir))
+      const actualDirAfter = canonicalizeSystemPrefix(await realpath(dirname(targetPath)))
+      if (actualDirAfter !== expectedDir) {
+        throw createTypedError(
+          'CONFLICT_ERROR',
+          `Ancestor directory path verification failed for '${dirname(targetPath)}' after write: expected '${expectedDir}', got '${actualDirAfter}'`,
+        )
+      }
 
       extractedFiles.push({
         path: item.file.path,
@@ -428,22 +572,7 @@ export async function executeExtract(options: ExtractOptions): Promise<ExtractOu
       })
     }
   } catch (writeErr) {
-    // Rollback only current attempt-created files on failure; clean owned empty dirs if feasible no delete users
-    for (const filePath of createdFiles.reverse()) {
-      try {
-        await rm(filePath, { force: true })
-      } catch {
-        // ignore best-effort removal
-      }
-    }
-    const sortedDirs = Array.from(createdDirs).sort((a, b) => b.length - a.length)
-    for (const dir of sortedDirs) {
-      try {
-        await rmdir(dir)
-      } catch {
-        // ignore if non-empty or unable to remove
-      }
-    }
+    await rollbackExtraction(createdFiles, createdDirs.values())
 
     if (hasErrorCode(writeErr)) {
       if (writeErr.code === 'EEXIST') {
@@ -454,7 +583,10 @@ export async function executeExtract(options: ExtractOptions): Promise<ExtractOu
         throw writeErr
       }
     }
-    throw createTypedError('LOCAL_IO_ERROR', `Failed to write extracted file: ${getErrorMessage(writeErr)}`)
+    throw createTypedError(
+      'LOCAL_IO_ERROR',
+      `Failed to write extracted file: ${getErrorMessage(writeErr)}`,
+    )
   }
 
   return {

@@ -42,16 +42,16 @@ Exercise two real browser rounds with unsaved正文 edits, comments and Checkpoi
 
 Current baseline was captured before implementation.
 
-| Artifact | Baseline bytes | Estimated added bytes | Measured added bytes |
-| --- | ---: | ---: | ---: |
-| Complete Skill Shell | 2,738,186 | 1,536–4,096 | 1,652 (0.0603%) |
-| Lite Skill Shell | 188,847 | 1,536–4,096 | 1,787 (0.9463%) |
-| Complete review artifact | 2,846,650 | 1,536–4,096 | 1,652 (0.0580%) |
-| Lite review artifact | 297,311 | 1,536–4,096 | 1,787 (0.6011%) |
-| Skill directory | 14,098,738 | 6,144–12,288 prose plus shared helper code and generated mirrors | 20,424 (0.1449%) |
-| CLI npm tarball | 14,011 | Release compression must be measured; raw assets add 2,927,033 plus 80,000–160,000 code/templates | 2,303,957; final 2,317,968 |
-| CLI npm unpacked | 50,302 | 3,007,033–3,087,033 plus generated guide | 3,285,226; final 3,335,528 |
-| Native macOS arm64 binary | 70,911,986 | 3,007,033–3,087,033 plus generated guide | 3,170,304; final 74,082,290 |
+| Artifact                  | Baseline bytes |                                                                             Estimated added bytes |        Measured added bytes |
+| ------------------------- | -------------: | ------------------------------------------------------------------------------------------------: | --------------------------: |
+| Complete Skill Shell      |      2,738,186 |                                                                                       1,536–4,096 |             1,652 (0.0603%) |
+| Lite Skill Shell          |        188,847 |                                                                                       1,536–4,096 |             1,787 (0.9463%) |
+| Complete review artifact  |      2,846,650 |                                                                                       1,536–4,096 |             1,652 (0.0580%) |
+| Lite review artifact      |        297,311 |                                                                                       1,536–4,096 |             1,787 (0.6011%) |
+| Skill directory           |     14,098,738 |                                  6,144–12,288 prose plus shared helper code and generated mirrors |            20,424 (0.1449%) |
+| CLI npm tarball           |         14,011 | Release compression must be measured; raw assets add 2,927,033 plus 80,000–160,000 code/templates |  2,303,957; final 2,317,968 |
+| CLI npm unpacked          |         50,302 |                                                          3,007,033–3,087,033 plus generated guide |  3,285,226; final 3,335,528 |
+| Native macOS arm64 binary |     70,911,986 |                                                          3,007,033–3,087,033 plus generated guide | 3,170,304; final 74,082,290 |
 
 No new third-party dependency was added. Explicit subscription adds loopback HTTP only. Complete retains offline runtime dependencies; Lite retains existing pinned CDN behavior. Neither Shell reaches the 1% or 32 KiB disclosure threshold. Shell increments fall within the estimate. The Skill increment includes generated template mirrors, shared validators and declarations. CLI unpacked growth exceeds the raw estimate by 198,193–278,193 bytes before the separately budgeted guide because it also embeds canonical guides, validators and complete template prose. Native growth exceeds the raw estimate by 83,271–163,271 bytes before the separately budgeted guide. Tarball compression was measured independently rather than estimated from raw asset size.
 
@@ -71,19 +71,31 @@ Prepare estimate for reconciliation, relative to `efcb126`: each Shell adds 0–
 
 Develop measurements after rebuilding, compared with the same `efcb126` baseline:
 
-| Artifact | Estimate added bytes | Measured added bytes | Final bytes |
-| --- | ---: | ---: | ---: |
-| Complete Skill Shell | 0–8,192 | 644 | 2,740,482 |
-| Lite Skill Shell | 0–8,192 | 601 | 191,235 |
-| Complete review artifact | 0–8,192 | 4,737 | 2,853,039 |
-| Lite review artifact | 0–8,192 | 4,694 | 303,792 |
-| Skill directory | 5,488,640–5,554,176 | 5,526,688 | 19,645,850 |
-| CLI npm unpacked | 16,384–49,152 | 38,866 | 3,374,394 |
-| macOS arm64 executable | 16,384–65,536 | 33,024 | 74,115,314 |
-| CLI npm tarball | Compression measured independently | 13,833 | 2,331,801 |
+| Artifact                 |               Estimate added bytes | Measured added bytes | Final bytes |
+| ------------------------ | ---------------------------------: | -------------------: | ----------: |
+| Complete Skill Shell     |                            0–8,192 |                  644 |   2,740,482 |
+| Lite Skill Shell         |                            0–8,192 |                  601 |     191,235 |
+| Complete review artifact |                            0–8,192 |                4,737 |   2,853,039 |
+| Lite review artifact     |                            0–8,192 |                4,694 |     303,792 |
+| Skill directory          |                5,488,640–5,554,176 |            5,526,688 |  19,645,850 |
+| CLI npm unpacked         |                      16,384–49,152 |               38,866 |   3,374,394 |
+| macOS arm64 executable   |                      16,384–65,536 |               33,024 |  74,115,314 |
+| CLI npm tarball          | Compression measured independently |               13,833 |   2,331,801 |
 
 Total measurements relative to `efcb126` remain within the estimates. Review artifacts include 4,093 additional document bytes from main; the Shell-only delta excludes them. Relative to current main `eb2eaa0`, CLI-specific Complete Shell growth is 1,780 bytes (0.0650%), Lite is 1,766 bytes (0.9321%), and Skill-directory growth is 30,142 bytes (0.1537%). The latter exceeds the 4,096–16,384 incremental estimate by 13,758–26,046 bytes because that estimate undercounted the six regenerated template Shell mirrors plus existing CLI helper changes. Both Shells remain below the 1% / 32 KiB threshold. Main's two generated Complete template containers account for most total Skill growth; no new third-party dependency or network behavior was added.
 
 Reconciliation validation: `npm run check` passed 707 tests in 60 files, formatting, all 15 lessons, TypeScript and three Shell builds. Independent CLI TypeScript and 46 CLI contract tests passed after the final exit-code correction. The isolated npm install and macOS arm64 binary both passed two actual Chromium review rounds, all six template paths, HTML iframe rendering and retention, direct HTML-content tampering refusal, Complete/Lite legacy capability replacement, Save-independent feedback, canonical regeneration and identity/history preservation. Embedded Skill guidance matches canonical source exactly and all six template mirrors are byte-identical. `npm run test:browser` passed with seven warnings in the product-spec artifact; the feature deliverable is checked separately. Website bilingual prompt arguments were observed at `http://127.0.0.1:4319/`. Browser coverage is limited to exercised Chromium.
 
 Additional post-review executable probes passed permitted reads from a canonical `templates/` directory, refused writes into that directory, and accepted hosted HTML additions/deletions/renames in both Handoff comparison modes while retaining `trustedBaseline: false`. These cases failed before the source/destination guard and hosted-delta corrections. Both final packaged runtimes then passed the complete two-round smoke again. The refreshed feature Taco and current-build `CLI_Main_Sync.taco.html` each passed browser rendering checks with zero warnings.
+
+## Independent review repairs (2026-10-12)
+
+An independent review of `2b9172f` reported 1 P1 and 21 P2 findings, each reproduced against the installed CLI or a real browser. Creation commands now commit with an exclusive hard link, so concurrent `new`/`init`/`pack` produce one success and `CONFLICT_ERROR` for the rest. Extraction creates files with `O_EXCL|O_NOFOLLOW`, re-verifies the resolved parent before writing and after closing, and rolls back only files and directories whose device/inode it created, including partial writes. `new` creates a missing parent; `pack --out X.taco.html` defaults its title to `X`; the L3 cascade only accepts directories; `init` rejects prototype template names.
+
+The shared helper's comment validation now matches the browser model: `anchor: null` is a legal document comment for every consumer, and non-null anchors require a position with `end > start` and a non-empty quote. Refresh rejects a stale receipt whose baseline comments or Checkpoint state differ from the current artifact, drops render `blocks` that no longer match handled content, and pairs files by stable ID so a renamed HTML page with changed content is refused. `diff` compares every comment message by ID and only reports `trustedBaseline: true` after binding a supplied Taco's identity and baseline. `inspect` redacts secrets before truncating snippets.
+
+The listener scans payloads iteratively with a depth cap, converts any request failure into a structured response, admits at most four concurrent request bodies within a shared 64 MiB budget, publishes its lock atomically, and stores receipts in a per-user directory it refuses to use when another user owns it or group/other permissions are set. The browser's manual handoff prompt strips the `taco-listen` capability. The embedded guide routes CLI-only installs to `taco-cli verify` for Mermaid checks, and the local-toolbox smoke asserts the HTML page instead of skipping it.
+
+Measured against `2b9172f`: Complete Skill Shell +72 bytes (2,740,554), Lite Skill Shell +103 bytes (191,338), Host Shell +92 bytes, Skill directory +2,737 bytes (19,648,587), CLI npm tarball +4,999 bytes (2,336,800), CLI npm unpacked +27,161 bytes (3,401,555), macOS arm64 executable +16,512 bytes (74,131,826). No estimate was recorded for this repair round; every delta is far below the 1% / 32 KiB disclosure threshold. No dependency or network behavior was added.
+
+Verification: `npm run check` passed formatting, 16 lessons, 733 tests in 65 files and all Shell builds; CLI TypeScript passed. The isolated npm install and the macOS arm64 binary each passed the two-round Chromium smoke with the HTML assertion mandatory. All 22 review reproductions were rerun against the fixed installed CLI and now fail safely; filesystem faults were injected at `open` to exercise partial writes and an ancestor swap, and the manual prompt was checked through the real menu in Chromium.

@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { mkdir, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, open, rmdir, unlink, writeFile, type FileHandle } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import {
@@ -23,7 +23,14 @@ export interface InitOptions {
   listTemplates?: boolean
 }
 
-const TEMPLATE_NAMES = ['spec', 'architecture', 'api-reference', 'adr', 'prd', 'interaction'] as const
+const TEMPLATE_NAMES = [
+  'spec',
+  'architecture',
+  'api-reference',
+  'adr',
+  'prd',
+  'interaction',
+] as const
 
 export const executeInit = async (
   options: InitOptions,
@@ -40,7 +47,10 @@ export const executeInit = async (
   }
 
   const templateName = options.template ?? 'spec'
-  const templateAsset = TEMPLATES[templateName]
+  const isTemplateValid =
+    Object.hasOwn(TEMPLATES, templateName) &&
+    (TEMPLATE_NAMES as readonly string[]).includes(templateName)
+  const templateAsset = isTemplateValid ? TEMPLATES[templateName] : undefined
   if (!templateAsset) {
     const error = makeCliError(
       'VALIDATION_ERROR',
@@ -79,7 +89,10 @@ export const executeInit = async (
     await verifyNotForbidden(targetPath)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', msg)) }
+    return {
+      exitCode: EXIT_CODES.VALIDATION_ERROR,
+      stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', msg)),
+    }
   }
   // Prepare template markdown content with JSON-safe YAML frontmatter
   let templateContent = templateAsset.templateMd
@@ -133,11 +146,32 @@ export const executeInit = async (
       html = embedBundle(shell, bundle)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', msg)) }
+      return {
+        exitCode: EXIT_CODES.VALIDATION_ERROR,
+        stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', msg)),
+      }
     }
 
     await mkdir(dirname(targetPath), { recursive: true })
-    await atomicWrite(targetPath, html)
+    try {
+      await atomicWrite(targetPath, html, { exclusive: true })
+    } catch (err) {
+      if (
+        (err as NodeJS.ErrnoException).code === 'EEXIST' ||
+        (err instanceof Error && err.message.includes('Refusing to overwrite'))
+      ) {
+        const error = makeCliError(
+          'CONFLICT_ERROR',
+          `Target file already exists: ${targetPath}. Refusing to overwrite.`,
+        )
+        return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+      }
+      const error = makeCliError(
+        'LOCAL_IO_ERROR',
+        `Failed to write taco file: ${(err as Error).message}`,
+      )
+      return { exitCode: EXIT_CODES.LOCAL_IO_ERROR, stderr: JSON.stringify(error) }
+    }
     writtenFiles.push(targetPath)
   } else {
     // Target is a directory: preflight BOTH md and taco targets before writing either
@@ -151,7 +185,10 @@ export const executeInit = async (
       await verifyNotForbidden(tacoFilePath)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', msg)) }
+      return {
+        exitCode: EXIT_CODES.VALIDATION_ERROR,
+        stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', msg)),
+      }
     }
 
     if (existsSync(mdFilePath)) {
@@ -194,7 +231,10 @@ export const executeInit = async (
       html = embedBundle(shell, bundle)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', msg)) }
+      return {
+        exitCode: EXIT_CODES.VALIDATION_ERROR,
+        stderr: JSON.stringify(makeCliError('VALIDATION_ERROR', msg)),
+      }
     }
 
     const createdDir = !existsSync(targetPath)
@@ -202,26 +242,50 @@ export const executeInit = async (
       await mkdir(targetPath, { recursive: true })
     }
 
-    let mdWritten = false
+    let mdOwned = false
     let tacoWritten = false
+    let mdHandle: FileHandle | null = null
     try {
-      await writeFile(mdFilePath, templateContent, { encoding: 'utf8', flag: 'wx' })
-      mdWritten = true
+      mdHandle = await open(mdFilePath, 'wx')
+      mdOwned = true
       writtenFiles.push(mdFilePath)
+      await mdHandle.writeFile(templateContent, 'utf8')
+      await mdHandle.sync()
+      await mdHandle.close()
+      mdHandle = null
 
-      await atomicWrite(tacoFilePath, html)
+      await atomicWrite(tacoFilePath, html, { exclusive: true })
       tacoWritten = true
       writtenFiles.push(tacoFilePath)
     } catch (err) {
+      if (mdHandle) {
+        await mdHandle.close().catch(() => {})
+      }
       // Roll back owned creations
-      if (mdWritten) {
+      if (mdOwned) {
         await unlink(mdFilePath).catch(() => {})
       }
       if (tacoWritten) {
         await unlink(tacoFilePath).catch(() => {})
       }
+      if (createdDir) {
+        await rmdir(targetPath).catch(() => {})
+      }
+      const isConflict =
+        (err as NodeJS.ErrnoException).code === 'EEXIST' ||
+        (err instanceof Error && err.message.includes('Refusing to overwrite'))
+      if (isConflict) {
+        const error = makeCliError(
+          'CONFLICT_ERROR',
+          `Target file already exists. Refusing to overwrite.`,
+        )
+        return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+      }
       const msg = err instanceof Error ? err.message : String(err)
-      return { exitCode: EXIT_CODES.LOCAL_IO_ERROR, stderr: JSON.stringify(makeCliError('LOCAL_IO_ERROR', msg)) }
+      return {
+        exitCode: EXIT_CODES.LOCAL_IO_ERROR,
+        stderr: JSON.stringify(makeCliError('LOCAL_IO_ERROR', msg)),
+      }
     }
   }
   const result = {

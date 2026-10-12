@@ -26,7 +26,7 @@ export interface InspectDiagnostic {
 
 export interface InspectCommentInfo {
   id: string
-  path: string
+  path: string | null
   line?: number
   contentSnippet: string
 }
@@ -126,14 +126,14 @@ async function getTrustedMermaidParser(): Promise<MermaidParser | null> {
 }
 
 export const extractTacoBundleFromHtml = (htmlContent: string): Record<string, unknown> => {
-  const match = htmlContent.match(
-    /<script\b(?=[^>]*\bid=["']taco-document["'])[^>]*>([\s\S]*?)<\/script>/i,
-  ) ?? htmlContent.match(
-    /<script\b[^>]*\bid=["']taco-document["'][^>]*>([\s\S]*?)<\/script>/i,
-  )
+  const match =
+    htmlContent.match(/<script\b(?=[^>]*\bid=["']taco-document["'])[^>]*>([\s\S]*?)<\/script>/i) ??
+    htmlContent.match(/<script\b[^>]*\bid=["']taco-document["'][^>]*>([\s\S]*?)<\/script>/i)
 
   if (!match) {
-    const error = new Error('Invalid Taco file: missing <script id="taco-document"> container') as Error & { code: string }
+    const error = new Error(
+      'Invalid Taco file: missing <script id="taco-document"> container',
+    ) as Error & { code: string }
     error.code = 'VALIDATION_ERROR'
     throw error
   }
@@ -142,13 +142,16 @@ export const extractTacoBundleFromHtml = (htmlContent: string): Record<string, u
   try {
     return JSON.parse(jsonText) as Record<string, unknown>
   } catch {
-    const error = new Error('Invalid Taco file: JSON parse error in #taco-document') as Error & { code: string }
+    const error = new Error('Invalid Taco file: JSON parse error in #taco-document') as Error & {
+      code: string
+    }
     error.code = 'VALIDATION_ERROR'
     throw error
   }
 }
 
-const SECRET_KEY_PATTERN = /^(token|secret|apiKey|api_key|password|authToken|auth_token|accessToken|access_token|privateKey|deviceKey|roomKey|signingKey|invitationKey)$/i
+const SECRET_KEY_PATTERN =
+  /^(token|secret|apiKey|api_key|password|authToken|auth_token|accessToken|access_token|privateKey|deviceKey|roomKey|signingKey|invitationKey)$/i
 
 /** `collab` scalars validated as non-secret by `isCollab`; everything else under it may be key material. */
 const NON_SECRET_COLLAB_KEYS: Record<string, true> = {
@@ -188,7 +191,8 @@ function collectKnownSecrets(bundle: Record<string, unknown>, rawFiles: unknown[
       return
     }
     for (const [k, v] of Object.entries(obj)) {
-      const isSecretKey = isSecretContext || SECRET_KEY_PATTERN.test(k) || k === 'credentials' || k === 'collab'
+      const isSecretKey =
+        isSecretContext || SECRET_KEY_PATTERN.test(k) || k === 'credentials' || k === 'collab'
       if (isSecretKey && typeof v === 'string' && NON_SECRET_COLLAB_KEYS[k] !== true) {
         addSecret(v)
       }
@@ -209,7 +213,12 @@ function collectKnownSecrets(bundle: Record<string, unknown>, rawFiles: unknown[
   scanObj(bundle, false)
 
   for (const rawFile of rawFiles) {
-    if (rawFile && typeof rawFile === 'object' && 'content' in rawFile && typeof rawFile.content === 'string') {
+    if (
+      rawFile &&
+      typeof rawFile === 'object' &&
+      'content' in rawFile &&
+      typeof rawFile.content === 'string'
+    ) {
       const content = rawFile.content
       for (const pat of SECRET_PATTERNS) {
         pat.lastIndex = 0
@@ -236,6 +245,47 @@ function redactString(text: string, secrets: Set<string>): string {
     result = result.replace(pat, '[REDACTED]')
   }
   return result
+}
+
+function sanitizeSnippet(text: string, secrets: Set<string>): string {
+  // 1. Redact known secrets and patterns on the full string first
+  let full = redactString(text, secrets)
+
+  // 2. Truncate to 100 chars
+  let snippet = full.slice(0, 100)
+
+  // If cut ended inside [REDACTED], complete it
+  const partialRedacted = /\[R(?:E(?:D(?:A(?:C(?:T(?:E(?:D)?)?)?)?)?)?)?$/
+  if (partialRedacted.test(snippet)) {
+    snippet = snippet.replace(partialRedacted, '[REDACTED]')
+  }
+
+  // 3. Ensure a truncated prefix of a known secret can never appear:
+  // Redact any substring of length >= 8 that is a prefix of a known secret
+  for (const secret of secrets) {
+    if (!secret || secret.length < 8) continue
+    for (let len = secret.length; len >= 8; len--) {
+      const prefix = secret.slice(0, len)
+      if (snippet.includes(prefix)) {
+        snippet = snippet.split(prefix).join('[REDACTED]')
+      }
+    }
+    // Also redact if snippet ends with a partial secret at the cut boundary
+    for (let len = Math.min(secret.length - 1, snippet.length); len >= 4; len--) {
+      const prefix = secret.slice(0, len)
+      if (snippet.endsWith(prefix)) {
+        snippet = snippet.slice(0, snippet.length - len) + '[REDACTED]'
+        break
+      }
+    }
+  }
+
+  for (const pat of SECRET_PATTERNS) {
+    pat.lastIndex = 0
+    snippet = snippet.replace(pat, '[REDACTED]')
+  }
+
+  return snippet
 }
 
 /** Walk the emitted summary and replace every known secret or pattern match. */
@@ -273,7 +323,9 @@ export async function executeInspect(options: InspectOptions): Promise<InspectOu
   try {
     rawHtml = readFileSync(options.filePath, 'utf8')
   } catch (err) {
-    const error = new Error(`Failed to read input file '${options.filePath}': ${(err as Error).message}`) as Error & { code: string }
+    const error = new Error(
+      `Failed to read input file '${options.filePath}': ${(err as Error).message}`,
+    ) as Error & { code: string }
     error.code = 'LOCAL_IO_ERROR'
     throw error
   }
@@ -289,6 +341,7 @@ export async function executeInspect(options: InspectOptions): Promise<InspectOu
   const version = typeof bundle.version === 'number' ? bundle.version : 1
 
   const rawFiles: unknown[] = Array.isArray(bundle.files) ? bundle.files : []
+  const knownSecrets = collectKnownSecrets(bundle, rawFiles)
   const fileDetails: InspectFileInfo[] = []
   const fileContentMap = new Map<string, string>()
   const diagnostics: InspectDiagnostic[] = []
@@ -296,8 +349,12 @@ export async function executeInspect(options: InspectOptions): Promise<InspectOu
   for (const rawFile of rawFiles) {
     if (rawFile && typeof rawFile === 'object') {
       const filePath = 'path' in rawFile && typeof rawFile.path === 'string' ? rawFile.path : ''
-      const content = 'content' in rawFile && typeof rawFile.content === 'string' ? rawFile.content : ''
-      const mediaType = 'mediaType' in rawFile && typeof rawFile.mediaType === 'string' ? rawFile.mediaType : 'text/plain'
+      const content =
+        'content' in rawFile && typeof rawFile.content === 'string' ? rawFile.content : ''
+      const mediaType =
+        'mediaType' in rawFile && typeof rawFile.mediaType === 'string'
+          ? rawFile.mediaType
+          : 'text/plain'
 
       fileContentMap.set(filePath, content)
       let size = Buffer.byteLength(content, 'utf8')
@@ -334,7 +391,10 @@ export async function executeInspect(options: InspectOptions): Promise<InspectOu
       diagnostics.push({
         path: file.path,
         severity: 'error',
-        message: `File path is not safe (traversal or invalid characters): ${file.path}`.slice(0, 500),
+        message: `File path is not safe (traversal or invalid characters): ${file.path}`.slice(
+          0,
+          500,
+        ),
         kind: 'safe-path',
       })
     }
@@ -385,7 +445,11 @@ export async function executeInspect(options: InspectOptions): Promise<InspectOu
 
   const groups: InspectGroupInfo[] = structure?.groups ?? []
   const unassigned: string[] = structure?.unassigned ?? fileDetails.map((f) => f.path)
-  const entry: string | null = structure?.entry ?? fileDetails.find((file) => /\.md$/i.test(file.path))?.path ?? fileDetails[0]?.path ?? null
+  const entry: string | null =
+    structure?.entry ??
+    fileDetails.find((file) => /\.md$/i.test(file.path))?.path ??
+    fileDetails[0]?.path ??
+    null
   const entryDeclared: boolean = Boolean(structure?.entryDeclared)
 
   const parser = await getTrustedMermaidParser()
@@ -393,7 +457,8 @@ export async function executeInspect(options: InspectOptions): Promise<InspectOu
   for (const rawFile of rawFiles) {
     if (rawFile && typeof rawFile === 'object') {
       const filePath = 'path' in rawFile && typeof rawFile.path === 'string' ? rawFile.path : ''
-      const content = 'content' in rawFile && typeof rawFile.content === 'string' ? rawFile.content : ''
+      const content =
+        'content' in rawFile && typeof rawFile.content === 'string' ? rawFile.content : ''
 
       const diagramUnits: Array<{ body: string; lineOffset: number }> = []
       if (filePath.toLowerCase().endsWith('.mmd')) {
@@ -428,12 +493,18 @@ export async function executeInspect(options: InspectOptions): Promise<InspectOu
         }
 
         try {
-          const diag = await validateUnit(parser, { file: filePath, body: unit.body, lineOffset: unit.lineOffset })
+          const diag = await validateUnit(parser, {
+            file: filePath,
+            body: unit.body,
+            lineOffset: unit.lineOffset,
+          })
           if (diag && typeof diag === 'object') {
             const diagLine = 'line' in diag && typeof diag.line === 'number' ? diag.line : undefined
             const line = diagLine !== undefined ? diagLine + unit.lineOffset : unit.lineOffset + 1
-            const detailStr = 'detail' in diag && typeof diag.detail === 'string' ? diag.detail : undefined
-            const msgStr = 'message' in diag && typeof diag.message === 'string' ? diag.message : undefined
+            const detailStr =
+              'detail' in diag && typeof diag.detail === 'string' ? diag.detail : undefined
+            const msgStr =
+              'message' in diag && typeof diag.message === 'string' ? diag.message : undefined
             const detailMsg = detailStr || msgStr || 'Syntax error'
             diagnostics.push({
               path: filePath,
@@ -446,7 +517,11 @@ export async function executeInspect(options: InspectOptions): Promise<InspectOu
           diagnostics.push({
             path: filePath,
             severity: 'error',
-            message: `Mermaid parser diagnostic at line ${unit.lineOffset + 1}: ${(err as Error).message || String(err)}`.slice(0, 500),
+            message:
+              `Mermaid parser diagnostic at line ${unit.lineOffset + 1}: ${(err as Error).message || String(err)}`.slice(
+                0,
+                500,
+              ),
             kind: 'mermaid-syntax',
           })
         }
@@ -464,31 +539,38 @@ export async function executeInspect(options: InspectOptions): Promise<InspectOu
       const isOpen = 'status' in rawThread && rawThread.status === 'open'
       if (isOpen) {
         openCount++
-        const anchor = 'anchor' in rawThread && rawThread.anchor && typeof rawThread.anchor === 'object'
-          ? rawThread.anchor
-          : undefined
-        const anchorPath = anchor && 'path' in anchor && typeof anchor.path === 'string' ? anchor.path : ''
+        const anchor =
+          'anchor' in rawThread && rawThread.anchor && typeof rawThread.anchor === 'object'
+            ? rawThread.anchor
+            : undefined
+        const anchorPath =
+          anchor && 'path' in anchor && typeof anchor.path === 'string' ? anchor.path : null
         let line: number | undefined = undefined
 
-        const pos = anchor && 'position' in anchor && anchor.position && typeof anchor.position === 'object'
-          ? anchor.position
-          : undefined
-        const startPos = pos && 'start' in pos && typeof pos.start === 'number' ? pos.start : undefined
+        const pos =
+          anchor && 'position' in anchor && anchor.position && typeof anchor.position === 'object'
+            ? anchor.position
+            : undefined
+        const startPos =
+          pos && 'start' in pos && typeof pos.start === 'number' ? pos.start : undefined
         if (anchorPath && fileContentMap.has(anchorPath) && typeof startPos === 'number') {
           const fileText = fileContentMap.get(anchorPath)!
           line = fileText.slice(0, Math.min(startPos, fileText.length)).split('\n').length
         }
 
-        const messages: unknown[] = 'messages' in rawThread && Array.isArray(rawThread.messages) ? rawThread.messages : []
-        const first = messages.length > 0 && messages[0] && typeof messages[0] === 'object' ? messages[0] : null
+        const messages: unknown[] =
+          'messages' in rawThread && Array.isArray(rawThread.messages) ? rawThread.messages : []
+        const first =
+          messages.length > 0 && messages[0] && typeof messages[0] === 'object' ? messages[0] : null
         const firstMsg = first && 'body' in first ? String(first.body ?? '') : ''
-        const quote = anchor && 'quote' in anchor && anchor.quote && typeof anchor.quote === 'object'
-          ? anchor.quote
-          : undefined
-        const quoteExact = quote && 'exact' in quote && typeof quote.exact === 'string' ? quote.exact : ''
-        const snippet = firstMsg
-          ? firstMsg.slice(0, 100)
-          : quoteExact.slice(0, 100)
+        const quote =
+          anchor && 'quote' in anchor && anchor.quote && typeof anchor.quote === 'object'
+            ? anchor.quote
+            : undefined
+        const quoteExact =
+          quote && 'exact' in quote && typeof quote.exact === 'string' ? quote.exact : ''
+        const rawSnippet = firstMsg || quoteExact
+        const snippet = sanitizeSnippet(rawSnippet, knownSecrets)
 
         const threadId = 'id' in rawThread ? String(rawThread.id ?? '') : ''
         openComments.push({
@@ -515,10 +597,16 @@ export async function executeInspect(options: InspectOptions): Promise<InspectOu
   const checkpointsPresent = Boolean(checkpointsState && typeof checkpointsState === 'object')
 
   if (checkpointsPresent && checkpointsState && typeof checkpointsState === 'object') {
-    const nodes: unknown[] = 'nodes' in checkpointsState && Array.isArray(checkpointsState.nodes) ? checkpointsState.nodes : []
+    const nodes: unknown[] =
+      'nodes' in checkpointsState && Array.isArray(checkpointsState.nodes)
+        ? checkpointsState.nodes
+        : []
     nodesCount = nodes.length
 
-    const docs: unknown[] = 'documents' in checkpointsState && Array.isArray(checkpointsState.documents) ? checkpointsState.documents : []
+    const docs: unknown[] =
+      'documents' in checkpointsState && Array.isArray(checkpointsState.documents)
+        ? checkpointsState.documents
+        : []
     for (const rawDoc of docs) {
       if (rawDoc && typeof rawDoc === 'object') {
         const s = 'status' in rawDoc && typeof rawDoc.status === 'string' ? rawDoc.status : 'todo'
@@ -529,13 +617,25 @@ export async function executeInspect(options: InspectOptions): Promise<InspectOu
     for (const rawNode of nodes) {
       if (rawNode && typeof rawNode === 'object') {
         const nodeId = 'id' in rawNode && typeof rawNode.id === 'string' ? rawNode.id : ''
-        const nodeDocs: unknown[] = 'documents' in rawNode && Array.isArray(rawNode.documents) ? rawNode.documents : []
-        const isCompleted = nodeDocs.length > 0 && nodeDocs.every((d) => {
-          const dPath = d && typeof d === 'object' && 'path' in d && typeof d.path === 'string' ? d.path : ''
-          const found = docs.find((r) => r && typeof r === 'object' && 'path' in r && r.path === dPath)
-          const s = found && typeof found === 'object' && 'status' in found && typeof found.status === 'string' ? found.status : null
-          return s === 'complete' || s === 'freeze'
-        })
+        const nodeDocs: unknown[] =
+          'documents' in rawNode && Array.isArray(rawNode.documents) ? rawNode.documents : []
+        const isCompleted =
+          nodeDocs.length > 0 &&
+          nodeDocs.every((d) => {
+            const dPath =
+              d && typeof d === 'object' && 'path' in d && typeof d.path === 'string' ? d.path : ''
+            const found = docs.find(
+              (r) => r && typeof r === 'object' && 'path' in r && r.path === dPath,
+            )
+            const s =
+              found &&
+              typeof found === 'object' &&
+              'status' in found &&
+              typeof found.status === 'string'
+                ? found.status
+                : null
+            return s === 'complete' || s === 'freeze'
+          })
         if (!isCompleted && !currentCheckpoint && nodeId) {
           currentCheckpoint = nodeId
         }
@@ -586,7 +686,8 @@ export async function executeInspect(options: InspectOptions): Promise<InspectOu
     for (const rawFile of rawFiles) {
       if (rawFile && typeof rawFile === 'object') {
         const filePath = 'path' in rawFile && typeof rawFile.path === 'string' ? rawFile.path : ''
-        const content = 'content' in rawFile && typeof rawFile.content === 'string' ? rawFile.content : ''
+        const content =
+          'content' in rawFile && typeof rawFile.content === 'string' ? rawFile.content : ''
         for (const pat of SECRET_PATTERNS) {
           pat.lastIndex = 0
           if (pat.test(content)) {
@@ -601,11 +702,12 @@ export async function executeInspect(options: InspectOptions): Promise<InspectOu
     credentials = {
       present: uniquePaths.length > 0,
       paths: uniquePaths,
-      notice: 'Known scanner scans declared collab/access/token fields and common secret patterns without printing values. A negative result does not guarantee arbitrary text contains no secrets.',
+      notice:
+        'Known scanner scans declared collab/access/token fields and common secret patterns without printing values. A negative result does not guarantee arbitrary text contains no secrets.',
     }
   }
 
-  const knownSecrets = collectKnownSecrets(bundle, rawFiles)
+  // knownSecrets was collected earlier to sanitize comment snippets safely
 
   const output: InspectOutput = {
     docId,

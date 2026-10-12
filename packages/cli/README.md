@@ -106,7 +106,7 @@ Refreshes an existing `.taco.html` in place after canonical source edits, preser
 
 Performs read-only structural diff between two Tacos, between a Taco and its canonical directory, or from a local Handoff payload.
 
-- `--handoff <path|->`: Diff using a local handoff payload or stdin receipt.
+- `--handoff <path|->`: Diff using a local handoff payload or stdin receipt. With `--dir`, pass the reviewed Taco as the first argument to bind the receipt to it; only then is `trustedBaseline` reported as `true`.
 - Does not modify files on disk or resolve comments.
 
 ### `taco-cli inspect <file.taco.html>`
@@ -126,6 +126,7 @@ Extracts credential-free file projections from a Taco to stdout or writes them t
 Starts a finite loopback HTTP listener (`127.0.0.1`) with a short-lived token and returns a ready fragment URL for the browser.
 
 - When the reviewer clicks **Handoff** in the browser, the listener receives the unsaved review snapshot, atomically writes a local receipt, emits JSON to stdout, and exits with code 0.
+- Receipts are stored in a per-user `taco-receipts-<uid>` directory under the system temporary directory. The listener refuses to start when that directory is a symbolic link, belongs to another user, or grants group/other permissions.
 - `--port <number>`: Preferred loopback port.
 - `--timeout <seconds>`: Idle timeout (default 300s).
 

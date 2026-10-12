@@ -15,21 +15,113 @@ import {
 import { decodePng } from '../../../skills/taco/scripts/png.mjs'
 import { EXIT_CODES, makeCliError } from './errors.ts'
 import { COMPLETE_SHELL_HTML, LITE_SHELL_HTML } from './generated/assets.ts'
-import {
-  assertSafeDestination,
-  verifyNoSymlinksInAncestry,
-} from './local-paths.ts'
+import { assertSafeDestination, verifyNoSymlinksInAncestry } from './local-paths.ts'
 
 const DATA_BLOCK = /<script\b(?=[^>]*\bid=["']taco-document["'])[^>]*>[\s\S]*?<\/script>/i
 
 const supportsEmbeddedHtml = (html: string): boolean => {
   const shell = html.replace(DATA_BLOCK, '')
   const marker = shell.match(/<meta\b(?=[^>]*\bname=["']taco-shell-features["'])[^>]*>/i)?.[0]
-  return marker?.match(/\bcontent=["']([^"']*)["']/i)?.[1].split(/\s+/).includes('embedded-html') ?? false
+  return (
+    marker
+      ?.match(/\bcontent=["']([^"']*)["']/i)?.[1]
+      .split(/\s+/)
+      .includes('embedded-html') ?? false
+  )
 }
 
 const isHtmlFile = (path: string, mediaType?: string): boolean =>
   /\.html?$/i.test(path) || mediaType?.split(';')[0].trim().toLowerCase() === 'text/html'
+
+interface ParsedCommentMessage {
+  id: string
+  body?: string | null
+  createdAt?: string
+  updatedAt?: string
+  deletedAt?: string
+}
+
+interface ParsedCommentThread {
+  id: string
+  status?: string
+  createdAt?: string
+  updatedAt?: string
+  messages: ParsedCommentMessage[]
+}
+
+const parseCommentThread = (val: unknown): ParsedCommentThread | null => {
+  if (!val || typeof val !== 'object') return null
+  const rec = val as Record<string, unknown>
+  if (typeof rec.id !== 'string') return null
+  const rawMsgs = Array.isArray(rec.messages) ? rec.messages : []
+  const messages: ParsedCommentMessage[] = []
+  for (const m of rawMsgs) {
+    if (!m || typeof m !== 'object') return null
+    const mRec = m as Record<string, unknown>
+    if (typeof mRec.id !== 'string') return null
+    messages.push({
+      id: mRec.id,
+      body: typeof mRec.body === 'string' ? mRec.body : null,
+      createdAt: typeof mRec.createdAt === 'string' ? mRec.createdAt : undefined,
+      updatedAt: typeof mRec.updatedAt === 'string' ? mRec.updatedAt : undefined,
+      deletedAt: typeof mRec.deletedAt === 'string' ? mRec.deletedAt : undefined,
+    })
+  }
+  return {
+    id: rec.id,
+    status: typeof rec.status === 'string' ? rec.status : undefined,
+    createdAt: typeof rec.createdAt === 'string' ? rec.createdAt : undefined,
+    updatedAt: typeof rec.updatedAt === 'string' ? rec.updatedAt : undefined,
+    messages,
+  }
+}
+
+const areBaselineCommentsMatchingArtifact = (
+  baselineComments?: unknown[],
+  artifactComments?: unknown[],
+): boolean => {
+  const baseList = Array.isArray(baselineComments) ? baselineComments : []
+  const artList = Array.isArray(artifactComments) ? artifactComments : []
+  if (baseList.length !== artList.length) return false
+
+  const artMap = new Map<string, ParsedCommentThread>()
+  for (const c of artList) {
+    const parsed = parseCommentThread(c)
+    if (!parsed) return false
+    artMap.set(parsed.id, parsed)
+  }
+  if (artMap.size !== artList.length) return false
+
+  for (const baseItem of baseList) {
+    const baseThread = parseCommentThread(baseItem)
+    if (!baseThread) return false
+    const artThread = artMap.get(baseThread.id)
+    if (!artThread) return false
+
+    if (baseThread.status !== artThread.status) return false
+    if ((baseThread.createdAt ?? null) !== (artThread.createdAt ?? null)) return false
+    if ((baseThread.updatedAt ?? null) !== (artThread.updatedAt ?? null)) return false
+
+    if (baseThread.messages.length !== artThread.messages.length) return false
+
+    const artMsgMap = new Map<string, ParsedCommentMessage>()
+    for (const m of artThread.messages) {
+      artMsgMap.set(m.id, m)
+    }
+    if (artMsgMap.size !== artThread.messages.length) return false
+
+    for (const bMsg of baseThread.messages) {
+      const aMsg = artMsgMap.get(bMsg.id)
+      if (!aMsg) return false
+      if (bMsg.body !== aMsg.body) return false
+      if ((bMsg.createdAt ?? null) !== (aMsg.createdAt ?? null)) return false
+      if ((bMsg.updatedAt ?? null) !== (aMsg.updatedAt ?? null)) return false
+      if ((bMsg.deletedAt ?? null) !== (aMsg.deletedAt ?? null)) return false
+    }
+  }
+
+  return true
+}
 export interface RefreshOptions {
   filePath: string
   handoffPath: string
@@ -69,7 +161,10 @@ export const executeRefresh = async (
     originalHtml = res.html
     originalBundle = res.bundle
   } catch (err) {
-    const error = makeCliError('VALIDATION_ERROR', `Failed to parse artifact: ${(err as Error).message}`)
+    const error = makeCliError(
+      'VALIDATION_ERROR',
+      `Failed to parse artifact: ${(err as Error).message}`,
+    )
     return { exitCode: EXIT_CODES.VALIDATION_ERROR, stderr: JSON.stringify(error) }
   }
 
@@ -157,10 +252,7 @@ export const executeRefresh = async (
 
   // 1. Identity & root checks
   if (payload.docId !== originalBundle.docId) {
-    const error = makeCliError(
-      'CONFLICT_ERROR',
-      `Handoff docId does not match artifact docId`,
-    )
+    const error = makeCliError('CONFLICT_ERROR', `Handoff docId does not match artifact docId`)
     return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
   }
 
@@ -173,10 +265,7 @@ export const executeRefresh = async (
   }
 
   if (baseline.root !== originalBundle.root || snapshot.root !== originalBundle.root) {
-    const error = makeCliError(
-      'CONFLICT_ERROR',
-      `Handoff root does not match artifact root`,
-    )
+    const error = makeCliError('CONFLICT_ERROR', `Handoff root does not match artifact root`)
     return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
   }
 
@@ -211,6 +300,26 @@ export const executeRefresh = async (
     }
   }
 
+  // Bind baseline comments to current artifact
+  if (!areBaselineCommentsMatchingArtifact(baseline.comments, originalBundle.comments)) {
+    const error = makeCliError(
+      'CONFLICT_ERROR',
+      `Baseline comments differ from current artifact; rejecting stale review baseline`,
+    )
+    return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+  }
+
+  // Bind baseline checkpoints to current artifact
+  const origCp = JSON.stringify(originalBundle.checkpoints ?? null)
+  const baseCp = JSON.stringify(baseline.checkpoints ?? null)
+  if (origCp !== baseCp) {
+    const error = makeCliError(
+      'CONFLICT_ERROR',
+      `Baseline checkpoints differ from current artifact; rejecting stale review baseline`,
+    )
+    return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+  }
+
   // 3. Metadata drift check: original title/nav/checkpoints must not mismatch supplied baseline unless matching snapshot
   if (originalBundle.title !== baseline.title && originalBundle.title !== snapshot.title) {
     const error = makeCliError(
@@ -232,23 +341,15 @@ export const executeRefresh = async (
     return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
   }
 
-  // Check checkpoints drift
-  const origCp = JSON.stringify(originalBundle.checkpoints ?? null)
-  const baseCp = JSON.stringify(baseline.checkpoints ?? null)
-  const snapCp = JSON.stringify(snapshot.checkpoints ?? null)
-  if (origCp !== baseCp && origCp !== snapCp) {
-    const error = makeCliError(
-      'CONFLICT_ERROR',
-      `Artifact checkpoints have independent modifications mismatching baseline and snapshot`,
-    )
-    return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
-  }
-
   // 4. Canonical directory check: require canonical directory
   let canonicalDir = options.dirPath ? resolve(options.dirPath) : null
   if (!canonicalDir) {
     // Attempt resolving from originalBundle.root if it's a valid relative directory
-    if (originalBundle.root && originalBundle.root !== '.' && existsSync(resolve(originalBundle.root))) {
+    if (
+      originalBundle.root &&
+      originalBundle.root !== '.' &&
+      existsSync(resolve(originalBundle.root))
+    ) {
       canonicalDir = resolve(originalBundle.root)
     } else {
       const error = makeCliError(
@@ -300,7 +401,11 @@ export const executeRefresh = async (
   const checks: FileContentCheck[] = []
   const canonicalLoadedFiles: TacoFile[] = []
 
-  const computeFileHash = async (file: { content: string; mediaType: string; path: string }): Promise<string> => {
+  const computeFileHash = async (file: {
+    content: string
+    mediaType: string
+    path: string
+  }): Promise<string> => {
     if (file.mediaType === 'image/png' || file.path.toLowerCase().endsWith('.png')) {
       const rawBytes = decodePng(file.content, file.path)
       return await sha256Hex(rawBytes)
@@ -308,12 +413,46 @@ export const executeRefresh = async (
     return await sha256Hex(file.content)
   }
 
+  // Check read-only HTML tampering: pair baseline/snapshot files by id when present, and by path.
+  // Any HTML file whose content changed under the same id (rename or not) => CONFLICT_ERROR tampering;
+  // pure HTML rename/add/delete remain allowed.
+  const baselineById = new Map<string, TacoFile>()
+  for (const f of baseline.files) {
+    if (f.id) {
+      baselineById.set(f.id, f)
+    }
+  }
+
+  for (const snapFile of snapshot.files) {
+    let pairedBase: TacoFile | undefined = undefined
+    if (snapFile.id && baselineById.has(snapFile.id)) {
+      pairedBase = baselineById.get(snapFile.id)
+    } else {
+      pairedBase = baselineFilesMap.get(snapFile.path)
+    }
+    if (pairedBase) {
+      const isHtml =
+        isHtmlFile(snapFile.path, snapFile.mediaType) ||
+        isHtmlFile(pairedBase.path, pairedBase.mediaType)
+      if (isHtml && pairedBase.content !== snapFile.content) {
+        const error = makeCliError(
+          'CONFLICT_ERROR',
+          `Tampering detected: read-only HTML file '${snapFile.path}' content was modified in review handoff`,
+        )
+        return { exitCode: EXIT_CODES.CONFLICT_ERROR, stderr: JSON.stringify(error) }
+      }
+    }
+  }
+
   for (const bundlePath of allPaths) {
     const baseFile = baselineFilesMap.get(bundlePath)
     const snapFile = snapshotFilesMap.get(bundlePath)
     const origFile = originalFilesMap.get(bundlePath)
     const canonicalFile = canonicalCollectedMap.get(bundlePath)
-    const isHtml = isHtmlFile(bundlePath, snapFile?.mediaType ?? baseFile?.mediaType ?? canonicalFile?.mediaType)
+    const isHtml = isHtmlFile(
+      bundlePath,
+      snapFile?.mediaType ?? baseFile?.mediaType ?? canonicalFile?.mediaType,
+    )
     if (isHtml && baseFile && snapFile && baseFile.content !== snapFile.content) {
       const error = makeCliError(
         'CONFLICT_ERROR',
@@ -387,13 +526,17 @@ export const executeRefresh = async (
         // Canonical matches the reviewed snapshot: handled
         checks.push({ path: bundlePath, status: 'handled' })
         const hash = await computeFileHash(canonicalFile)
-        canonicalLoadedFiles.push({
+        const loaded: TacoFile = {
           ...(origFile ?? {}),
           ...snapFile,
           content: canonicalFile.content,
           sourceHash: hash,
-          ...(snapFile.blocks ? { blocks: snapFile.blocks } : {}),
-        })
+        }
+        delete loaded.blocks
+        if (snapFile.blocks !== undefined) {
+          loaded.blocks = snapFile.blocks
+        }
+        canonicalLoadedFiles.push(loaded)
       } else if (canonicalFile.content === baseFile.content) {
         // Canonical is still baseline content: the review change is pending
         checks.push({
@@ -420,9 +563,7 @@ export const executeRefresh = async (
     }
   }
 
-  const pendingOrConflict = checks.filter(
-    (c) => c.status === 'pending' || c.status === 'conflict',
-  )
+  const pendingOrConflict = checks.filter((c) => c.status === 'pending' || c.status === 'conflict')
   if (pendingOrConflict.length > 0) {
     const summary = pendingOrConflict.map((c) => `${c.path}: ${c.reason}`).join('; ')
     const error = makeCliError(
@@ -498,8 +639,8 @@ export const executeRefresh = async (
   let shellReplaced = false
   const warnings: string[] = []
 
-  const hasEmbeddedHtml = refreshedBundle.files.some(
-    (file) => isHtmlFile(file.path, file.mediaType),
+  const hasEmbeddedHtml = refreshedBundle.files.some((file) =>
+    isHtmlFile(file.path, file.mediaType),
   )
 
   if (hasEmbeddedHtml && !supportsEmbeddedHtml(originalHtml)) {
@@ -524,7 +665,9 @@ export const executeRefresh = async (
 
     finalShell = stockShell
     shellReplaced = true
-    warnings.push('Replaced legacy shell with the current stock shell of the same variant for embedded HTML')
+    warnings.push(
+      'Replaced legacy shell with the current stock shell of the same variant for embedded HTML',
+    )
   }
 
   if (!options.dryRun) {
