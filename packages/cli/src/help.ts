@@ -435,13 +435,13 @@ export const COMMAND_HELPS: Record<string, CommandHelpOutput> = {
         type: 'duration',
         required: false,
         default: '30d',
-        description: 'Expiration duration for auto-cleanup (e.g. 1h, 7d, 30d, or 0/none for permanent)',
+        description: 'Expiration duration before public access is lost (e.g. 1h, 7d, 30d, max 365d, or 0/none for permanent; expires public access, not physical deletion)',
       },
     ],
     environment: GLOBAL_ENV,
     output: {
       stdout:
-        'PublishResponse JSON object containing command, host, id, tacoId, title, blobUrl, url, createdAt',
+        'PublishResponse JSON object containing command, host, id, tacoId, title, blobUrl, url, createdAt, expiresAt',
       stderr: 'ErrorResponse JSON on failure',
       streaming: false,
     },

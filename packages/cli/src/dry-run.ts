@@ -67,7 +67,12 @@ export const executeLocalDryRun = async (options: {
   summary.strippedFieldCategories = projection.strippedCategories
   const res: DryRunSummaryWithTtl = { ...summary }
   if (options.command === 'publish') {
-    const ttl = options.ttlSeconds !== undefined ? options.ttlSeconds : 2592000
+    const ttl =
+      options.ttlSeconds !== undefined
+        ? options.ttlSeconds === 0
+          ? null
+          : options.ttlSeconds
+        : 2592000
     res.ttlSeconds = ttl
     res.expiresAt = ttl ? new Date(Date.now() + ttl * 1000).toISOString() : null
   }
