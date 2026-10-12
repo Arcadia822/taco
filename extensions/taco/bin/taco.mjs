@@ -98,6 +98,7 @@ const mediaType = (path) => {
   if (lower.endsWith('.xml')) return 'application/xml'
   if (lower.endsWith('.toml')) return 'application/toml'
   if (lower.endsWith('.png')) return 'image/png'
+  if (/\.html?$/i.test(lower)) return 'text/html'
   if (/\.jpe?g$/i.test(lower)) return 'image/jpeg'
   if (lower.endsWith('.gif')) return 'image/gif'
   if (lower.endsWith('.webp')) return 'image/webp'
@@ -315,8 +316,8 @@ export const validateBundle = (bundle) => {
       throw new Error(`File escapes Taco root: ${file.path}`)
     }
     if (paths.has(file.path)) throw new Error(`Duplicate Taco path: ${file.path}`)
-    if (file.mediaType === 'text/html' || /\.html?$/i.test(file.path)) {
-      throw new Error(`HTML source files are not supported: ${file.path}`)
+    if (file.path.toLowerCase().endsWith('.taco.html')) {
+      throw new Error(`bundle file path must not end in .taco.html: ${file.path}`)
     }
     if ('sourceUrl' in file) {
       throw new Error(`sourceUrl is no longer supported: ${file.path}`)
@@ -400,11 +401,6 @@ const collectFiles = async (featureDir, rootPath, existingByPath, ignorePatterns
       if (!entry.isFile()) {
         throw new Error(
           `Unsupported filesystem entry in feature directory: ${relativePath}; exclude it with --ignore`,
-        )
-      }
-      if (/\.html?$/i.test(entry.name)) {
-        throw new Error(
-          `HTML source files are not supported: ${relativePath}; exclude it with --ignore`,
         )
       }
       const type = mediaType(relativePath)
@@ -586,6 +582,12 @@ export const pack = async ({
   const actualVariant = shellVariant(shellHtml) || 'complete'
   if (!shell && actualVariant !== targetVariant) {
     throw new Error(`Resolved shell ${shellPath} has variant ${actualVariant}, but expected ${targetVariant}`)
+  }
+  if (files.some((file) => file.mediaType.split(';')[0].trim().toLowerCase() === 'text/html' || /\.html?$/i.test(file.path))) {
+    const marker = shellHtml.replace(DATA_BLOCK, '').match(/<meta\b(?=[^>]*\bname=["']taco-shell-features["'])[^>]*>/i)?.[0]
+    if (!marker?.match(/\bcontent=["']([^"']*)["']/i)?.[1].split(/\s+/).includes('embedded-html')) {
+      throw new Error('Selected shell does not declare embedded-html support; use a current shell of the same variant')
+    }
   }
   await mkdir(dirname(outputPath), { recursive: true })
   await writeFile(outputPath, embedBundle(shellHtml, bundle), 'utf8')

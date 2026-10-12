@@ -180,8 +180,8 @@ export const validateSnapshotFile = (
     return { ok: false, err: `File mediaType is required: ${file.path}` }
   }
 
-  if (file.mediaType === 'text/html' || /\.html?$/i.test(file.path)) {
-    return { ok: false, err: `HTML source files are not supported: ${file.path}` }
+  if (file.path.toLowerCase().endsWith('.taco.html')) {
+    return { ok: false, err: `bundle file path must not end in .taco.html: ${file.path}` }
   }
   if ((file as Record<string, unknown>).sourceUrl !== undefined) {
     return { ok: false, err: `sourceUrl is no longer supported: ${file.path}` }

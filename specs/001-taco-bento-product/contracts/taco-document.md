@@ -73,10 +73,10 @@ The top-level `navigation` manifest explicitly groups virtual files without chan
 - Paths must not be duplicated and must not contain `..`, `.`, empty segments, backslashes, or absolute paths.
 - `files[].title` may be omitted; when present it must be a non-empty string. Editing it only changes the display title and must not rewrite `path` or the on-disk filename.
 - `files[].sourceHash` may be omitted; a CLI-created Taco must write a 64-character lowercase hexadecimal SHA-256 representing the canonical file content at pack time. Browser edits must not update this value; it is the bilateral conflict baseline for the next Agent sync.
-- Ordinary HTML/HTM source entries and the legacy `files[].sourceUrl` field are unsupported. The parser and CLI reject them; the `.taco.html` container remains supported. Explicitly ignore unsupported source files when packaging a directory after verifying their omission is intended.
+- Ordinary HTML/HTM source entries use `text/html` and render read-only in a network-blocked sandboxed iframe. Nested `.taco.html` entries and the legacy `files[].sourceUrl` field are rejected; the outer `.taco.html` container remains supported.
 - `content` must be saved verbatim from the file; the renderer must not write back formatted results.
 - A `<` inside a string is safely escaped in the HTML to avoid ending the script block.
-- The runtime does not execute bundle content.
+- Bundle HTML scripts execute only inside the opaque-origin, network-blocked preview sandbox; document content never executes in the parent runtime.
 - The bundle's core reading and editing depend on no external CDN, font, account, or backend; it connects to the relay specified by `collab.room` only when the user explicitly starts online collaboration.
 - Comment messages retain the required version-1 shape and may add `authorId`, `updatedAt`, and `deletedAt`. All timestamps are bounded ISO strings. `deletedAt` is the sole tombstone discriminator; deleted bodies serialize as the fixed non-empty `[Deleted message]` sentinel so older version-1 readers degrade to ordinary visible text instead of rejecting the bundle.
 - Message order is always `createdAt`, then `id`. Editing and deletion update the parent thread activity time without moving a message or deleting siblings. A deleted root or only message does not delete the thread.

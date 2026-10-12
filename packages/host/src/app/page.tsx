@@ -194,7 +194,7 @@ const I18N = {
     section2Lead: '打开 Taco，你可以：',
     section2Points: [
       '划词评论，讨论就挂在原文旁边',
-      '直接修改：Markdown 所见即所得，JSON/YAML 编辑高亮源码，Mermaid 编辑源码并预览图表，单页 HTML 沙箱内嵌展示',
+      '直接修改：Markdown 所见即所得，JSON/YAML 编辑高亮源码，Mermaid 编辑源码并预览图表；单页 HTML 在本地与托管评审中均以沙箱只读展示',
       '回复、解决评论线程',
       '点「交接改动」，把改动和评论整理成一段话交给 Agent',
     ],
@@ -307,7 +307,7 @@ const I18N = {
     section2Lead: 'In Taco you can:',
     section2Points: [
       'Select text to comment — the discussion stays next to the source',
-      'Edit in place: WYSIWYG Markdown, syntax-highlighted JSON/YAML source, Mermaid diagram preview, and single-page HTML rendered inline in a sandbox',
+      'Edit in place: WYSIWYG Markdown, syntax-highlighted JSON/YAML source, and Mermaid diagram preview; single-page HTML stays read-only in a sandbox in local and hosted reviews',
       'Reply to and resolve threads',
       'Hit Handoff to pack every edit and comment into one message for your agent',
     ],

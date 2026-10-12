@@ -39,7 +39,7 @@ This follows Castrel's AppShell composition: the outer split first, then the wor
 - The first visible Markdown file opens by default unless a valid `navigation.entry` selects another document. Filenames and frontmatter have no routing privilege.
 - Group titles use secondary text without a leading icon slot; a right chevron appears on hover or keyboard focus.
 - Nested directories remain navigable with open/closed folder icons.
-- Ordinary HTML/HTM source files are unsupported; `.taco.html` remains the review container.
+- Ordinary HTML/HTM source pages open inside Taco in a read-only, network-blocked sandbox; `.taco.html` remains the outer review container and is excluded from bundled content.
 - The selected file is indicated by text/background, not by color alone.
 - The file icon conveys file identity without implying that a format renderer exists.
 - Mobile and narrow-screen layouts start with the drawer closed.

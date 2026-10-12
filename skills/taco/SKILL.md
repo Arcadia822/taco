@@ -151,6 +151,8 @@ Find the selected variant in the first location that exists:
 
 Both skill shells have an empty `#taco-document` block. Fill it before opening; an unfilled shell shows the runtime's empty-bundle recovery screen, not a document. Template and checkout fallbacks may contain starter data: use their runtime, not their identity or content. Only write the data block and `<title>`.
 
+When a refresh introduces HTML source pages, inspect the shell outside `#taco-document` for `<meta name="taco-shell-features" content="embedded-html">` (the content is a space-separated feature list). If it is absent, reassemble using the current stock shell of the same Complete/Lite variant, preserving the entire prior bundle and review history. Unmarked legacy shells are Complete. Report the stock-shell replacement; never patch shell code or silently convert variants. An explicitly selected custom shell must declare this capability, or stop before writing. Ordinary compatible refreshes keep their existing shell unchanged.
+
 ## The bundle format (`taco/files` v1)
 
 The document lives in one plaintext block near the top of the shell:
@@ -264,7 +266,7 @@ You are authoring one document model — the bundle. A directory of Markdown is 
    - write a temporary sibling, then `rename` it over the destination, so a failure leaves the previous Taco untouched.
 
    If you have Node and would rather not do this by hand, the optional `scripts/pack.mjs` helper performs these steps. **It does not resolve the destination** — resolve it first (see `## Where to write .taco.html`) and pass the result explicitly, because the helper's default `--out` is inside the directory being packaged: `node scripts/pack.mjs --dir <DOC_DIR> --title "<Title>" --out <resolved absolute destination> [--shell <shell.html>] [--root <relpath>] [--entry <relpath>] [--group "<Title>=<relPath,relPath>"]... [--ignore <glob>]... [--dry-run]`. `node scripts/pack.mjs verify <name.taco.html>` prints the structure a reviewer will see. Report its `excluded:` list unless you closed the loop yourself.
-3. Start from the skill's shell (or, on a refresh, the existing Taco) held in memory: only the `#taco-document` block and the escaped `<title>` may change, and every other byte stays identical.
+3. Start from the skill's shell (or, on a compatible refresh, the existing Taco) held in memory: only the `#taco-document` block and the escaped `<title>` may change within the selected shell. For legacy shells lacking `embedded-html`, follow *Locate the shell* to reassemble with the current stock shell of the same variant; preserve the prior bundle before replacing the carrier.
 4. For a new document, set `format: "taco/files"`, `version: 1`, a fresh unique `docId`, `title`, `root` and `files`. Choose the Checkpoint definition from the user's or project's review requirements, if any; otherwise omit `checkpoints`, even if a starter pack contains one. The bundled `spec/` SDD graph is an example to adapt only if it fits; its stage names, document paths, and display template are not defaults that override project conventions. For a refresh, preserve the previous bundle wholesale—including `checkpoints.nodes`, `checkpoints.documents`, and any unknown fields—and replace only intended fields; keep `root`, format/version and identity unchanged. Stop on an unsupported format/version rather than downgrading it. Match existing file entries by path, preserve unknown fields and stable ids, and update content-dependent fields using the rules above.
 
 ### 2. Check what the reviewer will see

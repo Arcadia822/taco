@@ -75,6 +75,13 @@ prepare 估算基于 AGENTS.md 基线节（2026-10-09）；实测与估算同工
 - 新增依赖：无。联网行为：无新增；内嵌 HTML 渲染为离线沙箱（CSP 禁外联），`check-update.mjs` 与 Lite CDN 行为不变。
 - 阈值判断：shell 零增长（2,738,638 / 189,406 与 WP1–WP4 实测一致），不触发「较大增大」告知义务。`skills/taco/` 合计 +5,513,914 B 全部来自 WP5 两个生成的模板 `empty.taco.html`（各约 2.74 MB，内嵌 Complete shell，与既有 4 包同构），文档与脚本合计约 +22 KB。
 
+### 独立审查修复预算（2026-10-11，实施前估算）
+
+- 修复三条 HTML 消费路径：旧 shell 刷新、Spec Kit 扩展 pack/validate/sync、Tacobin 协议投影与快照校验。保持 Complete/Lite 变体与评审元数据；不放宽 iframe/CSP。
+- 相对本轮开始的 `faf5839`：Complete/Lite shell 与 `.taco.html` 产物预计各增加 0–256 B（仅兼容能力标记若需要）；`skills/taco/` 预计增加 2–8 KB（刷新指引及 helper）；extension 发布包未压缩源预计增加 1–5 KB；protocol/CLI/Host 预计净变化 -1–+3 KB。无新增依赖，无新增联网行为。
+- 统一构建后实测（相对 `faf5839`）：skill Complete/Lite shell 各 +64 B（2,738,702 / 189,470），符合 0–256 B 估算；Complete/Lite 文档产物各 +4,157 B（2,851,259 / 302,027），超估算源于同步更新内嵌 canonical 产品文档约 +4 KB；`skills/taco/` +3,151 B（19,611,985），符合 2–8 KB 估算；extension 未压缩目录 +9,387 B（19,764,777），超 1–5 KB 估算源于两个带文档数据的 shell asset 重建及显式 custom shell 兼容检查；protocol 源 -18 B。依赖与联网行为无新增。
+- 阈值判断只比较空文档、通用标题的生成 skill shell：Complete 2,738,638 → 2,738,702 B（+64 B，约 0.0023%）；Lite 189,406 → 189,470 B（+64 B，约 0.0338%），均未达到 ≥1% 或 ≥32 KB 阈值。带文档的 Lite 示例产物 +1.40% 不属于 shell 增长，不触发此告知义务。
+
 ## 实现验证
 
 - `npm run check` 通过：`format:check`、`check:lessons`、vitest 57 个测试文件 / 663 项测试全通过、`tsc -b` + `build-shells` + `refresh-host-demo` 构建通过。
@@ -84,10 +91,14 @@ prepare 估算基于 AGENTS.md 基线节（2026-10-09）；实测与估算同工
 - 浏览器实测（Playwright/Chromium，对构建产物 `tmp/TACO-70_Inline_HTML.taco.html`）10/10 通过：Markdown 链接内嵌打开且不发生本地跳转；`sandbox` 含 `allow-scripts` 且无 `allow-same-origin`；srcdoc 注入 CSP 且禁外联；内联脚本执行；`parent.document` 访问被拦（opaque origin）；外链图片被 CSP 拦截；html 文件不挂载编辑器；`window.taco.validate()` 返回 `ok: true`、0 error / 0 warning。
 - `node skills/taco/scripts/pack.mjs verify` 结构干净；`node scripts/smoke-built-shell.mjs tmp/TACO-70_Inline_HTML.taco.html` 通过（2 files, 0 warnings）。
 - 官网 copy 同步（`packages/host/src/app/page.tsx`），taco-guide 双语文档同步（架构/功能/FAQ/路线图），AGENTS.md 打包规则同步，LESSONS-009 记录「vitest 绿 ≠ 类型完整」。
+- 独立审查三个 P2 已修复：旧 shell 添加 HTML 时按 `embedded-html` 能力标记迁移到当前同变体 stock shell；扩展 pack/validate/sync/--from 接受 HTML；发布投影与 Host 快照接受 HTML，同时拒绝嵌套容器与 sourceUrl。
+- 本轮隔离 `faf5839` 旧代码 red：刷新 3 个、扩展 4 个、协议/CLI/Host 3 个场景失败；修复后 `npm run check` 全绿（57 文件 / 669 测试、类型检查、三种 shell 构建）。实际 built CLI publish dry-run 保留 HTML；扩展 pack/validate/sync dry-run 正常；本地 Memory Host 两阶段上传 201 / revision 读取 200、HTML 内容一致。
+- 实际历史 Complete shell 来自 `264fc79`，刷新产物 `tmp/HTML_Review_Fixes.taco.html` 保留 docId 并通过 browser smoke。浏览器内部验证本地与 canonical Host shell：Markdown 链接打开内嵌页、脚本按钮执行、父文档访问被阻止、`window.taco.validate()` 0 findings。提供 clickable Taco 文件；未进行外部发布。
+- 复审补齐扩展显式 custom shell 能力检查，在写入前拒绝缺少 `embedded-html` 的 shell；隔离去除该 guard 的版本 regression 失败，当前扩展 23 项测试、`tsc -b`、format 与 lessons gate 均通过。最终仅此 guard 与测试在完整 669 项 green 后变动，已运行对应全文件测试。
 
 ## 变更记录
 
-TACO-70 在 skill 内落地集成模块（SDD 引擎分层/探测/优先级/语义对齐 + 产物生成类 skill 通用范式），将 `.html` 变为受管文件类型并以沙箱 iframe 内嵌渲染单页 HTML（取代本地跳转），重写 skill 触发与评审边界、补 P0–P3/轻中重/决策题指引。WP5（`prd/`、`interaction/` 模板包）保留为后续批次。
+TACO-70 在 skill 内落地集成模块（SDD 引擎分层/探测/优先级/语义对齐 + 产物生成类 skill 通用范式），将 `.html` 变为受管文件类型并以沙箱 iframe 内嵌渲染单页 HTML，重写 skill 触发与评审边界、补 P0–P3/轻中重/决策题指引，交付 WP5 的 `prd/`、`interaction/` 模板包；独立审查后补齐刷新、扩展与发布消费者。
 
 2026-10-11 人类修正两条口径：① SDD 引擎缺失从不阻断——未安装即跳过流程集成、Taco 照常工作（原「报缺失并停」作废）；② Taco 只在需要人审阅/拍板时使用，一体成型无需人看的小功能不产出 Taco。
 2026-10-11 二次修正：`description` 改为三段式路由文本并内嵌中英触发短语（能力陈述 / Use when / Not for），消除「只按字面请求触发」的残余风险（TACO-58 的根因）。
