@@ -82,6 +82,7 @@ export default defineConfig({
     alias: {
       '@taco/protocol': resolve(projectRoot, 'packages/protocol/src/index.ts'),
       '@taco/host-browser': resolve(projectRoot, 'packages/host/src/browser/index.ts'),
+      '@': resolve(projectRoot, 'packages/host/src'),
     },
   },
   define: {
