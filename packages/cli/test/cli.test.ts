@@ -1218,4 +1218,40 @@ describe('taco-cli (Phase 1)', () => {
       globalThis.fetch = originalFetch
     }
   })
+
+  it('maps expired-target 410/GONE to TACO_GONE exit 2 for update, events and handoff', async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ error: { code: 'GONE', message: 'Taco has expired or was deleted' } }), {
+        status: 410,
+        headers: { 'Content-Type': 'application/json' },
+      })) as typeof fetch
+    try {
+      const eventsRes = await runCli(['events', '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001', '--host', 'http://127.0.0.1:1'])
+      expect(eventsRes.exitCode).toBe(2)
+      expect(JSON.parse(eventsRes.stderr!).error.code).toBe('TACO_GONE')
+
+      const handoffRes = await runCli([
+        'handoff',
+        '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001',
+        '99999999-4cad-43d2-a5f6-4f56bcb0a001',
+        '--host',
+        'http://127.0.0.1:1',
+      ])
+      expect(handoffRes.exitCode).toBe(2)
+      expect(JSON.parse(handoffRes.stderr!).error.code).toBe('TACO_GONE')
+
+      const updateRes = await runCli([
+        'update',
+        '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001',
+        FIXTURE_TACO,
+        '--host',
+        'http://127.0.0.1:1',
+      ])
+      expect(updateRes.exitCode).toBe(2)
+      expect(JSON.parse(updateRes.stderr!).error.code).toBe('TACO_GONE')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
 })

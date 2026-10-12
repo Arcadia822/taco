@@ -636,6 +636,19 @@ export const runCli = async (
       }
       const serverError = errObj.errorDetails?.error
       if (
+        errObj.statusCode === 410 ||
+        errObj.code === 'GONE' ||
+        errObj.code === 'TACO_GONE' ||
+        serverError?.code === 'GONE' ||
+        serverError?.code === 'TACO_GONE'
+      ) {
+        const message = serverError?.message || errObj.message || 'Taco has expired or was deleted'
+        return {
+          exitCode: EXIT_CODES.TACO_GONE,
+          stderr: JSON.stringify(makeCliError('TACO_GONE', message, { details: serverError?.details })),
+        }
+      }
+      if (
         errObj.statusCode === 409 ||
         errObj.code === 'CONFLICT_ERROR' ||
         serverError?.code === 'REVISION_CONFLICT' ||
@@ -905,6 +918,19 @@ export const runCli = async (
           error?: { code?: string; message?: string; details?: Record<string, unknown> }
         }
       }
+      const goneError = errObj.errorDetails?.error
+      if (
+        errObj.code === 'GONE' ||
+        errObj.code === 'TACO_GONE' ||
+        goneError?.code === 'GONE' ||
+        goneError?.code === 'TACO_GONE'
+      ) {
+        const message = goneError?.message || errObj.message || 'Taco has expired or was deleted'
+        return {
+          exitCode: EXIT_CODES.TACO_GONE,
+          stderr: JSON.stringify(makeCliError('TACO_GONE', message, { details: goneError?.details })),
+        }
+      }
       if (errObj.statusCode === 410 || errObj.code === 'CURSOR_EXPIRED') {
         const serverError = errObj.errorDetails?.error
         const code = serverError?.code || 'CURSOR_EXPIRED'
@@ -941,6 +967,19 @@ export const runCli = async (
         code?: string
         errorDetails?: {
           error?: { code?: string; message?: string; details?: Record<string, unknown> }
+        }
+      }
+      const goneError = errObj.errorDetails?.error
+      if (
+        errObj.code === 'GONE' ||
+        errObj.code === 'TACO_GONE' ||
+        goneError?.code === 'GONE' ||
+        goneError?.code === 'TACO_GONE'
+      ) {
+        const message = goneError?.message || errObj.message || 'Taco has expired or was deleted'
+        return {
+          exitCode: EXIT_CODES.TACO_GONE,
+          stderr: JSON.stringify(makeCliError('TACO_GONE', message, { details: goneError?.details })),
         }
       }
       if (errObj.statusCode === 410 || errObj.code === 'CURSOR_EXPIRED') {
