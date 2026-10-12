@@ -1,7 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
-  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -46,7 +45,7 @@ const readBundle = (path: string): CliBundle => {
 const writeBundle = (path: string, bundle: CliBundle): void => {
   const html = readFileSync(path, 'utf8')
   const json = JSON.stringify(bundle, null, 2).replace(/</g, '\\u003c')
-  writeFileSync(path, html.replace(dataBlock, `$1\n${json}\n$3`), 'utf8')
+  writeFileSync(path, html.replace(dataBlock, (_match, p1, _p2, p3) => `${p1}\n${json}\n${p3}`), 'utf8')
 }
 
 const runJson = <T>(args: string[], cwd: string): T =>
@@ -178,61 +177,67 @@ describe('Taco extension CLI', () => {
     )
   })
 
-  it('fails closed on ordinary HTML sources unless they are explicitly ignored', () => {
-    const project = mkdtempSync(join(tmpdir(), 'taco-html-reject-'))
-    const feature = join(project, 'specs/008-html-reject')
-    const output = join(feature, '008-html-reject.taco.html')
+  it('packs HTML sources as text/html and rejects nested .taco.html containers', () => {
+    const project = mkdtempSync(join(tmpdir(), 'taco-html-pack-'))
+    const feature = join(project, 'specs/008-html-pack')
+    const output = join(feature, '008-html-pack.taco.html')
     mkdirSync(feature, { recursive: true })
-    writeFileSync(join(feature, 'spec.md'), '# HTML reject\n')
+    writeFileSync(join(feature, 'spec.md'), '# HTML pack\n')
     writeFileSync(join(feature, 'prototype.html'), '<!doctype html><title>Prototype</title>\n')
-
-    const failed = spawnSync(
-      process.execPath,
-      [cli, 'pack', feature, '--project-root', project, '--output', output, '--shell', shell, '--json'],
-      { cwd: project, encoding: 'utf8' },
-    )
-    expect(failed.status).toBe(1)
-    expect(`${failed.stdout}${failed.stderr}`).toContain(
-      'HTML source files are not supported: prototype.html',
-    )
-    expect(existsSync(output)).toBe(false)
+    writeFileSync(join(feature, 'preview.htm'), '<h1>Preview</h1>\n')
+    writeFileSync(join(feature, 'nested.taco.html'), '<!doctype html><title>Nested</title>\n')
 
     const result = runJson<{
       files: number
-      explicitIgnored: Array<{ path: string; pattern: string }>
+      defaultIgnored: string[]
     }>(
-      [
-        'pack',
-        feature,
-        '--project-root',
-        project,
-        '--output',
-        output,
-        '--shell',
-        shell,
-        '--ignore',
-        'prototype.html',
-      ],
+      ['pack', feature, '--project-root', project, '--output', output, '--shell', shell],
       project,
     )
-    expect(result.files).toBe(1)
-    expect(result.explicitIgnored).toEqual([{ path: 'prototype.html', pattern: 'prototype.html' }])
-    expect(readBundle(output).files.map((file) => file.path)).toEqual([
-      'specs/008-html-reject/spec.md',
+    expect(result.files).toBe(3)
+    expect(result.defaultIgnored).toContain('nested.taco.html')
+
+    const bundle = readBundle(output)
+    const htmlFiles = bundle.files.filter((f) => f.mediaType === 'text/html')
+    expect(htmlFiles.map((f) => f.path)).toEqual([
+      'specs/008-html-pack/preview.htm',
+      'specs/008-html-pack/prototype.html',
     ])
+    expect(htmlFiles[0].content).toBe('<h1>Preview</h1>\n')
+    expect(bundle.files.some((f) => f.path.endsWith('.taco.html'))).toBe(false)
   })
 
-  it('rejects HTML entries and legacy sourceUrl metadata in validate', () => {
+  it('rejects an incompatible explicit HTML shell before replacing existing output', () => {
+    const project = mkdtempSync(join(tmpdir(), 'taco-html-shell-'))
+    const feature = join(project, 'specs/html-shell')
+    const output = join(feature, 'html-shell.taco.html')
+    mkdirSync(feature, { recursive: true })
+    writeFileSync(join(feature, 'spec.md'), '# Review\n')
+    runJson(['pack', feature, '--project-root', project, '--output', output], project)
+    const before = readFileSync(output, 'utf8')
+    const legacy = join(project, 'legacy.html')
+    writeFileSync(legacy, '<meta name="taco-shell-variant" content="complete"><script id="taco-document" type="application/taco+json"></script>')
+    writeFileSync(join(feature, 'report.html'), '<h1>Report</h1>')
+    const refused = spawnSync(process.execPath, [cli, 'pack', feature, '--project-root', project, '--output', output, '--shell', legacy], { encoding: 'utf8' })
+    expect(refused.status).toBe(1)
+    expect(refused.stderr).toContain('does not declare embedded-html support')
+    expect(readFileSync(output, 'utf8')).toBe(before)
+    runJson(['pack', feature, '--project-root', project, '--output', output, '--shell', shell], project)
+    expect(readBundle(output).files.find((file) => file.path.endsWith('/report.html'))?.content).toBe('<h1>Report</h1>')
+  })
+
+  it('validates bundles containing HTML sources and rejects nested .taco.html and legacy sourceUrl', () => {
     const project = mkdtempSync(join(tmpdir(), 'taco-validate-html-'))
-    const taco = join(project, 'legacy.taco.html')
+    const taco = join(project, 'valid-html.taco.html')
     const baseFile = { path: 'specs/legacy/spec.md', mediaType: 'text/markdown', content: '# Legacy' }
+    const htmlFile = { path: 'specs/legacy/preview.html', mediaType: 'text/html', content: '<!doctype html>' }
     const base = {
       format: 'taco/files',
       version: 1,
-      docId: 'legacy-html',
-      title: 'Legacy',
+      docId: 'html-validation',
+      title: 'HTML Validation',
       root: 'specs/legacy',
-      files: [baseFile],
+      files: [baseFile, htmlFile],
     }
     const writeTaco = (bundle: unknown): void =>
       writeFileSync(
@@ -240,22 +245,34 @@ describe('Taco extension CLI', () => {
         `<!doctype html><meta name="taco-security-version" content="1"><script id="taco-document" type="application/taco+json">${JSON.stringify(bundle)}</script>`,
       )
 
+    writeTaco(base)
+    const validRun = spawnSync(process.execPath, [cli, 'validate', taco, '--json'], {
+      cwd: project,
+      encoding: 'utf8',
+    })
+    expect(validRun.status).toBe(0)
+    const validResult = JSON.parse(validRun.stdout) as { files: number; issues: string[] }
+    expect(validResult.files).toBe(2)
+    expect(validResult.issues).toEqual([])
+
+    // Nested .taco.html path in bundle is rejected
     writeTaco({
       ...base,
       files: [
         baseFile,
-        { path: 'specs/legacy/preview.html', mediaType: 'text/plain', content: '<!doctype html>' },
+        { path: 'specs/legacy/nested.taco.html', mediaType: 'text/html', content: '<!doctype html>' },
       ],
     })
-    const htmlFailed = spawnSync(process.execPath, [cli, 'validate', taco, '--json'], {
+    const containerFailed = spawnSync(process.execPath, [cli, 'validate', taco, '--json'], {
       cwd: project,
       encoding: 'utf8',
     })
-    expect(htmlFailed.status).toBe(1)
-    expect(`${htmlFailed.stdout}${htmlFailed.stderr}`).toContain(
-      'HTML source files are not supported',
+    expect(containerFailed.status).toBe(1)
+    expect(`${containerFailed.stdout}${containerFailed.stderr}`).toContain(
+      'bundle file path must not end in .taco.html',
     )
 
+    // legacy sourceUrl is rejected
     writeTaco({ ...base, files: [{ ...baseFile, sourceUrl: 'file:///local/specs/legacy/spec.md' }] })
     const sourceUrlFailed = spawnSync(process.execPath, [cli, 'validate', taco, '--json'], {
       cwd: project,
@@ -265,6 +282,132 @@ describe('Taco extension CLI', () => {
     expect(`${sourceUrlFailed.stdout}${sourceUrlFailed.stderr}`).toContain(
       'sourceUrl is no longer supported',
     )
+  })
+
+  it('syncs HTML files with conflict safety and dry-run/import support', async () => {
+    const project = mkdtempSync(join(tmpdir(), 'taco-sync-html-'))
+    const feature = join(project, 'specs/009-sync-html')
+    const output = join(feature, '009-sync-html.taco.html')
+    mkdirSync(feature, { recursive: true })
+    const htmlPath = join(feature, 'report.html')
+    const initialHtml = '<!doctype html><html><head><title>Test $&</title></head><body><script>const x = "$\'";</script><p>Initial</p></body></html>\n'
+    writeFileSync(join(feature, 'spec.md'), '# Sync HTML\n')
+    writeFileSync(htmlPath, initialHtml)
+
+    runJson(
+      ['pack', feature, '--project-root', project, '--output', output, '--shell', shell],
+      project,
+    )
+
+    // Mutate HTML in bundle (simulate review edit) with real HTML containing $& / $' / script tokens
+    const updatedHtml = '<!doctype html><html><head><title>Updated $& $1</title></head><body><script>const y = "$`";</script><p>Updated Content</p></body></html>\n'
+    const bundle = readBundle(output)
+    const fileEntry = bundle.files.find((f) => f.path === 'specs/009-sync-html/report.html')
+    expect(fileEntry).toBeDefined()
+    fileEntry!.content = updatedHtml
+    writeBundle(output, bundle)
+
+    // Dry-run sync
+    const dryRunResult = runJson<{
+      applied: boolean
+      summary: { created: number; updated: number; unchanged: number; conflicts: number }
+      files: Array<{ path: string; state: string }>
+    }>(['sync', output, '--project-root', project, '--dry-run'], project)
+    expect(dryRunResult.applied).toBe(false)
+    expect(dryRunResult.summary).toEqual({ created: 0, updated: 1, unchanged: 1, conflicts: 0 })
+    const htmlChange = dryRunResult.files.find((c) => c.path === 'specs/009-sync-html/report.html')
+    expect(htmlChange?.state).toBe('updated')
+    expect(readFileSync(htmlPath, 'utf8')).toBe(initialHtml)
+
+    // Actual sync
+    const syncResult = runJson<{
+      applied: boolean
+      summary: { created: number; updated: number; unchanged: number; conflicts: number }
+      files: Array<{ path: string; state: string }>
+    }>(['sync', output, '--project-root', project], project)
+    expect(syncResult.applied).toBe(true)
+    expect(syncResult.summary).toEqual({ created: 0, updated: 1, unchanged: 1, conflicts: 0 })
+    expect(syncResult.files.find((c) => c.path === 'specs/009-sync-html/report.html')?.state).toBe('updated')
+    expect(readFileSync(htmlPath, 'utf8')).toBe(updatedHtml)
+
+    // Conflict test: both disk and Taco changed
+    const diskConflictHtml = '<!doctype html><html><body><p>Disk Conflict</p></body></html>\n'
+    writeFileSync(htmlPath, diskConflictHtml)
+    fileEntry!.content = '<!doctype html><html><body><p>Taco Conflict $&</p></body></html>\n'
+    writeBundle(output, bundle)
+    const conflictRun = spawnSync(
+      process.execPath,
+      [cli, 'sync', output, '--project-root', project, '--json'],
+      { cwd: project, encoding: 'utf8' },
+    )
+    const conflictResult = JSON.parse(conflictRun.stdout) as {
+      applied: boolean
+      summary: { conflicts: number }
+      files: Array<{ path: string; state: string }>
+    }
+    expect(conflictResult.applied).toBe(false)
+    expect(conflictResult.summary.conflicts).toBe(1)
+    expect(conflictResult.files.find((c) => c.path === 'specs/009-sync-html/report.html')?.state).toBe('conflict')
+  })
+  it('preserves existing HTML entries and review state during pack --from', () => {
+    const project = mkdtempSync(join(tmpdir(), 'taco-from-html-'))
+    const feature = join(project, 'specs/010-from-html')
+    const output = join(feature, '010-from-html.taco.html')
+    mkdirSync(feature, { recursive: true })
+    writeFileSync(join(feature, 'spec.md'), '# From HTML\n')
+    writeFileSync(join(feature, 'page.html'), '<html>Page</html>\n')
+
+    runJson(
+      ['pack', feature, '--project-root', project, '--output', output, '--shell', shell],
+      project,
+    )
+    const prior = readBundle(output)
+    prior.comments = [
+      {
+        id: 'comment-1',
+        anchor: {
+          path: 'specs/010-from-html/spec.md',
+          position: { start: 0, end: 11 },
+          quote: { exact: '# From HTML', prefix: '', suffix: '' },
+        },
+        status: 'open',
+        createdAt: '2026-10-11T12:00:00.000Z',
+        updatedAt: '2026-10-11T12:00:00.000Z',
+        messages: [
+          {
+            id: 'msg-1',
+            author: 'Alice',
+            body: 'Good start',
+            createdAt: '2026-10-11T12:00:00.000Z',
+          },
+        ],
+      },
+    ]
+    writeBundle(output, prior)
+
+    // Update spec.md on disk, pack with --from
+    writeFileSync(join(feature, 'spec.md'), '# From HTML Updated\n')
+    // pack into feature dir with matching title
+    const refreshResult = runJson<{ files: number }>(
+      [
+        'pack',
+        feature,
+        '--project-root',
+        project,
+        '--output',
+        output,
+        '--from',
+        output,
+        '--shell',
+        shell,
+      ],
+      project,
+    )
+    expect(refreshResult.files).toBe(2)
+    const refreshedBundle = readBundle(output)
+    expect(refreshedBundle.docId).toBe(prior.docId)
+    expect(refreshedBundle.comments).toEqual(prior.comments)
+    expect(refreshedBundle.files.find((f) => f.path.endsWith('page.html'))?.mediaType).toBe('text/html')
   })
   it('preserves shell variant and review identity across refresh while allowing explicit conversion', () => {
     const project = mkdtempSync(join(tmpdir(), 'taco-variants-'))

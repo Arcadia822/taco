@@ -31,6 +31,7 @@ Guided by the principle **Encode Lessons in Structure**:
 | [LESSON-011](#lesson-011-dynamic-preview-boundary-discrepancies-and-marker-injection)     | Dynamic Preview Boundary Discrepancies & Marker Injection       |      1      |   **open**    | `.github/workflows/scripts/plan-schema.mjs`, `tests/dynamic-preview-plan.test.ts`    |
 | [LESSON-012](#lesson-012-nextjs-google-font-loader-crashes-on-non-extension-endpoints)    | Next.js Google Font Loader Crashes on Non-Extension Endpoints   |      1      |   **open**    | `packages/host/src/app/fonts/`, `packages/host/src/app/page.tsx`                     |
 | [LESSON-013](#lesson-013-green-vitest-does-not-prove-type-level-integrity)                | Green vitest Does Not Prove Type-Level Integrity                |      1      |   **open**    | `npm run check` (`tsc -b`), `scripts/build-shells.mjs`                               |
+| [LESSON-014](#lesson-014-browser-action-receipts-do-not-prove-iframe-interaction)         | Browser Action Receipts Do Not Prove Iframe Interaction         |      1      |   **open**    | Observe frame output; explicit frame interaction                                     |
 
 ---
 
@@ -399,3 +400,30 @@ vitest transpiles TypeScript without type-checking, so exhaustiveness of `Record
 
 - Treat `tsc -b` (via `npm run check`) as the completion gate for any TypeScript change; a green test run alone is not verification.
 - When widening a union type, change its exhaustive `Record<…>` maps in the same edit and grep for other consumers.
+
+---
+
+### LESSON-014: Browser Action Receipts Do Not Prove Iframe Interaction
+
+- **ID**: `LESSON-014`
+- **Category**: `tooling`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: Observe iframe output after interaction; use an explicit frame handle when wrapper targeting is ambiguous.
+
+#### Symptom
+
+An Ego browser click on a button inside the HTML preview returned successfully, but the iframe output stayed `Ready`. Screenshot capture subsequently timed out.
+
+#### Root Cause
+
+The wrapper action receipt did not establish that the cross-origin iframe handler ran. A direct managed Chromium frame click on the same artifact executed the handler and showed the expected result; the exact wrapper failure remains unconfirmed.
+
+#### Evidence
+
+- 2026-10-11, TACO-70 review repair: direct frame interaction showed `Action passed; parent access blocked` in both local and canonical Host shells. The wrapper mismatch was reported through the tool QA channel.
+
+#### Prevention & Escalation
+
+- Verify the visible result inside the frame before claiming an action succeeded.
+- Classify a wrapper or screenshot timeout separately from product behavior, and retain the successful frame-level runtime evidence.

@@ -18,6 +18,7 @@ When a user asks an agent to install, use, package, or review Taco, read `README
 - Install `extensions/taco/` only into the exact initialized Spec Kit project named or confirmed by the user.
 - Keep the reviewed directory canonical. Assemble or refresh a `.taco.html` by copying the shell and writing the `taco/files` v1 bundle JSON into the `#taco-document` block — that data block is the only agent-writable part of the file. Never modify the shell's HTML, CSS, or scripts, and preserve `docId`, `comments`, and `navigation` across every refresh. Data-block-only editing is the supported workflow; the CLI is not required.
 - `.html` and `.htm` source files pack as `text/html` and render as read-only single-page HTML in a sandboxed, network-blocked frame; a `*.taco.html` container path is rejected as bundle content. Never confuse an embedded HTML page with the `.taco.html` container, which remains the product.
+- When a refresh adds HTML to a legacy shell without the `embedded-html` token in `taco-shell-features`, reassemble with the current stock shell of the same Complete/Lite variant, preserving the entire prior bundle. This carrier replacement is the supported compatibility exception to data-block-only refresh; never patch shell code or convert variants silently. Unmarked legacy shells are Complete. Keep the capability marker in the canonical HTML entry and regenerate every shell mirror.
 - Present a generated `.taco.html` through the Agent GUI's native clickable file/artifact surface, and open it in the user's browser whenever the host permits local `file://` navigation. Report `presented as a clickable file`, `opened`, or `opened and verified` truthfully: a headless boot check is internal evidence and is not user-visible presentation. In Codex, return a clickable absolute file link and let the user's click open it in Browser; do not attempt autonomous `file://` navigation or substitute a `data:` URL. Use a separate tab so an existing unsaved review survives.
 - Provide a verifiable Taco deliverable: After completing development and verification of any feature or fix, always build and provide a `.taco.html` file (such as `dist-single/Taco_Spec.taco.html`, or placed in the project `tmp/` directory, e.g. `tmp/<feature>.taco.html`, which is gitignored) so the user can directly open, interact with, and verify the implemented functionality in their browser.
 - Skill & Website Review Sync: 每当在当前仓库执行到代码审查（即开发完成后的审查与测试验证阶段）时，必须检查本次改动是否涉及相关的 skill 内容（`skills/`）以及官网内容（`packages/host/`）。
@@ -44,11 +45,11 @@ When a user asks an agent to install, use, package, or review Taco, read `README
 
 - **prepare（设计/规划）阶段：必须估算。** 在设计源文件（`specs/<feature>/spec.md`）中写明：本次改动预计增加的字节数或比例，落在哪些产物上（skill 目录、Complete shell、Lite shell、`.taco.html` 产物、发布包），以及是否引入新的依赖或联网行为。没有数字的估算不算完成，禁止只写「影响很小」。
 - **develop（实现）阶段：必须实测。** 实现后按同一口径重新测量，并与估算并列记录（估算值 / 实测值 / 偏差及原因）。实测方式：构建对应产物并比较字节数，例如
-  - `node scripts/build-shells.mjs` 后比较 `dist-single/Taco_Spec.taco.html` 与 `dist-single/Taco_Spec_Lite.taco.html`；
+  - `node scripts/build-shells.mjs` 后，以生成的 `skills/taco/taco-shell.html` 和 `skills/taco/taco-shell-lite.html`（空 `#taco-document`、统一通用标题）分别与改动前同口径基线比较；不得用带文档的 `dist-single/Taco_Spec*.taco.html` 整体大小判定 shell 增长；
   - skill 目录用 `du`/`wc` 比较 `skills/taco/`；
   - 结论写入 PR 描述与设计源文件。
-- **阈值与告知义务：任一 shell（`skills/taco/taco-shell.html`、`skills/taco/taco-shell-lite.html` 及其镜像 `extensions/taco/assets/`、`dist-single/`）相对当前基线增长 ≥ 1%，或绝对增量 ≥ 32 KB，即视为「较大增大」，必须在交付说明中**主动、明确地告知用户**，给出数字、原因与可选替代方案；未达阈值也应在实测记录中给出数字。
-- **基线（2026-10-11，`dist-single` 构建产物）**：`Taco_Spec.taco.html` 2,847,102 字节；`Taco_Spec_Lite.taco.html` 297,870 字节；`skills/taco/taco-shell.html` 2,738,638 字节；`skills/taco/taco-shell-lite.html` 189,406 字节。基线变化时同步更新本节。
+- **阈值与告知义务：纯 shell** 相对改动前同变体基线增长 ≥ 1%，或绝对增量 ≥ 32 KB，即视为「较大增大」，必须在交付说明中**主动、明确地告知用户**，给出数字、原因与可选替代方案；未达阈值也应在实测记录中给出数字。统一使用生成的 skill shell 作为测量对象；extension 与 dist-single 镜像不重复判定。文档数据、文档标题及示例内容的增长单独记录，不参与 shell 阈值计算。必须保留改动前基线，不能用本轮生成后的数值作本轮比较基线。
+- **纯 shell 当前基线（2026-10-11）**：`skills/taco/taco-shell.html` 2,738,702 字节；`skills/taco/taco-shell-lite.html` 189,470 字节。下一轮改动以此为起点；本轮修复的改动前基线为 2,738,638 / 189,406 字节。
 
 # Semantic commit messages
 

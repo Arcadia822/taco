@@ -126,7 +126,7 @@ In a Taco, an in-bundle link switches to that document in place (a hosted page a
 3. `JSON.parse` the exact escaped string you are about to insert — it must round-trip — then check the shape rules above.
 4. Write the whole file to a temporary sibling and `rename` it over the destination. A direct `writeFile` truncates the previous Taco first and loses it on failure.
 5. `<title>` becomes `<bundle title> — Taco`, with `&`, `<`, `>` escaped as HTML entities.
-6. Nothing outside the data block and `<title>` changes; the shell stays byte-identical.
+6. Nothing outside the data block and `<title>` changes within the selected shell. A refresh introducing HTML into a shell without the `taco-shell-features` token `embedded-html` must reassemble from the current stock shell of the same Complete/Lite variant, preserving all prior bundle fields. Unmarked legacy shells are Complete. Report the replacement; never hand-edit shell code. An explicitly supplied shell lacking the token is rejected before any write.
 
 ## Rejecting input
 

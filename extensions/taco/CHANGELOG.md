@@ -40,11 +40,14 @@
 * test: **mermaid**: add regression test for sequenceDiagram interaction and neo theme (TACO-67) ([f3c1664](https://github.com/Arcadia822/taco/commit/f3c1664f85a9adf98cd7a1620218f80e5e444c7f))
 
 ## [0.14.4](https://github.com/Arcadia822/taco/compare/v0.14.3...v0.14.4) (2026-10-10)
+
 ### Features
 
 * **ci**: dynamic desktop UI preview pipeline driven by PR diff and DOM outlines with strict network and secret isolation (TACO-68, TACO-62)
 
+### Bug Fixes
 
+* **extension**: support HTML source files as text/html while rejecting nested containers (TACO-70)
 * **governance**: resolve review findings for lessons validator and evidence counts (TACO-66) ([0e61c3e](https://github.com/Arcadia822/taco/commit/0e61c3e6905f3d32bc0a388e2e2c453e8fe129ae))
 * **ci**: keep a CI verdict for every commit on main (TACO-63) ([0d7d30e](https://github.com/Arcadia822/taco/commit/0d7d30eeee2cf184c3aee7170efda559d50dabaa))
 

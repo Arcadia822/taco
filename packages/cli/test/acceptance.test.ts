@@ -97,7 +97,7 @@ describe('008-taco-host-contract 21 Acceptance Scenarios (spec.md Section 10)', 
   })
 
   // Scenario 3: Markdown, files, assets semantic fidelity without executing code
-  it('Scenario 3: rejects ordinary HTML source entries instead of projecting them', () => {
+  it('Scenario 3: accepts ordinary HTML source entries while rejecting nested .taco.html containers', () => {
     const rawContent = '<script>alert(1)</script><p>Hello</p>'
     const file = {
       path: 'view.html',
@@ -105,7 +105,30 @@ describe('008-taco-host-contract 21 Acceptance Scenarios (spec.md Section 10)', 
       content: rawContent,
     }
     expect(isSafePath(file.path)).toBe(true)
-    expect(validateSnapshotFile(file, '.').ok).toBe(false)
+    const validated = validateSnapshotFile(file, '.')
+    expect(validated.ok).toBe(true)
+    if (validated.ok) {
+      expect(validated.file.mediaType).toBe('text/html')
+      expect(validated.file.content).toBe(rawContent)
+    }
+
+    const htmFile = {
+      path: 'report.htm',
+      mediaType: 'text/html',
+      content: '<h1>Report</h1>',
+    }
+    expect(validateSnapshotFile(htmFile, '.').ok).toBe(true)
+
+    const nestedTaco = {
+      path: 'nested.taco.html',
+      mediaType: 'text/html',
+      content: '<!doctype html><title>Nested</title>',
+    }
+    const rejectedTaco = validateSnapshotFile(nestedTaco, '.')
+    expect(rejectedTaco.ok).toBe(false)
+    if (!rejectedTaco.ok) {
+      expect(rejectedTaco.err).toContain('bundle file path must not end in .taco.html')
+    }
   })
 
   // Scenario 4: Public read without key, invalid key fails, key revocation takes effect

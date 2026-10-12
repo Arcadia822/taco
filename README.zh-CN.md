@@ -110,7 +110,7 @@ speckit.taco.review specs/001-example/001-example.taco.html
 
 更严格的“全有或全无”规则属于 extension 的可选 `sync` CLI 工具：它为每个打包文件记录 SHA-256 基线，当 canonical 文件与 Taco 副本自打包后都发生变化时，拒绝任何写入。这两条都不是 skill 离线路径上自动生效的行为 —— 当评审通过 Handoff 或保存文件到达、链路中没有 CLI 时，由 Agent 自己完成同样的比对，并在遇到无法归因的改动时停止。
 
-打包器包含可见的 UTF-8 普通文件，以及单个不超过 10 MiB、验证通过的本地 PNG 资源。PNG 会嵌入 Taco 以供 Markdown 离线渲染，并在评审往返过程中按二进制数据原样保留。默认只排除 `*.taco.html` 和隐藏路径；可重复的 `--ignore` 参数可以显式排除其他路径。普通 `.html`、`.htm` 源文件不再受支持，未显式忽略时打包会明确报错；作为产品容器的 `.taco.html` 不受此限制。
+打包器包含可见的 UTF-8 普通文件，以及单个不超过 10 MiB、验证通过的本地 PNG 资源。PNG 会嵌入 Taco 以供 Markdown 离线渲染，并在评审往返过程中按二进制数据原样保留。默认只排除 `*.taco.html` 和隐藏路径；可重复的 `--ignore` 参数可以显式排除其他路径。普通 `.html`、`.htm` 源文件以 `text/html` 打包，在本地与 Tacobin 中均以禁止联网的沙箱只读展示；嵌套 `.taco.html` 容器仍被排除。
 
 每次 update 成功后，Agent 都会把对应 Taco 作为原生、可点击的本地文件展示，并在宿主允许本地 HTML 导航时用用户的浏览器打开它。在 Codex 中，由用户点击后交给 Browser 打开；Agent 不会尝试自主导航到 `file://`。headless 启动检查只是内部证据，不会当作面向用户的可视化展示。
 

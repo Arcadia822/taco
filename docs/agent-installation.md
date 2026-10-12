@@ -14,6 +14,8 @@ This is the machine-facing installation guide for an Agent adding Taco to an env
 
 Select by the **recipient's opening environment**, not the Agent's installation-time connectivity. Use the default self-contained `taco-shell.html` whenever the recipient might be offline; it includes the editor and diagram renderer and is larger. Use `taco-shell-lite.html` only when reliable network access is expected; it loads pinned public CDN libraries for rich editing, syntax highlighting, and Mermaid and falls back to writable Markdown source when the rich editor fails. Lite must not silently replace an existing Complete Taco during a refresh.
 
+When adding HTML source pages to an existing Taco, inspect the shell's `taco-shell-features` meta field outside the document block for the `embedded-html` token. If absent, reassemble from the current stock shell of the same Complete/Lite variant, carrying over all bundle fields and review history; unmarked legacy shells are Complete. Report that replacement, never patch the shell scripts, and never change variants silently. The optional helper rejects an explicitly selected incompatible custom shell before writing.
+
 ## Install from a GitHub repo URL
 
 When the user gives the Taco repository URL (e.g. `https://github.com/Arcadia822/taco`), install the **`taco` skill**. Prefer the skills ecosystem CLI, because it resolves the repository, picks the skill, and reports the exact destination for the active harness; fall back to copying the directory when that CLI cannot run (no network, no npm, unknown harness).
