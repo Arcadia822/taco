@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
     tacoId?: string
     protocol?: string
     snapshot?: unknown
+    ttlSeconds?: unknown
   }
 
   if (payload.protocol !== 'taco-host/1' || !payload.snapshot) {
@@ -53,10 +54,33 @@ export async function POST(req: NextRequest) {
   const snapshot = validated.snapshot
   const tacoId = payload.id || payload.tacoId || randomUUID()
   const title = snapshot.title || 'Untitled Taco'
+  let ttlSeconds: number | null | undefined = undefined
+  if ('ttlSeconds' in payload && payload.ttlSeconds !== undefined) {
+    if (payload.ttlSeconds === null || payload.ttlSeconds === 0) {
+      ttlSeconds = null
+    } else if (
+      typeof payload.ttlSeconds === 'number' &&
+      Number.isInteger(payload.ttlSeconds) &&
+      payload.ttlSeconds > 0 &&
+      payload.ttlSeconds <= 31536000
+    ) {
+      ttlSeconds = payload.ttlSeconds
+    } else {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'ttlSeconds must be a positive integer <= 31536000 (365 days), or 0/null for permanent',
+          },
+        },
+        { status: 400 },
+      )
+    }
+  }
 
   try {
     const db = getDatabase()
-    const publishRes = await db.publishTaco(tacoId, title, snapshot)
+    const publishRes = await db.publishTaco(tacoId, title, snapshot, { ttlSeconds })
     const contentHash = await computeSnapshotContentHash(snapshot)
     const revisionId = publishRes.revisionId || tacoId
     // Also write to storage adapter if configured for legacy direct URL access
@@ -82,6 +106,7 @@ export async function POST(req: NextRequest) {
         contentHash,
         url: `${origin}/t/${tacoId}`,
         createdAt: nowIso,
+        expiresAt: publishRes.expiresAt ?? null,
       },
       { status: 201 },
     )

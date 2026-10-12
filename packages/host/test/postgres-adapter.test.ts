@@ -31,11 +31,8 @@ describe('PostgresDbAdapter Unit Fixtures & Regressions', () => {
         if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') {
           return { rowCount: 1, rows: [] }
         }
-        if (sql.includes('SELECT id, status FROM tacos WHERE id = $1 FOR UPDATE')) {
-          return { rowCount: 1, rows: [{ id: params?.[0], status: 'open' }] }
-        }
-        if (sql.includes('SELECT id, last_sequence, status FROM tacos WHERE id = $1 FOR UPDATE')) {
-          return { rowCount: 1, rows: [{ id: params?.[0], last_sequence: 1, status: 'open' }] }
+        if (sql.includes('FROM tacos WHERE id = $1 FOR UPDATE')) {
+          return { rowCount: 1, rows: [{ id: params?.[0], last_sequence: 1, status: 'open', expires_at: null }] }
         }
         if (sql.includes('SELECT action, response_body, status_code, request_hash FROM mutation_receipts')) {
           return { rowCount: 0, rows: [] }
@@ -99,8 +96,8 @@ describe('PostgresDbAdapter Unit Fixtures & Regressions', () => {
         if (sql.includes('SELECT sequence, thread_id, type, author, occurred_at, message_id FROM comment_thread_actions')) {
           return { rowCount: 0, rows: [] }
         }
-        if (sql.includes('SELECT status FROM tacos WHERE id = $1')) {
-          return { rowCount: 1, rows: [{ status: 'open' }] }
+        if (sql.includes('FROM tacos WHERE id = $1')) {
+          return { rowCount: 1, rows: [{ status: 'open', expires_at: null }] }
         }
         if (sql.includes('SELECT id, taco_id, author, created_at, payload_json FROM handoffs WHERE id = $1 AND taco_id = $2')) {
           return { rowCount: 0, rows: [] }
