@@ -260,7 +260,7 @@ const I18N = {
   },
   en: {
     eyebrow: 'AGENT - HUMAN COLLABORATION',
-    h1: 'Work through the design with your agent,\nwithout the back-and-forth.',
+    h1: 'Work through the design with your agent.\nNo retyping.',
     desc: 'A single-file design review workspace that stays easy to read, versions cleanly in your repo, and hands off in one click.',
     tryBtn: 'Try Taco',
     tryUrl: '/demo/en/taco-guide.taco.html',

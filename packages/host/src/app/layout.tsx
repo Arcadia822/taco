@@ -57,7 +57,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Taco — Work through the design with your agent, without the back-and-forth.',
+    title: 'Taco — Work through the design with your agent. No retyping.',
     description:
       'A single-file design review workspace that stays easy to read, versions cleanly in your repo, and hands off in one click.',
     images: ['/og-image.png'],
