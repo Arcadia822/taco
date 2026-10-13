@@ -1,6 +1,6 @@
 ---
 name: taco
-description: Human-agent document review in one portable .taco.html. Use when asked to create or refresh a .taco.html, make a Taco, "打包成 Taco", prepare documents for human review (spec, plan, RFC, ADR, PRD, API reference, data model), or handle Taco edits, comments, and Handoff. Use proactively when a multi-part design or plan needs a human to decide or sign off before it lands ("规划一下", "出个方案", "评审一下这个方案", "design this", "RFC", "which approach"). Not for quick answers, exploratory chat, or self-contained changes nobody needs to review.
+description: Human-agent document review in one portable .taco.html. Use when explicitly asked to create or refresh a .taco.html, make a Taco ("打包成 Taco"), or handle Taco edits, comments, and Handoff; or when project explicit review conventions require it. Proactively package a Taco only for a multi-file complex design that requires human review, decision, or sign-off before landing ("规划一下", "出个方案", "design this", "RFC", "which approach"). Not for quick answers, exploratory chat, simple fixes, single-file proposals without explicit request or project convention, or document length alone.
 ---
 
 # Taco: human-agent document review in one file
@@ -15,31 +15,51 @@ A `.taco.html` is plain HTML with one plaintext JSON data block. `references/bun
 
 ## When to use
 
-- Any directory of Markdown (plus JSON/YAML/PNG/HTML single pages) that needs human review: system design, RFC, ADR, data model, API reference, or a plain spec.
+- Multi-file complex design directories (system design, RFC, ADR, data model, API contracts, architecture) where human review and decision are required before landing.
+- When the user explicitly asks for a Taco ("打包成 Taco", "make a Taco", "create a .taco.html").
+- When project explicit review conventions require packaging documents for review.
 - No project scaffolding is required. Taco works in any repository or sandbox on a plain directory.
-- Spec Kit projects: if the project already has the Taco Spec Kit extension installed (`.specify/extensions/taco/` and the `taco-speckit` skill), use that flow. Otherwise this skill handles a Spec Kit feature directory exactly the same way — installing the extension is an optional deeper integration, never a requirement.
+- Spec Kit projects: if the project already has the Taco Spec Kit extension installed (`.specify/extensions/taco/` and the `taco-speckit` skill), follow that flow. Otherwise this skill handles a Spec Kit feature directory under the same review rules — installing the extension is an optional deeper integration, never a requirement.
 
-### Trigger judgment: when a human needs to look
+### Trigger judgment: default scope, project conventions, and explicit requests
 
-**Taco exists for human review — that is the trigger.** Pack one only when the result needs a person to review it, decide something, or sign off — one human judgment per document is the point. If nobody needs to look, do not make a Taco: answer or ship in the conversation and the repository.
+Taco is designed for human review, but human review alone does not trigger proactive packaging. **By default, proactively package a Taco only when BOTH conditions are met: (1) it is a multi-file complex design, AND (2) it requires human review, decision, or sign-off before implementation.**
 
-Needs a human → use this skill proactively (the request rarely says "Taco" or "review"):
+Trigger precedence:
 
-- a multi-part design, plan, RFC, or spec with decision points, contracts, migrations, or irreversible choices ("规划一下", "出个方案", "design this", "RFC", "which approach", a phased roadmap, a data model, an API contract);
-- the project's review contract, checkpoint, or sign-off convention calls for a review;
-- the user asks to review, edit, or comment on documents.
+1. **Explicit user request (highest priority)**: The user asks to create, pack, or refresh a `.taco.html`, make a Taco ("打包成 Taco", "make a Taco"), or review/comment via Taco.
+2. **Project explicit review conventions (retains priority)**: The repository's explicit review contract, checkpoint convention, or documented process (`.taco/`, `AGENTS.md`, PR template, or installed Spec Kit extension) requires packaging or reviewing via Taco.
+3. **Default proactive trigger**: Proactively package a Taco only when a multi-file complex design with architectural trade-offs, contracts, migrations, or irreversible choices needs a human to decide or sign off before landing ("规划一下", "出个方案", "design this", "RFC", "which approach", a phased roadmap, a data model, an API contract).
 
-Does not need a human → no Taco: a one-sentence answer, a single-point fix, a copy edit, open-ended brainstorming still taking shape, and any self-contained change you can implement and verify alone — **even when it spans several files or would make a long write-up**. Size and length are not reasons for a Taco; a document nobody reads is noise.
+When NOT to trigger:
 
-Early requirement refinement is exploration: stay in the conversation until there is something to confirm, decide, or sign off; do not turn every message into a document edit or a comment task. When exploration settles into a proposal that needs a human decision, that proposal is the Taco.
-
+- **Exploratory chat and early brainstorming**: stay in the conversation while ideas are still taking shape; do not turn every message into a document edit or a comment task.
+- **Simple, self-contained fixes or single-point updates**: answer or ship directly in conversation and repository.
+- **Single-file proposals or changes**: unless explicitly requested by the user or required by project review conventions, single-file proposals do not trigger a Taco even if they need sign-off.
+- **Document length alone**: size or word count is never a reason to package a Taco; a long document that can be reviewed in-chat or in PR does not trigger Taco.
 When you do trigger, the chat reply carries only the summary, the open decisions, and the file entry point; the canonical Markdown and the `.taco.html` carry the work.
+
+### Installation and first-use contract
+
+When asked to install Taco following `docs/agent-installation.md`, install both the `taco` skill and `taco-cli`, creating destination directories if needed. Do not package the current conversation during installation, do not alter project rules, and do not install the Spec Kit extension unless explicitly requested. If installation fails, report the real failure reason plainly without inventing a bypass.
+
+When installation succeeds, reply starting with:
+
+```text
+Installed taco.
+```
+
+State the installed skill path and `taco-cli` version/path, then summarize how to make a Taco:
+
+1. **Core capability**: Taco packages a document directory into one `.taco.html` for reading, editing Markdown/JSON/YAML/Mermaid in place, leaving anchored comments, and one-click Handoff (received directly via `taco-cli open <file.taco.html> --listen` / `listen` or clipboard) so the agent can update canonical files and refresh the same Taco in place while preserving `docId`, comments, navigation, and Checkpoints. Embedded `.html` pages render read-only in a sandbox without in-page editing or HTML text-selection comment anchors. Comment threads are confirmed and resolved by the human; the agent replies without auto-resolving.
+2. **Default scope**: Proactively use Taco only when a multi-file complex design needs human review or decision, or when the user explicitly asks for a Taco; exploratory chat and simple self-contained fixes stay in conversation and repository without packaging a Taco, and document length alone never triggers Taco.
+3. **No unrequested side effects**: Do not alter project rules or force Checkpoints or Spec Kit. Configuration entry (`taco-configure`, TACO-79) and CLI-assisted browser save (TACO-80) are unreleased and must not be promised as available.
 
 ### Optional document and Checkpoint examples
 
 This skill bundles optional document examples in `templates/` next to this `SKILL.md`: `spec/`, `architecture/`, `api-reference/`, `adr/`, `prd/`, and `interaction/`. (A Taco source checkout carries the same packs at `extensions/taco/templates/`; an installed Spec Kit extension exposes them at `.specify/extensions/taco/templates/`.) Match the pack to the depth ladder in *How much to design and write*: light needs no pack, medium takes `interaction/` for the flow layer, heavy takes `prd/` + `interaction/` + `architecture/` + `api-reference/`; `spec/` covers staged spec/plan/tasks review and `adr/` decision records. First use the user's instructions and the project's own Checkpoint convention (see *Project Checkpoint convention* below), if present. Read a bundled pack's `README.md` and `template.md` only when it is useful as a starting reference; its fields, files, and Checkpoint graph are not required structure.
 
-Decide whether to use Checkpoints from the review contract, not the task label or document count. Use them when the team needs named review milestones, dependencies, or explicit status tracking; follow any project-specific Checkpoint policy or reviewer request. Otherwise omit `checkpoints` and use Taco's ordinary document review. For comparison, a small copy edit or straightforward bug fix often needs no Checkpoint, while a `spec.md` → `plan.md` → `tasks.md` review can draw on the bundled `spec/` **SDD example**. Neither shape is mandatory: a small change may require client sign-off, and a complex change may use a different project-defined graph. If adapting an example, update every `checkpoints.nodes[].documents[].path` to the new root; never import sample status records as real review progress.
+Decide whether to use Checkpoints from the review contract, not the task label or document count. Use them when the team needs named review milestones, dependencies, or explicit status tracking; follow any project-specific Checkpoint policy or reviewer request. Otherwise omit `checkpoints` and use Taco's ordinary document review. For comparison, when an explicit user request or project convention packages a small change, it often needs no Checkpoint, while a `spec.md` → `plan.md` → `tasks.md` review can draw on the bundled `spec/` **SDD example**. Neither shape is mandatory: a small change may require client sign-off, and a complex change may use a different project-defined graph. If adapting an example, update every `checkpoints.nodes[].documents[].path` to the new root; never import sample status records as real review progress.
 
 Never transplant a pack's `bundle.json` structure into a directory that does not contain its paths. A copied Checkpoint graph or `navigation` manifest renders empty groups and `Not created` placeholder rows — a document that looks broken instead of simple. The packs supply prose to adapt (`template.md`); their `bundle.json` is a working example of *those* files, not a layout to impose.
 
@@ -48,7 +68,7 @@ Never transplant a pack's `bundle.json` structure into a directory that does not
 Before creating a new requirement Taco, find and follow the project's Checkpoint convention; read *Project Checkpoint convention* in `references/checkpoints.md` first. Precedence: the user's instruction in this request; an installed Spec Kit extension; `.taco/` (`.taco/README.md`'s first line records adoption; each `.taco/*.taco.html` is an empty Taco holding only `checkpoints`); other project conventions (`AGENTS.md`, `CONTRIBUTING`, PR template, `specs/` layout; cite file and line); then this skill's examples.
 
 - Use the `.taco/` nearest the working directory and give its path in your reply. Use a template there only if the README's first line is exactly `Checkpoint 模板：采用（YYYY-MM-DD）` or there is no README (say it is missing), its bundle `root` is `feature`, and it passes the reference's *Validate* step (script or, without `scripts/`, every listed rule by hand). Otherwise — another first line, a missing or invalid template, another `root` — say so in your reply; never use, repair, or normalize it.
-- An adopted template is an option, not an obligation: triage each request to one template or none, and state the choice and the reason; small changes usually get none. When one template's stated scope fits, use it without asking. To use one, copy only its `checkpoints.nodes`, map its `feature/` paths to this request's `root`, and start from a fresh `docId` and `documents: []`.
+- An adopted template is an option, not an obligation: triage each request to one template or none, and state the choice and the reason; smaller or non-staged reviews get no template. When one template's stated scope fits, use it without asking. To use one, copy only its `checkpoints.nodes`, map its `feature/` paths to this request's `root`, and start from a fresh `docId` and `documents: []`.
 - With no convention and no record, suggest a template once, and only when this request's review needs call for staged review or sign-off by different roles — never because of document count. Record the answer in `.taco/README.md`; once recorded, never ask about adoption again.
 - Write `.taco/` only to record the user's answer to that suggestion, or when the user asks to refine the process.
 
@@ -70,7 +90,7 @@ Contract:
 - Keep the raw output to yourself: the user sees at most one sentence, at the end of the final reply, using the wording in `references/update-notice.md`.
 - The script runs `taco-cli --version` on this machine when that CLI exists (the only program it starts). Disable the whole check with `TACO_UPDATE_CHECK=off`, or just the CLI probe with `--no-cli`.
 
-### Optional local CLI toolbox
+### Local CLI toolbox
 
 Use this route only after *Trigger judgment* and *How much to design and write* determine the review shape. CLI availability never creates a review requirement. Read `references/reviewing.md` for local receipt handling and the hosted distinction.
 

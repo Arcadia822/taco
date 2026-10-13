@@ -7,7 +7,7 @@ updated: 2026-10-03
 
 ## In one sentence
 
-**The whole design for one topic, in one file.** Humans and agents can both read, edit, and comment on it comfortably, and the file lives in your repository, versioned with your code.
+**Work through the design with your agent, effortlessly.** Taco is a single-file design review workspace that stays easy to read, versions cleanly with your repository, and hands off in one click.
 
 The documentation site you are reading right now is itself a Taco: files on the left, content in the middle, outline and comments on the right, and the Checkpoints view at the top of the sidebar tracks this documentation set's progress. There is no server and no database. Everything is inside a single `.taco.html` file.
 
@@ -56,9 +56,9 @@ Taco does not provide real-time multi-user editing, version history, or accounts
 
 | Part | What it is | Read more |
 | --- | --- | --- |
-| Taco | The single-file review workspace itself | [Taco](Features/Taco.md) |
-| Taco Skill | Teaches your agent to write, refresh, and read reviews | [Taco Skill](Features/Taco-Skill.md) |
-| Tacobin | Share links and an online review relay, used with `taco-cli` | [Tacobin](Features/Tacobin.md) |
+| Taco | The single-file design review workspace itself | [Taco](Features/Taco.md) |
+| Taco Skill | Equips your agent to create, refresh, and process Taco reviews, paired with `taco-cli` for local listening and automation | [Taco Skill](Features/Taco-Skill.md) |
+| Tacobin | Share links and an online review relay for teams | [Tacobin](Features/Tacobin.md) |
 
 ## Design principles
 

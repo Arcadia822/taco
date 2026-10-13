@@ -31,7 +31,7 @@
   ],
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && node scripts/build-shells.mjs && node scripts/build-cli-assets.mjs && node scripts/refresh-host-demo.mjs",
+    "build": "tsc -b && node scripts/build-shells.mjs && node scripts/build-cli-assets.mjs && node docs/taco-guide/build.mjs",
     "build:single": "npm run build",
     "format": "prettier --write README.md README.zh-CN.md AGENTS.md LESSONS.md docs/agent-installation.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md package.json .github",
     "format:check": "prettier --check README.md README.zh-CN.md AGENTS.md LESSONS.md docs/agent-installation.md CONTRIBUTING.md SECURITY.md CODE_OF_CONDUCT.md package.json .github",

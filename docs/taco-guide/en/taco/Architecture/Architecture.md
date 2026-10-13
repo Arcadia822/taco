@@ -17,7 +17,7 @@ Agents write only the data block and never touch the shell, so upgrading the app
 | Shell | Size | Dependencies |
 | --- | --- | --- |
 | Complete | About 2.7 MB | Everything embedded, fully offline |
-| Lite | About 180 KB | Loads editors from a public CDN at startup |
+| Lite | About 190 KB | Loads editors from a public CDN at startup |
 
 ## Data block: taco/files v1
 

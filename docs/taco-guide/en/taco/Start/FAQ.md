@@ -21,7 +21,7 @@ No. Taco never reformats your source while rendering, and anything you did not c
 
 ## How does the agent get my comments?
 
-Two ways: click **Handoff** to copy your edits and comments for the agent, or save the file and let the agent read the data inside the `.taco.html`. With Tacobin, the agent fetches a handoff snapshot through `taco-cli`.
+Two ways: click **Handoff** — with the agent listening locally your unsaved edits and comments are delivered directly, otherwise they are copied as text for you to paste; or save the file and let the agent read the data inside the `.taco.html`. With Tacobin, the agent fetches a handoff snapshot through `taco-cli`.
 
 ## Does it support real-time collaboration?
 
@@ -33,7 +33,7 @@ Markdown, Mermaid, JSON, YAML (with an OpenAPI overview), PNG/SVG images, audio/
 
 ## How big is a Taco?
 
-The application part is about 2.7 MB for Complete and about 180 KB for Lite, plus your documents.
+The application part is about 2.7 MB for Complete and about 190 KB for Lite, plus your documents.
 
 ## Do I need Spec Kit or Checkpoints?
 

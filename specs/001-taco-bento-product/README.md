@@ -9,7 +9,8 @@
     <a href="https://taco-spec-en.arcadia822.chatgpt.site">Live demo (English)</a> ·
     <a href="https://taco-spec-zh-cn.arcadia822.chatgpt.site">在线演示（简体中文）</a>
   </p>
-  <p><strong>Review, hand off, and manage specs with humans and agents — in one file.</strong></p>
+  <p><strong>Work through the design with your agent, effortlessly.</strong></p>
+  <p>A single-file design review workspace that stays easy to read, versions cleanly with your repo, and hands off in one click.</p>
 </div>
 
 Taco turns a specification directory into a portable review workspace. A human can open one `.taco.html` file in a browser, read the complete spec, edit the original Markdown, and leave anchored comments. An agent can then import those edits and comments back into the canonical files, handle the feedback, and produce the next review copy.
@@ -35,15 +36,10 @@ canonical spec directory → one .taco.html → human review → agent sync → 
 Point your Agent at this repository:
 
 ```text
-Install Taco in this repository and make Taco the default review flow
-for future specs. Follow the installation instructions in the Taco repository:
-https://github.com/Arcadia822/taco
+Fetch https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and follow it to install the Taco skill and taco-cli, creating the directories if needed. Then reply Installed taco. plus a short summary of how to make a Taco.
 ```
 
-The Agent reads Taco's repository instructions and installs the complete `skills/taco/` directory (agent guide, production shell, optional references and reader script, and document examples) into its skill location — preferably with `npx skills@latest add arcadia822/taco --skill=taco`, falling back to copying the directory. That is the whole installation: from then on the Agent assembles `.taco.html` review files from the skill's own shell in any directory, fully offline, with no npm package, no CLI, and no build. The installed skill also compares its own `VERSION` with the newest release once per work session and, when something newer is published, closes its reply with one sentence telling you so — it never upgrades anything on its own. Optional deeper integrations — Spec Kit extension commands/hooks/policy for project-level wiring, or `taco-cli` for cloud publishing (TacoHub/Tacobin) — are separate, explicitly requested steps described in [`docs/agent-installation.md`](docs/agent-installation.md).
-
-Checkpoint use follows the user's and project's review requirements. The bundled `spec/` SDD graph is an example to adapt, not a default stage plan or a required destination for generated Taco files. Agents load its detailed protocol reference only when working with Checkpoints; a normal review does not need one.
-
+The Agent reads `docs/agent-installation.md` and installs both the `taco` skill (`skills/taco/`) and `taco-cli` (`@tacobin/cli`), creating directories if needed. If any step fails, it reports the real cause plainly without inventing a bypass. When done, the Agent replies `Installed taco.` and introduces Taco's basic capability and default scope: **use Taco proactively only when a multi-file complex design needs human review or decision, or when you explicitly ask for one**; exploratory chat and simple self-contained fixes stay in the conversation and repository without packaging a Taco, and document length alone never triggers Taco. Installing Taco does not package the current conversation, does not alter project rules or set project defaults, and does not install Spec Kit unless explicitly requested.
 After installation, the review loop needs no further setup:
 
 ```mermaid
@@ -78,10 +74,12 @@ The project is licensed under the MIT License. You can study the implementation,
 - Package a complete specification directory into one portable `.taco.html` file that opens in a browser and works offline.
 - Browse, search, and edit the canonical Markdown and text files while preserving their real directory structure. Standalone JSON/YAML have syntax-highlighted source editors; Mermaid diagrams have an editable source and preview.
 - Review specs with anchored comment threads, including in-place editing of your own messages and tombstone deletion of individual messages without removing their replies; then save an updated Taco or write the changes back to the original directory.
-- Track document readiness with optional Checkpoints. Renaming or deleting a required file leaves its original Checkpoint path visible as uncreated rather than silently rewriting the requirement.
 - Taco and Tacobin headers show the filename, including its extension, or the localized Checkpoints page name. Document titles remain editable in the document body. Save writes a local Taco file; on Tacobin, shared edits autosave independently.
 - Choose the self-contained Complete shell for offline review or the smaller Lite shell for connected review, with editable Markdown source fallback when Lite's CDN editor is unavailable.
+- Track document readiness with optional Checkpoints. Renaming or deleting a required file leaves its original Checkpoint path visible as uncreated rather than silently rewriting the requirement.
+- Host shared reviews on Tacobin via `taco-cli` (`publish`, `update`, `subscribe`, `handoff`), with real-time autosave and durable `review.handed_off` events.
 - Integrate with Spec Kit, optionally and on explicit request, to keep each feature's Taco current and safely import human edits and comments with conflict detection.
+- Seamless local review loop: start a loopback listener (`taco-cli listen <file.taco.html>` or `taco-cli open <file.taco.html> --listen`), review in the browser, and click **Handoff** to send an unsaved review snapshot directly to the agent. The agent diffs changes (`taco-cli diff`) and refreshes the file (`taco-cli refresh`) in place without manual copy-paste.
 
 ## Agent installation
 
@@ -90,9 +88,10 @@ The Quickstart above is the user-facing entry point. [`docs/agent-installation.m
 Agent requirements:
 
 - Keep the reviewed directory canonical. The `.taco.html` is a transport: copy the skill's `taco-shell.html`, then write the `taco/files` v1 bundle JSON into its `#taco-document` block, preserving `docId`, comments, navigation, and any Checkpoint graph and statuses across refreshes. Only that data block and the escaped HTML `<title>` are agent-writable; never hand-edit the rest of the shell.
+- Let the Skill determine human-review need, design depth, and project conventions before selecting CLI commands or templates. Local receipts and Checkpoint statuses do not authorize implementation. Derived HTML pages remain read-only; regenerate them from their source. When HTML is added to an incompatible legacy Taco, use the current stock Shell of the same variant and preserve every bundle field.
 - Open the generated file in the user's browser whenever the host permits local `file://` navigation, and report which of `presented as a clickable file`, `opened`, or `opened and verified` actually happened. A headless load is internal evidence and is never reported as user-visible presentation.
-- Take the review back through the appropriate channel: for local review, the browser's **Handoff** action (copies text diff and open comment threads without requiring save) or the reviewer's saved `.taco.html` (save required). For optional hosted review (Tacobin), visitors autosave edits and comments under self-reported names, but autosaves and comments do not signal completion or wake the session; only the reviewer's explicit **Handoff** click records a `review.handed_off` event, retrieved via `taco-cli`. If no review arrived, say so instead of importing content you never received.
-- Keep an Agent subscribed during hosted review. Handoff requires an active listener; otherwise the page shows installation and subscription commands. Default `taco-cli subscribe` waits for `review.handed_off` and exits with code 0; `--stream` keeps receiving all events. Clicking the overlapping human/Agent avatars opens the listener list; presence is not proof of delivery.
+- Take the review back through the appropriate channel: for local review, the browser's **Handoff** action sends an in-memory snapshot containing text diffs and open comments to the local listener (`taco-cli listen`), copies Markdown prose to clipboard, or can be read from the reviewer's saved `.taco.html`. Saving updates the file on disk independently without resetting the review handoff baseline. For optional hosted review (Tacobin), visitors autosave edits and comments under self-reported names, but autosaves and comments do not signal completion or wake the session; only the reviewer's explicit **Handoff** click records a `review.handed_off` event, retrieved via `taco-cli`. If no review arrived, say so instead of importing content you never received.
+- Comment threads are confirmed and resolved by the human; the Agent replies with changes without auto-resolving threads.
 - Preserve all existing bundle fields on every refresh, including `checkpoints` when present; never fabricate a comment, a hash, or a verification claim; never delete a canonical file because it is absent from the bundle.
 - Treat a live collaboration-enabled Taco as potentially credential-bearing. Do not upload or paste its contents into another service without the user's approval.
 
@@ -110,7 +109,7 @@ speckit.taco.review specs/001-example/001-example.taco.html
 
 The stricter all-or-nothing rule belongs to the extension's optional `sync` CLI utility: it records a SHA-256 baseline for every packed file and refuses every write when both the canonical file and the Taco copy changed since packaging. Neither behavior is applied automatically on the skill's offline path — when a review arrives through Handoff or a saved file with no CLI in the loop, the Agent performs the same comparison itself and stops on any change it cannot attribute.
 
-The packer includes visible UTF-8 regular files plus validated local PNG assets up to 10 MiB. PNGs are embedded for offline Markdown rendering and preserved as binary data during review round trips. Its only default exclusions are `*.taco.html` and hidden paths; repeatable `--ignore` parameters add explicit feature-relative exclusions. Ordinary `.html` and `.htm` source files pack as `text/html` and display read-only inside a network-blocked sandbox, locally and on Tacobin. Nested `.taco.html` containers remain excluded.
+The packer includes visible UTF-8 regular files plus validated local PNG assets up to 10 MiB. PNGs are embedded for offline Markdown rendering and preserved as binary data during review round trips. Its only default exclusions are `*.taco.html` and hidden paths; repeatable `--ignore` parameters add explicit feature-relative exclusions. Ordinary `.html` and `.htm` source files pack as `text/html` and display as read-only pages inside the network-blocked sandbox, locally and on Tacobin. Nested `.taco.html` containers remain excluded.
 
 After each successful update, the Agent presents the exact generated Taco as a native clickable local file, and opens it in the user's browser whenever the host permits local HTML navigation. In Codex, the user click opens it in Browser; the Agent does not attempt autonomous `file://` navigation. A headless boot check is internal evidence and is never reported as user-visible presentation.
 

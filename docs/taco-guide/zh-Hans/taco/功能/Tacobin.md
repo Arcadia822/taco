@@ -1,7 +1,7 @@
 ---
 title: Tacobin
 status: 已完成
-summary: 分享链接与在线评审中继，配合 taco-cli 使用
+summary: 团队分享链接与在线评审中继
 ---
 
 ## 是什么
@@ -12,7 +12,7 @@ summary: 分享链接与在线评审中继，配合 taco-cli 使用
 - 评审者打开链接，在网页里编辑和评论，内容**自动保存**；
 - 评审者点「交接」，正在监听的 Agent 立刻收到通知，取回这一轮的完整结果。
 
-`taco-cli` 是 Agent 这一侧连接 Tacobin 的命令行工具。人不需要安装它；本地评审也用不到它。
+Agent 通过安装时配好的 `taco-cli` 连接 Tacobin，评审者只需打开浏览器链接即可参与。
 
 想看托管评审实际长什么样，打开这份在线演示：[Taco 文档（托管版）](https://taco.arcadia-han.com/t/b89dc5c7-3996-4ab6-b446-3508e4d0af6e)。自动保存、在线监听和显式交接只存在于那里——你现在读的这个独立版没有这些。
 
@@ -31,15 +31,9 @@ summary: 分享链接与在线评审中继，配合 taco-cli 使用
 - 点「交接」时如果没有 Agent 在监听，Tacobin 不会产生交接，而是显示安装 skill、安装 CLI、开始订阅的命令；
 - 头像显示在线，只表示 Agent 在监听，不代表你的意见已经被读到或处理。
 
-## taco-cli
+## Agent 如何接入 Tacobin
 
-安装：
-
-```bash
-npm install -g @tacobin/cli
-```
-
-Agent 常用的命令：
+Agent 使用以下 `taco-cli` 命令完成发布、更新与订阅：
 
 | 命令 | 作用 |
 | --- | --- |

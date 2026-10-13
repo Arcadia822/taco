@@ -5,10 +5,7 @@ import localFont from 'next/font/local'
 import './home.css'
 import { AgentTerminal, type AgentRun } from '../components/agent-terminal'
 import { TacoPixelBackground } from '../components/taco-pixel-background'
-import {
-  TACO_SKILL_INSTALL_COMMAND,
-  TACO_CLI_INSTALL_COMMAND,
-} from '../install-commands.ts'
+// Installation commands live in docs/agent-installation.md and install-commands.ts
 
 const geist = localFont({
   src: './fonts/Geist-Variable.woff2',
@@ -92,9 +89,8 @@ function CopyIconButton({ text, labels }: { text: string; labels: CopyLabels }) 
 type LocaleCode = 'zh-Hans' | 'en'
 
 // 每种语言一套演示数据：public/demo/<locale>/…（修改前）与 …/after/…（Agent 改完后）
-const DEMO_TACO = '008-taco-host-contract.taco.html'
-const DEMO_EDITED_FILE = 'specs/008-taco-host-contract/data-model.mmd'
-const TRACE_TACO_ID = '8e8e2b51-4cad-43d2-a5f6-4f56bcb0a001'
+const DEMO_TACO = 'taco-guide.taco.html'
+const TRACE_TACO_ID = 'b89dc5c7-3996-4ab6-b446-3508e4d0af6e'
 const TRACE_HOST = 'https://taco.arcadia-han.com'
 // Taco 在 ≤1080px 时收起评论栏：窗口更窄时按 1200px 渲染再等比缩小，否则 1:1
 const DEMO_MIN_WIDTH = 1200
@@ -143,25 +139,45 @@ function ScaledTaco({ src, title }: { src: string; title: string }) {
 const I18N = {
   'zh-Hans': {
     eyebrow: 'Agent 与人协作',
-    h1: '一个议题的完整设计，一个文件装下。',
-    desc: '人和 Agent 都能顺手地阅读、修改和评论。单个文件放在代码仓库里，跟代码一起做版本管理。',
+    h1: '跟 Agent 把设计过清楚，不费力。',
+    desc: '清晰易读、便于版本管理、支持一键 Handoff 的单文件设计评审工作区。',
     tryBtn: '试用 Taco',
     tryUrl: '/demo/zh-Hans/taco-guide.taco.html',
     downloadBtn: '下载 Taco',
     downloadUrl: 'https://github.com/Arcadia822/taco/releases/download/taco-docs/Taco_Docs.zh-Hans.taco.html',
     forAgent: 'For Agent',
-    forSkill: 'Skill',
     agentPrompt:
-      '阅读 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md ，按其中步骤为我安装 Taco；安装完成后，向我介绍 Taco 怎么用。',
-    skillCmd: TACO_SKILL_INSTALL_COMMAND,
+      '读取 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md ，按其中步骤安装 Taco skill 与 taco-cli（需要时创建目录）；完成后回复 Installed taco. 并简短说明如何生成一份 Taco。',
     copy: '复制',
     copied: '已复制',
     copyFailed: '复制失败',
     scrollDown: '向下滚动',
-    section1Eyebrow: '04 / 一个文件',
+    section2Eyebrow: '02 / 评审交接',
+    section2Title: '评审直接在文档里做，Agent 接着就改',
+    section2Lead: '打开 Taco，你可以：',
+    section2Points: [
+      '划词评论，讨论就挂在原文旁边',
+      '直接修改：Markdown 所见即所得，JSON/YAML 编辑高亮源码，Mermaid 编辑源码并预览图表；单页 HTML 在本地与托管评审中均以沙箱只读展示',
+      '回复评论，最终由你确认并解决讨论线程',
+      '点「交接改动」，把改动和评论一键交给 Agent',
+    ],
+    section2Tip: '试试窗口右上角的「交接改动」，左边的 Agent 会重跑一遍。',
+    section1Eyebrow: '03 / 一个文件',
     section1Title: '一个文件，带齐所有东西',
     section1Desc: '一个 .taco.html 就是完整的交接件：文档、阅读应用和评论线程一起入库或发送。审阅者双击即可阅读、编辑、划词评论；保存后，下一位审阅者或 Agent 接手的仍是同一份上下文。本地评审无需安装或登录。',
-    sectionCpEyebrow: '03 / 阶段进度',
+    section1FileSize: 'Complete 示例',
+    section1BreakdownTitle: 'Complete shell + Taco 指南内容',
+    section1Tree: [
+      ['应用', '约 2.7 MB（内嵌 Tiptap、highlight.js/lowlight、Mermaid）'],
+      ['文件', '10 篇文档（Markdown、Mermaid、OpenAPI）'],
+      ['评论', '4 条待确认与讨论线程'],
+      ['导航与检查点', '5 阶段依赖图与入口配置'],
+    ],
+    section1ShellSizeTitle: 'Shell 大小（不含文档）',
+    section1ShellSizes: ['Complete：约 2.7 MB（内嵌完整编辑器、代码高亮、Mermaid 渲染库及样式）', 'Lite：约 190 KB（运行时从公共 CDN 加载编辑器库）'],
+    section1Online: '联网依赖',
+    section1OnlineItems: ['Complete：无需联网，所有编辑器与渲染依赖均已内置；Lite 在启动时从公共 CDN 加载，不可用时回退为 Markdown 源码编辑'],
+    sectionCpEyebrow: '04 / 阶段进度',
     sectionCpTitle: '检查点：文档状态与依赖图',
     sectionCpDesc: '为项目定义文档依赖关系，查看每个阶段的进度和下一步建议。状态随 Taco 文件一起交接；重命名或删除必需文件后，原要求会显示为未创建。检查点不会锁定内容或阻止跨阶段编辑。',
     sectionCpPoints: [
@@ -171,48 +187,28 @@ const I18N = {
       ['下一步建议', '根据已标记的前序阶段推导 frontier，供人与 Agent 参考'],
       ['无需内容锁', '状态保存在数据块中，不做哈希校验或强制门禁'],
     ],
-    sectionCpDocInstruction: '必须先补齐匿名凭据的字段、有效期与回收路径，以及幂等键冲突的处理分支，再冻结 openapi.yaml 契约。',
+    sectionCpDocInstruction: '不超过 5 步，从安装到第一次交接。',
     sectionCpBadge: 'CHECKPOINTS DAG',
-    sectionCpDemoTemplate: '008 宿主协议规范',
-    sectionCpStage1: '01 规范定义',
-    sectionCpStage2: '02 架构与模型',
-    sectionCpStage3: '03 接口契约',
-    section1FileSize: 'Lite 示例',
-    section1BreakdownTitle: 'Lite shell + 当前示例内容',
-    section1Tree: [
-      ['应用', '约 178 KB'],
-      ['文件', '约 8.1 KB'],
-      ['评论', '约 3.3 KB'],
-      ['导航', '约 0.5 KB'],
-    ],
-    section1ShellSizeTitle: 'Shell 大小（不含文档）',
-    section1ShellSizes: ['Lite：约 180 KB', 'Complete：约 2.7 MB（内嵌 Tiptap、highlight.js/lowlight、Mermaid 渲染库及样式）'],
-    section1Online: '联网依赖',
-    section1OnlineItems: ['Lite：所需编辑器、语法高亮和 Mermaid 库在启动时从公共 CDN 加载；Complete 无需联网'],
-    section2Eyebrow: '02 / 评审交接',
-    section2Title: '评审直接在文档里做，Agent 接着就改',
-    section2Lead: '打开 Taco，你可以：',
-    section2Points: [
-      '划词评论，讨论就挂在原文旁边',
-      '直接修改：Markdown 所见即所得，JSON/YAML 编辑高亮源码，Mermaid 编辑源码并预览图表；单页 HTML 在本地与托管评审中均以沙箱只读展示',
-      '回复、解决评论线程',
-      '点「交接改动」，把改动和评论整理成一段话交给 Agent',
-    ],
-    section2Tip: '试试窗口右上角的「交接改动」，左边的 Agent 会重跑一遍。',
-    section3Eyebrow: '05 / SPEC KIT 集成',
-    section3Title: '原生支持 GitHub Spec Kit 工作流',
-    section3DescBefore: '已为 ',
-    section3DescAfter: ' 做好完整集成。安装 Taco 扩展插件后，Agent 在每个规范生命周期（specify、plan、tasks 等）自动更新单文件容器，人类审查随时跟进。',
-    section3Cmd: 'specify extension add taco --from https://github.com/Arcadia822/taco/releases/latest/download/taco-extension.zip',
-    section4Eyebrow: '06 / TACOBIN 协作空间与 CLI 本地工具箱',
-    section4Title: 'Tacobin 与 taco-cli：连接 Taco 与 Agent',
+    sectionCpDemoTemplate: 'Taco 文档站',
+    sectionCpStage1: '01 概览',
+    sectionCpStage2: '02 开始',
+    sectionCpStage3: '03 架构与接口',
+    sectionCpDoc1: '概览.md',
+    sectionCpDoc2: '开始/快速开始.md',
+    sectionCpDoc3: '开始/常见问题.md',
+    sectionCpDoc4: '架构/Tacobin-API.yaml',
+    section4Eyebrow: '05 / TACOBIN 协作空间',
+    section4Title: 'Tacobin：为团队连接 Taco 与 Agent',
     section4Desc:
-      '本地 Taco 文件无需安装即可离线评审；可选的 taco-cli 提供完整本地工具箱（new、init、pack、verify、refresh、diff、inspect、extract、open、listen），也支持 Tacobin 云端共享评审。浏览器打开 Taco 本地评审后，点击「交接」即可持久化未保存快照至本地回执（仅限本机 127.0.0.1 访问，有限超时释放，不可达时可通过菜单复制交接），再由 Agent diff 核验并 refresh 原地更新。Tacobin 云端分享页支持多方协作编辑与评论并自动保存，点击「交接」后生成 review.handed_off 事件。',
-    section4CliTitle: 'CLI',
-    section4CliCmd: TACO_CLI_INSTALL_COMMAND,
+      '本地 Taco 可直接离线评审；当需要跨成员在线评审或生成分享链接时，Agent 可通过已安装的 taco-cli 发布到 Tacobin。访客在网页里共享编辑与评论并自动保存；保存失败可重试，冲突时保留草稿。仅当评审者显式点击「交接」且有 Agent 在线监听时，才产生 review.handed_off 事件；普通评论和自动保存不会唤醒 Agent。',
     section4AgentTitle: 'FOR AGENT',
     section4AgentPrompt:
-      '阅读 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md，安装 Taco skill；需要自动化时可选安装 taco-cli。先按 Skill 的人类评审触发、设计深度与项目约定选择内容，再用 taco-cli pack 或 init 创建评审。运行 taco-cli listen <file.taco.html> 或 taco-cli open <file.taco.html> --listen 接收显式交接；核验 diff、处理 canonical 文件后，用 taco-cli refresh <file.taco.html> --dir <canonical-dir> --handoff <receipt-path> 原地复审。Handoff 和 Checkpoint 状态不代表获准实施。托管评审先 dry-run 核对公开内容，再发布并订阅 review.handed_off。',
+      '阅读 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md 的托管评审说明。先用 taco-cli publish <file.taco.html> --host <origin> --dry-run 核对公开内容，再发布并保存 URL、tacoId 和 revisionId；运行 taco-cli subscribe <tacoId> --host <origin> 等待 review.handed_off 事件。收到交接后用 taco-cli handoff 拉取快照、更新源文件，并通过 taco-cli update <tacoId> <file.taco.html> 原地更新同一链接。',
+    section3Eyebrow: '06 / SPEC KIT 集成',
+    section3Title: '原生支持 GitHub Spec Kit 工作流',
+    section3DescBefore: '已为 ',
+    section3DescAfter: ' 做好完整集成。按需安装 Taco 扩展插件后，Agent 在每个规范生命周期（specify、plan、tasks 等）自动更新单文件容器，人类审查随时跟进。',
+    section3Cmd: 'specify extension add taco --from https://github.com/Arcadia822/taco/releases/latest/download/taco-extension.zip',
     creditsEyebrow: '07 / SHOUTOUT',
     creditsBackToTop: '回到顶部',
     creditsTitlePrefix: '感谢',
@@ -222,10 +218,6 @@ const I18N = {
     pageNavAria: '页面导航',
     pageDotAria: (page: number) => `跳转到第 ${page} 页`,
     langSwitchAria: '切换语言',
-    traceLocalPack: '打包现有规范目录为单文件容器',
-    traceLocalListen: '启动短时回环监听器并生成安全入口',
-    traceLocalDiff: '只读比对未保存反馈与本地源文件差异',
-    traceLocalRefresh: '原地原子复审，保留评审身份与评论',
     tracePublish: '发布 Taco，拿到分享地址',
     traceSubscribe: '用 tacoId 订阅这份文档的评审',
     traceEvent: '交接事件到达；Agent 拉取完整快照',
@@ -233,52 +225,80 @@ const I18N = {
       title: 'agent · ~/taco',
       defaultHandoff: [
         '我已在 Taco 评审页面完成了修改与评论，请同步以下变更：',
-        '- 文档标题: "008-taco-host-contract"',
+        '- 文档标题: "Taco 文档"',
         '',
         '## 评论',
-        '- [specs/008-taco-host-contract/spec.md:5] 原文: "匿名可发布，最小流程不含登录"',
-        '  - **arcadia**: 匿名发布自动发的 ApiKey 有效期多久、怎么回收？请在 data-model.mmd 里把相关字段补上。',
-        '- [specs/008-taco-host-contract/data-model.mmd:32] 原文: "string kind "comment | confirm | feedback-done""',
-        '  - **lin**: spec 说确认与反馈完成属于评审数据、不冒充正文评论。confirm / feedback-done 和 comment 放在同一个 kind 里合适吗？',
-        '- [specs/008-taco-host-contract/flows/anonymous-publish.mmd:5] 原文: "D["先安全保存 Key"]"',
-        '  - **arcadia**: 这里缺失败分支：Key 没落盘就不能继续上传正文，应该直接失败退出。',
-        '- [specs/008-taco-host-contract/contracts/openapi.yaml:71] 原文: "description: 幂等键冲突"',
-        '  - **lin**: 409 的响应体要带上已存在的 tacoId 和 revisionId，CLI 才能按幂等键恢复。',
+        '- [taco/概览.md:22] 原文: "Taco 把一个议题的整组文档打包成一个可以直接在浏览器里打开的文件。"',
+        '  - **arcadia**: 这里补一段默认使用边界吧：说明只有多文件复杂设计且需要人评审拍板，或用户主动要求时才打包 Taco；日常探索聊天和简单修改直接在对话与代码里完成。',
+        '- [taco/功能/Taco.md:76] 原文: "Lite 的 CDN 不可用时，Markdown 仍可按源码编辑。"',
+        '  - **mo**: Lite 和 Complete 默认推荐哪个？表格里看不出结论。',
+        '  - **arcadia**: 放进仓库、联网评审用 Lite；要发给可能离线的人用 Complete。已经写进常见问题，你看这样清楚吗？',
+        '- [taco/功能/Tacobin.md:29] 原文: "评论和自动保存都不等于交接，不会唤醒 Agent。"',
+        '  - **lin**: 评审者写完评论就关页面的情况会很多。自动保存成功后，是否应该在页面上提示「尚未交接」？',
+        '  - **arcadia**: 同意这是风险。先记下来，等第二轮审阅体验一起设计提示方式。',
+        '- [taco/路线图.md:23] 原文: "全局讨论列表"',
+        '  - **mo**: 全局讨论里能不能新建不挂在任何文档上的议题？比如整体架构方向这种讨论。',
       ].join('\n'),
-      firstHit: '[open] spec.md:5:32 > 匿名可发布，最小流程不含登录',
-      moreHits: '… 另有 3 条：data-model.mmd、anonymous-publish.mmd、openapi.yaml',
-      diffLine: 'datetime expiresAt "默认 90 天，每次成功鉴权顺延"',
-      checkpointHit: '节点 architecture 达成聚合 complete，等待测试与接口契约推进',
+      reviewTarget: '剪贴板交接反馈',
+      firstHit: '[open] taco/概览.md:22 > Taco 把一个议题的整组文档打包成一个可以直接在浏览器里打开的文件。',
+      moreHits: '… 另有 3 条评论：功能/Taco.md、功能/Tacobin.md、路线图.md',
+      readTarget: 'taco/概览.md',
+      editedTarget: 'taco/概览.md',
+      editStats: '(+1',
+      diffLine: '默认情况下，仅在多文件复杂设计需要人评审拍板，或你主动要求时，Agent 才会打包 Taco…',
+      refreshCmd: `node skills/taco/scripts/pack.mjs --dir docs/taco-guide/zh-Hans/taco --out ${DEMO_TACO}`,
+      refreshOutput: '原地刷新完成 · docId、4 条打开评论与 Checkpoints 均已保留',
       placeholder: '粘贴 Taco 交接内容…',
       pasted: (lines: number) => `[已粘贴 ${lines} 行]`,
-      summary: '已在 data-model.mmd 给 ApiKey 补上 expiresAt、lastUsedAt，给匿名 User 补上 reclaimAt，这条评论已解决。另外 3 条涉及设计取舍，留给你拍板。',
+      summary: '已在《概览》补上默认使用边界说明并刷新 Taco；评论保持打开，待你确认。另外 3 条涉及产品取舍，留给你拍板。',
       replay: '重来一次',
     },
-    demoViewerTitle: 'Taco 演示：008-taco-host-contract',
+    demoEditedFile: 'taco/概览.md',
+    demoViewerTitle: 'Taco 演示：Taco 文档',
     footerLeft: 'Taco Specification & Tacobin Platform',
     footerRight: '© 2026 STENCIL LABS / ARCADIA',
   },
   en: {
     eyebrow: 'AGENT - HUMAN COLLABORATION',
-    h1: 'The whole design doc, in one file.',
-    desc: 'Easy for humans and agents to read, edit, and comment. Lives in your repo, versioned with your code.',
+    h1: 'Work through the design with your agent, effortlessly.',
+    desc: 'A single-file design review workspace that stays easy to read, versions cleanly with your repo, and hands off in one click.',
     tryBtn: 'Try Taco',
     tryUrl: '/demo/en/taco-guide.taco.html',
     downloadBtn: 'Download Taco',
     downloadUrl: 'https://github.com/Arcadia822/taco/releases/download/taco-docs/Taco_Docs.en.taco.html',
     forAgent: 'For Agent',
-    forSkill: 'Skill',
     agentPrompt:
-      'Read https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and install Taco for me by following it. When done, walk me through how to use Taco.',
-    skillCmd: TACO_SKILL_INSTALL_COMMAND,
+      'Fetch https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and follow it to install the Taco skill and taco-cli, creating the directories if needed. Then reply Installed taco. plus a short summary of how to make a Taco.',
     copy: 'Copy',
     copied: 'Copied',
     copyFailed: 'Could not copy',
     scrollDown: 'Scroll down',
-    section1Eyebrow: '04 / One file',
+    section2Eyebrow: '02 / Review handoff',
+    section2Title: 'Review right in the doc. Your agent takes it from there.',
+    section2Lead: 'In Taco you can:',
+    section2Points: [
+      'Select text to comment — the discussion stays next to the source',
+      'Edit in place: WYSIWYG Markdown, syntax-highlighted JSON/YAML source, and Mermaid diagram preview; single-page HTML stays read-only in a sandbox in local and hosted reviews',
+      'Reply to threads and resolve them once you confirm the changes',
+      'Hit Handoff to send every edit and open comment to your agent in one click',
+    ],
+    section2Tip: 'Try Handoff at the window’s top right — the agent on the left replays.',
+    section1Eyebrow: '03 / One file',
     section1Title: 'One file carries everything.',
     section1Desc: 'One .taco.html is the whole handoff: docs, the reader app and review threads travel together in your repo or as a shared file. Reviewers double-click to read, edit and comment in context; once saved, the next reviewer or agent gets that same context. No install or account for local review.',
-    sectionCpEyebrow: '03 / DOCUMENT PROGRESS',
+    section1FileSize: 'Complete example',
+    section1BreakdownTitle: 'COMPLETE SHELL + TACO GUIDE CONTENT',
+    section1Tree: [
+      ['App', 'about 2.7 MB (bundles Tiptap, highlight.js/lowlight, Mermaid)'],
+      ['Files', '10 docs (Markdown, Mermaid, OpenAPI)'],
+      ['Comments', '4 open review and discussion threads'],
+      ['Navigation & Checkpoints', '5-stage graph and entry manifest'],
+    ],
+    section1ShellSizeTitle: 'SHELL SIZE (EXCLUDES DOCUMENTS)',
+    section1ShellSizes: ['Complete: about 2.7 MB (bundles full editor, syntax highlighter, Mermaid renderer, and styles)', 'Lite: about 190 KB (loads editor libraries from public CDN at runtime)'],
+    section1Online: 'NETWORK DEPENDENCIES',
+    section1OnlineItems: ['Complete: needs no network — all editor and rendering dependencies are bundled inline; Lite loads from public CDNs at startup, falling back to Markdown source editing if unavailable'],
+    sectionCpEyebrow: '04 / DOCUMENT PROGRESS',
     sectionCpTitle: 'Checkpoints: Document Status & Dependencies',
     sectionCpDesc: 'Define document dependencies and see stage progress and suggested next steps. A renamed or deleted required file remains visible as uncreated. Status travels with the Taco file; checkpoints do not lock content or block out-of-order edits.',
     sectionCpPoints: [
@@ -288,48 +308,28 @@ const I18N = {
       ['Suggested Next Steps', 'Derive a frontier from marked predecessors for people and agents to consider'],
       ['No Content Lock', 'State lives in the data block without hash checks or enforced gates'],
     ],
-    sectionCpDocInstruction: 'Must enumerate every anonymous-credential field with its lifetime and revocation path, and the idempotency-key conflict handling, before openapi.yaml is frozen.',
+    sectionCpDocInstruction: 'At most 5 steps from installation to the first handoff.',
     sectionCpBadge: 'CHECKPOINTS DAG',
-    sectionCpDemoTemplate: '008 Host Protocol',
-    sectionCpStage1: '01 Specification',
-    sectionCpStage2: '02 Architecture & Model',
-    sectionCpStage3: '03 API Contract',
-    section1FileSize: 'Lite example',
-    section1BreakdownTitle: 'LITE SHELL + CURRENT DEMO CONTENT',
-    section1Tree: [
-      ['App', 'about 178 KB'],
-      ['Files', 'about 8.8 KB'],
-      ['Comments', 'about 3.4 KB'],
-      ['Navigation', 'about 0.5 KB'],
-    ],
-    section1ShellSizeTitle: 'SHELL SIZE (EXCLUDES DOCUMENTS)',
-    section1ShellSizes: ['Lite: about 180 KB', 'Complete: about 2.7 MB (bundles Tiptap, highlight.js/lowlight, the Mermaid renderer, and styles)'],
-    section1Online: 'NETWORK DEPENDENCIES',
-    section1OnlineItems: ['Lite: required editor, syntax-highlighter and Mermaid libraries load from public CDNs at startup; Complete needs no network'],
-    section2Eyebrow: '02 / Review handoff',
-    section2Title: 'Review right in the doc. Your agent takes it from there.',
-    section2Lead: 'In Taco you can:',
-    section2Points: [
-      'Select text to comment — the discussion stays next to the source',
-      'Edit in place: WYSIWYG Markdown, syntax-highlighted JSON/YAML source, and Mermaid diagram preview; single-page HTML stays read-only in a sandbox in local and hosted reviews',
-      'Reply to and resolve threads',
-      'Hit Handoff to pack every edit and comment into one message for your agent',
-    ],
-    section2Tip: 'Try Handoff at the window’s top right — the agent on the left replays.',
-    section3Eyebrow: '05 / SPEC KIT INTEGRATION',
-    section3Title: 'Built-in GitHub Spec Kit Integration',
-    section3DescBefore: 'Full integration ready out of the box. Installing the Taco extension equips ',
-    section3DescAfter: ' with automatic single-file container refreshes across all lifecycle hooks.',
-    section3Cmd: 'specify extension add taco --from https://github.com/Arcadia822/taco/releases/latest/download/taco-extension.zip',
-    section4Eyebrow: '06 / TACOBIN SPACE & LOCAL TOOLBOX',
-    section4Title: 'Tacobin & taco-cli: Connecting Tacos with Agents',
+    sectionCpDemoTemplate: 'Taco documentation site',
+    sectionCpStage1: '01 Overview',
+    sectionCpStage2: '02 Start',
+    sectionCpStage3: '03 Architecture & API',
+    sectionCpDoc1: 'Overview.md',
+    sectionCpDoc2: 'Start/Quickstart.md',
+    sectionCpDoc3: 'Start/FAQ.md',
+    sectionCpDoc4: 'Architecture/Tacobin-API.yaml',
+    section4Eyebrow: '05 / TACOBIN SPACE',
+    section4Title: 'Tacobin: Shared Review Relay for Teams & Agents',
     section4Desc:
-      'Local Taco files work offline without installation; the optional taco-cli provides a complete local toolbox (new, init, pack, verify, refresh, diff, inspect, extract, open, listen) alongside hosted Tacobin shared reviews. Open a Taco locally in your browser, review and click Handoff to atomically persist an unsaved snapshot into a local receipt (same-machine 127.0.0.1 loopback only, finite idle timeout, use the copy menu when unreachable), followed by agent diff and in-place refresh. On Tacobin, shared edits and comments autosave, and clicking Handoff records review.handed_off.',
-    section4CliTitle: 'CLI',
-    section4CliCmd: TACO_CLI_INSTALL_COMMAND,
+      'Local Taco files work offline; when reviewers are across the team, your agent publishes the Taco to Tacobin via taco-cli for a shareable link. Visitors edit and comment in the browser with real-time autosave. Only when a reviewer clicks Handoff with an active agent listener does Tacobin record review.handed_off — ordinary comments and autosaves never wake the agent.',
     section4AgentTitle: 'FOR AGENT',
     section4AgentPrompt:
-      'Read https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and install the Taco skill; optionally install taco-cli for automation. Choose content using the Skill human-review trigger, design depth and project conventions before pack or init. Run taco-cli listen <file.taco.html> or taco-cli open <file.taco.html> --listen for explicit Handoff; check diff, handle canonical files, then run taco-cli refresh <file.taco.html> --dir <canonical-dir> --handoff <receipt-path> in place. Handoff and Checkpoint status do not authorize implementation. For hosted review, dry-run public payloads, publish, and subscribe to review.handed_off.',
+      'Read the hosted-review section of https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md. Dry-run the public payload with taco-cli publish <file.taco.html> --host <origin> --dry-run, publish the Taco, and keep taco-cli subscribe <tacoId> --host <origin> running for review.handed_off. Fetch the snapshot with taco-cli handoff, update canonical files, and push subsequent rounds in place with taco-cli update <tacoId> <file.taco.html>.',
+    section3Eyebrow: '06 / SPEC KIT INTEGRATION',
+    section3Title: 'Built-in GitHub Spec Kit Integration',
+    section3DescBefore: 'Full integration ready on request. Installing the optional Taco extension equips ',
+    section3DescAfter: ' with automatic single-file container refreshes across all lifecycle hooks.',
+    section3Cmd: 'specify extension add taco --from https://github.com/Arcadia822/taco/releases/latest/download/taco-extension.zip',
     creditsEyebrow: '07 / SHOUTOUT',
     creditsBackToTop: 'Back to Top',
     creditsTitlePrefix: 'Thank you,',
@@ -337,10 +337,6 @@ const I18N = {
     creditsDescription: 'Taco’s inspiration and core code come from Bento. Thank you to nyblnet for making it open source and giving Taco a place to begin.',
     creditsContact: 'Keep in touch',
     tracePublish: 'Publish the Taco and get a share URL',
-    traceLocalPack: 'Package canonical spec directory into single-file container',
-    traceLocalListen: 'Start finite loopback listener and emit clickable URL',
-    traceLocalDiff: 'Read-only check of un-saved feedback against canonical source',
-    traceLocalRefresh: 'Atomic in-place refresh preserving identity and comments',
     pageNavAria: 'Page navigation',
     pageDotAria: (page: number) => `Scroll to page ${page}`,
     langSwitchAria: 'Switch Language',
@@ -350,27 +346,36 @@ const I18N = {
       title: 'agent · ~/taco',
       defaultHandoff: [
         'I have completed modifications and comments in the Taco review page. Please sync the following changes:',
-        '- Document title: "008-taco-host-contract"',
+        '- Document title: "Taco Docs"',
         '',
         '## Comments',
-        '- [specs/008-taco-host-contract/spec.md:5] Quote: "anonymous publishing works and the minimal flow has no login"',
-        '  - **arcadia**: How long does the ApiKey issued for anonymous publishing last, and how is it reclaimed? Please add the fields to data-model.mmd.',
-        '- [specs/008-taco-host-contract/data-model.mmd:32] Quote: "string kind "comment | confirm | feedback-done""',
-        '  - **lin**: The spec says confirmations and feedback-done are review data, not body comments. Should confirm / feedback-done really share one kind with comment?',
-        '- [specs/008-taco-host-contract/flows/anonymous-publish.mmd:5] Quote: "D["Store the key safely first"]"',
-        '  - **arcadia**: Missing failure branch: if the key is not persisted, never upload content — fail and exit.',
-        '- [specs/008-taco-host-contract/contracts/openapi.yaml:71] Quote: "description: Idempotency key conflict"',
-        '  - **lin**: The 409 body should return the existing tacoId and revisionId so the CLI can recover with the idempotency key.',
+        '- [taco/Overview.md:22] Quote: "Taco packs every document for one topic into a file you open directly in a browser."',
+        '  - **arcadia**: Let’s add a short paragraph right after this on when Taco is used by default: only when a multi-file complex design needs human review, or when the user asks for one — exploratory chat and simple fixes stay in the chat and repo.',
+        '- [taco/Features/Taco.md:76] Quote: "If Lite\'s CDN is unavailable, Markdown can still be edited as source."',
+        '  - **mo**: Which one do we recommend by default, Lite or Complete? The table doesn\'t say.',
+        '  - **arcadia**: Lite for committing to a repository and online review; Complete for recipients who may be offline. Added to the FAQ — does that look clear to you?',
+        '- [taco/Features/Tacobin.md:29] Quote: "Comments and autosave are not a handoff, and they do not wake the agent."',
+        '  - **lin**: Plenty of reviewers will comment and just close the tab. After autosave succeeds, should the page say "not handed off yet"?',
+        '  - **arcadia**: Agreed, that\'s a real risk. Logging it for now; we\'ll design the prompt together with the second review round.',
+        '- [taco/Roadmap.md:23] Quote: "Global discussions list"',
+        '  - **mo**: Can the global discussions list hold topics that aren\'t attached to any document, like overall architecture direction?',
       ].join('\n'),
-      firstHit: '[open] spec.md:5:106 > anonymous publishing works and the minimal flow has no login',
-      moreHits: '… +3 more: data-model.mmd, anonymous-publish.mmd, openapi.yaml',
-      diffLine: 'datetime expiresAt "90 days by default, extended on each successful auth"',
-      checkpointHit: 'Node architecture aggregated to complete, awaiting test & API contracts',
+      reviewTarget: 'pasted review feedback',
+      firstHit: '[open] taco/Overview.md:22 > Taco packs every document for one topic into a file you open directly in a browser.',
+      moreHits: '… +3 more: Features/Taco.md, Features/Tacobin.md, Roadmap.md',
+      readTarget: 'taco/Overview.md',
+      editedTarget: 'taco/Overview.md',
+      editStats: '(+1',
+      diffLine: 'By default, your agent packs a Taco only when a multi-file complex design needs human review…',
+      refreshCmd: `node skills/taco/scripts/pack.mjs --dir docs/taco-guide/en/taco --out ${DEMO_TACO}`,
+      refreshOutput: 'Refreshed in place · docId, 4 open threads and Checkpoints preserved',
+      placeholder: 'Paste a Taco handoff…',
       pasted: (lines: number) => `[Pasted text · ${lines} lines]`,
-      summary: 'Added expiresAt and lastUsedAt to ApiKey and reclaimAt to anonymous Users in data-model.mmd and resolved that thread. The other 3 are design calls — they are yours.',
+      summary: 'Added the default scope paragraph to Overview and refreshed the Taco; left the comment thread open for you to confirm. The other 3 are product calls — they are yours.',
       replay: 'Replay',
     },
-    demoViewerTitle: 'Taco demo: 008-taco-host-contract',
+    demoEditedFile: 'taco/Overview.md',
+    demoViewerTitle: 'Taco demo: Taco Docs',
     footerLeft: 'Taco Specification & Tacobin Platform',
     footerRight: '© 2026 STENCIL LABS / ARCADIA',
   },
@@ -743,18 +748,12 @@ export default function HomePage() {
               </a>
             </div>
 
-            {/* 给 Agent 的单行安装 Prompt 与 Skill 安装行 */}
+            {/* 给 Agent 的单行安装 Prompt */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <div className="agent-prompt">
                 <span className="agent-prompt__label">{t.forAgent}</span>
                 <code className="agent-prompt__text">{t.agentPrompt}</code>
                 <CopyIconButton text={t.agentPrompt} labels={t} />
-              </div>
-
-              <div className="agent-prompt">
-                <span className="agent-prompt__label">{t.forSkill}</span>
-                <code className="agent-prompt__text">{t.skillCmd}</code>
-                <CopyIconButton text={t.skillCmd} labels={t} />
               </div>
             </div>
           </div>
@@ -818,7 +817,7 @@ export default function HomePage() {
                 key={`${locale}-${agentDone ? 'after' : 'before'}`}
                 src={
                   agentDone
-                    ? `/demo/${locale}/after/${DEMO_TACO}?embed&theme=dark&lang=${locale}#${encodeURIComponent(DEMO_EDITED_FILE)}`
+                    ? `/demo/${locale}/after/${DEMO_TACO}?embed&theme=dark&lang=${locale}#${encodeURIComponent(t.demoEditedFile)}`
                     : `/demo/${locale}/${DEMO_TACO}?embed&pending&theme=dark&lang=${locale}`
                 }
                 title={t.demoViewerTitle}
@@ -830,7 +829,6 @@ export default function HomePage() {
             run={agentRun ?? { id: 0, handoff: t.agent.defaultHandoff }}
             animate={agentRun !== null}
             done={agentDone}
-            tacoFile={DEMO_TACO}
             labels={t.agent}
             onDone={() => setAgentDone(true)}
             onReplay={() => {
@@ -841,145 +839,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ================= PAGE 2: 特性 02 - CHECKPOINTS 阶段门禁 ================= */}
-      <section className="snap-page snap-page--checkpoints">
-        <div style={{ width: '100%' }}>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-              gap: '48px',
-              alignItems: 'center',
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontSize: '11px',
-                  letterSpacing: '0.24em',
-                  textTransform: 'uppercase',
-                  color: '#3ecf8e',
-                  fontFamily: 'var(--mono)',
-                  marginBottom: '16px',
-                }}
-              >
-                {t.sectionCpEyebrow}
-              </div>
-              <h2
-                style={{
-                  fontSize: 'clamp(32px, 4.5vw, 48px)',
-                  fontWeight: 600,
-                  letterSpacing: '-0.035em',
-                  lineHeight: 1.15,
-                  margin: '0 0 20px',
-                  color: '#fff',
-                }}
-              >
-                {t.sectionCpTitle}
-              </h2>
-              <p
-                style={{
-                  fontSize: '16px',
-                  lineHeight: 1.7,
-                  color: '#a1a1aa',
-                  margin: '0 0 28px',
-                  maxWidth: '520px',
-                }}
-              >
-                {t.sectionCpDesc}
-              </p>
-
-              <div className="cp-feature-list">
-                {t.sectionCpPoints.map(([title, desc]) => (
-                  <div key={title} className="cp-feature-item">
-                    <span className="cp-feature-item__bullet" aria-hidden="true" />
-                    <div>
-                      <strong className="cp-feature-item__title">{title}</strong>
-                      <span className="cp-feature-item__desc">{desc}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* 拟态 Checkpoint DAG 图与阶段卡片 */}
-            <div className="cp-card">
-              <div className="cp-card__header">
-                <div className="cp-card__badge-row">
-                  <span className="cp-card__badge">{t.sectionCpBadge}</span>
-                  <span className="cp-card__template">{t.sectionCpDemoTemplate}</span>
-                </div>
-                <span className="cp-card__status-summary">1 / 3 Freeze</span>
-              </div>
-
-              <div className="cp-graph-container">
-                {/* 节点 1: 规范定义 (Freeze) */}
-                <div className="cp-node cp-node--freeze">
-                  <div className="cp-node__header">
-                    <span className="cp-node__dot" aria-hidden="true" />
-                    <span className="cp-node__title">{t.sectionCpStage1}</span>
-                    <span className="cp-node__status">freeze</span>
-                  </div>
-                  <div className="cp-node__docs">
-                    <div className="cp-doc-item">
-                      <span className="cp-doc-item__icon cp-doc-item__icon--freeze" />
-                      <span className="cp-doc-item__path">spec.md</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="cp-edge-down" aria-hidden="true">
-                  <span className="cp-edge-line" />
-                </div>
-
-                {/* 节点 2: 架构与模型 (Complete / Frontier) */}
-                <div className="cp-node cp-node--complete is-frontier">
-                  <div className="cp-node__header">
-                    <span className="cp-node__dot" aria-hidden="true" />
-                    <span className="cp-node__title">{t.sectionCpStage2}</span>
-                    <span className="cp-node__status">complete</span>
-                    <span className="cp-node__frontier-tag">FRONTIER</span>
-                  </div>
-                  <div className="cp-node__docs">
-                    <div className="cp-doc">
-                      <div className="cp-doc-item">
-                        <span className="cp-doc-item__icon cp-doc-item__icon--complete" />
-                        <span className="cp-doc-item__path">data-model.mmd</span>
-                      </div>
-                      <p className="cp-doc-instruction">{t.sectionCpDocInstruction}</p>
-                    </div>
-                    <div className="cp-doc-item">
-                      <span className="cp-doc-item__icon cp-doc-item__icon--complete" />
-                      <span className="cp-doc-item__path">flows/anonymous-publish.mmd</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="cp-edge-down" aria-hidden="true">
-                  <span className="cp-edge-line cp-edge-line--dashed" />
-                </div>
-
-                {/* 节点 3: 接口契约 (Todo) */}
-                <div className="cp-node cp-node--todo">
-                  <div className="cp-node__header">
-                    <span className="cp-node__dot" aria-hidden="true" />
-                    <span className="cp-node__title">{t.sectionCpStage3}</span>
-                    <span className="cp-node__status">todo</span>
-                  </div>
-                  <div className="cp-node__docs">
-                    <div className="cp-doc-item">
-                      <span className="cp-doc-item__icon cp-doc-item__icon--todo" />
-                      <span className="cp-doc-item__path">contracts/openapi.yaml</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ================= PAGE 3: 特性 01 - 真正单文件自洽 ================= */}
+      {/* ================= PAGE 2: 03 / 一个文件自洽 ================= */}
       <section className="snap-page">
         <div style={{ width: '100%' }}>
           <div
@@ -1071,7 +931,236 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ================= PAGE 3: 特性 03 - 原生 SPEC KIT 路由 ================= */}
+      {/* ================= PAGE 3: 进阶能力 1 - CHECKPOINTS 阶段进度 ================= */}
+      <section className="snap-page snap-page--checkpoints">
+        <div style={{ width: '100%' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+              gap: '48px',
+              alignItems: 'center',
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: '11px',
+                  letterSpacing: '0.24em',
+                  textTransform: 'uppercase',
+                  color: '#3ecf8e',
+                  fontFamily: 'var(--mono)',
+                  marginBottom: '16px',
+                }}
+              >
+                {t.sectionCpEyebrow}
+              </div>
+              <h2
+                style={{
+                  fontSize: 'clamp(32px, 4.5vw, 48px)',
+                  fontWeight: 600,
+                  letterSpacing: '-0.035em',
+                  lineHeight: 1.15,
+                  margin: '0 0 20px',
+                  color: '#fff',
+                }}
+              >
+                {t.sectionCpTitle}
+              </h2>
+              <p
+                style={{
+                  fontSize: '16px',
+                  lineHeight: 1.7,
+                  color: '#a1a1aa',
+                  margin: '0 0 28px',
+                  maxWidth: '520px',
+                }}
+              >
+                {t.sectionCpDesc}
+              </p>
+
+              <div className="cp-feature-list">
+                {t.sectionCpPoints.map(([title, desc]) => (
+                  <div key={title} className="cp-feature-item">
+                    <span className="cp-feature-item__bullet" aria-hidden="true" />
+                    <div>
+                      <strong className="cp-feature-item__title">{title}</strong>
+                      <span className="cp-feature-item__desc">{desc}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 拟态 Checkpoint DAG 图与阶段卡片 */}
+            <div className="cp-card">
+              <div className="cp-card__header">
+                <div className="cp-card__badge-row">
+                  <span className="cp-card__badge">{t.sectionCpBadge}</span>
+                  <span className="cp-card__template">{t.sectionCpDemoTemplate}</span>
+                </div>
+                <span className="cp-card__status-summary">1 / 3 Freeze</span>
+              </div>
+
+              <div className="cp-graph-container">
+                {/* 节点 1: 概览 (Freeze) */}
+                <div className="cp-node cp-node--freeze">
+                  <div className="cp-node__header">
+                    <span className="cp-node__dot" aria-hidden="true" />
+                    <span className="cp-node__title">{t.sectionCpStage1}</span>
+                    <span className="cp-node__status">freeze</span>
+                  </div>
+                  <div className="cp-node__docs">
+                    <div className="cp-doc-item">
+                      <span className="cp-doc-item__icon cp-doc-item__icon--freeze" />
+                      <span className="cp-doc-item__path">{t.sectionCpDoc1}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="cp-edge-down" aria-hidden="true">
+                  <span className="cp-edge-line" />
+                </div>
+
+                {/* 节点 2: 开始 (Complete / Frontier) */}
+                <div className="cp-node cp-node--complete is-frontier">
+                  <div className="cp-node__header">
+                    <span className="cp-node__dot" aria-hidden="true" />
+                    <span className="cp-node__title">{t.sectionCpStage2}</span>
+                    <span className="cp-node__status">complete</span>
+                    <span className="cp-node__frontier-tag">FRONTIER</span>
+                  </div>
+                  <div className="cp-node__docs">
+                    <div className="cp-doc">
+                      <div className="cp-doc-item">
+                        <span className="cp-doc-item__icon cp-doc-item__icon--complete" />
+                        <span className="cp-doc-item__path">{t.sectionCpDoc2}</span>
+                      </div>
+                      <p className="cp-doc-instruction">{t.sectionCpDocInstruction}</p>
+                    </div>
+                    <div className="cp-doc-item">
+                      <span className="cp-doc-item__icon cp-doc-item__icon--complete" />
+                      <span className="cp-doc-item__path">{t.sectionCpDoc3}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="cp-edge-down" aria-hidden="true">
+                  <span className="cp-edge-line cp-edge-line--dashed" />
+                </div>
+
+                {/* 节点 3: 架构与接口 (Todo) */}
+                <div className="cp-node cp-node--todo">
+                  <div className="cp-node__header">
+                    <span className="cp-node__dot" aria-hidden="true" />
+                    <span className="cp-node__title">{t.sectionCpStage3}</span>
+                    <span className="cp-node__status">todo</span>
+                  </div>
+                  <div className="cp-node__docs">
+                    <div className="cp-doc-item">
+                      <span className="cp-doc-item__icon cp-doc-item__icon--todo" />
+                      <span className="cp-doc-item__path">{t.sectionCpDoc4}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ================= PAGE 4: 进阶能力 2 - TACOBIN 协作空间 ================= */}
+      <section className="snap-page snap-page--tacobin">
+        <div style={{ width: '100%', margin: 'auto 0' }}>
+          <div className="tacobin-layout"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 3fr) minmax(0, 7fr)',
+              gap: '40px',
+              alignItems: 'center',
+            }}
+          >
+            {/* 说明与 Agent 指引 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div>
+                <div
+                  style={{
+                    fontSize: '11px',
+                    letterSpacing: '0.24em',
+                    textTransform: 'uppercase',
+                    color: '#3ecf8e',
+                    fontFamily: 'var(--mono)',
+                    marginBottom: '12px',
+                  }}
+                >
+                  {t.section4Eyebrow}
+                </div>
+                <h2
+                  style={{
+                    fontSize: 'clamp(26px, 3.6vw, 40px)',
+                    fontWeight: 600,
+                    letterSpacing: '-0.03em',
+                    lineHeight: 1.15,
+                    margin: '0 0 14px',
+                    color: '#fff',
+                  }}
+                >
+                  {t.section4Title}
+                </h2>
+                <p
+                  style={{
+                    fontSize: '14px',
+                    lineHeight: 1.65,
+                    color: '#a1a1aa',
+                    margin: 0,
+                  }}
+                >
+                  {t.section4Desc}
+                </p>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="agent-prompt" style={{ width: '100%', maxWidth: '100%' }}>
+                  <span className="agent-prompt__label">{t.section4AgentTitle}</span>
+                  <code className="agent-prompt__text">{t.section4AgentPrompt}</code>
+                  <CopyIconButton text={t.section4AgentPrompt} labels={t} />
+                </div>
+              </div>
+            </div>
+
+            {/* 示例终端：Agent 发起发布与订阅，接收 Tacobin 评审事件 */}
+            <div className="workflow-terminal">
+              <div className="workflow-terminal__bar">
+                <span className="browser-window__dots" aria-hidden="true">
+                  <span style={{ background: '#ef4444' }} />
+                  <span style={{ background: '#eab308' }} />
+                  <span style={{ background: '#22c55e' }} />
+                </span>
+              </div>
+              <div className="workflow-terminal__body">
+                <div className="workflow-terminal__step">
+                  <div className="workflow-terminal__agent"><span>AGENT / 01</span>{t.tracePublish}</div>
+                  <div className="workflow-terminal__command"><span>$</span><code>taco-cli publish {DEMO_TACO}</code></div>
+                  <div className="workflow-terminal__output workflow-terminal__output--url"><span>url</span><code>{TRACE_HOST}/t/{TRACE_TACO_ID}</code></div>
+                  <div className="workflow-terminal__output"><span>tacoId</span><code>{TRACE_TACO_ID}</code></div>
+                </div>
+                <div className="workflow-terminal__step">
+                  <div className="workflow-terminal__agent"><span>AGENT / 02</span>{t.traceSubscribe}</div>
+                  <div className="workflow-terminal__command"><span>$</span><code>taco-cli subscribe {TRACE_TACO_ID}</code></div>
+                  <div className="workflow-terminal__log"><span>ready</span><code>{'{"kind":"ready","mode":"live","cursor":"0"}'}</code></div>
+                </div>
+                <div className="workflow-terminal__step">
+                  <div className="workflow-terminal__agent"><span>AGENT / 03</span>{t.traceEvent}</div>
+                  <div className="workflow-terminal__log"><span>event</span><code>{JSON.stringify({ kind: 'event', type: 'review.handed_off', tacoId: TRACE_TACO_ID, data: { handoffId: '63e82d37-a037-46f9-90d8-c752500169ed' } })}</code></div>
+                  <div className="workflow-terminal__command"><span>$</span><code>taco-cli handoff {TRACE_TACO_ID} 63e82d37-a037-46f9-90d8-c752500169ed</code></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ================= PAGE 5: 进阶能力 3 - SPEC KIT 集成 ================= */}
       <section className="snap-page">
         <div style={{ width: '100%' }}>
           <div
@@ -1179,105 +1268,6 @@ export default function HomePage() {
                     <span style={{ color: '#fff', fontSize: '13px' }}>speckit.taco.review</span>
                   </div>
                   <span style={{ fontSize: '11px', color: '#71717a' }}>DIFF & COMMENT HANDOFF</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ================= PAGE 4: 05 / TACOBIN 介绍与接入 ================= */}
-      <section className="snap-page snap-page--tacobin">
-        <div style={{ width: '100%', margin: 'auto 0' }}>
-          <div className="tacobin-layout"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 3fr) minmax(0, 7fr)',
-              gap: '40px',
-              alignItems: 'center',
-            }}
-          >
-            {/* 说明、Agent 指引与 CLI 安装命令 */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div>
-                <div
-                  style={{
-                    fontSize: '11px',
-                    letterSpacing: '0.24em',
-                    textTransform: 'uppercase',
-                    color: '#3ecf8e',
-                    fontFamily: 'var(--mono)',
-                    marginBottom: '12px',
-                  }}
-                >
-                  {t.section4Eyebrow}
-                </div>
-                <h2
-                  style={{
-                    fontSize: 'clamp(26px, 3.6vw, 40px)',
-                    fontWeight: 600,
-                    letterSpacing: '-0.03em',
-                    lineHeight: 1.15,
-                    margin: '0 0 14px',
-                    color: '#fff',
-                  }}
-                >
-                  {t.section4Title}
-                </h2>
-                <p
-                  style={{
-                    fontSize: '14px',
-                    lineHeight: 1.65,
-                    color: '#a1a1aa',
-                    margin: 0,
-                  }}
-                >
-                  {t.section4Desc}
-                </p>
-              </div>
-
-              {/* Agent 指引在前，CLI 命令在后 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div className="agent-prompt" style={{ width: '100%', maxWidth: '100%' }}>
-                  <span className="agent-prompt__label">{t.section4AgentTitle}</span>
-                  <code className="agent-prompt__text">{t.section4AgentPrompt}</code>
-                  <CopyIconButton text={t.section4AgentPrompt} labels={t} />
-                </div>
-                <div className="agent-prompt" style={{ width: '100%', maxWidth: '100%' }}>
-                  <span className="agent-prompt__label">{t.section4CliTitle}</span>
-                  <code className="agent-prompt__text">{t.section4CliCmd}</code>
-                  <CopyIconButton text={t.section4CliCmd} labels={t} />
-                </div>
-              </div>
-
-            </div>
-
-            {/* 示例终端：Agent 发起发布与订阅，Shell 输出 URL 和评审事件 */}
-            <div className="workflow-terminal">
-              <div className="workflow-terminal__bar">
-                <span className="browser-window__dots" aria-hidden="true">
-                  <span style={{ background: '#ef4444' }} />
-                  <span style={{ background: '#eab308' }} />
-                  <span style={{ background: '#22c55e' }} />
-                </span>
-              </div>
-              <div className="workflow-terminal__body">
-                <div className="workflow-terminal__step">
-                  <div className="workflow-terminal__agent"><span>LOCAL / 01</span>{t.traceLocalPack}</div>
-                  <div className="workflow-terminal__command"><span>$</span><code>taco-cli pack docs/ --title Spec --out Spec.taco.html</code></div>
-                </div>
-                <div className="workflow-terminal__step">
-                  <div className="workflow-terminal__agent"><span>LOCAL / 02</span>{t.traceLocalListen}</div>
-                  <div className="workflow-terminal__command"><span>$</span><code>taco-cli listen Spec.taco.html --no-open</code></div>
-                  <div className="workflow-terminal__output workflow-terminal__output--url"><span>ready</span><code>file:///.../Spec.taco.html#taco-listen=port%3D49152...</code></div>
-                </div>
-                <div className="workflow-terminal__step">
-                  <div className="workflow-terminal__log"><span>receipt</span><code>{'{"type":"handoff","path":"<receipt.json>"}'}</code></div>
-                  <div className="workflow-terminal__command"><span>$</span><code>taco-cli diff Spec.taco.html --handoff &lt;receipt.json&gt; --dir docs/</code></div>
-                </div>
-                <div className="workflow-terminal__step">
-                  <div className="workflow-terminal__agent"><span>LOCAL / 04</span>{t.traceLocalRefresh}</div>
-                  <div className="workflow-terminal__command"><span>$</span><code>taco-cli refresh Spec.taco.html --dir docs/ --handoff &lt;receipt.json&gt;</code></div>
                 </div>
               </div>
             </div>

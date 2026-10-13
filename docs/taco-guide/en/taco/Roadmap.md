@@ -11,7 +11,7 @@ updated: 2026-10-03
 - **Structured rendering**: YAML properties panel, JSON/YAML source editing, OpenAPI overview, Mermaid preview and syntax checks;
 - **Embedded single-page HTML**: generated `.html` pages pack into the Taco and render inline in a sandbox;
 - **Checkpoints**: stage graph, four statuses, document requirements, not-created placeholders, project templates;
-- **Lite shell**: an online edition of about 180 KB;
+- **Lite shell**: an online edition of about 190 KB;
 - **Tacobin online review**: share links, autosave, explicit handoff, `taco-cli` subscriptions.
 
 ## In progress

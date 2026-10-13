@@ -42,8 +42,8 @@ An adopted template is an **option**, not an obligation. For every new requireme
 
 1. Collect the candidates and when each applies. With a README, use the templates it lists and their stated scope. Without one, list every `.taco/*.taco.html` that meets the contract and infer scope from its title, nodes, and `instruction`s; say in your reply that the decision record is missing, but do not create or edit the README.
 2. Match them against this request's review needs: named review milestones, staged reviews, or sign-off by different roles.
-3. Choose one template, or none. Small changes — copy edits, a single-point fix — usually get none and an ordinary Taco without `checkpoints`.
-4. State the choice and the reason in your reply ("using `Feature_Checkpoints`: design and plan are reviewed separately" or "no template: single-file copy edit"). The user may overrule it.
+3. Choose one template, or none. When a Taco is packaged under explicit request or project convention for a simpler or single-file change, it gets no template and an ordinary Taco without `checkpoints`.
+4. State the choice and the reason in your reply ("using `Feature_Checkpoints`: design and plan are reviewed separately" or "no template: single-file review without staged checkpoints"). The user may overrule it.
 5. When exactly one template's stated scope fits, use it without asking. Ask which one to use only when the scopes cannot settle between several templates.
 
 Triage writes nothing; `.taco/README.md` holds only the project-level decision.
@@ -71,8 +71,8 @@ Suggest a project template only when all of these hold:
 Ask once, and at most once per session. Give the evidence (which review need triggered it, which locations you checked), what accepting writes (`.taco/README.md` and one template Taco), what declining writes (`.taco/README.md` only), and that you will not ask again and the user can edit or delete the file to change it.
 
 - **Accepted**: write `.taco/README.md` with the *adopted* first line, then draft a template from repository evidence and give it to the user to confirm.
-- **Declined**: write `.taco/README.md` with the *declined* first line; use ordinary Taco review now.
-- **No clear answer**: write nothing and use ordinary Taco review; a later session may suggest again.
+- **Declined**: write `.taco/README.md` with the *declined* first line; continue with ordinary Taco review when this request or project convention calls for Taco.
+- **No clear answer**: write nothing and use ordinary Taco review when called for; a later session may suggest again.
 
 Write the files only; never commit them for the user. Never edit `AGENTS.md` or other project process files for this.
 

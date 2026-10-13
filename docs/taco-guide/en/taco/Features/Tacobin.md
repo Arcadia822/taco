@@ -1,7 +1,7 @@
 ---
 title: Tacobin
 status: Complete
-summary: Share links and an online review relay, used with taco-cli
+summary: Share links and an online review relay for teams
 ---
 
 ## What it is
@@ -12,7 +12,7 @@ A local Taco suits one person working with their own agent. When reviewers are n
 - Reviewers open the link and edit and comment in the browser, with **autosave**;
 - A reviewer clicks **Handoff**, the listening agent is notified immediately, and it fetches the complete result of the round.
 
-`taco-cli` is the command-line tool that connects the agent side to Tacobin. People do not need it, and local review does not use it.
+The agent connects to Tacobin through `taco-cli` (installed alongside the skill); reviewers only need a browser to open the shared link.
 
 To see hosted review in action, open this live demo: [Taco Docs (hosted)](https://taco.arcadia-han.com/t/2733ed73-8250-4cae-a1e5-27d5f409d535). Autosave, online listeners, and the explicit handoff exist there — the standalone Taco you are reading now has none of them.
 
@@ -31,15 +31,9 @@ To see hosted review in action, open this live demo: [Taco Docs (hosted)](https:
 - If no agent is listening when Handoff is clicked, Tacobin records no handoff and instead shows commands to install the skill, install the CLI, and start subscribing;
 - An online avatar only means the agent is listening, not that your feedback has been read or handled.
 
-## taco-cli
+## How the agent connects to Tacobin
 
-Install:
-
-```bash
-npm install -g @tacobin/cli
-```
-
-Commands the agent uses:
+The agent uses these `taco-cli` commands to publish, update, and subscribe:
 
 | Command | What it does |
 | --- | --- |
