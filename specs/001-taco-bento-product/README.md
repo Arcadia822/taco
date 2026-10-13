@@ -9,8 +9,8 @@
     <a href="https://taco-spec-en.arcadia822.chatgpt.site">Live demo (English)</a> ·
     <a href="https://taco-spec-zh-cn.arcadia822.chatgpt.site">在线演示（简体中文）</a>
   </p>
-  <p><strong>Work through the design with your agent, effortlessly.</strong></p>
-  <p>A single-file design review workspace that stays easy to read, versions cleanly with your repo, and hands off in one click.</p>
+  <p><strong>Work through the design with your agent, without the back-and-forth.</strong></p>
+  <p>A single-file design review workspace that stays easy to read, versions cleanly in your repo, and hands off in one click.</p>
 </div>
 
 Taco turns a specification directory into a portable review workspace. A human can open one `.taco.html` file in a browser, read the complete spec, edit the original Markdown, and leave anchored comments. An agent can then import those edits and comments back into the canonical files, handle the feedback, and produce the next review copy.

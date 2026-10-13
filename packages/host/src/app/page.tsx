@@ -260,8 +260,8 @@ const I18N = {
   },
   en: {
     eyebrow: 'AGENT - HUMAN COLLABORATION',
-    h1: 'Work through the design with your agent, effortlessly.',
-    desc: 'A single-file design review workspace that stays easy to read, versions cleanly with your repo, and hands off in one click.',
+    h1: 'Work through the design with your agent,\nwithout the back-and-forth.',
+    desc: 'A single-file design review workspace that stays easy to read, versions cleanly in your repo, and hands off in one click.',
     tryBtn: 'Try Taco',
     tryUrl: '/demo/en/taco-guide.taco.html',
     downloadBtn: 'Download Taco',
@@ -715,8 +715,9 @@ export default function HomePage() {
                 letterSpacing: '-0.02em',
                 margin: '0 0 20px',
                 color: '#ffffff',
+                whiteSpace: 'pre-line',
                 width: 'max-content',
-                maxWidth: '80vw',
+                maxWidth: 'min(80vw, 1160px)',
               }}
             >
               {t.h1}

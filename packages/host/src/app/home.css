@@ -313,6 +313,8 @@ body {
   color: #d4d4d8;
   font-size: 12px;
   scrollbar-width: none;
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
 }
 .agent-prompt__text::-webkit-scrollbar {
   display: none;

@@ -7,7 +7,7 @@ updated: 2026-10-03
 
 ## In one sentence
 
-**Work through the design with your agent, effortlessly.** Taco is a single-file design review workspace that stays easy to read, versions cleanly with your repository, and hands off in one click.
+**Work through the design with your agent, without the back-and-forth.** Taco is a single-file design review workspace that stays easy to read, versions cleanly in your repository, and hands off in one click.
 
 The documentation site you are reading right now is itself a Taco: files on the left, content in the middle, outline and comments on the right, and the Checkpoints view at the top of the sidebar tracks this documentation set's progress. There is no server and no database. Everything is inside a single `.taco.html` file.
 
