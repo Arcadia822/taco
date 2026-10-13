@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.18.0](https://github.com/Arcadia822/taco/compare/v0.17.0...v0.18.0) (2026-10-13)
+
+### Features
+
+* **host**: 统一 Taco 产品定位与安装评审入口 ([8113269](https://github.com/Arcadia822/taco/commit/811326952f8f0880f476267717126388cd7be002))
+
+### Bug Fixes
+
+* **ci**: skip the UI preview asset commit when no screenshots exist ([b42a567](https://github.com/Arcadia822/taco/commit/b42a5677fd5f2d16f5c503014a852965fed3757a))
+
+### Chores & Maintenance
+
+* chore: **release**: tacobin-v0.12.0 ([87c6262](https://github.com/Arcadia822/taco/commit/87c626245809e045ec90a9c86be57ae086002097))
+* chore: **release**: taco-cli v0.7.0 ([fd38677](https://github.com/Arcadia822/taco/commit/fd38677d56a1d3ed0f8a0fc38786ed8b5772e6bf))
+* chore: **release**: tacobin-v0.11.1 ([579236c](https://github.com/Arcadia822/taco/commit/579236c020f06e3c6f16c79cf4daf93697e2a060))
+* chore: **release**: taco-cli v0.6.1 ([1c3305f](https://github.com/Arcadia822/taco/commit/1c3305f577cdbfa9f9602c6a414f6c88e8de61d6))
+* chore: **agents**: add Taco browser verification skill and refresh assets ([e7cf9fb](https://github.com/Arcadia822/taco/commit/e7cf9fb8e5e82c4b876975183ae088c2f25b0aef))
+* docs: **ci**: record screenshot-free preview publication and update LESSON-007 ([9066fde](https://github.com/Arcadia822/taco/commit/9066fde565cc964b7ddc6d159eaec84c5f1e0db6))
+* test: **ci**: cover UI preview publication without screenshots ([601550e](https://github.com/Arcadia822/taco/commit/601550e562c2ce10d36b5ed5a78cb8749c2f77aa))
+
 ## [0.17.0](https://github.com/Arcadia822/taco/compare/v0.16.0...v0.17.0) (2026-10-12)
 
 ### Features
