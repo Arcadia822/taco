@@ -1,6 +1,6 @@
 # Taco Spec Kit extension
 
-This extension is an **optional** project-level integration. Installing Taco normally means installing the `taco` skill (`skills/taco/`), which needs no project changes, no build, and no CLI — see [`docs/agent-installation.md`](../../docs/agent-installation.md). Install this extension only when the user explicitly asks to wire Taco into one initialized Spec Kit project.
+This extension is an **optional** project-level integration. Installing Taco normally means installing the `taco` skill (`skills/taco/`) together with the optional `taco-cli` — neither needs project changes or a build, and the skill works without the CLI — see [`docs/agent-installation.md`](../../docs/agent-installation.md). Install this extension only when the user explicitly asks to wire Taco into one initialized Spec Kit project.
 
 Installing this extension adds the Agent commands, lifecycle hooks, offline CLI, and a persistent project policy to that project. The installed directory is self-contained; the target project does not need another Taco package, service, account, or build.
 

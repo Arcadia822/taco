@@ -4,11 +4,11 @@ This is the machine-facing installation guide for an Agent adding Taco to an env
 
 ## Installation model
 
-**Installing Taco means installing the `taco` skill.** There is no package manager step, no daemon, no build, no project modification, and no CLI requirement for the core workflow:
+**Installing Taco by default installs both the `taco` skill (`skills/taco/`) and `taco-cli` (`@tacobin/cli`), creating directories if needed.** Spec Kit integration (`extensions/taco/`) remains an optional, explicitly requested step.
 
-- The skill directory (`skills/taco/`) is self-sufficient: `SKILL.md` (the agent guide), `taco-shell.html` (the complete offline browser shell), `taco-shell-lite.html` (the connected Lite shell), `references/` (loaded for the bundle contract, Checkpoints, or hosted workflows), `scripts/` (the bundled assembler and the saved-Checkpoint reader), and `templates/` (optional examples).
-- Once installed, the Agent can assemble, present, open, and review `.taco.html` files in any directory. Complete needs no network; Lite loads public CDN editor dependencies and remains editable in plain-text Markdown mode if those libraries fail.
-- `taco-cli` provides both an optional local toolbox (`new`, `init`, `pack`, `verify`, `refresh`, `diff`, `inspect`, `extract`, `open`, `listen`) and hosted Tacobin workflows (`publish`, `update`, `subscribe`, `events`, `handoff`). Installing the skill remains standalone by default without requiring `taco-cli` or Spec Kit.
+- The skill directory (`skills/taco/`) provides: `SKILL.md` (the agent guide), `taco-shell.html` (the complete offline browser shell), `taco-shell-lite.html` (the connected Lite shell), `references/` (bundle format, Checkpoints, and review flows), `scripts/` (the bundled assembler and Checkpoint reader), and `templates/` (optional examples).
+- `taco-cli` provides the companion CLI for local loopback listening and review automation (`listen`, `open --listen`, `diff`, `refresh`, `pack`, `verify`, `inspect`) as well as hosted Tacobin workflows (`publish`, `update`, `subscribe`, `handoff`).
+- The installation does **not** package the current conversation or plan, does **not** alter project rules or set project-wide defaults, and does not install Spec Kit unless explicitly requested. If installing either component fails, the agent reports the real cause plainly without inventing a bypass.
 
 ### Choosing a shell for the recipient
 
@@ -18,9 +18,11 @@ When adding HTML source pages to an existing Taco, inspect the shell's `taco-she
 
 ## Install from a GitHub repo URL
 
-When the user gives the Taco repository URL (e.g. `https://github.com/Arcadia822/taco`), install the **`taco` skill**. Prefer the skills ecosystem CLI, because it resolves the repository, picks the skill, and reports the exact destination for the active harness; fall back to copying the directory when that CLI cannot run (no network, no npm, unknown harness).
+When asked to install Taco (e.g. from the Taco repository or its installation guide), install the **`taco` skill** and **`taco-cli`**, creating destination directories if needed. Read the whole section before reporting success: both steps, then the response contract.
 
-### Preferred: `npx skills`
+### 1. Install the `taco` skill
+
+Prefer the skills ecosystem CLI, because it resolves the repository, picks the skill, and reports the exact destination for the active harness:
 
 ```bash
 npx skills@latest add arcadia822/taco --skill=taco
@@ -29,13 +31,11 @@ npx skills@latest add arcadia822/taco --skill=taco -g -a claude-code -y
 npx skills@latest list        # verify what is installed
 ```
 
-This installs the whole `skills/taco/` directory — `SKILL.md`, both shells, `references/**`, `scripts/**`, `templates/**`, and `VERSION` — into the harness skill location (`./.claude/skills/taco/` for a project install, the user directory with `-g`). It records `skills-lock.json` next to a project install. It reports the destination; verify the file list below in that directory before reporting success.
+This installs the `skills/taco/` directory — `SKILL.md`, both shells, `references/**`, `scripts/**`, `templates/**`, and `VERSION` — into the harness skill location (creating that directory if needed) and, for a project install, records `skills-lock.json` beside it.
 
-If `npx`, npm, or the network is unavailable, or the installed directory is missing files it should contain, fall back to the copy flow. Do not mix the two in one install.
+#### Fallback: copy the skill directory
 
-### Fallback: copy the skill directory
-
-When the CLI cannot be used, fetch the raw skill directory from the repo (or a local clone):
+When the CLI cannot run (no network, no npm, unknown harness), fetch the raw skill directory from the repo or a local clone, then verify before reporting success — every check below is required:
 
 1. Fetch these files:
    - `skills/taco/SKILL.md`
@@ -51,20 +51,44 @@ When the CLI cannot be used, fetch the raw skill directory from the repo (or a l
    - Complete and template packs are self-contained: every script, style, font, and image is inline or a `data:` URI. Lite likewise embeds its own runtime but loads only the external libraries required by bundled file types from pinned public CDNs; do not promise offline rich editing in Lite.
    - `SKILL.md` states that the data block is filled before the file is opened; only that block and the escaped HTML title may change.
    - Read `SKILL.md` once to confirm it describes the shell and routes optional references that exist in the installed directory. The bundled `spec/` SDD graph is an example, not a required Checkpoint policy; project-owned review rules take precedence, and a project may keep its Checkpoint templates and the adoption decision under `.taco/`, which the skill reads before creating a requirement Taco.
-4. Done. Report the installed skill path and which path you used (`npx skills` or copy). Running the packaging flow once against a scratch directory is useful internal evidence, but it is not required, and a headless load is never user-visible presentation (see below).
+4. Done with the skill. If the skill installation fails, report the real failure reason plainly.
 
-### Update notice
+#### Update notice
 
 When the skill directory carries `VERSION` and `scripts/check-update.mjs`, run `node scripts/check-update.mjs --json` from that directory once per work session, before the first Taco action, and — only when a component's `updateAvailable` is `true` — close the final reply with the single sentence from `references/update-notice.md`. A minimal install that omits `scripts/**` has no check to run: skip it silently. Never upgrade on the user's behalf; the script only reports and the user decides. `TACO_UPDATE_CHECK=off` disables the check entirely.
 
 This mechanism needs one bootstrap step: a skill snapshot installed before this contract exists has no `check-update.mjs` and no `VERSION`, so it cannot check anything. Re-installing (preferably through `npx skills@latest add arcadia822/taco --skill=taco`, or `npx skills@latest update taco` for an existing `npx skills` install) adds it.
 
-### Uninstalling or updating
+#### Uninstalling or updating
 
 - `npx skills@latest update taco` updates an `npx skills` install; `npx skills@latest remove taco` removes it.
 - A copied install is updated by repeating the copy flow above and re-running the verification list.
 - Do not hand-edit `VERSION`: it is generated from `package.json` at release time by `npm run sync:version`.
-  Do not install npm packages, download `taco-cli`, or run any build for the default install. Do not modify the target project. If the user's request is explicitly about local CLI automation or hosted reviews (Tacobin), see "Install taco-cli" below.
+
+### 2. Install `taco-cli`
+
+Install `taco-cli` next, creating the destination directory if needed. It is the companion CLI for local one-click Handoff (`listen`, `open --listen`, `diff`, `refresh`) and hosted Tacobin workflows; the skill remains fully operational without it, so a failed CLI install degrades the review loop rather than breaking the skill.
+
+- **npm**: `npm install -g @tacobin/cli@latest` (also the upgrade command).
+- **Standalone binary**: download the archive for the platform from the latest `taco-cli-v*` release ([GitHub Releases](https://github.com/Arcadia822/taco/releases?q=taco-cli-v)), verify `SHA256SUMS`, and install it to `$HOME/.local/bin/` (creating that directory if needed and ensuring it is on `PATH`).
+
+Verify with `taco-cli help`. If it cannot be installed (restricted environment, missing npm, no network), report the real cause plainly and continue: the rest of this document's manual workflow still works through the installed skill's shell and `scripts/pack.mjs`.
+
+Do not modify the target project's rules or set project-wide defaults while installing either component.
+
+### 3. Post-installation response contract
+
+When installation completes, reply starting with:
+
+```text
+Installed taco.
+```
+
+State the installed skill path and `taco-cli` version/path, then give a short summary of how to make a Taco covering:
+
+1. **Core capability**: Taco packages a document directory (Markdown, Mermaid `.mmd`, JSON/YAML/OpenAPI, PNG, and derived single-page `.html`) into one portable `.taco.html` file that opens in a browser. Reviewers read, edit in place, leave anchored comments, and click **Handoff** (received directly via `taco-cli open <file.taco.html> --listen` or copied to the clipboard). The agent updates canonical source files and refreshes the same `.taco.html` in place while preserving `docId`, comment threads, navigation, and Checkpoints. Embedded `.html` pages render read-only in a sandbox without in-page editing or HTML text-selection comment anchors. Comment threads are confirmed and resolved by the human; the agent replies without auto-resolving.
+2. **Default usage scope**: By default, the agent uses Taco proactively **only when a multi-file complex design needs human review or decision** (architecture, RFC, PRD/interaction flows, API/data model contracts with trade-offs), **or when the user explicitly asks for a Taco**. Exploratory chat and simple self-contained fixes stay in the conversation and repository without packaging a Taco, and document length alone never triggers a Taco.
+3. **No unrequested side effects**: Installing Taco does not package the current conversation, alter project rules, or force Checkpoints or Spec Kit. Configuration entry (`taco-configure`, TACO-79) and CLI-assisted browser save (TACO-80) are unreleased and must not be promised as available.
 
 ## Use the skill
 
@@ -85,39 +109,13 @@ The skill works on any Spec Kit feature directory without project installation: 
 
 An optional deeper integration ships as a Spec Kit extension (`extensions/taco/`) that installs the two agent commands (`speckit.taco.update` / `speckit.taco.review`), lifecycle hooks, an offline CLI, and a persistent project policy into the target project. Only set this up when the user explicitly asks for project-level Spec Kit integration — see [`extensions/taco/README.md`](../extensions/taco/README.md). That document is also the home of the `prepare-policy` process-routing and migration contract.
 
-## Install taco-cli (optional local toolbox and hosted workflows)
+## Advanced workflows and integrations
 
-`taco-cli` is optional. It provides both a local toolbox (`new`, `init`, `pack`, `verify`, `refresh`, `diff`, `inspect`, `extract`, `open`, `listen`) and hosted Tacobin workflows (publishing, streaming live review events, and retrieving handoffs). Install via **npm** or the **standalone binary**:
+`taco-cli` is installed by step 2 above; this section covers what it adds once available, and how to read its contract.
 
-### Option A: npm
+It provides a local toolbox (`new`, `init`, `pack`, `verify`, `refresh`, `diff`, `inspect`, `extract`, `open`, `listen`) and hosted Tacobin workflows (publishing, streaming live review events, and retrieving handoffs). Run `taco-cli help` and inspect the subcommand's own help before selecting commands, and check `binaryVersion`: if an upgrade still reports the old version, an earlier install in another global prefix shadows the new one on `PATH` (`command -v taco-cli` shows which) — remove that copy rather than reordering `PATH`.
 
-```bash
-npm install -g @tacobin/cli@latest   # also the upgrade command
-# Or invoke directly:
-npx @tacobin/cli help
-```
-
-After installing or upgrading, run `taco-cli help` and check `binaryVersion`. If it still reports the old version, an earlier install in another global prefix shadows the new one on `PATH` (`command -v taco-cli` shows which); remove that copy rather than reordering `PATH`.
-
-### Option B: standalone binary
-
-Download the archive for the target platform from the latest `taco-cli-v*` release ([GitHub Releases](https://github.com/Arcadia822/taco/releases?q=taco-cli-v)):
-
-| Platform            | Artifact                       |
-| ------------------- | ------------------------------ |
-| macOS Apple Silicon | `taco-cli-darwin-arm64.tar.gz` |
-| macOS Intel         | `taco-cli-darwin-x64.tar.gz`   |
-| Linux arm64         | `taco-cli-linux-arm64.tar.gz`  |
-| Linux x64           | `taco-cli-linux-x64.tar.gz`    |
-
-```bash
-shasum -a 256 -c SHA256SUMS --ignore-missing
-tar -xzf taco-cli-<platform>-<arch>.tar.gz
-install -m 0755 taco-cli "$HOME/.local/bin/taco-cli"
-taco-cli help
-```
-
-The canonical skill's optional hosted workflow lives in `skills/taco/references/publishing.md` and `references/reviewing.md`; read those when using a Host. Release builds embed the canonical Skill and its references, so `taco-cli skills read taco` returns the guide shipped with that CLI version. Use `taco-cli help` for the installed binary's command contract. Local review uses `taco-cli listen <file.taco.html>` or `taco-cli open <file.taco.html> --listen`; after consuming the receipt and applying canonical edits, refresh the same file with `taco-cli refresh <file.taco.html> --dir <canonical-dir> --handoff <receipt-path>`.
+The canonical skill's hosted workflow lives in `skills/taco/references/publishing.md` and `references/reviewing.md`; read those when using a Host. Release builds embed the canonical Skill and its references, so `taco-cli skills read taco` returns the guide shipped with that CLI version. Local review uses `taco-cli listen <file.taco.html>` or `taco-cli open <file.taco.html> --listen`; after consuming the receipt and applying canonical edits, refresh the same file with `taco-cli refresh <file.taco.html> --dir <canonical-dir> --handoff <receipt-path>`.
 
 The Skill still decides whether human review is needed, the design depth, project precedence and pending decisions. CLI availability does not make an exploratory conversation or a self-contained fix into a review. Inspect `taco-cli help` before selecting local commands; older hosted-only binaries use the manual Skill/helper fallback without an automatic upgrade. `new` is an empty Agent authoring container; `init --template` offers six optional prose packs (`spec`, `adr`, `architecture`, `api-reference`, `prd`, `interaction`) without imposing Checkpoints. HTML artifacts are self-contained, read-only derived pages: regenerate them from their source, then refresh. A local receipt or a Checkpoint status is feedback/progress, not permission to start implementation. Keep human approval decisions in the canonical documents.
 

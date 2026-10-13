@@ -6,37 +6,29 @@ summary: Teaches your agent to write, refresh, and read reviews
 
 ## What it is
 
-The Taco Skill is an agent skill package (`skills/taco/`). Once installed, your agent knows how to:
+The Taco Skill is the agent skill package (`skills/taco/`), paired with `taco-cli`. Once installed, your agent knows:
 
-- Pack a folder of documents into a Taco;
-- Refresh the same Taco without losing comments;
-- Read your edits and comments and apply them to the source files in the repository.
-
-**Installing the skill is the complete installation.** It ships the production shell, reference docs, and scripts. No npm package, CLI, or build is required, and it works offline.
+- When to use Taco by default: only when a **multi-file complex design needs human review or sign-off**, or when **you explicitly ask for a Taco**. Exploratory chat and simple self-contained fixes stay in the conversation and repository, and document length alone never triggers a Taco;
+- How to pack a folder of documents into a `.taco.html` and receive one-click Handoff via `taco-cli open <file.taco.html> --listen` (or `taco-cli listen`);
+- How to apply your edits and comments back to the canonical source files and refresh the same Taco in place without losing threads or identity.
 
 ## Installation
 
 Give your agent this prompt:
 
 ```text
-Read https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and install Taco for me following its steps. When you are done, show me how to use Taco.
+Fetch https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and follow it to install the Taco skill and taco-cli, creating the directories if needed. Then reply Installed taco. plus a short summary of how to make a Taco.
 ```
 
-Or run it yourself:
-
-```bash
-npx skills@latest add arcadia822/taco --skill=taco
-```
-
-If `npx skills` is unavailable, copying the `skills/taco/` folder into your agent's skills folder also works.
+The agent follows `docs/agent-installation.md` to install both the `taco` skill (`npx skills@latest add arcadia822/taco --skill=taco` or directory copy fallback) and `taco-cli` (`@tacobin/cli` or standalone binary), creating directories if needed. The install prompt does not package the current conversation, alter project rules, or set project-wide defaults; if anything fails, the agent reports the real cause without inventing a bypass.
 
 ## What the agent does
 
 ### Generate and refresh
 
-- Copies the skill's shell and writes your documents only into its data block, never touching the application itself;
+- Uses the skill's shell and writes your documents only into its data block (or runs `taco-cli pack` / `refresh`), never touching the application itself;
 - Keeps the document identity (`docId`), comment threads, navigation, and Checkpoints on refresh, so you always reopen the same Taco;
-- Excludes hidden files and other `.taco.html` files by default; HTML source files pack as embedded read-only pages.
+- Excludes hidden files and other `.taco.html` files by default; HTML source files (`.html`) pack as read-only sandboxed pages without in-page editing or HTML text-selection comment anchors.
 
 ### Show it to you
 
@@ -44,14 +36,14 @@ After generating, the agent gives you a clickable link to the file and opens it 
 
 ### Process your review
 
-- Reads the Handoff text or the `.taco.html` you saved;
+- Reads the local listener Handoff receipt, the clipboard Handoff text, or the `.taco.html` you saved;
 - Maps every edit and comment to the source files;
 - If a source file changed after packing, or a diff cannot be applied cleanly, it **reports the conflict and overwrites nothing**;
-- Never invents comments and never resolves a discussion on your behalf.
+- Replies with what changed and **never resolves a comment thread on your behalf**, leaving confirmation to you.
 
 ### Follow project conventions
 
-If the project has `.taco/` Checkpoint templates or existing process conventions such as `AGENTS.md` or Spec Kit, the agent follows them to decide which documents to write and whether to use Checkpoints. Small changes are not forced through a full staged process.
+If the project has `.taco/` Checkpoint templates or existing process conventions such as `AGENTS.md` or Spec Kit, the agent follows them to decide which documents to write and whether to use Checkpoints; otherwise it does not forcibly enable Checkpoints. Small changes are not forced through a full staged process.
 
 ### Update notice
 
@@ -69,5 +61,5 @@ This is project-level wiring you request explicitly; you do not need it without 
 
 ## Limits
 
-- The skill handles local files only; share links and online review need [Tacobin](Tacobin.md).
+- Local review works offline; share links and online team review use [Tacobin](Tacobin.md).
 - The reviewed folder stays the source of truth. A file missing from the Taco never causes the agent to delete it from the repository.

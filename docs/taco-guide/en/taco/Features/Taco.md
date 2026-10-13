@@ -25,7 +25,7 @@ One Taco covers one topic. The agent packs a folder from the repository into a T
 | Mermaid (`.mmd` or code blocks in Markdown) | Diagram preview plus source; switch theme and direction, zoom full screen; syntax errors point to the line and column | [System components](../Architecture/System.mmd) |
 | JSON / YAML | Syntax-highlighted source editor | — |
 | OpenAPI (JSON / YAML) | An extra **Overview** of operations, parameters, and responses | [Tacobin API](../Architecture/Tacobin-API.yaml) |
-| Single-page HTML (`.html`) | Embedded read-only page in a sandboxed frame | — |
+| Single-page HTML (`.html`) | Embedded read-only page in a sandboxed frame (not editable in place, no text-selection comment anchors inside the HTML) | — |
 | PNG and SVG images, audio, video | Embedded previews | — |
 | Other text files | Shown as source, with no guessing about the format | — |
 
@@ -35,12 +35,12 @@ Files Taco does not understand are kept as-is; they are never dropped when packi
 
 - **Comment on selected text**: select anything and comment. Comments are anchored to the quoted text and re-anchor after small edits.
 - **Finer anchors**: comment on a node of a Mermaid diagram or a single line of a code block.
-- **Threads**: reply, resolve, or reopen. Edit your own messages; deleting one leaves a placeholder so later replies keep their place.
+- **Threads**: reply, resolve, or reopen (threads are resolved by humans after confirming changes, never auto-resolved by the agent). Edit your own messages; deleting one leaves a placeholder so later replies keep their place.
 - **Edit directly**: change the text yourself instead of writing "suggest changing A to B".
 
 ## Handoff
 
-Click **Handoff** in the top-right corner and Taco copies this round's result to the clipboard:
+Click **Handoff** in the top-right corner. When the agent is listening locally (`taco-cli open <file.taco.html> --listen` or `taco-cli listen`, installed alongside the skill), your unsaved edits and open comments are delivered directly; otherwise Taco copies this round's result to the clipboard:
 
 - A diff for every edited file;
 - Every open comment, with its file path, the quoted text, and the whole discussion;
@@ -69,7 +69,7 @@ Checkpoints are optional; a plain Taco is enough when you do not need stage trac
 
 | | Complete | Lite |
 | --- | --- | --- |
-| Application size | About 2.7 MB | About 180 KB |
+| Application size | About 2.7 MB | About 190 KB |
 | Network | Fully offline | Editors, highlighting, and Mermaid load from a public CDN |
 | Best for | Recipients who may be offline, long-term archives | Online review, committing to a repository |
 

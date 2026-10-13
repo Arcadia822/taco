@@ -9,7 +9,8 @@
     <a href="https://taco-spec-zh-cn.arcadia822.chatgpt.site">在线演示（简体中文）</a> ·
     <a href="https://taco-spec-en.arcadia822.chatgpt.site">Live demo (English)</a>
   </p>
-  <p><strong>让人与 Agent 在一个文件里共同审阅、传递和管理 spec。</strong></p>
+  <p><strong>跟 Agent 把设计过清楚，不费力。</strong></p>
+  <p>清晰易读、便于版本管理、支持一键 Handoff 的单文件设计评审工作区。</p>
 </div>
 
 Taco 把规格目录变成一个可携带的评审工作区。人可以在浏览器中打开一个 `.taco.html` 文件，阅读完整 spec、直接编辑原始 Markdown，并留下锚定到具体文本的评论；Agent 随后可以把修改与评论安全导回 canonical files，处理反馈，再生成下一轮评审文件。
@@ -35,15 +36,10 @@ canonical spec directory → 一个 .taco.html → 人类评审 → Agent 同步
 把下面的指令交给你的 Agent：
 
 ```text
-在当前仓库中安装 Taco，并让后续 spec 默认使用 Taco 评审流程。
-按照 Taco repo 中的安装说明执行：
-https://github.com/Arcadia822/taco
+读取 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md ，按其中步骤安装 Taco skill 与 taco-cli（需要时创建目录）；完成后回复 Installed taco. 并简短说明如何生成一份 Taco。
 ```
 
-Agent 会读取 Taco repo 中的说明安装完整的 `skills/taco/` 目录（Agent 指南、生产 shell、按需加载的参考文档与读取脚本、文档示例）：优先执行 `npx skills@latest add arcadia822/taco --skill=taco`，不可用时回退为拷贝该目录。这就是完整安装；此后 Agent 可以在任意目录用 skill 自带的 shell 组装 `.taco.html` 评审文件，完全离线，不需要 npm 包、CLI 或任何构建。该 skill 还会在每个工作会话开始时把自身的 `VERSION` 与最新发布版本比一次，发现更新时只在回复末尾用一句话告知，绝不自行升级。更深入的集成 —— 用于项目级接线的 Spec Kit extension 命令/hooks/policy，或用于云端发布（TacoHub/Tacobin）的 `taco-cli` —— 都属于需要显式请求的独立步骤，详见 [`docs/agent-installation.md`](docs/agent-installation.md)。
-
-是否使用 Checkpoint 取决于用户和项目的评审要求。随 skill 提供的 `spec/` SDD 阶段图只是可改写的示例，不是默认阶段方案，也不决定生成的 Taco 要存在哪里。只有处理 Checkpoint 时才需要加载对应的详细协议参考；普通评审不必设置 Checkpoint。
-
+Agent 会按 `docs/agent-installation.md` 同时安装 `taco` skill（`skills/taco/`）与 `taco-cli`（`@tacobin/cli`），需要时创建目录；若安装失败，直接报告真实原因而不设计旁路。安装完成后，Agent 回复 `Installed taco.` 并说明基本能力与默认使用范围：**默认仅在多文件复杂设计需要人评审拍板，或你主动要求时才生成 Taco**；日常探索聊天和简单修复直接在对话与代码中完成，不会仅因单篇文档较长就打包。安装过程不会自动打包当前对话，不修改项目规则或预设默认流程，Spec Kit 扩展仍仅在显式要求时安装。
 安装之后，评审闭环不需要额外配置：
 
 ```mermaid
@@ -78,12 +74,12 @@ Agent 只复制 skill 的 shell、把文档写入其数据块，目录中的其�
 - 将完整规格目录打包成一个可携带的 `.taco.html` 文件，在浏览器中打开并离线使用。
 - 保留真实目录结构，浏览、搜索和编辑 canonical Markdown 与其他文本文件。独立 JSON/YAML 文件提供语法高亮源码编辑器；Mermaid 图表支持编辑源码与预览。
 - 通过锚定评论线程评审规格，可原位编辑自己的消息，也可将单条消息删除为保留回复的占位记录；随后保存更新后的 Taco，或把修改写回原始目录。
-- 可选用检查点追踪文档进度。重命名或删除必需文件后，原要求路径仍显示为「未创建」，不会被悄悄改写。
 - Taco 与 Tacobin 页头只显示含扩展名的文件名，或国际化的检查点页面名。正文仍可编辑文档标题。保存按钮保存本地 Taco 文件；Tacobin 的共享改动独立自动保存。
 - 收件环境可能离线时选择自包含的 Complete；联网评审可选择更小的 Lite。Lite 的 CDN 编辑器不可用时仍可编辑 Markdown 源码。
-- 可选 CLI 本地工具箱（`taco-cli`）：提供确定性的本地编写与评审命令（`new`、`init`、`pack`、`verify`、`refresh`、`diff`、`inspect`、`extract`、`open`、`listen`）以及托管协作（`publish`、`update`、`subscribe`、`events`、`handoff`）。CLI 完全可选，`taco` skill 与自带脚本无需 CLI 即可独立工作。
-- 无缝本地评审闭环：启动回环监听（`taco-cli listen <file.taco.html>` 或 `taco-cli open <file.taco.html> --listen`），在浏览器中审阅，点击「交接」即可将未保存快照直接送达 Agent；Agent 可通过 `taco-cli diff` 检查改动并用 `taco-cli refresh` 原地刷新文件，无需手动复制粘贴。
+- 可选用检查点（Checkpoints）追踪文档进度。重命名或删除必需文件后，原要求路径仍显示为「未创建」，不会被悄悄改写。
+- 通过 `taco-cli` 接入 Tacobin 云端共享评审（`publish`、`update`、`subscribe`、`handoff`），支持多人协作与自动保存，仅在显式点击「交接」后通知 Agent。
 - 可选地（需显式请求）集成 Spec Kit，持续更新每个 feature 的 Taco，并通过冲突检测安全导入人类修改与评论。
+- 无缝本地评审闭环：启动回环监听（`taco-cli listen <file.taco.html>` 或 `taco-cli open <file.taco.html> --listen`），在浏览器中审阅，点击「交接」即可将未保存快照直接送达 Agent；Agent 可通过 `taco-cli diff` 检查改动并用 `taco-cli refresh` 原地刷新文件，无需手动复制粘贴。
 
 ## Agent 安装说明
 
@@ -95,7 +91,7 @@ Agent 需要遵守：
 - 先按 Skill 判断是否需要人审、设计深度与项目约定，再选择 CLI 命令或模板。本地回执与 Checkpoint 状态不代表获准实施。派生 HTML 页面保持只读，从其源内容重新生成；向旧 Taco 加入 HTML 时，若原 Shell 不兼容，使用同变体的当前 stock Shell，并保留全部 bundle 字段。
 - 当宿主允许本地 `file://` 导航时，用用户的浏览器打开生成的文件，并如实报告 `presented as a clickable file`、`opened`、`opened and verified` 三者中真正发生的一项。headless 加载只是内部证据，不能当作面向用户的可视化展示。
 - 通过对应渠道取回评审结果：本地评审通过浏览器的 **Handoff**（发送包含未保存改动与 open comment 的内存快照到本地 listener，或复制 Markdown 到剪贴板）或评审者保存后的 `.taco.html`。独立保存文件不重置评审交接基线。可选的托管评审（Tacobin）中，访客以自报姓名编辑和评论并自动保存，但评论和自动保存不代表评审完成且不会自动唤醒会话，仅在评审者显式点击「交接」后生成 `review.handed_off` 事件并通过 `taco-cli` 获取不可变交接快照。未收到评审输入时如实说明，不要导入并未真正获得的内容。
-- 评审期间保持 Agent 订阅在线：本地评审使用 `taco-cli listen <file.taco.html>`（或 `taco-cli open <file.taco.html> --listen`），托管评审使用 `taco-cli subscribe <tacoId>`。交接需要活跃监听者，否则页面提供剪贴板复制或展示设置命令。
+- 评论线程始终由人类确认并解决；Agent 仅回复处理结果，不代为关闭讨论。
 - 每次刷新都保留所有已有 bundle 字段，包括存在时的 `checkpoints`；不得编造评论、哈希或验证结论；不得因为某个文件不在 bundle 中就删除 canonical 文件。
 - 启用在线协作的 Taco 可能携带访问凭据。未经用户允许，不要把其内容上传或粘贴到其他服务。
 

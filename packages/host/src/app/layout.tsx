@@ -3,11 +3,11 @@ import type { Metadata } from 'next'
 export const metadata: Metadata = {
   metadataBase: new URL('https://taco.arcadia-han.com'),
   title: {
-    default: 'Taco — 面向人类与 AI Agent 协作的单文件可交互规范空间',
+    default: 'Taco — 跟 Agent 把设计过清楚，不费力。',
     template: '%s | Taco',
   },
   description:
-    'Taco (Taco Page) 是一个自洽单文件 HTML 规范协作空间。包含阶段门禁 (Checkpoints)、双向交接 (Handoff)、富文本与 Mermaid 实时可视化，支持离线阅读与版本化审阅，并提供 Tacobin 云端中继与实时事件订阅。',
+    '清晰易读、便于版本管理、支持一键 Handoff 的单文件设计评审工作区。支持在 Markdown、JSON、YAML 与 Mermaid 中就地划词评论、阶段进度检查点及 Tacobin 云端共享评审。',
   keywords: [
     'taco',
     'taco page',
@@ -42,9 +42,9 @@ export const metadata: Metadata = {
     alternateLocale: ['en_US'],
     url: 'https://taco.arcadia-han.com',
     siteName: 'Taco',
-    title: 'Taco — Single-File Interactive Spec & Review Space for Humans & Agents',
+    title: 'Taco — 跟 Agent 把设计过清楚，不费力。',
     description:
-      '一个议题的完整设计，一个文件装下。自洽单文件 HTML、Checkpoints 依赖图与阶段门禁、双向 Handoff 交接及实时富文本/Mermaid 审阅，附带可选的 Tacobin 在线中继分享。',
+      '清晰易读、便于版本管理、支持一键 Handoff 的单文件设计评审工作区。',
     images: [
       {
         url: '/og-image.png',
@@ -57,9 +57,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Taco — Single-File Interactive Spec & Review Space for Humans & Agents',
+    title: 'Taco — Work through the design with your agent, seamlessly.',
     description:
-      'The whole design doc in one portable .taco.html file. Checkpoints DAG, two-way agent handoff, and in-place rich reviews.',
+      'A single-file design review workspace that stays easy to read, versions cleanly in your repo, and hands off in one click.',
     images: ['/og-image.png'],
     creator: '@arcadia822',
   },
@@ -75,7 +75,7 @@ const jsonLdWebsite = {
   alternateName: ['Taco Page', 'Tacobin'],
   url: 'https://taco.arcadia-han.com',
   description:
-    'Single-file interactive specification and review space for humans and AI agents with checkpoints, handoffs, and real-time collaboration.',
+    'A single-file design review workspace for humans and AI agents with anchored comments, checkpoints, and seamless review handoffs.',
 }
 
 

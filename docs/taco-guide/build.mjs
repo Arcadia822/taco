@@ -1,10 +1,11 @@
-// Builds the new-user documentation Tacos (TACO-11) from docs/taco-guide/<locale>/taco.
-// Each build writes two identical artifacts: tmp/taco-guide/<title>.taco.html (preview and
-// the GitHub Release download) and packages/host/public/demo/<locale>/taco-guide.taco.html,
-// the static standalone copy behind the website's Try Taco link. The standalone version is
-// not hosted: edits live in the browser and a reload restores the original.
+// Builds the new-user documentation Tacos (TACO-11 / TACO-38) from docs/taco-guide/<locale>/taco.
+// Each build writes the baseline guide to tmp/taco-guide/<title>.taco.html (preview and GitHub
+// Release download) and packages/host/public/demo/<locale>/taco-guide.taco.html (Try Taco and
+// homepage review demo before state), plus the post-handoff demo state to
+// packages/host/public/demo/<locale>/after/taco-guide.taco.html.
 // Usage: node docs/taco-guide/build.mjs
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, rmSync, writeFileSync, renameSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -17,6 +18,7 @@ const T = (day, hour = 8) => `2026-10-0${day}T0${hour}:00:00.000Z`
 
 const LOCALES = {
   'zh-Hans': {
+    docId: 'taco-guide-zh-hans',
     title: 'Taco 文档',
     template: 'Taco 文档站',
     entry: '概览.md',
@@ -39,24 +41,26 @@ const LOCALES = {
       '路线图/下一阶段.md': '列出下一阶段的议题；每个议题写清要解决的问题、依赖哪些已有能力，并标注哪些需要人来决策。不写已完成的内容。',
     },
     comments: [
-      ['概览.md', '它没有服务端、没有数据库', 'resolved', [
-        ['lin', '为什么不直接做成 SaaS？团队评审放在网页上不是更方便吗？', 1, 1],
-        ['arcadia', '文档要跟代码在同一个仓库、同一段历史里，Agent 也要能直接读写。单文件是底座；需要在线评审时再用 Tacobin，两者不冲突。', 1, 2],
-        ['lin', '明白了，那这里保留现在的说法。', 1, 3]]],
-      ['功能/Taco.md', 'Lite 的 CDN 不可用时，Markdown 仍可按源码编辑。', 'resolved', [
+      ['概览.md', 'Taco 把一个议题的整组文档打包成一个可以直接在浏览器里打开的文件。', 'open', [
+        ['arcadia', '这里补一段默认使用边界吧：说明只有多文件复杂设计且需要人评审拍板，或用户主动要求时才打包 Taco；日常探索聊天和简单修改直接在对话与代码里完成。', 3, 1]]],
+      ['功能/Taco.md', 'Lite 的 CDN 不可用时，Markdown 仍可按源码编辑。', 'open', [
         ['mo', 'Lite 和 Complete 默认推荐哪个？表格里看不出结论。', 2, 1],
-        ['arcadia', '放进仓库、联网评审用 Lite；要发给可能离线的人用 Complete。已经写进常见问题。', 2, 2]]],
-      ['架构/系统组件.mmd', 'BIN["Tacobin<br/>taco-host/1"]', 'resolved', [
-        ['mo', 'Tacobin 会长期保存正文吗？要不要在图上标出来？', 2, 3],
-        ['arcadia', '发布时保存一份不可变基线，仓库仍是事实来源。这一点写在 Tacobin 页的「边界」里，图上不再加。', 2, 4]]],
+        ['arcadia', '放进仓库、联网评审用 Lite；要发给可能离线的人用 Complete。已经写进常见问题，你看这样清楚吗？', 2, 2]]],
       ['功能/Tacobin.md', '评论和自动保存都不等于交接，不会唤醒 Agent。', 'open', [
-        ['lin', '评审者写完评论就关页面的情况会很多。自动保存成功后，是否应该在页面上提示「尚未交接」？', 3, 1],
-        ['arcadia', '同意这是风险。先记下来，等第二轮审阅体验一起设计提示方式。', 3, 2]]],
+        ['lin', '评审者写完评论就关页面的情况会很多。自动保存成功后，是否应该在页面上提示「尚未交接」？', 3, 2],
+        ['arcadia', '同意这是风险。先记下来，等第二轮审阅体验一起设计提示方式。', 3, 3]]],
       ['路线图.md', '全局讨论列表', 'open', [
-        ['mo', '全局讨论里能不能新建不挂在任何文档上的议题？比如整体架构方向这种讨论。', 3, 3]]],
+        ['mo', '全局讨论里能不能新建不挂在任何文档上的议题？比如整体架构方向这种讨论。', 3, 4]]],
     ],
+    afterEdit: {
+      path: '概览.md',
+      anchor: 'Agent 改回仓库里的源文件，再刷新同一个 Taco，评论线程和文档身份都保留。',
+      addition: '默认情况下，仅在多文件复杂设计需要人评审拍板，或你主动要求时，Agent 才会打包 Taco；探索性聊天与简单修复直接在对话和代码中完成，不会仅因单篇内容较长就生成 Taco。',
+      reply: ['agent', '已在该段下方补上默认使用边界说明，并刷新当前 Taco。评论保留打开，待你确认。', 3, 5],
+    },
   },
   en: {
+    docId: 'taco-guide-en',
     title: 'Taco Docs',
     template: 'Taco documentation site',
     entry: 'Overview.md',
@@ -79,27 +83,79 @@ const LOCALES = {
       'Roadmap/Next-Phase.md': 'List next-phase topics; for each, state the problem, the existing capabilities it depends on, and whether it needs a human decision. Leave out finished work.',
     },
     comments: [
-      ['Overview.md', 'There is no server and no database', 'resolved', [
-        ['lin', 'Why not just build a SaaS? Wouldn\'t team review be easier on a website?', 1, 1],
-        ['arcadia', 'Docs need to live in the same repository and history as the code, and agents need to read and write them directly. The single file is the foundation; Tacobin adds online review when you need it. The two don\'t compete.', 1, 2],
-        ['lin', 'Makes sense, let\'s keep the wording as is.', 1, 3]]],
-      ['Features/Taco.md', 'If Lite\'s CDN is unavailable, Markdown can still be edited as source.', 'resolved', [
+      ['Overview.md', 'Taco packs every document for one topic into a file you open directly in a browser.', 'open', [
+        ['arcadia', 'Let’s add a short paragraph right after this on when Taco is used by default: only when a multi-file complex design needs human review, or when the user asks for one — exploratory chat and simple fixes stay in the chat and repo.', 3, 1]]],
+      ['Features/Taco.md', 'If Lite\'s CDN is unavailable, Markdown can still be edited as source.', 'open', [
         ['mo', 'Which one do we recommend by default, Lite or Complete? The table doesn\'t say.', 2, 1],
-        ['arcadia', 'Lite for committing to a repository and online review; Complete for recipients who may be offline. It\'s now in the FAQ.', 2, 2]]],
-      ['Architecture/System.mmd', 'BIN["Tacobin<br/>taco-host/1"]', 'resolved', [
-        ['mo', 'Does Tacobin keep the content long term? Should the diagram say so?', 2, 3],
-        ['arcadia', 'Publishing stores an immutable baseline, and the repository stays the source of truth. That\'s under Limits on the Tacobin page, so the diagram stays as is.', 2, 4]]],
+        ['arcadia', 'Lite for committing to a repository and online review; Complete for recipients who may be offline. Added to the FAQ — does that look clear to you?', 2, 2]]],
       ['Features/Tacobin.md', 'Comments and autosave are not a handoff, and they do not wake the agent.', 'open', [
-        ['lin', 'Plenty of reviewers will comment and just close the tab. After autosave succeeds, should the page say "not handed off yet"?', 3, 1],
-        ['arcadia', 'Agreed, that\'s a real risk. Logging it for now; we\'ll design the prompt together with the second review round.', 3, 2]]],
+        ['lin', 'Plenty of reviewers will comment and just close the tab. After autosave succeeds, should the page say "not handed off yet"?', 3, 2],
+        ['arcadia', 'Agreed, that\'s a real risk. Logging it for now; we\'ll design the prompt together with the second review round.', 3, 3]]],
       ['Roadmap.md', 'Global discussions list', 'open', [
-        ['mo', 'Can the global discussions list hold topics that aren\'t attached to any document, like overall architecture direction?', 3, 3]]],
+        ['mo', 'Can the global discussions list hold topics that aren\'t attached to any document, like overall architecture direction?', 3, 4]]],
     ],
+    afterEdit: {
+      path: 'Overview.md',
+      anchor: 'The agent updates the source files in the repository and refreshes the same Taco, keeping the comment threads and the document identity.',
+      addition: 'By default, your agent packs a Taco only when a multi-file complex design needs human review, or when you explicitly ask for one; exploratory chat and simple fixes stay in the conversation and repository, never triggered by length alone.',
+      reply: ['agent', 'Added the default scope paragraph right below and refreshed this Taco. Leaving the thread open for you to confirm.', 3, 5],
+    },
   },
 }
 
 const ORDER = ['overview', 'start', 'features', 'architecture', 'roadmap']
 const AFTER = { overview: [], start: ['overview'], features: ['start'], architecture: ['start'], roadmap: ['features', 'architecture'] }
+const full = (p) => `taco/${p}`
+
+function buildComments(bundle, commentSpecs, locale) {
+  const content = (p) => {
+    const file = bundle.files.find((f) => f.path === full(p))
+    if (!file) throw new Error(`${locale} missing file for comment: ${p}`)
+    return file.content
+  }
+  return commentSpecs.map(([path, exact, status, messages], index) => {
+    const text = content(path)
+    const start = text.indexOf(exact)
+    if (start < 0 || text.indexOf(exact, start + 1) >= 0) {
+      throw new Error(`${locale} anchor not unique: ${path}: ${exact}`)
+    }
+    const msgs = messages.map(([author, body, d, h], mi) => ({
+      id: `message-${index + 1}-${mi + 1}`,
+      author,
+      authorId: `demo-${author}`,
+      body,
+      createdAt: T(d, h),
+    }))
+    return {
+      id: `thread-${index + 1}`,
+      anchor: {
+        path: full(path),
+        position: { start, end: start + exact.length },
+        quote: {
+          exact,
+          prefix: text.slice(Math.max(0, start - 32), start),
+          suffix: text.slice(start + exact.length, start + exact.length + 32),
+        },
+      },
+      status,
+      messages: msgs,
+      createdAt: msgs[0].createdAt,
+      updatedAt: msgs.at(-1).createdAt,
+    }
+  })
+}
+
+function embedBundle(shellHtml, bundle) {
+  const json = JSON.stringify(bundle, null, 2).replaceAll('<', '\\u003c')
+  JSON.parse(json)
+  return shellHtml.replace(DATA, (_m, open, _body, close) => `${open}${json}${close}`)
+}
+
+function writeAtomic(targetPath, content) {
+  const tmpPath = `${targetPath}.tmp`
+  writeFileSync(tmpPath, content, 'utf8')
+  renameSync(tmpPath, targetPath)
+}
 
 for (const [locale, cfg] of Object.entries(LOCALES)) {
   const dir = resolve(here, locale, 'taco')
@@ -109,9 +165,9 @@ for (const [locale, cfg] of Object.entries(LOCALES)) {
   rmSync(out, { force: true })
   execFileSync('node', [pack, '--dir', dir, '--out', out, '--title', cfg.title, '--root', 'taco', '--entry', cfg.entry], { stdio: 'pipe' })
 
-  let html = readFileSync(out, 'utf8')
-  const bundle = JSON.parse(html.match(DATA)[2].replaceAll('<\\/', '</').replaceAll('<\\!--', '<!--'))
-  const full = (p) => `taco/${p}`
+  const packedHtml = readFileSync(out, 'utf8')
+  const bundle = JSON.parse(packedHtml.match(DATA)[2].replaceAll('<\\/', '</').replaceAll('<\\!--', '<!--'))
+  bundle.docId = cfg.docId
   const day = (p) => (p.startsWith(cfg.stages.architecture[1][0].split('/')[0]) || cfg.stages.roadmap[1].includes(p) ? 3 : 2)
 
   // Checkpoint node ids are prefixed so nodes in the same layout level sort into reading order.
@@ -130,34 +186,43 @@ for (const [locale, cfg] of Object.entries(LOCALES)) {
     }))
   bundle.checkpoints = { version: 1, template: cfg.template, nodes, documents }
   bundle.navigation = { version: 1, entry: full(cfg.entry), groups: [] }
+  bundle.comments = buildComments(bundle, cfg.comments, `${locale}:before`)
 
-  const content = (p) => bundle.files.find((f) => f.path === full(p)).content
-  let n = 0
-  bundle.comments = cfg.comments.map(([path, exact, status, messages], index) => {
-    const text = content(path)
-    const start = text.indexOf(exact)
-    if (start < 0 || text.indexOf(exact, start + 1) >= 0) throw new Error(`${locale} anchor not unique: ${path}: ${exact}`)
-    const msgs = messages.map(([author, body, d, h]) => ({ id: `message-${++n}`, author, authorId: `demo-${author}`, body, createdAt: T(d, h) }))
-    return {
-      id: `thread-${index + 1}`,
-      anchor: {
-        path: full(path),
-        position: { start, end: start + exact.length },
-        quote: { exact, prefix: text.slice(Math.max(0, start - 32), start), suffix: text.slice(start + exact.length, start + exact.length + 32) },
-      },
-      status,
-      messages: msgs,
-      createdAt: msgs[0].createdAt,
-      updatedAt: msgs.at(-1).createdAt,
-    }
-  })
-
-  const json = JSON.stringify(bundle, null, 2).replaceAll('</', '<\\/').replaceAll('<!--', '<\\!--')
-  html = html.replace(DATA, (_m, open, _body, close) => `${open}${json}${close}`)
-  writeFileSync(`${out}.tmp`, html)
-  renameSync(`${out}.tmp`, out)
+  const beforeHtml = embedBundle(packedHtml, bundle)
+  writeAtomic(out, beforeHtml)
   const demoDir = resolve(repo, 'packages/host/public/demo', locale)
   mkdirSync(demoDir, { recursive: true })
-  writeFileSync(resolve(demoDir, 'taco-guide.taco.html'), html)
-  process.stdout.write(`${locale}: ${out} + ${demoDir}/taco-guide.taco.html (${html.length} chars)\n`)
+  const beforeDemoPath = resolve(demoDir, 'taco-guide.taco.html')
+  writeAtomic(beforeDemoPath, beforeHtml)
+
+  // Derive the post-handoff ("after") bundle from the same identity and baseline.
+  const afterBundle = structuredClone(bundle)
+  const editedPath = full(cfg.afterEdit.path)
+  const targetFile = afterBundle.files.find((f) => f.path === editedPath)
+  if (!targetFile) throw new Error(`${locale}: missing afterEdit target ${editedPath}`)
+  const anchorIndex = targetFile.content.indexOf(cfg.afterEdit.anchor)
+  if (anchorIndex < 0 || targetFile.content.indexOf(cfg.afterEdit.anchor, anchorIndex + 1) >= 0) {
+    throw new Error(`${locale}: afterEdit anchor not unique in ${editedPath}`)
+  }
+  targetFile.content = targetFile.content.replace(
+    cfg.afterEdit.anchor,
+    `${cfg.afterEdit.anchor}\n\n${cfg.afterEdit.addition}`,
+  )
+  targetFile.sourceHash = createHash('sha256').update(targetFile.content, 'utf8').digest('hex')
+  delete targetFile.blocks
+
+  const afterCommentSpecs = cfg.comments.map(([path, exact, status, messages], idx) =>
+    idx === 0 ? [path, exact, status, [...messages, cfg.afterEdit.reply]] : [path, exact, status, messages],
+  )
+  afterBundle.comments = buildComments(afterBundle, afterCommentSpecs, `${locale}:after`)
+
+  const afterDemoDir = resolve(demoDir, 'after')
+  mkdirSync(afterDemoDir, { recursive: true })
+  const afterDemoPath = resolve(afterDemoDir, 'taco-guide.taco.html')
+  const afterHtml = embedBundle(packedHtml, afterBundle)
+  writeAtomic(afterDemoPath, afterHtml)
+
+  process.stdout.write(
+    `${locale}: ${out} + ${beforeDemoPath} (${beforeHtml.length} chars) + ${afterDemoPath} (${afterHtml.length} chars)\n`,
+  )
 }

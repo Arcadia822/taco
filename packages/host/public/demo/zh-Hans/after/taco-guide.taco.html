@@ -9,257 +9,352 @@
     <meta name="taco-shell-variant" content="complete" />
     <meta name="taco-shell-features" content="embedded-html" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='15.2' cy='8.8' r='4.8' fill='%233ecf8e'/%3E%3Ccircle cx='7.2' cy='14.4' r='3.2' fill='%233b82f6'/%3E%3Ccircle cx='14.8' cy='18' r='2' fill='%23f97316'/%3E%3C/svg%3E" />
-    <title>008-taco-host-contract — Taco</title>
+    <title>Taco 文档 — Taco</title>
 
-    <script type="application/taco+json" id="taco-document">
-{
+    <script type="application/taco+json" id="taco-document">{
   "format": "taco/files",
   "version": 1,
-  "docId": "specs-008-taco-host-contract",
-  "title": "008-taco-host-contract",
-  "root": "specs/008-taco-host-contract",
+  "docId": "taco-guide-zh-hans",
+  "title": "Taco 文档",
+  "root": "taco",
+  "files": [
+    {
+      "path": "taco/概览.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: 概览\nstatus: 已冻结\naudience: 第一次接触 Taco 的人\nupdated: 2026-10-03\n---\n\n## 一句话\n\n**跟 Agent 把设计过清楚，不费力。** Taco 是清晰易读、便于版本管理、支持一键 Handoff 的单文件设计评审工作区；文件放在代码仓库里，跟代码一起做版本管理。\n\n你现在看到的这个文档站，本身就是一个 Taco：左边是目录，中间是正文，右边是大纲和评论，侧栏顶部的「检查点」是这组文档的阶段进度。它没有服务端、没有数据库，全部内容都装在一个 `.taco.html` 文件里。\n\n## Taco 解决什么问题\n\n用 Agent 做开发设计和产品设计时，方案通常这样流转：Agent 在仓库里写出一组 Markdown，人要么在编辑器里逐个打开读，要么复制到文档平台里批注，再把意见手工整理回对话框。结果是：\n\n- 读的地方和改的地方不是同一处，意见与原文脱节；\n- 文档平台里的批注，Agent 拿不回来；\n- 方案离开了仓库，和代码不再有同一段历史。\n\nTaco 把一个议题的整组文档打包成一个可以直接在浏览器里打开的文件。人在里面读、改、划词评论；点一下「交接改动」，改动和评论就整理成一段 Agent 能直接处理的文本。Agent 改回仓库里的源文件，再刷新同一个 Taco，评论线程和文档身份都保留。\n\n默认情况下，仅在多文件复杂设计需要人评审拍板，或你主动要求时，Agent 才会打包 Taco；探索性聊天与简单修复直接在对话和代码中完成，不会仅因单篇内容较长就生成 Taco。\n\n```mermaid\nflowchart LR\n    A[\"Agent 写方案\u003cbr/>（仓库里的 Markdown）\"] --> B[\"生成 / 刷新\u003cbr/>同一个 Taco\"]\n    B --> C[\"人在浏览器里\u003cbr/>阅读、修改、评论\"]\n    C --> D[\"交接改动\"]\n    D --> E[\"Agent 改回\u003cbr/>源文件\"]\n    E --> B\n```\n\n## 三个特点\n\n### 一个文件，带齐所有东西\n\n文档、真实的目录结构、阅读器、编辑器和评论都在一个文件里。发给别人、放进仓库、归档、离线打开都可以；收件人只需要一个浏览器，不需要账号。\n\n### 人和 Agent 都是一等公民\n\n人得到的是适合阅读的界面：所见即所得编辑、流程图预览、划词评论。Agent 得到的是结构化的文件和完整的评论线程：每条意见都带着文件路径和原文引用，不需要猜「这里」指的是哪里。\n\n### 文件才是事实来源\n\n仓库里的 Markdown 始终是权威版本，Taco 只是运输和评审的载体。Markdown 保持可读、可 diff，能被 git、Agent 和命令行工具继续处理；Taco 渲染时不会悄悄改写你的原文。\n\n## 适合什么场景\n\n- 围绕一个任务或议题的**开发设计**：需求、方案、接口、数据模型、任务拆分；\n- **产品设计**：PRD、交互流程、文案；\n- 任何「Agent 先写、人来审、Agent 再改」的文档协作。\n\nTaco 不做实时多人协作、版本历史和账号体系。需要团队在线评审时，用 [Tacobin](功能/Tacobin.md)。\n\n## 三个组成部分\n\n| 部分 | 是什么 | 详见 |\n| --- | --- | --- |\n| Taco | 单文件设计评审工作区本身 | [Taco](功能/Taco.md) |\n| Taco Skill | 让 Agent 按需生成、刷新 Taco 并处理评审反馈，配套 `taco-cli` 完成本地监听与自动化 | [Taco Skill](功能/Taco-Skill.md) |\n| Tacobin | 分享链接与在线评审中继，供团队在线评审 | [Tacobin](功能/Tacobin.md) |\n\n## 设计原则\n\n1. **Files first**：文件内容是唯一事实来源。\n2. **Portable by default**：一个文件即可打开、复制、归档、分享。\n3. **Derived UI**：目录、大纲、检查点进度、搜索都是从文件推导出来的，不是第二份数据。\n4. **No invisible rewrite**：渲染结果不会反向改写你的 Markdown。\n5. **Honest scope**：本地 Taco 支持评审和交接，不假装是实时协作工具。\n\n## 接下来读什么\n\n- 想马上用起来：[快速开始](开始/快速开始.md)\n- 想知道每个部分能做什么：从 [Taco](功能/Taco.md) 开始\n- 想了解实现：[技术架构](架构/技术架构.md)\n",
+      "sourceHash": "7ba8ff68afde1b24dd24d1d733909ba52878bbb67dae923e18fe60385a699473"
+    },
+    {
+      "path": "taco/功能/Taco-Skill.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: Taco Skill\nstatus: 已完成\nsummary: 让 Agent 会写、会刷新、会读评审结果\n---\n\n## 是什么\n\nTaco Skill 是面向 Agent 的能力包（`skills/taco/`），配合 `taco-cli` 使用。装上之后，你的 Agent 就知道：\n\n- 何时主动使用 Taco：默认仅在**多文件复杂设计需要人评审拍板**，或**你主动要求**时生成 Taco；日常探索聊天和简单修复直接在对话和代码里完成，不会因为单篇文档较长就打包；\n- 怎样把文档目录打包成 `.taco.html`，并通过 `taco-cli open \u003cfile.taco.html> --listen`（或 `taco-cli listen`）接收一键 Handoff；\n- 怎样读取你的修改和评论、改回仓库源文件，并在不丢评论和身份的前提下原地刷新同一个 Taco。\n\n## 安装\n\n把这句话交给 Agent：\n\n```text\n读取 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md ，按其中步骤安装 Taco skill 与 taco-cli（需要时创建目录）；完成后回复 Installed taco. 并简短说明如何生成一份 Taco。\n```\n\nAgent 会按文档同时安装 `taco` skill（优先 `npx skills@latest add arcadia822/taco --skill=taco`，不可用时拷贝 `skills/taco/`）和 `taco-cli`（`@tacobin/cli` 或独立二进制），需要时创建目录。安装指令不会自动打包当前对话方案，也不会修改项目规则或预设默认流程；若安装失败，Agent 会直接报告真实原因，不设计旁路。\n\n## Agent 会做什么\n\n### 生成与刷新\n\n- 复制 skill 自带的 shell，只把文档写进其中的数据块（或使用 `taco-cli pack` / `refresh`），不改动应用本身；\n- 刷新时保留文档身份（`docId`）、评论线程、导航和检查点，所以你重新打开的始终是「同一个」Taco；\n- 默认排除隐藏文件和其他 `.taco.html`；HTML 源文件（`.html`）打包为沙箱内嵌只读页面，不支持在 HTML 内直接编辑或划词锚定评论。\n\n### 打开给你看\n\n生成后，Agent 会把文件作为可点击的链接给你，宿主允许时直接在浏览器里打开。它会如实说明是「给了链接」「已打开」还是「已打开并验证」，不会把后台检查说成你已经看到了。\n\n### 处理你的评审\n\n- 读取本地监听收到的 Handoff 回执、剪贴板「交接改动」文本，或你保存后的 `.taco.html`；\n- 把每条修改和评论对应到源文件；\n- 打包后源文件如果又被改过，或某处 diff 无法干净应用，**只报告冲突，不覆盖**；\n- 不编造评论，只回复处理结果，**不替你把讨论标成已解决**，等待你确认。\n\n### 遵循项目约定\n\n如果项目里有 `.taco/` 检查点模板，或 `AGENTS.md`、Spec Kit 之类已有的流程约定，Agent 会按它们决定写哪些文档、要不要检查点；没有约定时不强行启用 Checkpoints。小改动不会被套上一整套阶段流程。\n\n### 更新提醒\n\n每个工作会话开始时，skill 会比较自身版本和最新发布版本。有新版本只在回复末尾提一句，不会自行升级。\n\n## 可选：Spec Kit 集成\n\n如果你在用 [GitHub Spec Kit](https://github.com/github/spec-kit)，可以额外安装 Taco 扩展。它会在 specify、plan、tasks 等步骤之后自动刷新每个 feature 的 Taco，并提供 `speckit.taco.review` 导入评审结果，遇到冲突只报告不写入。\n\n```bash\nspecify extension add taco --from https://github.com/Arcadia822/taco/releases/latest/download/taco-extension.zip\n```\n\n这是需要显式请求的项目级接线；不用 Spec Kit 时完全不需要它。\n\n## 边界\n\n- 本地评审可离线运行；团队分享链接和在线评审中继见 [Tacobin](Tacobin.md)。\n- 被评审的目录始终是事实来源。Taco 里没有的文件，Agent 不会因此删除仓库里的对应文件。\n",
+      "sourceHash": "80f34adadd2fb2260d361a5a136d72fa0214bd250edee0f5801810512e589e2e"
+    },
+    {
+      "path": "taco/功能/Taco.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: Taco\nstatus: 已完成\nsummary: 单文件评审工作区本身\n---\n\n## 是什么\n\nTaco 是一个 `.taco.html` 文件：里面装着一组文档、它们的目录结构、一个阅读器和编辑器，以及评论线程。双击就能在浏览器中打开，不需要安装、登录或联网。\n\n一个 Taco 对应一个议题。Agent 把仓库里的文档目录打包成 Taco，人在里面评审，再把结果交还给 Agent。\n\n## 阅读\n\n- **文件树**：保留真实的目录结构。一级目录自动成为分类；也可以用导航清单自定义分组和顺序（本站侧栏就是这样排的）。\n- **入口文档**：打开时默认显示的那一篇，在侧栏标有「入口」。\n- **搜索**：`⌘K` / `Ctrl+K`，按文件名和全文查找。\n- **大纲**：右侧列出当前文档的标题，滚动时自动高亮所在位置。\n\n## 渲染\n\n| 文件类型 | 显示方式 | 本站示例 |\n| --- | --- | --- |\n| Markdown | 所见即所得编辑；开头的 YAML 显示为属性表 | 每篇 `.md` 顶部的属性 |\n| Mermaid（`.mmd` 或 Markdown 中的代码块） | 图表预览 + 源码，可切主题、方向、全屏缩放；语法错误会标出行列 | [系统组件图](../架构/系统组件.mmd) |\n| JSON / YAML | 语法高亮的源码编辑器 | — |\n| OpenAPI（JSON / YAML） | 额外提供「概览」视图：接口、参数、响应一目了然 | [Tacobin API](../架构/Tacobin-API.yaml) |\n| 单页 HTML（`.html`） | 沙箱框架中的内嵌只读页面（不可直接编辑，不设 HTML 原文划词锚点） | — |\n| PNG、SVG 图片，音视频 | 内嵌预览 | — |\n| 其他文本文件 | 原样显示为源码，不猜测格式 | — |\n\nTaco 不认识的文件也会原样保留，不会在打包或保存时被丢掉。\n\n## 评审\n\n- **划词评论**：选中任意文字即可评论；评论锚定在原文上，原文稍有改动也能重新定位。\n- **更细的锚点**：可以评论 Mermaid 图里的某个节点、代码块的某一行。\n- **线程**：回复、标记解决或重新打开（评论始终由人确认并解决，Agent 不会代关）；可以编辑自己的消息，删除时留下占位，后面的回复不会错位。\n- **直接修改**：正文可以直接改，不必写成「建议把 A 改成 B」。\n\n## 交接改动\n\n点右上角「交接改动」：若 Agent 正在本机监听（安装时配好的 `taco-cli open \u003cfile.taco.html> --listen` 或 `taco-cli listen`），未保存的改动和未解决评论会直接送达 Agent；没有监听时，Taco 会把这一轮的结果整理成一段文本复制到剪贴板：\n\n- 每个被修改文件的 diff；\n- 所有未解决的评论，带文件路径、被评论的原文和完整讨论；\n- 检查点状态的变动。\n\n粘贴给 Agent，它就能逐条处理。也可以保存文件后，把整个 `.taco.html` 交给 Agent 读取。\n\n## 保存\n\n「保存」把改动写回这个 `.taco.html`（浏览器支持时原地写入，否则下载一份）。另有「保存副本」和「解包到文件夹」——后者把文件还原成磁盘上的真实目录。有未保存改动时，关闭页面前会提醒你。\n\n## 检查点（Checkpoints）\n\n当一个议题有多篇文档、需要按阶段推进时，可以给 Taco 加上检查点：\n\n- 用依赖图定义阶段，比如「概览 → 开始 → 功能 / 架构 → 路线图」；\n- 每篇文档有四种状态：待开始、进行中、已完成、已冻结，阶段状态由文档汇总；\n- 每篇文档可以附带「要求」，写给作者（人或 Agent）看；\n- 被要求但还没写的文档，会显示为「未创建」。\n\n本站就在用检查点：点侧栏顶部的「检查点」看看。`路线图/下一阶段.md` 就是一篇还没创建、但已经写好要求的文档。\n\n检查点是可选的；不需要阶段管理时，普通 Taco 就够了。\n\n## Complete 与 Lite\n\n| | Complete | Lite |\n| --- | --- | --- |\n| 应用体积 | 约 2.7 MB | 约 190 KB |\n| 联网 | 完全离线 | 编辑器、高亮、Mermaid 从公共 CDN 加载 |\n| 适合 | 发给可能离线的人、长期归档 | 联网评审、放进仓库 |\n\nLite 的 CDN 不可用时，Markdown 仍可按源码编辑。\n",
+      "sourceHash": "c7fae5788963c6f606ce32121e86c3bc3262c1d6430003a0ef384a7f786537c2"
+    },
+    {
+      "path": "taco/功能/Tacobin.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: Tacobin\nstatus: 已完成\nsummary: 团队分享链接与在线评审中继\n---\n\n## 是什么\n\n本地 Taco 适合一个人和自己的 Agent。当评审者不在你的电脑旁——同事、产品、外部合作方——就需要 Tacobin：\n\n- Agent 把 Taco 发布到 Tacobin，得到一个**分享链接**；\n- 评审者打开链接，在网页里编辑和评论，内容**自动保存**；\n- 评审者点「交接」，正在监听的 Agent 立刻收到通知，取回这一轮的完整结果。\n\nAgent 通过安装时配好的 `taco-cli` 连接 Tacobin，评审者只需打开浏览器链接即可参与。\n\n想看托管评审实际长什么样，打开这份在线演示：[Taco 文档（托管版）](https://taco.arcadia-han.com/t/b89dc5c7-3996-4ab6-b446-3508e4d0af6e)。自动保存、在线监听和显式交接只存在于那里——你现在读的这个独立版没有这些。\n\n## 评审者看到什么\n\n- 和本地 Taco 一样的阅读、编辑、评论界面；\n- 第一次评论时填一个名字（自报，无需注册）；\n- 改动实时自动保存。保存失败可以重试；遇到冲突时保留你的草稿，确认放弃后才加载最新版本；\n- 页头的重叠头像显示当前有哪些人和 Agent 在线，点开可以看完整的监听名单；\n- 「保存」按钮仍然可用，用来另存一份本地 Taco。\n\n## 最重要的一条：交接要显式点击\n\n**评论和自动保存都不等于交接，不会唤醒 Agent。** 只有评审者确认这一轮看完、点击「交接」，Tacobin 才会记录一次 `review.handed_off` 事件，Agent 才开始处理。\n\n- 点「交接」时如果没有 Agent 在监听，Tacobin 不会产生交接，而是显示安装 skill、安装 CLI、开始订阅的命令；\n- 头像显示在线，只表示 Agent 在监听，不代表你的意见已经被读到或处理。\n\n## Agent 如何接入 Tacobin\n\nAgent 使用以下 `taco-cli` 命令完成发布、更新与订阅：\n\n| 命令 | 作用 |\n| --- | --- |\n| `taco-cli publish \u003cfile.taco.html> --host \u003corigin> --dry-run` | 本地预检：列出将要公开的文件和大小，不发任何请求 |\n| `taco-cli publish \u003cfile.taco.html> --host \u003corigin>` | 发布新 Taco，返回给评审者的 `url` 和后续使用的 `tacoId` |\n| `taco-cli update \u003ctacoId> \u003cfile.taco.html> [--base \u003crevisionId>] --host \u003corigin>` | 向已有的 Taco 提交替换修订版，保持原 URL 不变，并保留评论与 Checkpoint 状态（省略 `--base` 时默认使用 Host 当前 revision） |\n| `taco-cli update \u003ctacoId> \u003cfile.taco.html> [--base \u003crevisionId>] --dry-run` | 本地检查修订内容，不发网络请求；仅在显式传入时显示基础版本 |\n| `taco-cli subscribe \u003ctacoId> --host \u003corigin>` | 等待交接：忽略普通评论和编辑，收到 `review.handed_off` 后退出 |\n| `taco-cli subscribe \u003ctacoId> --stream` | 持续接收全部事件 |\n| `taco-cli handoff \u003ctacoId> \u003chandoffId> --host \u003corigin>` | 读取这次交接的不可变快照 |\n| `taco-cli events \u003ctacoId> --after \u003csequence>` | 监听中断后补读事件；没人监听时发生的交接也能找回 |\n\n首次发布会创建一份新的 Taco（`POST /v1/tacos`）并固定基础版本。后续评审轮次通过 `taco-cli update \u003ctacoId> \u003cfile.taco.html> [--base \u003crevisionId>]` 原地更新，保持评审 URL 稳定，推进 revision 记录，并保留评论与 Checkpoint 状态。省略 `--base` 时，CLI 会自动使用 Host 当前 revision；显式指定时，严格校验期望的基础版本。如果旧版本 CLI 不支持网络更新，会明确报错不支持，绝不会静默回退为新建发布（`publish`）。\n\n## 安全\n\n- 发布前先用 `--dry-run` 核对要公开的内容；\n- 匿名发布会自动签发访问凭据，Agent 会先把它安全保存再上传正文；\n- 启用在线协作的 Taco 文件可能携带访问凭据，未经允许不要转发到其他服务、日志或工单里。\n\n## 边界\n\n- Tacobin 不是事实来源。仓库里的文件仍然是权威版本，Tacobin 只承载这一轮评审；\n- 发布本身不会修改你的本地文件；\n- 目前不支持脱离基线版本强制覆盖、私有托管和账号登录。\n",
+      "sourceHash": "9a18d399c0c631012f6d9344d68df6082dc1c5b74f7ee51e726a4a6ef189f45d"
+    },
+    {
+      "path": "taco/架构/技术架构.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: 技术架构\nstatus: 已完成\n---\n\n## 总览\n\nTaco 由四部分组成：一个自带应用的 HTML 文件、浏览器里的运行时、一份文件协议，以及可选的宿主。组件关系见 [系统组件图](系统组件.mmd)。\n\n## 一个文件 = shell + 数据块\n\n- **shell**：压缩内嵌的应用（阅读器、编辑器、评论、导航），所有 Taco 都相同；\n- **数据块**：`\u003cscript type=\"application/taco+json\" id=\"taco-document\">` 里的一段 JSON，装着这个议题的全部文档和评审状态。\n\nAgent 只写数据块，从不改动 shell，所以升级应用和更新内容互不干扰。\n\n| shell | 体积 | 依赖 |\n| --- | --- | --- |\n| Complete | 约 2.7 MB | 全部内嵌，完全离线 |\n| Lite | 约 190 KB | 启动时从公共 CDN 加载编辑器 |\n\n## 数据块：taco/files v1\n\n| 字段 | 说明 |\n| --- | --- |\n| `docId` | 文档身份，首次生成后每次刷新都保留 |\n| `files[]` | 每个文件的路径、类型、内容和打包时的 `sourceHash` |\n| `comments[]` | 评论线程：锚点、状态、消息 |\n| `navigation` | 可选：入口文档与分组 |\n| `checkpoints` | 可选：阶段图与文档状态 |\n\n刷新时保留 `docId`、评论、导航和检查点，这就是「同一个 Taco」能跨轮次延续的原因。\n\n## 往返与冲突\n\n1. 打包时每个文件记录内容哈希（`sourceHash`），代表评审者看到的版本；\n2. 「交接改动」输出改动 diff 和未解决的评论；\n3. Agent 应用前对照哈希检查源文件：打包后被改过、或 diff 无法干净应用，就报告冲突并停下，不覆盖任何一方。\n\n## 安全\n\n- 文件路径必须在文档目录之内，越界即拒绝；\n- 普通 `.html` 源文件以只读方式内嵌在阻断外部网络的沙箱框架中展示；\n- 启用在线协作的 Taco 可能带有访问凭据，不要随意转发。\n\n## 宿主\n\n- **本地**：直接用 `file://` 打开，不需要任何服务；\n- **Tacobin**：负责发布、自动保存、在线状态和交接事件，主要接口见 [Tacobin API](Tacobin-API.yaml)。\n",
+      "sourceHash": "737f4b6690234e707e9c14adfb1eaa2a587ea67175ac001dea2c53956fae42d6"
+    },
+    {
+      "path": "taco/架构/系统组件.mmd",
+      "mediaType": "text/plain",
+      "content": "flowchart TB\n    subgraph Repo[\"代码仓库\"]\n        SRC[\"文档目录\u003cbr/>canonical Markdown / mmd / yaml\"]\n        SKILL[\"Taco Skill\u003cbr/>shell + 参考 + 脚本\"]\n    end\n\n    subgraph File[\".taco.html\"]\n        SHELL[\"shell\u003cbr/>阅读器 · 编辑器 · 评论 · 导航\"]\n        DATA[\"数据块\u003cbr/>taco/files v1\"]\n    end\n\n    subgraph Hosts[\"宿主\"]\n        LOCAL[\"本地浏览器\u003cbr/>file://\"]\n        BIN[\"Tacobin\u003cbr/>taco-host/1\"]\n    end\n\n    AGENT[\"Agent\"]\n    CLI[\"taco-cli\"]\n    HUMAN[\"评审者\"]\n\n    AGENT -->|写文档| SRC\n    AGENT -->|用 skill 打包| SKILL\n    SKILL --> SHELL\n    SRC --> DATA\n    File --> LOCAL\n    AGENT --> CLI\n    CLI -->|publish / subscribe / handoff| BIN\n    HUMAN --> LOCAL\n    HUMAN --> BIN\n    LOCAL -->|交接改动| AGENT\n    BIN -->|review.handed_off| CLI\n",
+      "sourceHash": "8e987c50524220beea80889c5676752b8294c37f456dcac4330fc1f728f7ad6d"
+    },
+    {
+      "path": "taco/架构/Tacobin-API.yaml",
+      "mediaType": "application/yaml",
+      "content": "openapi: 3.1.0\ninfo:\n  title: Tacobin API（节选）\n  version: 0.1.0-draft\n  description: |\n    Tacobin 实现的 taco-host/1 主要接口节选。本文档仍是草稿（检查点状态：待开始），\n    字段细节以 taco-cli help 与服务端实现为准。\nservers:\n  - url: https://taco.arcadia-han.com\ntags:\n  - name: 发布\n  - name: 评审\n  - name: 事件\npaths:\n  /v1/capabilities:\n    get:\n      tags: [发布]\n      summary: 查询宿主能力与协议版本\n      responses:\n        '200':\n          description: 协议、服务类型与存储信息\n  /v1/anonymous-credentials:\n    post:\n      tags: [发布]\n      summary: 匿名签发 ApiKey\n      description: 返回的密钥只出现一次，调用方需先安全保存再继续上传。\n      responses:\n        '201':\n          description: 新建的匿名用户与 ApiKey\n  /v1/uploads:\n    post:\n      tags: [发布]\n      summary: 两阶段发布的暂存上传\n      security: [{ apiKey: [] }]\n      responses:\n        '201':\n          description: 暂存成功\n  /v1/tacos:\n    post:\n      tags: [发布]\n      summary: 发布 Taco\n      security: [{ apiKey: [] }]\n      responses:\n        '201':\n          description: 返回评审者 url 与 tacoId\n          content:\n            application/json:\n              schema:\n                type: object\n                required: [tacoId, url]\n                properties:\n                  tacoId: { type: string }\n                  url: { type: string, format: uri }\n  /v1/tacos/{id}/state:\n    parameters:\n      - $ref: '#/components/parameters/TacoId'\n    get:\n      tags: [评审]\n      summary: 读取当前共享评审状态\n      responses:\n        '200':\n          description: 当前文档与评论\n    patch:\n      tags: [评审]\n      summary: 自动保存（乐观并发）\n      responses:\n        '200':\n          description: 保存成功\n        '409':\n          description: 版本冲突，客户端保留草稿\n  /v1/tacos/{id}/handoffs:\n    parameters:\n      - $ref: '#/components/parameters/TacoId'\n    post:\n      tags: [评审]\n      summary: 评审者点击「交接」\n      description: 没有活跃监听者时拒绝，不产生 review.handed_off。\n      responses:\n        '201':\n          description: 记录 review.handed_off\n  /v1/tacos/{id}/handoffs/{handoffId}:\n    parameters:\n      - $ref: '#/components/parameters/TacoId'\n      - name: handoffId\n        in: path\n        required: true\n        schema: { type: string }\n    get:\n      tags: [评审]\n      summary: 读取不可变交接快照\n      responses:\n        '200':\n          description: 本轮改动与评论\n  /v1/tacos/{id}/subscribe:\n    parameters:\n      - $ref: '#/components/parameters/TacoId'\n    get:\n      tags: [事件]\n      summary: 订阅事件流（SSE）\n      responses:\n        '200':\n          description: text/event-stream\n  /v1/tacos/{id}/events:\n    parameters:\n      - $ref: '#/components/parameters/TacoId'\n      - name: after\n        in: query\n        schema: { type: integer }\n    get:\n      tags: [事件]\n      summary: 分页补读持久事件\n      responses:\n        '200':\n          description: 事件列表\n  /v1/tacos/{id}/listeners:\n    parameters:\n      - $ref: '#/components/parameters/TacoId'\n    get:\n      tags: [事件]\n      summary: 当前在线监听者\n      responses:\n        '200':\n          description: 监听名单\ncomponents:\n  parameters:\n    TacoId:\n      name: id\n      in: path\n      required: true\n      schema: { type: string }\n  securitySchemes:\n    apiKey:\n      type: http\n      scheme: bearer\n",
+      "sourceHash": "5397f0c3d9031ed2ff1d55b958e883dc5b512ab503f152536e276e2ba4631ddb"
+    },
+    {
+      "path": "taco/开始/常见问题.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: 常见问题\nstatus: 已完成\n---\n\n## 为什么是一个 HTML 文件？\n\n因为浏览器是每个人都有的阅读器。一个 `.taco.html` 双击就能打开，不需要安装软件、注册账号或连接服务器；同时它又只是一个普通文件，可以放进仓库、发邮件、归档。\n\n## 能离线用吗？\n\nComplete 版完全离线，所有编辑器和渲染库都内嵌在文件里。Lite 版需要从公共 CDN 加载编辑器；加载失败时，Markdown 仍然可以按源码编辑。\n\n## 和 git 怎么配合？\n\n仓库里的 Markdown 才是权威版本，正常提交、diff、review。Taco 文件可以和文档放在同一目录一起提交，也可以只在评审时生成。\n\n## 会不会把我的 Markdown 改乱？\n\n不会。Taco 渲染时不会反向格式化你的原文；你没改过的地方，交接时也不会出现在 diff 里。\n\n## Agent 怎么拿到我的评论？\n\n两种方式：点「交接改动」，Agent 正在本机监听时直接收到未保存的改动与评论，没有监听时复制成文本交给你粘贴；或者保存文件，让 Agent 读取 `.taco.html` 里的数据。用 Tacobin 时，Agent 通过 `taco-cli` 获取交接快照。\n\n## 支持多人实时协作吗？\n\n本地 Taco 不支持。需要多人在线评审时用 [Tacobin](../功能/Tacobin.md)：多人可以同时编辑和评论，内容自动保存。\n\n## 支持哪些文件？\n\nMarkdown、Mermaid、JSON、YAML（含 OpenAPI 概览）、PNG/SVG 图片、音视频，以及单页 HTML。其他文本文件原样显示为源码。`.html` 页面以只读方式内嵌在沙箱框架中展示，外部网络请求被全部拦截，自包含的页面可完整渲染。\n\n## 文件有多大？\n\nComplete 的应用部分约 2.7 MB，Lite 约 190 KB，再加上你的文档本身。\n\n## 必须用 Spec Kit 或检查点吗？\n\n都不需要。它们是可选的；任何 Markdown 目录都可以直接做成 Taco。\n\n## 是开源的吗？\n\n是，MIT 协议，源码在 [github.com/Arcadia822/taco](https://github.com/Arcadia822/taco)。Taco 的灵感与核心代码来自 [Bento](https://github.com/nyblnet/bento)。\n",
+      "sourceHash": "e228a6f8c8e5d219e33ab8d0eadf0ee324f040ad28af501d58e30c30a31a088c"
+    },
+    {
+      "path": "taco/开始/快速开始.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: 快速开始\nstatus: 已完成\ntime: 约 5 分钟\n---\n\n## 1. 让 Agent 安装 Taco\n\n把下面这句话发给你正在用的 Agent（Claude Code、Codex、Cursor 等）：\n\n```text\n读取 https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md ，按其中步骤安装 Taco skill 与 taco-cli（需要时创建目录）；完成后回复 Installed taco. 并简短说明如何生成一份 Taco。\n```\n\nAgent 会按安装说明同时安装 `taco` skill 和 `taco-cli`（需要时创建目录），完成后回复 `Installed taco.`：先介绍 Taco 的基本能力，再说明默认使用范围——仅在多文件复杂设计需要人评审拍板，或你主动要求时才使用 Taco；日常探索聊天和简单修复不打包，不会只因为单篇文档长就触发。安装失败时 Agent 会如实报告原因。\n\n## 2. 让 Agent 写一份方案，并生成 Taco\n\n```text\n为「订单导出 CSV」写一份设计方案（需求、方案、接口），放在 specs/order-export/，用 Taco 给我评审。\n```\n\nAgent 写好 Markdown 后，会把整个目录打包成 `.taco.html` 并在浏览器里打开（可通过 `taco-cli open \u003cfile.taco.html> --listen` 启动本机监听）。\n\n## 3. 在浏览器里评审\n\n- 选中一句话，点「评论」，写下具体意见；\n- 发现错字或措辞问题，直接在正文里改；\n- 流程图节点、代码块的某一行也可以评论；单页 HTML（`.html`）以沙箱只读方式内嵌展示，相关意见写在引用它的 Markdown 文档里。\n\n## 4. 交接给 Agent\n\n点右上角「交接改动」：若 Agent 正在本机监听，未保存改动和未解决评论会直接送达 Agent；没有监听时，改动的 diff 和未解决的评论会复制到剪贴板，粘贴给 Agent 即可。\n\n## 5. 核对第二轮\n\nAgent 改完源文件后刷新**同一个** Taco 再打开：评论线程还在，Agent 只回复处理情况而不会替你解决评论；你逐条核对，满意就点「解决」，不满意就回复继续讨论。\n\n---\n\n各部分能做什么，见 [Taco](../功能/Taco.md)、[Taco Skill](../功能/Taco-Skill.md) 和 [Tacobin](../功能/Tacobin.md)。\n\n> 在这个文档站里，你也可以直接选中文字评论、修改正文，试试看。这是独立版 Taco：没有在线监听和自动保存，「交接改动」只是把内容复制到剪贴板，由你自己交给 Agent。改动只存在浏览器里，刷新页面即恢复原样。\n",
+      "sourceHash": "487e0d866c7434b0d2790e2ed4fee0760af5ad629c9c8c96ada343ee4c659987"
+    },
+    {
+      "path": "taco/路线图.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: 路线图\nstatus: 进行中\nupdated: 2026-10-03\n---\n\n## 已完成\n\n- **单文件容器**：文档、阅读器、编辑器、评论装进一个 `.taco.html`，离线可用；\n- **评审与交接**：划词评论、Mermaid 节点与代码行评论、交接改动；\n- **结构化渲染**：YAML 属性表、JSON/YAML 源码编辑、OpenAPI 概览、Mermaid 预览与语法检查；\n- **内嵌单页 HTML**：生成的 `.html` 页面可打包进 Taco，在沙箱中内嵌展示；\n- **检查点**：阶段依赖图、四种状态、文档要求、未创建占位、项目级模板；\n- **Lite shell**：约 190 KB 的联网版本；\n- **Tacobin 在线评审**：分享链接、自动保存、显式交接、`taco-cli` 订阅。\n\n## 进行中\n\n### 第二轮审阅体验\n\n人把意见交给 Agent 之后，第二轮需要更快地确认「改了什么、改对没有」：\n\n- **全局讨论列表**：把所有评论线程汇总在一页，按状态和文件筛选；\n- **本轮差异**：只看这一轮基线到当前内容的真实变化，点击直接跳到对应位置；\n- **人类确认**：Agent 可以说明自己如何处理，但只有人能确认并关闭讨论。\n\n## 规划中\n\n- **文档模板与写作指引**：内置需求、架构、交互设计模板，帮助 Agent 写出层次清楚的文档；\n- **真实两轮回归**：用常见的 Agent 宿主完整跑一遍「生成 → 评审 → 交接 → 修改 → 第二轮」，覆盖旧副本、并发修改等情况。\n\n## 待定\n\n下一阶段的议题拆分还在讨论中，见 `路线图/下一阶段.md`（尚未创建）。\n",
+      "sourceHash": "aead0d75bc15b6658d905335fa4d264fe49a442cee73a71101982df92af6a74a"
+    }
+  ],
   "packOptions": {
     "ignore": []
   },
   "navigation": {
     "version": 1,
-    "entry": "spec.md",
-    "groups": [
-      {
-        "id": "requirements",
-        "title": "Requirements",
-        "paths": [
-          "spec.md"
-        ]
-      },
-      {
-        "id": "design",
-        "title": "Design",
-        "paths": [
-          "data-model.mmd",
-          "flows/anonymous-publish.mmd"
-        ]
-      },
-      {
-        "id": "api",
-        "title": "API",
-        "paths": [
-          "contracts/openapi.yaml"
-        ]
-      }
-    ]
+    "entry": "taco/概览.md",
+    "groups": []
   },
-  "files": [
-    {
-      "title": "008-taco-host-contract",
-      "path": "specs/008-taco-host-contract/spec.md",
-      "mediaType": "text/markdown",
-      "content": "## 1. Status and scope\n\nThis is a usage contract and interface design under review; it does not mean the commands or service already exist. Directions the user has confirmed are recorded separately from the interface details proposed here. This is not an implementation plan and does not move existing directories.\n\nConfirmed in review: JSON output by default; everything is public by default, with no visibility switch; anonymous publishing works and the minimal flow has no login; the Host defaults to `http://localhost:32167` and honors an environment variable; Taco and Revision use UUIDs; the first release ships complete help and a built-in skill in the binary. OAuth `taco-cli login` is deferred; ApiKeys are used for now. Automatic anonymous keys, concrete APIs, exit codes, limits and retention described here are still implementation proposals, not shipped behavior.\n\n## User and ApiKey\n\nA User is either anonymous or registered. An anonymous User is a holder identity that cannot pass as a named account and needs no sign-up or OAuth. Later, provider/subject will be unique; users are never identified by an editable name or email. The first release has no OAuth or web login; public fields are defined in OpenAPI and internal relations in the data model.\n\nAn ApiKey is a high-entropy random credential owned by a User: the plaintext is returned once in the creation response and the server stores only a digest; it never appears in URLs, logs, shared data or exports. The first release has no scopes; one key stands for one user, and a Taco belongs to the User, not the key.\n\nProposed anonymous publishing: with no credential, the CLI calls `POST /v1/anonymous-credentials`; the Host creates an anonymous User and issues its ApiKey; the CLI stores the key safely, then publishes. The user only runs publish — no separate login or sign-up. This still uses just User and ApiKey, with no per-document admin token. The bootstrap endpoint is rate-limited and abuse-controlled and never accepts a client-chosen userId. If the key response is lost, at most an anonymous identity with no Taco is left behind for cleanup; content is never uploaded before the credential is stored. Once the first Taco is published the credential is saved, and a lost response is recovered with the same key and idempotency key. A lost anonymous key cannot be taken over through a public UUID; the first release has no anonymous recovery or claiming. Existing Users and ApiKeys can be provisioned by Host operators, and no OAuth is needed today.\n",
-      "sourceHash": "97396959bca8d6e8fc52b486bc332f86046a5e5f3476abfa4e3d2f6090c709f3"
-    },
-    {
-      "title": "Taco Host data model",
-      "path": "specs/008-taco-host-contract/data-model.mmd",
-      "mediaType": "text/plain",
-      "content": "erDiagram\n  USER ||--o{ API_KEY : \"holds\"\n  USER ||--o{ TACO : \"owns\"\n  TACO ||--|{ REVISION : \"versions\"\n  REVISION ||--o{ REVIEW_EVENT : \"reviews\"\n  USER {\n    uuid id PK\n    string kind \"anonymous | registered\"\n    datetime createdAt\n    datetime reclaimAt \"anonymous User with no Taco: 24h after creation\"\n  }\n  API_KEY {\n    uuid id PK\n    uuid userId FK\n    string secretHash \"SHA-256; plaintext returned once\"\n    datetime createdAt\n    datetime expiresAt \"90 days by default, extended on each successful auth\"\n    datetime lastUsedAt\n  }\n  TACO {\n    uuid id PK\n    uuid ownerId FK\n    string lifecycle \"open | closed | deleted\"\n    datetime expiresAt\n  }\n  REVISION {\n    uuid id PK\n    uuid tacoId FK\n    string blobKey\n    datetime committedAt\n  }\n  REVIEW_EVENT {\n    uuid id PK\n    uuid revisionId FK\n    string kind \"comment | confirm | feedback-done\"\n    datetime createdAt\n  }\n",
-      "sourceHash": "b94feb974bbd91b0691c252f149665d01cf8ec7079708a24bb6341e3147b0729"
-    },
-    {
-      "title": "Anonymous publish flow",
-      "path": "specs/008-taco-host-contract/flows/anonymous-publish.mmd",
-      "mediaType": "text/plain",
-      "content": "flowchart TD\n  A[\"taco-cli publish\"] --> B{\"ApiKey for this Host on this machine?\"}\n  B -->|yes| E[\"POST /v1/uploads to request a direct upload\"]\n  B -->|no| C[\"POST /v1/anonymous-credentials\"]\n  C --> D[\"Store the key safely first\"]\n  D --> E\n  E --> F[\"PUT the private blob\"]\n  F --> G[\"POST /v1/tacos to commit the revision\"]\n  G --> H[\"Return tacoId and share link\"]\n",
-      "sourceHash": "0e60fd47c377676aef05307942463fa08683c6890fe2cdb7b1bca23f4d87e492"
-    },
-    {
-      "title": "Taco Host API",
-      "path": "specs/008-taco-host-contract/contracts/openapi.yaml",
-      "mediaType": "application/yaml",
-      "content": "openapi: 3.1.0\ninfo:\n  title: Taco Host API\n  version: 1.0.0-draft\n  description: >-\n    Taco Host server HTTP contract (demo excerpt).\n    Public by default; management calls authenticate the owner with a Bearer ApiKey.\nservers:\n  - url: http://localhost:32167\n    description: Default address for local development and loopback tests\npaths:\n  /v1/anonymous-credentials:\n    post:\n      summary: Bootstrap an anonymous User and issue an ApiKey\n      description: Called by the CLI on its first publish without a credential; the plaintext secret is returned only in this response.\n      operationId: createAnonymousCredentials\n      responses:\n        '201':\n          description: Anonymous identity and ApiKey created\n          content:\n            application/json:\n              schema:\n                type: object\n                required: [user, apiKey]\n                properties:\n                  user:\n                    type: object\n                    properties:\n                      id: { type: string, format: uuid }\n                      kind: { type: string, enum: [anonymous] }\n                  apiKey:\n                    type: object\n                    properties:\n                      id: { type: string, format: uuid }\n                      secret: { type: string, description: plaintext returned once }\n        '429':\n          description: IP / rate limit exceeded\n  /v1/uploads:\n    post:\n      summary: Reserve an upload and get a signed private PUT URL\n      operationId: createUpload\n      security: [{ bearer: [] }]\n      responses:\n        '201':\n          description: Reservation and a short-lived PUT URL\n          content:\n            application/json:\n              schema:\n                type: object\n                properties:\n                  reservationId: { type: string, format: uuid }\n                  putUrl: { type: string, format: uri }\n                  expiresAt: { type: string, format: date-time }\n  /v1/tacos:\n    post:\n      summary: Publish a new Taco with its first Revision\n      operationId: createTaco\n      security: [{ bearer: [] }]\n      responses:\n        '201':\n          description: Published\n          content:\n            application/json:\n              schema:\n                type: object\n                properties:\n                  tacoId: { type: string, format: uuid }\n                  revisionId: { type: string, format: uuid }\n                  url: { type: string, format: uri }\n        '409':\n          description: Idempotency key conflict\n  /v1/tacos/{id}:\n    get:\n      summary: Get public Taco metadata\n      operationId: getTaco\n      parameters:\n        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }\n      responses:\n        '200':\n          description: Taco metadata\n        '404':\n          description: Not found or deleted\n  /v1/tacos/{id}/reviews:\n    get:\n      summary: Get aggregated review data for a revision\n      operationId: listReviews\n      parameters:\n        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }\n      responses:\n        '200':\n          description: Comment threads and confirmation state\n    post:\n      summary: Submit a review action or state change\n      operationId: submitReview\n      parameters:\n        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }\n      responses:\n        '202':\n          description: Written to the event log\n  /v1/tacos/{id}/subscribe:\n    get:\n      summary: WebSocket live event subscription\n      operationId: subscribeTaco\n      parameters:\n        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }\n      responses:\n        '101':\n          description: Upgraded to WebSocket\ncomponents:\n  securitySchemes:\n    bearer: { type: http, scheme: bearer }\n",
-      "sourceHash": "0c0a1b0bf205c37d72845a5d78b0ffb6abb06414623592c9613b9bb9dc02e087"
-    }
-  ],
-  "comments": [
-    {
-      "id": "demo-thread-anon-key",
-      "anchor": {
-        "path": "specs/008-taco-host-contract/spec.md",
-        "position": {
-          "start": 421,
-          "end": 481
-        },
-        "quote": {
-          "exact": "anonymous publishing works and the minimal flow has no login",
-          "prefix": "with no visibility switch; ",
-          "suffix": "; the Host defaults to "
-        }
-      },
-      "status": "resolved",
-      "messages": [
-        {
-          "id": "demo-thread-anon-key-m1",
-          "author": "arcadia",
-          "body": "How long does the ApiKey issued for anonymous publishing last, and how is it reclaimed? Please add the fields to data-model.mmd.",
-          "createdAt": "2026-09-22T09:30:00.000Z"
-        },
-        {
-          "id": "demo-msg-2",
-          "author": "Agent",
-          "body": "Added API_KEY.expiresAt (90 days, extended on auth) and lastUsedAt, plus USER.reclaimAt (anonymous Users with no Taco are reclaimed after 24h) to data-model.mmd.",
-          "createdAt": "2026-09-22T09:31:12.000Z"
-        }
-      ],
-      "createdAt": "2026-09-22T09:30:00.000Z",
-      "updatedAt": "2026-09-22T09:31:12.000Z"
-    },
-    {
-      "id": "demo-thread-review-kind",
-      "anchor": {
-        "path": "specs/008-taco-host-contract/data-model.mmd",
-        "position": {
-          "start": 818,
-          "end": 865
-        },
-        "quote": {
-          "exact": "string kind \"comment | confirm | feedback-done\"",
-          "prefix": "visionId FK\n    ",
-          "suffix": "\n    datetime cr"
-        }
-      },
-      "status": "open",
-      "messages": [
-        {
-          "id": "demo-thread-review-kind-m1",
-          "author": "lin",
-          "body": "The spec says confirmations and feedback-done are review data, not body comments. Should confirm / feedback-done really share one kind with comment?",
-          "createdAt": "2026-09-22T09:12:00.000Z"
-        }
-      ],
-      "createdAt": "2026-09-22T09:12:00.000Z",
-      "updatedAt": "2026-09-22T09:12:00.000Z"
-    },
-    {
-      "id": "demo-thread-save-key",
-      "anchor": {
-        "path": "specs/008-taco-host-contract/flows/anonymous-publish.mmd",
-        "position": {
-          "start": 202,
-          "end": 233
-        },
-        "quote": {
-          "exact": "D[\"Store the key safely first\"]",
-          "prefix": "tials\"]\n  C --> ",
-          "suffix": "\n  D --> E\n  E -"
-        }
-      },
-      "status": "open",
-      "messages": [
-        {
-          "id": "demo-thread-save-key-m1",
-          "author": "arcadia",
-          "body": "Missing failure branch: if the key is not persisted, never upload content — fail and exit.",
-          "createdAt": "2026-09-22T09:12:00.000Z"
-        }
-      ],
-      "createdAt": "2026-09-22T09:12:00.000Z",
-      "updatedAt": "2026-09-22T09:12:00.000Z"
-    },
-    {
-      "id": "demo-thread-409",
-      "anchor": {
-        "path": "specs/008-taco-host-contract/contracts/openapi.yaml",
-        "position": {
-          "start": 2490,
-          "end": 2527
-        },
-        "quote": {
-          "exact": "description: Idempotency key conflict",
-          "prefix": "409':\n          ",
-          "suffix": "\n  /v1/tacos/{id"
-        }
-      },
-      "status": "open",
-      "messages": [
-        {
-          "id": "demo-thread-409-m1",
-          "author": "lin",
-          "body": "The 409 body should return the existing tacoId and revisionId so the CLI can recover with the idempotency key.",
-          "createdAt": "2026-09-22T09:12:00.000Z"
-        }
-      ],
-      "createdAt": "2026-09-22T09:12:00.000Z",
-      "updatedAt": "2026-09-22T09:12:00.000Z"
-    }
-  ],
   "checkpoints": {
     "version": 1,
-    "template": "008 Host Protocol",
+    "template": "Taco 文档站",
     "nodes": [
       {
-        "id": "spec",
-        "title": "Specification",
+        "id": "1-overview",
+        "title": "概览",
         "after": [],
         "documents": [
           {
-            "path": "specs/008-taco-host-contract/spec.md",
-            "instruction": "Record confirmed decisions separately from still-open interface detail; this review approves direction, not an implementation plan."
+            "path": "taco/概览.md",
+            "instruction": "一屏讲清定位、三个特点与三个组成部分；不要求读者操作也能读懂。"
           }
         ]
       },
       {
-        "id": "architecture",
-        "title": "Architecture & Model",
+        "id": "2-start",
+        "title": "开始",
         "after": [
-          "spec"
+          "1-overview"
         ],
         "documents": [
           {
-            "path": "specs/008-taco-host-contract/data-model.mmd",
-            "instruction": "Must enumerate every anonymous-credential field with its lifetime and revocation path, and the idempotency-key conflict handling, before openapi.yaml is frozen."
+            "path": "taco/开始/快速开始.md",
+            "instruction": "不超过 5 步，从安装到第一次交接。"
           },
           {
-            "path": "specs/008-taco-host-contract/flows/anonymous-publish.mmd"
+            "path": "taco/开始/常见问题.md"
           }
         ]
       },
       {
-        "id": "contracts",
-        "title": "API Contract",
+        "id": "3-features",
+        "title": "功能",
         "after": [
-          "architecture"
+          "2-start"
         ],
         "documents": [
           {
-            "path": "specs/008-taco-host-contract/contracts/openapi.yaml"
+            "path": "taco/功能/Taco.md",
+            "instruction": "只写已实现的能力；每项能力指明本站中可以看到的示例文件。"
+          },
+          {
+            "path": "taco/功能/Taco-Skill.md"
+          },
+          {
+            "path": "taco/功能/Tacobin.md",
+            "instruction": "讲清 taco-cli 与 Tacobin 的分工；强调评论与自动保存不等于交接。"
+          }
+        ]
+      },
+      {
+        "id": "4-architecture",
+        "title": "架构",
+        "after": [
+          "2-start"
+        ],
+        "documents": [
+          {
+            "path": "taco/架构/技术架构.md"
+          },
+          {
+            "path": "taco/架构/系统组件.mmd"
+          },
+          {
+            "path": "taco/架构/Tacobin-API.yaml",
+            "instruction": "与服务端实现逐条核对后补全请求与响应 schema；未实现的接口不得写入。"
+          }
+        ]
+      },
+      {
+        "id": "5-roadmap",
+        "title": "路线图",
+        "after": [
+          "3-features",
+          "4-architecture"
+        ],
+        "documents": [
+          {
+            "path": "taco/路线图.md"
+          },
+          {
+            "path": "taco/路线图/下一阶段.md",
+            "instruction": "列出下一阶段的议题；每个议题写清要解决的问题、依赖哪些已有能力，并标注哪些需要人来决策。不写已完成的内容。"
           }
         ]
       }
     ],
     "documents": [
       {
-        "path": "specs/008-taco-host-contract/spec.md",
+        "path": "taco/概览.md",
         "status": "freeze",
-        "updatedAt": "2026-09-23T08:00:00.000Z"
+        "updatedAt": "2026-10-02T08:00:00.000Z"
       },
       {
-        "path": "specs/008-taco-host-contract/data-model.mmd",
+        "path": "taco/开始/快速开始.md",
         "status": "complete",
-        "updatedAt": "2026-09-23T10:00:00.000Z"
+        "updatedAt": "2026-10-02T08:00:00.000Z"
       },
       {
-        "path": "specs/008-taco-host-contract/flows/anonymous-publish.mmd",
+        "path": "taco/开始/常见问题.md",
         "status": "complete",
-        "updatedAt": "2026-09-23T10:00:00.000Z"
+        "updatedAt": "2026-10-02T08:00:00.000Z"
       },
       {
-        "path": "specs/008-taco-host-contract/contracts/openapi.yaml",
-        "status": "todo",
-        "updatedAt": "2026-09-23T08:30:00.000Z"
+        "path": "taco/功能/Taco.md",
+        "status": "complete",
+        "updatedAt": "2026-10-02T08:00:00.000Z"
+      },
+      {
+        "path": "taco/功能/Taco-Skill.md",
+        "status": "complete",
+        "updatedAt": "2026-10-02T08:00:00.000Z"
+      },
+      {
+        "path": "taco/功能/Tacobin.md",
+        "status": "complete",
+        "updatedAt": "2026-10-02T08:00:00.000Z"
+      },
+      {
+        "path": "taco/架构/技术架构.md",
+        "status": "complete",
+        "updatedAt": "2026-10-03T08:00:00.000Z"
+      },
+      {
+        "path": "taco/架构/系统组件.mmd",
+        "status": "complete",
+        "updatedAt": "2026-10-03T08:00:00.000Z"
+      },
+      {
+        "path": "taco/路线图.md",
+        "status": "in_progress",
+        "updatedAt": "2026-10-03T08:00:00.000Z"
       }
     ]
-  }
-}
-</script>
+  },
+  "comments": [
+    {
+      "id": "thread-1",
+      "anchor": {
+        "path": "taco/概览.md",
+        "position": {
+          "start": 469,
+          "end": 504
+        },
+        "quote": {
+          "exact": "Taco 把一个议题的整组文档打包成一个可以直接在浏览器里打开的文件。",
+          "prefix": "t 拿不回来；\n- 方案离开了仓库，和代码不再有同一段历史。\n\n",
+          "suffix": "人在里面读、改、划词评论；点一下「交接改动」，改动和评论就整理成"
+        }
+      },
+      "status": "open",
+      "messages": [
+        {
+          "id": "message-1-1",
+          "author": "arcadia",
+          "authorId": "demo-arcadia",
+          "body": "这里补一段默认使用边界吧：说明只有多文件复杂设计且需要人评审拍板，或用户主动要求时才打包 Taco；日常探索聊天和简单修改直接在对话与代码里完成。",
+          "createdAt": "2026-10-03T01:00:00.000Z"
+        },
+        {
+          "id": "message-1-2",
+          "author": "agent",
+          "authorId": "demo-agent",
+          "body": "已在该段下方补上默认使用边界说明，并刷新当前 Taco。评论保留打开，待你确认。",
+          "createdAt": "2026-10-03T05:00:00.000Z"
+        }
+      ],
+      "createdAt": "2026-10-03T01:00:00.000Z",
+      "updatedAt": "2026-10-03T05:00:00.000Z"
+    },
+    {
+      "id": "thread-2",
+      "anchor": {
+        "path": "taco/功能/Taco.md",
+        "position": {
+          "start": 1918,
+          "end": 1951
+        },
+        "quote": {
+          "exact": "Lite 的 CDN 不可用时，Markdown 仍可按源码编辑。",
+          "prefix": " | 发给可能离线的人、长期归档 | 联网评审、放进仓库 |\n\n",
+          "suffix": "\n"
+        }
+      },
+      "status": "open",
+      "messages": [
+        {
+          "id": "message-2-1",
+          "author": "mo",
+          "authorId": "demo-mo",
+          "body": "Lite 和 Complete 默认推荐哪个？表格里看不出结论。",
+          "createdAt": "2026-10-02T01:00:00.000Z"
+        },
+        {
+          "id": "message-2-2",
+          "author": "arcadia",
+          "authorId": "demo-arcadia",
+          "body": "放进仓库、联网评审用 Lite；要发给可能离线的人用 Complete。已经写进常见问题，你看这样清楚吗？",
+          "createdAt": "2026-10-02T02:00:00.000Z"
+        }
+      ],
+      "createdAt": "2026-10-02T01:00:00.000Z",
+      "updatedAt": "2026-10-02T02:00:00.000Z"
+    },
+    {
+      "id": "thread-3",
+      "anchor": {
+        "path": "taco/功能/Tacobin.md",
+        "position": {
+          "start": 648,
+          "end": 673
+        },
+        "quote": {
+          "exact": "评论和自动保存都不等于交接，不会唤醒 Agent。",
+          "prefix": "份本地 Taco。\n\n## 最重要的一条：交接要显式点击\n\n**",
+          "suffix": "** 只有评审者确认这一轮看完、点击「交接」，Tacobin 才"
+        }
+      },
+      "status": "open",
+      "messages": [
+        {
+          "id": "message-3-1",
+          "author": "lin",
+          "authorId": "demo-lin",
+          "body": "评审者写完评论就关页面的情况会很多。自动保存成功后，是否应该在页面上提示「尚未交接」？",
+          "createdAt": "2026-10-03T02:00:00.000Z"
+        },
+        {
+          "id": "message-3-2",
+          "author": "arcadia",
+          "authorId": "demo-arcadia",
+          "body": "同意这是风险。先记下来，等第二轮审阅体验一起设计提示方式。",
+          "createdAt": "2026-10-03T03:00:00.000Z"
+        }
+      ],
+      "createdAt": "2026-10-03T02:00:00.000Z",
+      "updatedAt": "2026-10-03T03:00:00.000Z"
+    },
+    {
+      "id": "thread-4",
+      "anchor": {
+        "path": "taco/路线图.md",
+        "position": {
+          "start": 450,
+          "end": 456
+        },
+        "quote": {
+          "exact": "全局讨论列表",
+          "prefix": " 之后，第二轮需要更快地确认「改了什么、改对没有」：\n\n- **",
+          "suffix": "**：把所有评论线程汇总在一页，按状态和文件筛选；\n- **本轮"
+        }
+      },
+      "status": "open",
+      "messages": [
+        {
+          "id": "message-4-1",
+          "author": "mo",
+          "authorId": "demo-mo",
+          "body": "全局讨论里能不能新建不挂在任何文档上的议题？比如整体架构方向这种讨论。",
+          "createdAt": "2026-10-03T04:00:00.000Z"
+        }
+      ],
+      "createdAt": "2026-10-03T04:00:00.000Z",
+      "updatedAt": "2026-10-03T04:00:00.000Z"
+    }
+  ]
+}</script>
 
 
   </head>

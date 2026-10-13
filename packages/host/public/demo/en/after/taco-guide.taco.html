@@ -9,251 +9,352 @@
     <meta name="taco-shell-variant" content="complete" />
     <meta name="taco-shell-features" content="embedded-html" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='15.2' cy='8.8' r='4.8' fill='%233ecf8e'/%3E%3Ccircle cx='7.2' cy='14.4' r='3.2' fill='%233b82f6'/%3E%3Ccircle cx='14.8' cy='18' r='2' fill='%23f97316'/%3E%3C/svg%3E" />
-    <title>008-taco-host-contract — Taco</title>
+    <title>Taco Docs — Taco</title>
 
-    <script type="application/taco+json" id="taco-document">
-{
+    <script type="application/taco+json" id="taco-document">{
   "format": "taco/files",
   "version": 1,
-  "docId": "specs-008-taco-host-contract",
-  "title": "008-taco-host-contract",
-  "root": "specs/008-taco-host-contract",
+  "docId": "taco-guide-en",
+  "title": "Taco Docs",
+  "root": "taco",
+  "files": [
+    {
+      "path": "taco/Architecture/Architecture.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: Architecture\nstatus: Complete\n---\n\n## Overview\n\nTaco has four parts: an HTML file that carries its own application, a runtime in the browser, a file protocol, and an optional host. See the [system components](System.mmd) for how they relate.\n\n## One file = shell + data block\n\n- **Shell**: the compressed, embedded application (reader, editor, comments, navigation), identical for every Taco;\n- **Data block**: the JSON inside `\u003cscript type=\"application/taco+json\" id=\"taco-document\">`, holding every document and the review state for this topic.\n\nAgents write only the data block and never touch the shell, so upgrading the application and updating content never interfere.\n\n| Shell | Size | Dependencies |\n| --- | --- | --- |\n| Complete | About 2.7 MB | Everything embedded, fully offline |\n| Lite | About 190 KB | Loads editors from a public CDN at startup |\n\n## Data block: taco/files v1\n\n| Field | Meaning |\n| --- | --- |\n| `docId` | Document identity, kept on every refresh after it is first created |\n| `files[]` | Path, type, and content of each file, plus its `sourceHash` at packing time |\n| `comments[]` | Comment threads: anchor, status, messages |\n| `navigation` | Optional: entry document and groups |\n| `checkpoints` | Optional: stage graph and document statuses |\n\nRefreshes keep `docId`, comments, navigation, and Checkpoints, which is what lets the same Taco continue across rounds.\n\n## Round trip and conflicts\n\n1. When packing, each file records a content hash (`sourceHash`): the version the reviewer saw;\n2. **Handoff** outputs the diff of edits and the open comments;\n3. Before applying, the agent checks the source files against those hashes. If a file changed after packing, or a diff cannot be applied cleanly, it reports the conflict and stops, overwriting neither side.\n\n## Security\n\n- File paths must stay inside the document folder; anything that escapes is rejected;\n- Plain `.html` source files are embedded read-only in a sandboxed frame that blocks all external network access;\n- A Taco with online collaboration enabled may carry access credentials; do not pass it around.\n\n## Hosts\n\n- **Local**: open directly via `file://`, no service needed;\n- **Tacobin**: handles publishing, autosave, presence, and handoff events. See the [Tacobin API](Tacobin-API.yaml) for the main endpoints.\n",
+      "sourceHash": "25754da2f34888d7b1f1588411e1c44f35c4023dea3d288495146ed3c7766ba8"
+    },
+    {
+      "path": "taco/Architecture/System.mmd",
+      "mediaType": "text/plain",
+      "content": "flowchart TB\n    subgraph Repo[\"Code repository\"]\n        SRC[\"Document folder\u003cbr/>canonical Markdown / mmd / yaml\"]\n        SKILL[\"Taco Skill\u003cbr/>shell + references + scripts\"]\n    end\n\n    subgraph File[\".taco.html\"]\n        SHELL[\"Shell\u003cbr/>reader · editor · comments · navigation\"]\n        DATA[\"Data block\u003cbr/>taco/files v1\"]\n    end\n\n    subgraph Hosts[\"Hosts\"]\n        LOCAL[\"Local browser\u003cbr/>file://\"]\n        BIN[\"Tacobin\u003cbr/>taco-host/1\"]\n    end\n\n    AGENT[\"Agent\"]\n    CLI[\"taco-cli\"]\n    HUMAN[\"Reviewer\"]\n\n    AGENT -->|writes docs| SRC\n    AGENT -->|packs with the skill| SKILL\n    SKILL --> SHELL\n    SRC --> DATA\n    File --> LOCAL\n    AGENT --> CLI\n    CLI -->|publish / subscribe / handoff| BIN\n    HUMAN --> LOCAL\n    HUMAN --> BIN\n    LOCAL -->|Handoff| AGENT\n    BIN -->|review.handed_off| CLI\n",
+      "sourceHash": "d99b3fdc8e718bdaab61b2905b9570d506b3ae9164c49bc490a475a00ed71c90"
+    },
+    {
+      "path": "taco/Architecture/Tacobin-API.yaml",
+      "mediaType": "application/yaml",
+      "content": "openapi: 3.1.0\ninfo:\n  title: Tacobin API (excerpt)\n  version: 0.1.0-draft\n  description: |\n    An excerpt of the main taco-host/1 endpoints implemented by Tacobin. This document is still a draft\n    (Checkpoint status: To do); for field details, defer to taco-cli help and the server implementation.\nservers:\n  - url: https://taco.arcadia-han.com\ntags:\n  - name: Publish\n  - name: Review\n  - name: Events\npaths:\n  /v1/capabilities:\n    get:\n      tags: [Publish]\n      summary: Query host capabilities and protocol version\n      responses:\n        '200':\n          description: Protocol, server type, and storage\n  /v1/anonymous-credentials:\n    post:\n      tags: [Publish]\n      summary: Issue an anonymous ApiKey\n      description: The returned secret is shown once; store it safely before uploading.\n      responses:\n        '201':\n          description: The new anonymous user and ApiKey\n  /v1/uploads:\n    post:\n      tags: [Publish]\n      summary: Staged upload for two-phase publishing\n      security: [{ apiKey: [] }]\n      responses:\n        '201':\n          description: Staged\n  /v1/tacos:\n    post:\n      tags: [Publish]\n      summary: Publish a Taco\n      security: [{ apiKey: [] }]\n      responses:\n        '201':\n          description: Returns the reviewer url and tacoId\n          content:\n            application/json:\n              schema:\n                type: object\n                required: [tacoId, url]\n                properties:\n                  tacoId: { type: string }\n                  url: { type: string, format: uri }\n  /v1/tacos/{id}/state:\n    parameters:\n      - $ref: '#/components/parameters/TacoId'\n    get:\n      tags: [Review]\n      summary: Read the current shared review state\n      responses:\n        '200':\n          description: Current documents and comments\n    patch:\n      tags: [Review]\n      summary: Autosave (optimistic concurrency)\n      responses:\n        '200':\n          description: Saved\n        '409':\n          description: Version conflict; the client keeps its draft\n  /v1/tacos/{id}/handoffs:\n    parameters:\n      - $ref: '#/components/parameters/TacoId'\n    post:\n      tags: [Review]\n      summary: Reviewer clicks Handoff\n      description: Rejected when no listener is active; no review.handed_off is recorded.\n      responses:\n        '201':\n          description: Records review.handed_off\n  /v1/tacos/{id}/handoffs/{handoffId}:\n    parameters:\n      - $ref: '#/components/parameters/TacoId'\n      - name: handoffId\n        in: path\n        required: true\n        schema: { type: string }\n    get:\n      tags: [Review]\n      summary: Read an immutable handoff snapshot\n      responses:\n        '200':\n          description: This round's edits and comments\n  /v1/tacos/{id}/subscribe:\n    parameters:\n      - $ref: '#/components/parameters/TacoId'\n    get:\n      tags: [Events]\n      summary: Subscribe to the event stream (SSE)\n      responses:\n        '200':\n          description: text/event-stream\n  /v1/tacos/{id}/events:\n    parameters:\n      - $ref: '#/components/parameters/TacoId'\n      - name: after\n        in: query\n        schema: { type: integer }\n    get:\n      tags: [Events]\n      summary: Page through persisted events\n      responses:\n        '200':\n          description: Event list\n  /v1/tacos/{id}/listeners:\n    parameters:\n      - $ref: '#/components/parameters/TacoId'\n    get:\n      tags: [Events]\n      summary: Currently connected listeners\n      responses:\n        '200':\n          description: Listener list\ncomponents:\n  parameters:\n    TacoId:\n      name: id\n      in: path\n      required: true\n      schema: { type: string }\n  securitySchemes:\n    apiKey:\n      type: http\n      scheme: bearer\n",
+      "sourceHash": "19e3838b1e7e9835d3ae4124504e71f2a27bbf2688975ef534bb67b7f53d7f32"
+    },
+    {
+      "path": "taco/Features/Taco-Skill.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: Taco Skill\nstatus: Complete\nsummary: Teaches your agent to write, refresh, and read reviews\n---\n\n## What it is\n\nThe Taco Skill is the agent skill package (`skills/taco/`), paired with `taco-cli`. Once installed, your agent knows:\n\n- When to use Taco by default: only when a **multi-file complex design needs human review or sign-off**, or when **you explicitly ask for a Taco**. Exploratory chat and simple self-contained fixes stay in the conversation and repository, and document length alone never triggers a Taco;\n- How to pack a folder of documents into a `.taco.html` and receive one-click Handoff via `taco-cli open \u003cfile.taco.html> --listen` (or `taco-cli listen`);\n- How to apply your edits and comments back to the canonical source files and refresh the same Taco in place without losing threads or identity.\n\n## Installation\n\nGive your agent this prompt:\n\n```text\nFetch https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and follow it to install the Taco skill and taco-cli, creating the directories if needed. Then reply Installed taco. plus a short summary of how to make a Taco.\n```\n\nThe agent follows `docs/agent-installation.md` to install both the `taco` skill (`npx skills@latest add arcadia822/taco --skill=taco` or directory copy fallback) and `taco-cli` (`@tacobin/cli` or standalone binary), creating directories if needed. The install prompt does not package the current conversation, alter project rules, or set project-wide defaults; if anything fails, the agent reports the real cause without inventing a bypass.\n\n## What the agent does\n\n### Generate and refresh\n\n- Uses the skill's shell and writes your documents only into its data block (or runs `taco-cli pack` / `refresh`), never touching the application itself;\n- Keeps the document identity (`docId`), comment threads, navigation, and Checkpoints on refresh, so you always reopen the same Taco;\n- Excludes hidden files and other `.taco.html` files by default; HTML source files (`.html`) pack as read-only sandboxed pages without in-page editing or HTML text-selection comment anchors.\n\n### Show it to you\n\nAfter generating, the agent gives you a clickable link to the file and opens it in your browser when the host allows. It tells you truthfully whether it gave you a link, opened the file, or opened and verified it; it never presents a background check as something you have seen.\n\n### Process your review\n\n- Reads the local listener Handoff receipt, the clipboard Handoff text, or the `.taco.html` you saved;\n- Maps every edit and comment to the source files;\n- If a source file changed after packing, or a diff cannot be applied cleanly, it **reports the conflict and overwrites nothing**;\n- Replies with what changed and **never resolves a comment thread on your behalf**, leaving confirmation to you.\n\n### Follow project conventions\n\nIf the project has `.taco/` Checkpoint templates or existing process conventions such as `AGENTS.md` or Spec Kit, the agent follows them to decide which documents to write and whether to use Checkpoints; otherwise it does not forcibly enable Checkpoints. Small changes are not forced through a full staged process.\n\n### Update notice\n\nAt the start of each working session, the skill compares its version with the latest release. If a newer one exists it mentions it in one line at the end of a reply; it never upgrades itself.\n\n## Optional: Spec Kit integration\n\nIf you use [GitHub Spec Kit](https://github.com/github/spec-kit), you can additionally install the Taco extension. It refreshes each feature's Taco after specify, plan, tasks, and other steps, and provides `speckit.taco.review` to import review results, reporting conflicts instead of writing.\n\n```bash\nspecify extension add taco --from https://github.com/Arcadia822/taco/releases/latest/download/taco-extension.zip\n```\n\nThis is project-level wiring you request explicitly; you do not need it without Spec Kit.\n\n## Limits\n\n- Local review works offline; share links and online team review use [Tacobin](Tacobin.md).\n- The reviewed folder stays the source of truth. A file missing from the Taco never causes the agent to delete it from the repository.\n",
+      "sourceHash": "02e4aeaa51d55f7e2b176039887e9a89fe764c837c69d33bfb21ddf4f5358911"
+    },
+    {
+      "path": "taco/Features/Taco.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: Taco\nstatus: Complete\nsummary: The single-file review workspace itself\n---\n\n## What it is\n\nA Taco is a `.taco.html` file containing a set of documents, their folder structure, a reader and editor, and comment threads. Double-click it to open it in a browser, with no installation, sign-in, or network.\n\nOne Taco covers one topic. The agent packs a folder from the repository into a Taco, you review it, and the result goes back to the agent.\n\n## Reading\n\n- **File tree**: keeps the real folder structure. Top-level folders become categories automatically, or a navigation manifest can define custom groups.\n- **Entry document**: the page shown on open, marked **Entry** in the sidebar.\n- **Search**: `⌘K` / `Ctrl+K` searches file names and full text.\n- **Outline**: the headings of the current document on the right, highlighted as you scroll.\n\n## Rendering\n\n| File type | How it is shown | Example on this site |\n| --- | --- | --- |\n| Markdown | WYSIWYG editing; leading YAML becomes a properties panel | The properties at the top of every `.md` |\n| Mermaid (`.mmd` or code blocks in Markdown) | Diagram preview plus source; switch theme and direction, zoom full screen; syntax errors point to the line and column | [System components](../Architecture/System.mmd) |\n| JSON / YAML | Syntax-highlighted source editor | — |\n| OpenAPI (JSON / YAML) | An extra **Overview** of operations, parameters, and responses | [Tacobin API](../Architecture/Tacobin-API.yaml) |\n| Single-page HTML (`.html`) | Embedded read-only page in a sandboxed frame (not editable in place, no text-selection comment anchors inside the HTML) | — |\n| PNG and SVG images, audio, video | Embedded previews | — |\n| Other text files | Shown as source, with no guessing about the format | — |\n\nFiles Taco does not understand are kept as-is; they are never dropped when packing or saving.\n\n## Reviewing\n\n- **Comment on selected text**: select anything and comment. Comments are anchored to the quoted text and re-anchor after small edits.\n- **Finer anchors**: comment on a node of a Mermaid diagram or a single line of a code block.\n- **Threads**: reply, resolve, or reopen (threads are resolved by humans after confirming changes, never auto-resolved by the agent). Edit your own messages; deleting one leaves a placeholder so later replies keep their place.\n- **Edit directly**: change the text yourself instead of writing \"suggest changing A to B\".\n\n## Handoff\n\nClick **Handoff** in the top-right corner. When the agent is listening locally (`taco-cli open \u003cfile.taco.html> --listen` or `taco-cli listen`, installed alongside the skill), your unsaved edits and open comments are delivered directly; otherwise Taco copies this round's result to the clipboard:\n\n- A diff for every edited file;\n- Every open comment, with its file path, the quoted text, and the whole discussion;\n- Any Checkpoint status changes.\n\nPaste it to your agent and it can work through each item. Alternatively, save the file and give the whole `.taco.html` to the agent.\n\n## Saving\n\n**Save** writes your changes back into the `.taco.html` (in place when the browser supports it, otherwise as a download). **Save a copy** and **Save & unpack** are also available; the latter restores the files to a real folder on disk. You are warned before closing the page with unsaved changes.\n\n## Checkpoints\n\nWhen a topic has several documents that move forward in stages, add Checkpoints to the Taco:\n\n- Define stages as a dependency graph, for example \"Overview → Start → Features / Architecture → Roadmap\";\n- Each document has one of four statuses: To do, In progress, Complete, Frozen. A stage's status is aggregated from its documents;\n- Each document can carry **Requirements** written for its author, human or agent;\n- A required document that has not been written yet appears as **Not created**.\n\nThis site uses Checkpoints: open **Checkpoints** at the top of the sidebar. `Roadmap/Next-Phase.md` is a document that does not exist yet but already has its requirements written.\n\nCheckpoints are optional; a plain Taco is enough when you do not need stage tracking.\n\n## Complete and Lite\n\n| | Complete | Lite |\n| --- | --- | --- |\n| Application size | About 2.7 MB | About 190 KB |\n| Network | Fully offline | Editors, highlighting, and Mermaid load from a public CDN |\n| Best for | Recipients who may be offline, long-term archives | Online review, committing to a repository |\n\nIf Lite's CDN is unavailable, Markdown can still be edited as source.\n",
+      "sourceHash": "a9298763f7c1d0a58caffc38d21a79af6fd2a7005b9fdb0283fbac2806a5c551"
+    },
+    {
+      "path": "taco/Features/Tacobin.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: Tacobin\nstatus: Complete\nsummary: Share links and an online review relay for teams\n---\n\n## What it is\n\nA local Taco suits one person working with their own agent. When reviewers are not at your computer, such as colleagues, product managers, or external partners, use Tacobin:\n\n- The agent publishes the Taco to Tacobin and gets a **share link**;\n- Reviewers open the link and edit and comment in the browser, with **autosave**;\n- A reviewer clicks **Handoff**, the listening agent is notified immediately, and it fetches the complete result of the round.\n\nThe agent connects to Tacobin through `taco-cli` (installed alongside the skill); reviewers only need a browser to open the shared link.\n\nTo see hosted review in action, open this live demo: [Taco Docs (hosted)](https://taco.arcadia-han.com/t/2733ed73-8250-4cae-a1e5-27d5f409d535). Autosave, online listeners, and the explicit handoff exist there — the standalone Taco you are reading now has none of them.\n\n## What reviewers see\n\n- The same reading, editing, and commenting interface as a local Taco;\n- A name prompt on their first comment (self-reported, no sign-up);\n- Changes autosave in real time. A failed save can be retried; on a conflict your draft is kept, and the latest version loads only after you confirm discarding it;\n- Stacked avatars in the header show which people and agents are online; click them for the full listener list;\n- **Save** still works for keeping a local copy of the Taco.\n\n## The one rule that matters: Handoff is explicit\n\n**Comments and autosave are not a handoff, and they do not wake the agent.** Only when a reviewer finishes the round and clicks **Handoff** does Tacobin record a `review.handed_off` event, and only then does the agent start working.\n\n- If no agent is listening when Handoff is clicked, Tacobin records no handoff and instead shows commands to install the skill, install the CLI, and start subscribing;\n- An online avatar only means the agent is listening, not that your feedback has been read or handled.\n\n## How the agent connects to Tacobin\n\nThe agent uses these `taco-cli` commands to publish, update, and subscribe:\n\n| Command | What it does |\n| --- | --- |\n| `taco-cli publish \u003cfile.taco.html> --host \u003corigin> --dry-run` | Local preflight: lists the files and size to be published, sends no request |\n| `taco-cli publish \u003cfile.taco.html> --host \u003corigin>` | Publishes a new Taco and returns the reviewer `url` and the `tacoId` used afterwards |\n| `taco-cli update \u003ctacoId> \u003cfile.taco.html> [--base \u003crevisionId>] --host \u003corigin>` | Pushes a replacement revision to the existing Taco under the same URL, preserving comments and checkpoints (uses Host current revision if `--base` omitted) |\n| `taco-cli update \u003ctacoId> \u003cfile.taco.html> [--base \u003crevisionId>] --dry-run` | Checks the local revision payload without network access; includes a base revision only when specified |\n| `taco-cli subscribe \u003ctacoId> --host \u003corigin>` | Waits for Handoff: ignores ordinary comments and edits, exits after `review.handed_off` |\n| `taco-cli subscribe \u003ctacoId> --stream` | Receives every event continuously |\n| `taco-cli handoff \u003ctacoId> \u003chandoffId> --host \u003corigin>` | Reads the immutable snapshot of that handoff |\n| `taco-cli events \u003ctacoId> --after \u003csequence>` | Catches up after a disconnect; handoffs made while nobody listened are still retrievable |\n\nInitial publication creates a new Taco (`POST /v1/tacos`) with an immutable baseline. Subsequent review rounds update the existing Taco in-place via `taco-cli update \u003ctacoId> \u003cfile.taco.html> [--base \u003crevisionId>]` to preserve the stable reviewer URL, advance revision history, and retain comment threads and Checkpoint statuses. If `--base` is omitted, the CLI automatically uses the current revision from the Host; if provided, it strictly asserts that expected revision. If an installed CLI lacks network update support, it reports an unsupported error; it never silently falls back to `publish`.\n\n## Security\n\n- Check what will become public with `--dry-run` before publishing;\n- Anonymous publishing issues an access credential automatically; the agent stores it safely before uploading content;\n- A Taco with online collaboration enabled may carry access credentials. Do not forward it to other services, logs, or tickets without permission.\n\n## Limits\n\n- Tacobin is not the source of truth. Files in the repository remain authoritative; Tacobin only hosts this review round;\n- Publishing does not modify your local files;\n- Overwriting without a matching base revision, private hosting, and account sign-in are not supported yet.\n",
+      "sourceHash": "9f8cc47701bb8d931df3b1722a14654d3f07e3381948e4e3e0440f08278809ab"
+    },
+    {
+      "path": "taco/Overview.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: Overview\nstatus: Frozen\naudience: People meeting Taco for the first time\nupdated: 2026-10-03\n---\n\n## In one sentence\n\n**Work through the design with your agent, seamlessly.** Taco is a single-file design review workspace that stays easy to read, versions cleanly in your repository, and hands off in one click.\n\nThe documentation site you are reading right now is itself a Taco: files on the left, content in the middle, outline and comments on the right, and the Checkpoints view at the top of the sidebar tracks this documentation set's progress. There is no server and no database. Everything is inside a single `.taco.html` file.\n\n## The problem Taco solves\n\nWhen you design software or products with an agent, plans usually move like this: the agent writes a set of Markdown files in the repository, and you either open them one by one in an editor or paste them into a docs platform to annotate, then retype your feedback into the chat. The result:\n\n- You read in one place and edit in another, so feedback drifts away from the text it refers to;\n- Annotations made in a docs platform never make it back to the agent;\n- The plan leaves the repository and no longer shares history with the code.\n\nTaco packs every document for one topic into a file you open directly in a browser. You read, edit, and comment on selected text inside it. One click on **Handoff** turns your edits and comments into text an agent can act on. The agent updates the source files in the repository and refreshes the same Taco, keeping the comment threads and the document identity.\n\nBy default, your agent packs a Taco only when a multi-file complex design needs human review, or when you explicitly ask for one; exploratory chat and simple fixes stay in the conversation and repository, never triggered by length alone.\n\n```mermaid\nflowchart LR\n    A[\"Agent writes a plan\u003cbr/>(Markdown in the repo)\"] --> B[\"Generate / refresh\u003cbr/>the same Taco\"]\n    B --> C[\"You read, edit,\u003cbr/>and comment in a browser\"]\n    C --> D[\"Handoff\"]\n    D --> E[\"Agent updates\u003cbr/>the source files\"]\n    E --> B\n```\n\n## Three things that make Taco different\n\n### One file carries everything\n\nDocuments, the real folder structure, a reader, an editor, and comments all live in one file. Send it, commit it, archive it, open it offline. The recipient needs only a browser, not an account.\n\n### Humans and agents are both first-class\n\nYou get an interface built for reading: WYSIWYG editing, diagram previews, comments on selected text. The agent gets structured files and complete comment threads: every comment carries its file path and the quoted text, so nobody has to guess what \"here\" means.\n\n### Files stay the source of truth\n\nThe Markdown in your repository is always authoritative. Taco is only the carrier for transport and review. Markdown stays readable and diffable for git, agents, and command-line tools, and Taco never silently rewrites your source while rendering it.\n\n## Where it fits\n\n- **Engineering design** for a task or topic: requirements, approach, APIs, data models, task breakdown;\n- **Product design**: PRDs, interaction flows, copy;\n- Any document collaboration where the agent writes, a human reviews, and the agent revises.\n\nTaco does not provide real-time multi-user editing, version history, or accounts. For online team review, use [Tacobin](Features/Tacobin.md).\n\n## Three parts\n\n| Part | What it is | Read more |\n| --- | --- | --- |\n| Taco | The single-file design review workspace itself | [Taco](Features/Taco.md) |\n| Taco Skill | Equips your agent to create, refresh, and process Taco reviews, paired with `taco-cli` for local listening and automation | [Taco Skill](Features/Taco-Skill.md) |\n| Tacobin | Share links and an online review relay for teams | [Tacobin](Features/Tacobin.md) |\n\n## Design principles\n\n1. **Files first**: file content is the only source of truth.\n2. **Portable by default**: one file to open, copy, archive, and share.\n3. **Derived UI**: the tree, outline, Checkpoint progress, and search are derived from the files, not a second copy of the data.\n4. **No invisible rewrite**: rendering never reformats your Markdown behind your back.\n5. **Honest scope**: a local Taco supports review and handoff; it does not pretend to be a real-time collaboration tool.\n\n## Where to go next\n\n- Get started right away: [Quickstart](Start/Quickstart.md)\n- See what each part does: start with [Taco](Features/Taco.md)\n- Learn how it is built: [Architecture](Architecture/Architecture.md)\n",
+      "sourceHash": "e21c5778f820da4ac90237070d8b38f4103bd4b9e63e0a93adc3624d742fd47d"
+    },
+    {
+      "path": "taco/Roadmap.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: Roadmap\nstatus: In progress\nupdated: 2026-10-03\n---\n\n## Done\n\n- **Single-file container**: documents, reader, editor, and comments in one offline-capable `.taco.html`;\n- **Review and handoff**: comments on selected text, Mermaid nodes, and code lines; Handoff;\n- **Structured rendering**: YAML properties panel, JSON/YAML source editing, OpenAPI overview, Mermaid preview and syntax checks;\n- **Embedded single-page HTML**: generated `.html` pages pack into the Taco and render inline in a sandbox;\n- **Checkpoints**: stage graph, four statuses, document requirements, not-created placeholders, project templates;\n- **Lite shell**: an online edition of about 190 KB;\n- **Tacobin online review**: share links, autosave, explicit handoff, `taco-cli` subscriptions.\n\n## In progress\n\n### The second review round\n\nAfter a person hands feedback to the agent, round two needs a faster way to confirm what changed and whether it changed correctly:\n\n- **Global discussions list**: every comment thread on one page, filterable by status and file;\n- **This round's changes**: only the real changes from this round's baseline to the current content, with one click to the exact spot;\n- **Human confirmation**: the agent can explain how it handled a comment, but only a person can confirm and close the discussion.\n\n## Planned\n\n- **Document templates and writing guidance**: built-in templates for requirements, architecture, and interaction design, so agents write clearly structured documents;\n- **Real two-round regression**: run \"generate → review → hand off → revise → round two\" end to end with common agent hosts, covering stale copies and concurrent edits.\n\n## Open\n\nHow to split the next phase is still under discussion; see `Roadmap/Next-Phase.md` (not created yet).\n",
+      "sourceHash": "d350191c174b44cf2d3e5adb6d869c0aa033aa285b7056ea11adbc2e795f1473"
+    },
+    {
+      "path": "taco/Start/FAQ.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: FAQ\nstatus: Complete\n---\n\n## Why an HTML file?\n\nBecause everyone already has a browser. A `.taco.html` opens with a double-click, with no software to install, no account, and no server. It is still an ordinary file you can commit, email, and archive.\n\n## Does it work offline?\n\nThe Complete edition is fully offline: every editor and rendering library is embedded in the file. The Lite edition loads its editors from a public CDN; if loading fails, Markdown can still be edited as source.\n\n## How does it work with git?\n\nThe Markdown in your repository is authoritative: commit, diff, and review it as usual. The Taco file can be committed alongside the documents or generated only for review.\n\n## Will it mess up my Markdown?\n\nNo. Taco never reformats your source while rendering, and anything you did not change does not appear in the handoff diff.\n\n## How does the agent get my comments?\n\nTwo ways: click **Handoff** — with the agent listening locally your unsaved edits and comments are delivered directly, otherwise they are copied as text for you to paste; or save the file and let the agent read the data inside the `.taco.html`. With Tacobin, the agent fetches a handoff snapshot through `taco-cli`.\n\n## Does it support real-time collaboration?\n\nA local Taco does not. For online review with several people, use [Tacobin](../Features/Tacobin.md): multiple reviewers can edit and comment at the same time, with autosave.\n\n## Which files are supported?\n\nMarkdown, Mermaid, JSON, YAML (with an OpenAPI overview), PNG/SVG images, audio/video, and single-page HTML. Other text files are shown as source. An `.html` page is embedded read-only in a sandboxed frame that blocks all external network access, so a self-contained page renders fully.\n\n## How big is a Taco?\n\nThe application part is about 2.7 MB for Complete and about 190 KB for Lite, plus your documents.\n\n## Do I need Spec Kit or Checkpoints?\n\nNeither. Both are optional; any Markdown folder can become a Taco.\n\n## Is it open source?\n\nYes, under the MIT license, at [github.com/Arcadia822/taco](https://github.com/Arcadia822/taco). Taco's inspiration and core code come from [Bento](https://github.com/nyblnet/bento).\n",
+      "sourceHash": "cf1cbf32a023823042f4a1719d79f1f2f4355d3fa248a886ab04e161735ec3d9"
+    },
+    {
+      "path": "taco/Start/Quickstart.md",
+      "mediaType": "text/markdown",
+      "content": "---\ntitle: Quickstart\nstatus: Complete\ntime: About 5 minutes\n---\n\n## 1. Ask your agent to install Taco\n\nSend this to the agent you use (Claude Code, Codex, Cursor, and others):\n\n```text\nFetch https://github.com/Arcadia822/taco/blob/main/docs/agent-installation.md and follow it to install the Taco skill and taco-cli, creating the directories if needed. Then reply Installed taco. plus a short summary of how to make a Taco.\n```\n\nThe agent follows the guide to install both the `taco` skill and `taco-cli` (creating directories if needed), then replies `Installed taco.` with a summary of Taco's core capabilities and default scope: Taco is used proactively only when a multi-file complex design needs human review, or when you explicitly ask for one; exploratory chat and simple fixes are not packaged, and document length alone never triggers it. If installation fails, the agent reports the real cause.\n\n## 2. Ask your agent for a plan, as a Taco\n\n```text\nWrite a design for \"export orders as CSV\" (requirements, approach, API) in specs/order-export/, and give it to me for review as a Taco.\n```\n\nAfter writing the Markdown, the agent packs the folder into a `.taco.html` file and opens it in your browser (using `taco-cli open \u003cfile.taco.html> --listen` when listening locally).\n\n## 3. Review in the browser\n\n- Select a sentence, click **Comment**, and write specific feedback;\n- Fix typos or wording directly in the text;\n- You can also comment on a diagram node or a single line of a code block; embedded single-page `.html` files are read-only inside a sandbox, so comments about them go on the Markdown document that links to them.\n\n## 4. Hand off to the agent\n\nClick **Handoff** in the top-right corner. When the agent is listening locally, your unsaved edits and open comments are delivered directly; otherwise a diff of your edits and all open comments are copied to the clipboard to paste to your agent.\n\n## 5. Check round two\n\nAfter updating the source files, the agent refreshes the **same** Taco and opens it again. The comment threads stay open with the agent's replies — the agent never resolves threads on your behalf. Check each item, click **Resolve** when you are satisfied, or reply to keep the discussion going.\n\n---\n\nTo see what each part does, read [Taco](../Features/Taco.md), [Taco Skill](../Features/Taco-Skill.md), and [Tacobin](../Features/Tacobin.md).\n\n> You can also select text and comment, or edit the content, right here on this site. This is a standalone Taco: no online listener and no autosave — **Handoff** only copies the content to your clipboard, and you give it to your agent yourself. Edits live in your browser; reload the page and everything goes back to how it was.\n",
+      "sourceHash": "0b978d80af0aaaa603a97971039f10aa72dc145e88314cdd79573753c617df04"
+    }
+  ],
   "packOptions": {
     "ignore": []
   },
   "navigation": {
     "version": 1,
-    "entry": "spec.md",
-    "groups": [
-      {
-        "id": "requirements",
-        "title": "Requirements",
-        "paths": [
-          "spec.md"
-        ]
-      },
-      {
-        "id": "design",
-        "title": "Design",
-        "paths": [
-          "data-model.mmd",
-          "flows/anonymous-publish.mmd"
-        ]
-      },
-      {
-        "id": "api",
-        "title": "API",
-        "paths": [
-          "contracts/openapi.yaml"
-        ]
-      }
-    ]
+    "entry": "taco/Overview.md",
+    "groups": []
   },
-  "files": [
-    {
-      "title": "008-taco-host-contract",
-      "path": "specs/008-taco-host-contract/spec.md",
-      "mediaType": "text/markdown",
-      "content": "## 1. Status and scope\n\nThis is a usage contract and interface design under review; it does not mean the commands or service already exist. Directions the user has confirmed are recorded separately from the interface details proposed here. This is not an implementation plan and does not move existing directories.\n\nConfirmed in review: JSON output by default; everything is public by default, with no visibility switch; anonymous publishing works and the minimal flow has no login; the Host defaults to `http://localhost:32167` and honors an environment variable; Taco and Revision use UUIDs; the first release ships complete help and a built-in skill in the binary. OAuth `taco-cli login` is deferred; ApiKeys are used for now. Automatic anonymous keys, concrete APIs, exit codes, limits and retention described here are still implementation proposals, not shipped behavior.\n\n## User and ApiKey\n\nA User is either anonymous or registered. An anonymous User is a holder identity that cannot pass as a named account and needs no sign-up or OAuth. Later, provider/subject will be unique; users are never identified by an editable name or email. The first release has no OAuth or web login; public fields are defined in OpenAPI and internal relations in the data model.\n\nAn ApiKey is a high-entropy random credential owned by a User: the plaintext is returned once in the creation response and the server stores only a digest; it never appears in URLs, logs, shared data or exports. The first release has no scopes; one key stands for one user, and a Taco belongs to the User, not the key.\n\nProposed anonymous publishing: with no credential, the CLI calls `POST /v1/anonymous-credentials`; the Host creates an anonymous User and issues its ApiKey; the CLI stores the key safely, then publishes. The user only runs publish — no separate login or sign-up. This still uses just User and ApiKey, with no per-document admin token. The bootstrap endpoint is rate-limited and abuse-controlled and never accepts a client-chosen userId. If the key response is lost, at most an anonymous identity with no Taco is left behind for cleanup; content is never uploaded before the credential is stored. Once the first Taco is published the credential is saved, and a lost response is recovered with the same key and idempotency key. A lost anonymous key cannot be taken over through a public UUID; the first release has no anonymous recovery or claiming. Existing Users and ApiKeys can be provisioned by Host operators, and no OAuth is needed today.\n",
-      "sourceHash": "97396959bca8d6e8fc52b486bc332f86046a5e5f3476abfa4e3d2f6090c709f3"
-    },
-    {
-      "title": "Taco Host data model",
-      "path": "specs/008-taco-host-contract/data-model.mmd",
-      "mediaType": "text/plain",
-      "content": "erDiagram\n  USER ||--o{ API_KEY : \"holds\"\n  USER ||--o{ TACO : \"owns\"\n  TACO ||--|{ REVISION : \"versions\"\n  REVISION ||--o{ REVIEW_EVENT : \"reviews\"\n  USER {\n    uuid id PK\n    string kind \"anonymous | registered\"\n    datetime createdAt\n  }\n  API_KEY {\n    uuid id PK\n    uuid userId FK\n    string secretHash \"SHA-256; plaintext returned once\"\n    datetime createdAt\n  }\n  TACO {\n    uuid id PK\n    uuid ownerId FK\n    string lifecycle \"open | closed | deleted\"\n    datetime expiresAt\n  }\n  REVISION {\n    uuid id PK\n    uuid tacoId FK\n    string blobKey\n    datetime committedAt\n  }\n  REVIEW_EVENT {\n    uuid id PK\n    uuid revisionId FK\n    string kind \"comment | confirm | feedback-done\"\n    datetime createdAt\n  }\n",
-      "sourceHash": "63eecbc3d653400169dc2ab3adcf474bde9d4cb9e4bd13da1ca84b779afe54f7"
-    },
-    {
-      "title": "Anonymous publish flow",
-      "path": "specs/008-taco-host-contract/flows/anonymous-publish.mmd",
-      "mediaType": "text/plain",
-      "content": "flowchart TD\n  A[\"taco-cli publish\"] --> B{\"ApiKey for this Host on this machine?\"}\n  B -->|yes| E[\"POST /v1/uploads to request a direct upload\"]\n  B -->|no| C[\"POST /v1/anonymous-credentials\"]\n  C --> D[\"Store the key safely first\"]\n  D --> E\n  E --> F[\"PUT the private blob\"]\n  F --> G[\"POST /v1/tacos to commit the revision\"]\n  G --> H[\"Return tacoId and share link\"]\n",
-      "sourceHash": "0e60fd47c377676aef05307942463fa08683c6890fe2cdb7b1bca23f4d87e492"
-    },
-    {
-      "title": "Taco Host API",
-      "path": "specs/008-taco-host-contract/contracts/openapi.yaml",
-      "mediaType": "application/yaml",
-      "content": "openapi: 3.1.0\ninfo:\n  title: Taco Host API\n  version: 1.0.0-draft\n  description: >-\n    Taco Host server HTTP contract (demo excerpt).\n    Public by default; management calls authenticate the owner with a Bearer ApiKey.\nservers:\n  - url: http://localhost:32167\n    description: Default address for local development and loopback tests\npaths:\n  /v1/anonymous-credentials:\n    post:\n      summary: Bootstrap an anonymous User and issue an ApiKey\n      description: Called by the CLI on its first publish without a credential; the plaintext secret is returned only in this response.\n      operationId: createAnonymousCredentials\n      responses:\n        '201':\n          description: Anonymous identity and ApiKey created\n          content:\n            application/json:\n              schema:\n                type: object\n                required: [user, apiKey]\n                properties:\n                  user:\n                    type: object\n                    properties:\n                      id: { type: string, format: uuid }\n                      kind: { type: string, enum: [anonymous] }\n                  apiKey:\n                    type: object\n                    properties:\n                      id: { type: string, format: uuid }\n                      secret: { type: string, description: plaintext returned once }\n        '429':\n          description: IP / rate limit exceeded\n  /v1/uploads:\n    post:\n      summary: Reserve an upload and get a signed private PUT URL\n      operationId: createUpload\n      security: [{ bearer: [] }]\n      responses:\n        '201':\n          description: Reservation and a short-lived PUT URL\n          content:\n            application/json:\n              schema:\n                type: object\n                properties:\n                  reservationId: { type: string, format: uuid }\n                  putUrl: { type: string, format: uri }\n                  expiresAt: { type: string, format: date-time }\n  /v1/tacos:\n    post:\n      summary: Publish a new Taco with its first Revision\n      operationId: createTaco\n      security: [{ bearer: [] }]\n      responses:\n        '201':\n          description: Published\n          content:\n            application/json:\n              schema:\n                type: object\n                properties:\n                  tacoId: { type: string, format: uuid }\n                  revisionId: { type: string, format: uuid }\n                  url: { type: string, format: uri }\n        '409':\n          description: Idempotency key conflict\n  /v1/tacos/{id}:\n    get:\n      summary: Get public Taco metadata\n      operationId: getTaco\n      parameters:\n        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }\n      responses:\n        '200':\n          description: Taco metadata\n        '404':\n          description: Not found or deleted\n  /v1/tacos/{id}/reviews:\n    get:\n      summary: Get aggregated review data for a revision\n      operationId: listReviews\n      parameters:\n        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }\n      responses:\n        '200':\n          description: Comment threads and confirmation state\n    post:\n      summary: Submit a review action or state change\n      operationId: submitReview\n      parameters:\n        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }\n      responses:\n        '202':\n          description: Written to the event log\n  /v1/tacos/{id}/subscribe:\n    get:\n      summary: WebSocket live event subscription\n      operationId: subscribeTaco\n      parameters:\n        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }\n      responses:\n        '101':\n          description: Upgraded to WebSocket\ncomponents:\n  securitySchemes:\n    bearer: { type: http, scheme: bearer }\n",
-      "sourceHash": "0c0a1b0bf205c37d72845a5d78b0ffb6abb06414623592c9613b9bb9dc02e087"
-    }
-  ],
-  "comments": [
-    {
-      "id": "demo-thread-anon-key",
-      "anchor": {
-        "path": "specs/008-taco-host-contract/spec.md",
-        "position": {
-          "start": 421,
-          "end": 481
-        },
-        "quote": {
-          "exact": "anonymous publishing works and the minimal flow has no login",
-          "prefix": "with no visibility switch; ",
-          "suffix": "; the Host defaults to "
-        }
-      },
-      "status": "open",
-      "messages": [
-        {
-          "id": "demo-thread-anon-key-m1",
-          "author": "arcadia",
-          "body": "How long does the ApiKey issued for anonymous publishing last, and how is it reclaimed? Please add the fields to data-model.mmd.",
-          "createdAt": "2026-09-22T09:30:00.000Z"
-        }
-      ],
-      "createdAt": "2026-09-22T09:30:00.000Z",
-      "updatedAt": "2026-09-22T09:30:00.000Z"
-    },
-    {
-      "id": "demo-thread-review-kind",
-      "anchor": {
-        "path": "specs/008-taco-host-contract/data-model.mmd",
-        "position": {
-          "start": 643,
-          "end": 690
-        },
-        "quote": {
-          "exact": "string kind \"comment | confirm | feedback-done\"",
-          "prefix": "visionId FK\n    ",
-          "suffix": "\n    datetime cr"
-        }
-      },
-      "status": "open",
-      "messages": [
-        {
-          "id": "demo-thread-review-kind-m1",
-          "author": "lin",
-          "body": "The spec says confirmations and feedback-done are review data, not body comments. Should confirm / feedback-done really share one kind with comment?",
-          "createdAt": "2026-09-22T09:12:00.000Z"
-        }
-      ],
-      "createdAt": "2026-09-22T09:12:00.000Z",
-      "updatedAt": "2026-09-22T09:12:00.000Z"
-    },
-    {
-      "id": "demo-thread-save-key",
-      "anchor": {
-        "path": "specs/008-taco-host-contract/flows/anonymous-publish.mmd",
-        "position": {
-          "start": 202,
-          "end": 233
-        },
-        "quote": {
-          "exact": "D[\"Store the key safely first\"]",
-          "prefix": "tials\"]\n  C --> ",
-          "suffix": "\n  D --> E\n  E -"
-        }
-      },
-      "status": "open",
-      "messages": [
-        {
-          "id": "demo-thread-save-key-m1",
-          "author": "arcadia",
-          "body": "Missing failure branch: if the key is not persisted, never upload content — fail and exit.",
-          "createdAt": "2026-09-22T09:12:00.000Z"
-        }
-      ],
-      "createdAt": "2026-09-22T09:12:00.000Z",
-      "updatedAt": "2026-09-22T09:12:00.000Z"
-    },
-    {
-      "id": "demo-thread-409",
-      "anchor": {
-        "path": "specs/008-taco-host-contract/contracts/openapi.yaml",
-        "position": {
-          "start": 2490,
-          "end": 2527
-        },
-        "quote": {
-          "exact": "description: Idempotency key conflict",
-          "prefix": "409':\n          ",
-          "suffix": "\n  /v1/tacos/{id"
-        }
-      },
-      "status": "open",
-      "messages": [
-        {
-          "id": "demo-thread-409-m1",
-          "author": "lin",
-          "body": "The 409 body should return the existing tacoId and revisionId so the CLI can recover with the idempotency key.",
-          "createdAt": "2026-09-22T09:12:00.000Z"
-        }
-      ],
-      "createdAt": "2026-09-22T09:12:00.000Z",
-      "updatedAt": "2026-09-22T09:12:00.000Z"
-    }
-  ],
   "checkpoints": {
     "version": 1,
-    "template": "008 Host Protocol",
+    "template": "Taco documentation site",
     "nodes": [
       {
-        "id": "spec",
-        "title": "Specification",
+        "id": "1-overview",
+        "title": "Overview",
         "after": [],
         "documents": [
           {
-            "path": "specs/008-taco-host-contract/spec.md",
-            "instruction": "Record confirmed decisions separately from still-open interface detail; this review approves direction, not an implementation plan."
+            "path": "taco/Overview.md",
+            "instruction": "Explain the positioning, three differentiators, and three parts on one screen; readable without any interaction."
           }
         ]
       },
       {
-        "id": "architecture",
-        "title": "Architecture & Model",
+        "id": "2-start",
+        "title": "Start",
         "after": [
-          "spec"
+          "1-overview"
         ],
         "documents": [
           {
-            "path": "specs/008-taco-host-contract/data-model.mmd",
-            "instruction": "Must enumerate every anonymous-credential field with its lifetime and revocation path, and the idempotency-key conflict handling, before openapi.yaml is frozen."
+            "path": "taco/Start/Quickstart.md",
+            "instruction": "At most 5 steps from installation to the first handoff."
           },
           {
-            "path": "specs/008-taco-host-contract/flows/anonymous-publish.mmd"
+            "path": "taco/Start/FAQ.md"
           }
         ]
       },
       {
-        "id": "contracts",
-        "title": "API Contract",
+        "id": "3-features",
+        "title": "Features",
         "after": [
-          "architecture"
+          "2-start"
         ],
         "documents": [
           {
-            "path": "specs/008-taco-host-contract/contracts/openapi.yaml"
+            "path": "taco/Features/Taco.md",
+            "instruction": "Describe implemented capabilities only; for each, point to an example file on this site."
+          },
+          {
+            "path": "taco/Features/Taco-Skill.md"
+          },
+          {
+            "path": "taco/Features/Tacobin.md",
+            "instruction": "Explain how taco-cli and Tacobin divide the work; stress that comments and autosave are not a handoff."
+          }
+        ]
+      },
+      {
+        "id": "4-architecture",
+        "title": "Architecture",
+        "after": [
+          "2-start"
+        ],
+        "documents": [
+          {
+            "path": "taco/Architecture/Architecture.md"
+          },
+          {
+            "path": "taco/Architecture/System.mmd"
+          },
+          {
+            "path": "taco/Architecture/Tacobin-API.yaml",
+            "instruction": "Complete request and response schemas after checking each endpoint against the server; never add endpoints that do not exist."
+          }
+        ]
+      },
+      {
+        "id": "5-roadmap",
+        "title": "Roadmap",
+        "after": [
+          "3-features",
+          "4-architecture"
+        ],
+        "documents": [
+          {
+            "path": "taco/Roadmap.md"
+          },
+          {
+            "path": "taco/Roadmap/Next-Phase.md",
+            "instruction": "List next-phase topics; for each, state the problem, the existing capabilities it depends on, and whether it needs a human decision. Leave out finished work."
           }
         ]
       }
     ],
     "documents": [
       {
-        "path": "specs/008-taco-host-contract/spec.md",
+        "path": "taco/Overview.md",
         "status": "freeze",
-        "updatedAt": "2026-09-23T08:00:00.000Z"
+        "updatedAt": "2026-10-02T08:00:00.000Z"
       },
       {
-        "path": "specs/008-taco-host-contract/data-model.mmd",
+        "path": "taco/Start/Quickstart.md",
+        "status": "complete",
+        "updatedAt": "2026-10-02T08:00:00.000Z"
+      },
+      {
+        "path": "taco/Start/FAQ.md",
+        "status": "complete",
+        "updatedAt": "2026-10-02T08:00:00.000Z"
+      },
+      {
+        "path": "taco/Features/Taco.md",
+        "status": "complete",
+        "updatedAt": "2026-10-02T08:00:00.000Z"
+      },
+      {
+        "path": "taco/Features/Taco-Skill.md",
+        "status": "complete",
+        "updatedAt": "2026-10-02T08:00:00.000Z"
+      },
+      {
+        "path": "taco/Features/Tacobin.md",
+        "status": "complete",
+        "updatedAt": "2026-10-02T08:00:00.000Z"
+      },
+      {
+        "path": "taco/Architecture/Architecture.md",
+        "status": "complete",
+        "updatedAt": "2026-10-03T08:00:00.000Z"
+      },
+      {
+        "path": "taco/Architecture/System.mmd",
+        "status": "complete",
+        "updatedAt": "2026-10-03T08:00:00.000Z"
+      },
+      {
+        "path": "taco/Roadmap.md",
         "status": "in_progress",
-        "updatedAt": "2026-09-23T09:00:00.000Z"
-      },
-      {
-        "path": "specs/008-taco-host-contract/flows/anonymous-publish.mmd",
-        "status": "todo",
-        "updatedAt": "2026-09-23T09:00:00.000Z"
-      },
-      {
-        "path": "specs/008-taco-host-contract/contracts/openapi.yaml",
-        "status": "todo",
-        "updatedAt": "2026-09-23T08:30:00.000Z"
+        "updatedAt": "2026-10-03T08:00:00.000Z"
       }
     ]
-  }
-}
-</script>
+  },
+  "comments": [
+    {
+      "id": "thread-1",
+      "anchor": {
+        "path": "taco/Overview.md",
+        "position": {
+          "start": 1213,
+          "end": 1296
+        },
+        "quote": {
+          "exact": "Taco packs every document for one topic into a file you open directly in a browser.",
+          "prefix": " shares history with the code.\n\n",
+          "suffix": " You read, edit, and comment on "
+        }
+      },
+      "status": "open",
+      "messages": [
+        {
+          "id": "message-1-1",
+          "author": "arcadia",
+          "authorId": "demo-arcadia",
+          "body": "Let’s add a short paragraph right after this on when Taco is used by default: only when a multi-file complex design needs human review, or when the user asks for one — exploratory chat and simple fixes stay in the chat and repo.",
+          "createdAt": "2026-10-03T01:00:00.000Z"
+        },
+        {
+          "id": "message-1-2",
+          "author": "agent",
+          "authorId": "demo-agent",
+          "body": "Added the default scope paragraph right below and refreshed this Taco. Leaving the thread open for you to confirm.",
+          "createdAt": "2026-10-03T05:00:00.000Z"
+        }
+      ],
+      "createdAt": "2026-10-03T01:00:00.000Z",
+      "updatedAt": "2026-10-03T05:00:00.000Z"
+    },
+    {
+      "id": "thread-2",
+      "anchor": {
+        "path": "taco/Features/Taco.md",
+        "position": {
+          "start": 4426,
+          "end": 4495
+        },
+        "quote": {
+          "exact": "If Lite's CDN is unavailable, Markdown can still be edited as source.",
+          "prefix": ", committing to a repository |\n\n",
+          "suffix": "\n"
+        }
+      },
+      "status": "open",
+      "messages": [
+        {
+          "id": "message-2-1",
+          "author": "mo",
+          "authorId": "demo-mo",
+          "body": "Which one do we recommend by default, Lite or Complete? The table doesn't say.",
+          "createdAt": "2026-10-02T01:00:00.000Z"
+        },
+        {
+          "id": "message-2-2",
+          "author": "arcadia",
+          "authorId": "demo-arcadia",
+          "body": "Lite for committing to a repository and online review; Complete for recipients who may be offline. Added to the FAQ — does that look clear to you?",
+          "createdAt": "2026-10-02T02:00:00.000Z"
+        }
+      ],
+      "createdAt": "2026-10-02T01:00:00.000Z",
+      "updatedAt": "2026-10-02T02:00:00.000Z"
+    },
+    {
+      "id": "thread-3",
+      "anchor": {
+        "path": "taco/Features/Tacobin.md",
+        "position": {
+          "start": 1529,
+          "end": 1601
+        },
+        "quote": {
+          "exact": "Comments and autosave are not a handoff, and they do not wake the agent.",
+          "prefix": "matters: Handoff is explicit\n\n**",
+          "suffix": "** Only when a reviewer finishes"
+        }
+      },
+      "status": "open",
+      "messages": [
+        {
+          "id": "message-3-1",
+          "author": "lin",
+          "authorId": "demo-lin",
+          "body": "Plenty of reviewers will comment and just close the tab. After autosave succeeds, should the page say \"not handed off yet\"?",
+          "createdAt": "2026-10-03T02:00:00.000Z"
+        },
+        {
+          "id": "message-3-2",
+          "author": "arcadia",
+          "authorId": "demo-arcadia",
+          "body": "Agreed, that's a real risk. Logging it for now; we'll design the prompt together with the second review round.",
+          "createdAt": "2026-10-03T03:00:00.000Z"
+        }
+      ],
+      "createdAt": "2026-10-03T02:00:00.000Z",
+      "updatedAt": "2026-10-03T03:00:00.000Z"
+    },
+    {
+      "id": "thread-4",
+      "anchor": {
+        "path": "taco/Roadmap.md",
+        "position": {
+          "start": 956,
+          "end": 979
+        },
+        "quote": {
+          "exact": "Global discussions list",
+          "prefix": "ther it changed correctly:\n\n- **",
+          "suffix": "**: every comment thread on one "
+        }
+      },
+      "status": "open",
+      "messages": [
+        {
+          "id": "message-4-1",
+          "author": "mo",
+          "authorId": "demo-mo",
+          "body": "Can the global discussions list hold topics that aren't attached to any document, like overall architecture direction?",
+          "createdAt": "2026-10-03T04:00:00.000Z"
+        }
+      ],
+      "createdAt": "2026-10-03T04:00:00.000Z",
+      "updatedAt": "2026-10-03T04:00:00.000Z"
+    }
+  ]
+}</script>
 
 
   </head>
