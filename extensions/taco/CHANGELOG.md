@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.18.1](https://github.com/Arcadia822/taco/compare/v0.18.0...v0.18.1) (2026-10-14)
+
+### Chores & Maintenance
+
+* test: 补齐主要验证场景并接入 CI（TACO-81） (#153) ([f63db7f](https://github.com/Arcadia822/taco/commit/f63db7f7ea609b82b8e0f81aa46e2bb7423cca5e))
+
 ## [0.18.0](https://github.com/Arcadia822/taco/compare/v0.17.0...v0.18.0) (2026-10-13)
 
 ### Features
