@@ -10,6 +10,11 @@ artifacts/
 dist-single/*.taco.html
 demo-spec/*.taco.html
 tests/fixtures/**/*.taco.html
+
+# Feature review snapshots stay local; retain the fixture used by host smoke scripts
+specs/**/*.taco.html
+!specs/008-taco-host-contract/008-taco-host-contract.taco.html
+docs/tacos/*.taco.html
 .vercel
 # npm pack artifacts
 *.tgz
@@ -20,3 +25,6 @@ dist-extension/
 
 # Temporary directory for local verification files
 tmp/
+
+# GitNexus is opt-in per project; keep any regenerated local index untracked
+.gitnexus/
