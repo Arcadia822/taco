@@ -19,7 +19,7 @@ concurrency:
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
@@ -43,6 +43,36 @@ jobs:
       - name: Smoke-test the built single-file shell
         run: npm run test:browser
 
+      - name: Verify major browser workflows without agents
+        run: npm run test:verify -- --out artifacts/verify-taco/ci-suite
+
+      - name: Set up Bun for the CLI build
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Build the standalone CLI
+        run: npm run build --workspace @tacobin/cli
+
+      - name: Verify CLI packaging, extraction, and reviewed-file conflicts
+        run: node .agents/skills/verify-taco/scripts/verify.mjs --scenario .agents/skills/verify-taco/scripts/cli.mjs --out artifacts/verify-taco/ci-cli
+
+      - name: Smoke-test the CLI toolbox and two-round listener handoff
+        env:
+          TACO_SMOKE_OUT: artifacts/smoke-toolbox
+        run: npm run test:toolbox
+
+      - name: Upload browser and CLI verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-toolbox-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/verify-taco/
+            artifacts/smoke-toolbox/
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Verify committed build artifacts
         shell: bash
         run: |
@@ -57,6 +87,46 @@ jobs:
             echo "$stale"
             exit 1
           fi
+
+  host-smoke:
+    name: Tacobin local Host verification without agents
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set up Bun for the real remote CLI
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Build the standalone CLI and current shells
+        run: npm run build --workspace @tacobin/cli
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify real Host routes and browser persistence
+        run: npm run test:host -- --out artifacts/smoke-host/ci
+
+      - name: Upload Host verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: host-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/smoke-host/
+          if-no-files-found: warn
+          retention-days: 14
 
   spec-kit-extension:
     name: Spec Kit ${{ matrix.spec-kit-version }} extension install
