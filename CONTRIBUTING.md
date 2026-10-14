@@ -51,6 +51,20 @@ npm run test:browser
 
 The smoke test fails on an uncaught page error, on an embedded bundle that disagrees with the public `window.taco` API, or when the sidebar and Markdown reader never mount the selected file. On Linux CI, `npx playwright install --with-deps chromium` also installs the required system libraries.
 
+The major-workflow suite runs synthetic Complete/Lite reviews through browser actions and saves/reopens the results. CLI and Host proof use separate real runtimes:
+
+```bash
+npm run test:verify
+npm run build --workspace @tacobin/cli # Bun required
+node .agents/skills/verify-taco/scripts/verify.mjs --scenario .agents/skills/verify-taco/scripts/cli.mjs
+npm run test:toolbox
+npm run test:host
+```
+
+`test:verify` covers 51 browse/search, editing/file management, comments, saving/Handoff, Checkpoints and variant cases. For local development, use `npm run test:verify -- --feature comments`; CI rejects case/domain filters and runs the full registry. The separate CLI scenario proves packaging exclusions, byte-preserving extraction, reviewed-file diffs and conflict refusal after the CLI build. `test:toolbox` observes real two-round listener receipts. `test:host` builds an isolated local Next workspace, uses temporary SQLite and a fresh CSRF secret, and verifies nine browser/CLI persistence, Handoff, conflict and CSRF cases without production credentials. These commands require no Agent or model. Existing Vitest and Spec Kit installation checks remain separate gates.
+
+Runs retain screenshots, ARIA, actions/network, traces, downloads and result manifests under `artifacts/verify-taco/`, `artifacts/smoke-host/`, and the toolbox output directory printed by the smoke (`TACO_SMOKE_OUT=artifacts/smoke-toolbox` in CI). CI uploads this evidence on success and failure. Native file/directory picker permission, OS browser transitions, live CDN delivery, production deployment and an agent acting on Handoff need their own checks and are not reported as automated passes.
+
 ## Generated artifacts
 
 `dist-single/Taco_Spec.taco.html` is ignored local build output. `extensions/taco/assets/taco-shell.html` is the tracked generated shell consumed directly by the Spec Kit integration, so source changes that affect the build must update it.

@@ -1,5 +1,5 @@
 ---
-title: "Track required documents with Checkpoints"
+title: 'Track required documents with Checkpoints'
 ---
 
 Review a document dependency graph, update readiness statuses, read required-document instructions and retain missing requirements after file changes.
@@ -22,7 +22,7 @@ Review a document dependency graph, update readiness statuses, read required-doc
 
 ## Driving it with Playwright
 
-Preconditions: a valid Checkpoint graph is required. The default production Taco has none. Use the generated current-shell example `skills/taco/templates/spec/empty.taco.html` as a read-only seed: `node .cursor/skills/verify-taco/scripts/verify.mjs --artifact skills/taco/templates/spec/empty.taco.html --scenario tmp/verify-taco-checkpoints.mjs`. This isolates browser mutations from the seed. For missing-file/instruction cases, assemble a disposable Taco by copying a current stock shell and changing only its `#taco-document` JSON, preserving the full bundle; do not call `window.taco.loadBundle()` as the proof's user path.
+Run `npm run test:verify -- --feature checkpoints`. `scripts/fixture.mjs` generates the valid graph, instructions and deliberately missing required path in a current shell by changing only its data block. `scripts/checkpoints.mjs` owns dashboard/status/file/instruction/missing cases. The default production Taco has no graph; never inject one through `window.taco.loadBundle()` as the user proof.
 
 - **Dashboard.** Click `page.locator('button.checkpoint-nav-item')`; require `section.checkpoint-view .checkpoint-graph`, cards named Specification/Plan/Tasks and visible document filenames. Capture graph state and `window.taco.getCheckpoints()`; compare waiting/frontier presentation with resolved dependencies.
 - **Sidebar status.** Open a tracked file, click its `.checkpoint-status-button` scoped by its actual accessible name, then choose `.checkpoint-status-menu`'s `getByRole('menuitemradio', { name: 'In progress', exact: true })`. Require the matching document status `in_progress` in `getCheckpoints()` and `getReviewHandoff().checkpointChanges`. Reopen the menu and require `aria-checked="true"` on `getByRole('menuitemradio', { name: /^In progress(?: ✓)?$/ })`; the selected label includes a check mark. Repeat Complete/Freeze/To do using the actual English snapshot labels.

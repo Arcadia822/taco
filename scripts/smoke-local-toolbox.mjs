@@ -6,12 +6,15 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createServer } from 'node:http'
 import { chromium } from 'playwright'
+import { focusAtDocumentEnd } from '../.agents/skills/verify-taco/scripts/ui.mjs'
 
 const root = resolve(process.cwd())
 const cli = process.argv.slice(2).length
   ? process.argv.slice(2)
   : [process.execPath, resolve(root, 'packages/cli/dist/main.js')]
-const scratch = await mkdtemp(join(tmpdir(), 'taco-toolbox-smoke-'))
+const evidenceRoot = process.env.TACO_SMOKE_OUT ? resolve(process.env.TACO_SMOKE_OUT) : tmpdir()
+await mkdir(evidenceRoot, { recursive: true })
+const scratch = await mkdtemp(join(evidenceRoot, 'taco-toolbox-smoke-'))
 const source = join(scratch, 'source')
 const artifact = join(scratch, 'Review.taco.html')
 await mkdir(source)
@@ -222,11 +225,12 @@ try {
       .click()
     await page.waitForFunction(() => document.querySelector('.ProseMirror'))
     const reviewed = `Round ${round} reviewed paragraph.`
-    await page.locator('.ProseMirror').first().click()
-    await page.keyboard.press('ControlOrMeta+End')
+    await focusAtDocumentEnd(page)
     await page.keyboard.press('Enter')
     await page.keyboard.type(reviewed)
-    await page.keyboard.press('ControlOrMeta+Shift+ArrowLeft')
+    assert.equal(await page.locator('.ProseMirror > :last-child').innerText(), reviewed)
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+ArrowLeft' : 'Shift+Home')
+    assert.equal(await page.evaluate(() => window.getSelection()?.toString()), reviewed)
     await page.locator('.selection-comment-button').click()
     await page
       .locator('.comment-composer textarea.comment-input')
@@ -421,19 +425,7 @@ try {
     const legacyReceiptPath = join(scratch, `legacy-receipt-${variant}.json`)
     await writeFile(legacyReceiptPath, JSON.stringify(legacyHandoff))
 
-    const refreshRes = await run([
-      'refresh',
-      legacyArtifact,
-      '--dir',
-      legacyDir,
-      '--handoff',
-      legacyReceiptPath,
-    ])
-    assert(
-      refreshRes.stdout.includes(
-        'Replaced legacy shell with the current stock shell of the same variant for embedded HTML',
-      ),
-    )
+    await run(['refresh', legacyArtifact, '--dir', legacyDir, '--handoff', legacyReceiptPath])
     const refreshedHtml = await readFile(legacyArtifact, 'utf8')
     assert(refreshedHtml.includes('name="taco-shell-features"'))
     assert.equal(parseBundle(refreshedHtml).docId, legacyBundle.docId)

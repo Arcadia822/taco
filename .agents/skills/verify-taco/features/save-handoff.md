@@ -1,5 +1,5 @@
 ---
-title: "Save Taco and hand off review"
+title: 'Save Taco and hand off review'
 ---
 
 Persist the reviewed file or a copy, unpack to an explicitly selected directory, and send review feedback through clipboard or an active local listener.
@@ -21,7 +21,7 @@ Persist the reviewed file or a copy, unpack to an explicitly selected directory,
 
 ## Driving it with Playwright
 
-Preconditions: doctor passes; create a visible unique edit first. The helper's context accepts downloads and grants no directory handles. Run `node .cursor/skills/verify-taco/scripts/verify.mjs --scenario .cursor/skills/verify-taco/scripts/edit-save.mjs` to prove the default Save download path.
+Run `npm run test:verify -- --feature save-handoff` for browser entries. Cases in `scripts/save.mjs` start with real edits in fresh contexts and distinguish header/keyboard/menu entries. File-access substitutions are logged; downloads are reopened. Also follow [Agent CLI workflows](cli.md): the `scripts/cli.mjs` scenario proves CLI reads/extraction of browser-saved reviews, and `TACO_SMOKE_OUT=artifacts/smoke-toolbox npm run test:toolbox` proves listener receipts and two refresh rounds after the CLI build. Browser-only coverage is insufficient for the Agent review loop.
 
 - **Download Save.** At the production file-access boundary only, run `page.evaluate(() => { window.showSaveFilePicker = undefined })` to select the supported download fallback. Start `page.waitForEvent('download')` before clicking `button.save-button`; confirm `dialog.confirmation-dialog[open] .control-button-primary`. Save the download under `outDir`. Parse its inert bundle and reopen using `await reopen(path)`. Require the edit in both bundle and rendered UI, preserved `docId`, and unchanged original artifact hash. Capture before, edited and reopened states.
 - **Keyboard and menu Save.** Repeat in independent baseline runs using `page.keyboard.press('ControlOrMeta+s')`; separately click `button.save-more` and `.save-menu`'s button named `Save`. Confirm the same output content. Never report all three entry points verified by the main-button scenario.

@@ -1,5 +1,5 @@
 ---
-title: "Review with anchored comments"
+title: 'Review with anchored comments'
 ---
 
 Select text and start a discussion attached to it, reply and revise messages, and keep review history when messages are deleted or a thread is resolved.
@@ -22,10 +22,10 @@ Select text and start a discussion attached to it, reply and revise messages, an
 
 ## Driving it with Playwright
 
-Preconditions: doctor passes, file is editable, run uses a fresh identity/context. Use an authored scenario through `verify.mjs --scenario tmp/verify-taco-comments.mjs`; capture before and after each transition.
+Run `npm run test:verify -- --feature comments`. Each case has a fresh identity/context and editable synthetic source. Read `scripts/comments.mjs` for registered selection/thread/panel/anchor cases; capture before/after and inspect downloaded/reopened persisted comments.
 
 - **Select and submit.** Click `.ProseMirror`, go to its end, press Enter and type a unique paragraph. Press `ControlOrMeta+Shift+ArrowLeft` to select the last word; click `.selection-comment-button`; fill `.comment-composer textarea.comment-input` and click `.comment-composer button.comment-submit`. If `dialog.author-name-dialog` appears, fill `input.author-name-input` with `Verification Reviewer` and confirm using `.control-button-primary`. Require an `article.comment-thread[data-thread-id]`, the entered body and a quote from the selected source; observe the matching thread in `getReviewHandoff().comments`.
-- **Source selection.** Open a JSON/plain-text fixture, click `textarea.source-editor-input`, then use Home/Shift+End to select a real line and click `.selection-comment-button`. Submit through the same composer. Check the resulting quote and path, not just comment count.
+- **Source selection.** Open a JSON/plain-text fixture and click `textarea.source-editor-input`. Native textarea caret keys are not portable, so use the platform branch `scripts/comments.mjs` uses: on darwin `Meta+ArrowUp`, then `ArrowDown` once per line, then `Meta+ArrowLeft` and `Shift+Meta+ArrowRight`; elsewhere `Control+Home`, then `ArrowDown` once per line, then `Home` and `Shift+End`. Read `selectionStart`/`selectionEnd` from the textarea and require a real non-empty selection before clicking `.selection-comment-button`; this macOS Chromium ignored `ControlOrMeta+End` in a textarea. Submit through the same composer. Check the resulting quote and path, not just comment count.
 - **Reply/status.** Capture the actual thread ID. Scope all actions to its `article.comment-thread`; click its button named `Reply`, fill that card's `textarea.comment-input`, and submit with its `button.comment-submit`. Click `Resolve`, require `.is-resolved` and API status, then click `Reopen` and require `open` again. Save/reopen and compare the message history.
 - **Edit/delete message.** Select the exact `.comment-message[data-message-id]` belonging to the current author. Click its action whose accessible name starts `Edit`; fill `.comment-message-editor textarea.comment-input`, submit its `.comment-submit`, and require updated body/timestamp in the read-only handoff. Before clicking `.comment-message-delete`, register `page.once('dialog', dialog => dialog.accept())` for its native confirmation. Require a tombstone for that message while replies survive. Separately test the thread's `Delete thread` control with its own pre-registered native confirmation handler; it has different semantics.
 - **Draft/panel.** Enter a distinctive unsent draft in the composer; toggle `.comment-toggle` closed/open and verify the same draft, focus/caret where applicable. In a separate step press Escape with no active dialog/menu and require closed panel. Click `.comment-toggle` to reopen the panel, then select `getByRole('tab', { name: 'Comments', exact: true })`.

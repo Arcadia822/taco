@@ -1,5 +1,5 @@
 ---
-title: "Browse and search Taco files"
+title: 'Browse and search Taco files'
 ---
 
 Browse the packaged directory, find files by path or content, follow document headings and open read-only HTML previews.
@@ -20,9 +20,9 @@ Browse the packaged directory, find files by path or content, follow document he
 
 ## Driving it with Playwright
 
-Preconditions: run the helper against the Complete build; doctor passes. The default browsing scenario covers the sidebar entry only.
+Run `npm run test:verify -- --feature browse-search` for the fixture-based domain. The default arbitrary-bundle browsing scenario covers only the sidebar entry. Read `scripts/browse.mjs` for exact registered case IDs and assertions.
 
-- **Sidebar.** Run `node .cursor/skills/verify-taco/scripts/verify.mjs`. Its default scenario clicks a different Markdown row and checks selected `data-path`, rendered heading and `window.taco.readFile()` content equality. Before/after images and `browse-state.json` prove which file changed.
+- **Sidebar.** Run `node .agents/skills/verify-taco/scripts/verify.mjs` against an arbitrary Complete build. It clicks a different Markdown row and compares selected full path, rendered heading and read-only file content. The suite additionally drives collapsed groups and duplicate basenames through real clicks.
 - **Expanded group.** In a scenario, find `page.locator('nav.file-sidebar details', { has: page.locator('button.file-row').filter({ hasText: 'requirements.md' }) })`; for each closed ancestor group click its `:scope > summary`. Select the matching `button.file-row[data-path]`. Compare the actual attribute to the bundle's full path when names repeat.
 - **Outline.** Click `page.locator('.comment-toggle')` only when its `aria-expanded` is `false`; choose `page.getByRole('tab', { name: 'Outline', exact: true })`, then `page.locator('#taco-outline').getByRole('button', { name: 'Product Boundary', exact: true })` after selecting `requirements.md`. Capture before/after viewport screenshots and check that the actual heading is visible in the reader; a selected outline button alone is insufficient.
 - **Search.** Use `page.keyboard.press('ControlOrMeta+k')`, then `page.locator('dialog.search-dialog input.search-input').fill('requirements.md')`. Click `page.locator('dialog.search-dialog button.search-result').filter({ hasText: 'checklists/requirements.md' })`. Require the dialog to close and the matching file/heading to render. Repeat using unique body text, then a guaranteed absent query; check `.search-dialog .empty-state`, clear the input and require zero result buttons, then press Escape.
