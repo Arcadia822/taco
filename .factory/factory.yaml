@@ -55,8 +55,7 @@ integrations:
   omp:
     targets:
       - id: taco-worker
-        transport: ssh
-        host: host-c1
+        transport: local
         root: /tmp/factory-taco-journey.IfXmXu/worker
         slots: 1
     binary: omp
