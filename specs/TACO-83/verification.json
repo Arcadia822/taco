@@ -1,0 +1,13 @@
+{
+  "issue": "TACO-83",
+  "status": "BLOCKED",
+  "baseline": "9540e98d004685f1e5c2acdbddc150745467404b",
+  "final_checks": {"format": "passed", "lessons": "20 passed", "vitest": "67 files, 822 passed", "focused": "143 passed", "build": "TypeScript and Complete/Lite/Host gates passed"},
+  "browser": {"result": "artifacts/verify-taco/TACO-83-punctuation-final/result.json", "ok": true, "artifact_sha256": "d8935369485d4638f11e6554c98558c451391d3a074888fe4c68f256908212ba", "actions": "10 rendered selections and comments; quote locate; actual clipboard Handoff with spec.md changed path; download save and reopen", "expected_lines": [3,5,7,9,11,13,15,17,19,21], "position_lost": false, "boundary": "Native picker replaced with supported download fallback; headless internal proof, not user-visible opening"},
+  "shell_bytes": {"complete": {"baseline": 2740554, "estimate_delta": 2048, "measured": 2741230, "delta": 676}, "lite": {"baseline": 191340, "estimate_delta": 2048, "measured": 191893, "delta": 553}, "skill_regular_files": {"baseline": 19652706, "estimate_delta": 4096, "measured": 19657991, "delta": 5285}},
+  "acceptance": {"command": "node tests/e2e/acceptance/test_comment_anchor_punctuation.mjs /tmp/factory-taco-journey.IfXmXu/worker", "exit_code": 1, "error": "MODULE_NOT_FOUND", "searched": "worker, adjacent live/checkout/project, accessible /root and /tmp; no existing real script found", "required_next": "Coordinator supplies original test; run it against PR head; only then consider Ready"},
+  "artifacts": ["dist-single/Taco_Spec.taco.html", "tmp/TACO-83.taco.html", "artifacts/verify-taco/TACO-83-punctuation-final/TACO-83-reviewed.taco.html"],
+  "host_preview": "http://127.0.0.1:3183/",
+  "dependencies_added": 0,
+  "production_network_added": false
+}
