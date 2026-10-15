@@ -37,9 +37,15 @@ roles:
 coordinator:
   host: host-c1
   root: /tmp/factory-taco-journey.IfXmXu/live
-  session: null
+  session: 01a13e1c-8ed3-762b-aca5-7c00871cc4af
   task_key: TACO-82
-  continuity: blocked：尚未绑定真实协调会话，尚未证明 harness 原生持续推进与两轮 service_scans；禁止外部调度器。
+  probe:
+    - python3
+    - "@factory/integrations/omp/terminal.py"
+    - probe
+    - "--run-dir"
+    - /tmp/factory-taco-journey.IfXmXu/coordinator-live3
+  continuity: OMP 原生交互 /loop，由安装版 terminal.py 仅承载 PTY 并发送一次初始输入；不设循环次数或结束时间。coordinator_ready 在原生成功完成两轮且 TACO-82 当前服务 SHA 有两轮不同时间 service_scans 前保持 blocked。固定模型 magpie/group/auto-gpt-6-1-sol；无外部调度器。
 integrations:
   linear:
     team: 1f9f0c7f-c3e9-450d-b940-ef15a5cca85e
