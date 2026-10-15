@@ -59,7 +59,7 @@ export function resolveDocumentNavigation(bundle: TacoBundle): ResolvedDocumentN
       for (const id of layer) {
         const node = nodesById.get(id)!
         const documents = [...node.documents].sort((a, b) =>
-          Number(Boolean(a.optional)) - Number(Boolean(b.optional)) || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+          Number(Boolean(a.optional)) - Number(Boolean(b.optional)))
         checkpointGroups.push({
           id: `checkpoint-${node.id}`,
           title: node.title,

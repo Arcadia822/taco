@@ -124,7 +124,7 @@ export interface ResolvedDocumentNavigation {
 }
 ```
 
-1. `checkpoints` 合法时：按 `checkpointLayout` 的顺序生成 `checkpointGroups`；组内先列必需文档、后列可选文档，各自按 `path` 排序；文件存在时用 `file` 条目，不存在时用 `placeholder` 条目。
+1. `checkpoints` 合法时：按 `checkpointLayout` 的顺序生成 `checkpointGroups`；组内先列必需文档、后列可选文档，同组比较返回 0，利用稳定排序保留声明顺序；文件存在时用 `file` 条目，不存在时用 `placeholder` 条目。
 2. 用成员表建一个"已占用"集合，其余文件走原有三层逻辑，并做三处调整：
    - manifest 分支跳过已占用的路径，记录 `manifest-path-owned-by-checkpoint` 警告；
    - category 分支中，`hasCategoryDeclaration` 只统计未占用的文件；

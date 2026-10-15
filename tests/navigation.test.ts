@@ -124,7 +124,7 @@ describe('resolveDocumentNavigation', () => {
   })
 })
 describe('Checkpoint navigation', () => {
-  it('orders Checkpoint groups by topology and each document once, including missing placeholders', () => {
+  it('keeps required documents first and declaration order within both groups, including missing placeholders', () => {
     const bundle = createBundle([
       { path: 'specs/sample/plan.md' },
       { path: 'specs/sample/spec.md' },
@@ -138,6 +138,7 @@ describe('Checkpoint navigation', () => {
         ] },
         { id: 'first', title: 'First', after: [], documents: [
           { path: 'specs/sample/optional.md', optional: true },
+          { path: 'specs/sample/a-optional.md', optional: true },
           { path: 'specs/sample/spec.md' },
           { path: 'specs/sample/required.md' },
         ] },
@@ -148,9 +149,10 @@ describe('Checkpoint navigation', () => {
     const resolved = resolveDocumentNavigation(bundle)
     expect(resolved.checkpointGroups.map((group) => group.checkpointId)).toEqual(['first', 'later'])
     expect(resolved.checkpointGroups[0].entries).toEqual([
-      { kind: 'placeholder', path: 'specs/sample/required.md', checkpointId: 'first', optional: false },
       { kind: 'file', file: bundle.files[1] },
+      { kind: 'placeholder', path: 'specs/sample/required.md', checkpointId: 'first', optional: false },
       { kind: 'placeholder', path: 'specs/sample/optional.md', checkpointId: 'first', optional: true },
+      { kind: 'placeholder', path: 'specs/sample/a-optional.md', checkpointId: 'first', optional: true },
     ])
     expect(resolved.checkpointGroups[1].entries).toEqual([{ kind: 'file', file: bundle.files[0] }])
     expect(resolved.checkpointGroups[0]).toMatchObject({ isCheckpoint: true, locked: true })
