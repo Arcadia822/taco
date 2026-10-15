@@ -1,0 +1,62 @@
+# Factory IO 配置（version 1）。长期规则写在 .factory/standing-orders.md。
+version: 1
+name: taco-factory-service-live-20261015-b4d9-live3
+bind:
+  task: linear
+  change: github
+  runtime: omp
+  workflow: builtin
+task:
+  scope:
+    team: 1f9f0c7f-c3e9-450d-b940-ef15a5cca85e
+    project: 3e7ae872-195e-4c3a-83b8-fef25381725e
+  states:
+    queued: Todo
+    running: In Progress
+    handoff: In Review
+    done: In Review
+change:
+  scope:
+    repo: Arcadia822/taco
+    base: main
+services:
+  - name: linear-delivery-review
+    logic: "处理接入项目中带有 'factory-e2e:service-live-20261015-b4d9-live3' 批次标识且属于 Review/Comments 审阅反馈范围的 Linear issue，验证后交付真实 PR。严格禁止认领未带有 'factory-e2e:service-live-20261015-b4d9-live3' 的 issue。"
+max_parallel: 1
+members:
+  - id: owner
+    kind: human
+    identities:
+      linear: 5a884ad0-0a65-45cf-b8d1-71406d323a04
+  - id: builder
+    kind: agent
+    model: magpie/group/auto-gpt-6-1-sol
+roles:
+  - id: coordinator
+    playbook: coordinator.md
+coordinator:
+  host: host-c1
+  root: /tmp/factory-taco-journey.IfXmXu/live
+  session: null
+  task_key: TACO-82
+  continuity: blocked：尚未绑定真实协调会话，尚未证明 harness 原生持续推进与两轮 service_scans；禁止外部调度器。
+integrations:
+  linear:
+    team: 1f9f0c7f-c3e9-450d-b940-ef15a5cca85e
+    project: 3e7ae872-195e-4c3a-83b8-fef25381725e
+    states:
+      queued: Todo
+      running: In Progress
+      handoff: In Review
+      done: In Review
+  github:
+    repo: Arcadia822/taco
+    base: main
+  omp:
+    targets:
+      - id: taco-worker
+        transport: ssh
+        host: host-c1
+        root: /tmp/factory-taco-journey.IfXmXu/worker
+        slots: 1
+    binary: omp
