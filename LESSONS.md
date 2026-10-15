@@ -37,6 +37,7 @@ Guided by the principle **Encode Lessons in Structure**:
 | [LESSON-017](#lesson-017-runtime-ddl-and-expiry-consumers-diverge)                             | Runtime DDL and Expiry Consumers Diverge                             |      1      |   **open**    | Real PostgreSQL bootstrap/upgrade and expired-route regression smoke                                           |
 | [LESSON-018](#lesson-018-temporary-postgresql-binaries-omit-dylib-aliases)                     | Temporary PostgreSQL Binaries Omit Dylib Aliases                     |      1      |   **open**    | Inspect otool dependencies and restore aliases only in disposable runtime                                      |
 | [LESSON-019](#lesson-019-verifiers-must-match-runtime-contracts-and-native-keyboards)          | Verifiers Must Match Runtime Contracts and Native Keyboards          |      3      | **escalated** | Full browser registry, native caret/selection invariants and real Next/CLI smoke in `.github/workflows/ci.yml` |
+| [LESSON-020](#lesson-020-fresh-worker-checkout-tooling-assumptions)                            | Fresh Worker Checkout Tooling Assumptions                            |      1      |   **open**    | Resolve package names from manifests and commit identity before delivery                                       |
 
 ---
 
