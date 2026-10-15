@@ -1,65 +1,67 @@
 # Factory IO 配置（version 1）。长期规则写在 .factory/standing-orders.md。
 version: 1
 name: taco-factory-service-live-20261015-b4d9-live3
-bind:
+bind: 
   task: linear
   change: github
   runtime: omp
   workflow: builtin
-task:
-  scope:
+task: 
+  scope: 
     team: 1f9f0c7f-c3e9-450d-b940-ef15a5cca85e
     project: 3e7ae872-195e-4c3a-83b8-fef25381725e
-  states:
+  states: 
     queued: Todo
     running: In Progress
     handoff: In Review
     done: In Review
-change:
-  scope:
+change: 
+  scope: 
     repo: Arcadia822/taco
     base: main
-services:
+services: 
   - name: linear-delivery-review
-    logic: "处理接入项目中带有 'factory-e2e:service-live-20261015-b4d9-live3' 批次标识且属于 Review/Comments 审阅反馈范围的 Linear issue，验证后交付真实 PR。严格禁止认领未带有 'factory-e2e:service-live-20261015-b4d9-live3' 的 issue。"
+    logic: "处理接入项目中带有 'factory-e2e:service-live-20261015-b4d9-live3' 批次标识且属于 Review/Comments 审阅反馈范围的 Linear issue，强制保留划词评论行号定位并交付真实 PR。严格禁止认领未带有 'factory-e2e:service-live-20261015-b4d9-live3' 的 issue。"
+  - name: linear-delivery-navigation
+    logic: "处理接入项目中带有 'factory-e2e:service-live-20261015-b4d9-live3' 批次标识且属于 Navigation/Checkpoints 检查点文档排序范围的 Linear issue，与审阅服务互斥，验证后交付真实 PR。严格禁止认领未带有 'factory-e2e:service-live-20261015-b4d9-live3' 的 issue。"
 max_parallel: 1
-members:
+members: 
   - id: owner
     kind: human
-    identities:
+    identities: 
       linear: 5a884ad0-0a65-45cf-b8d1-71406d323a04
   - id: builder
     kind: agent
     model: magpie/group/auto-gpt-6-1-sol
-roles:
+roles: 
   - id: coordinator
     playbook: coordinator.md
-coordinator:
+coordinator: 
   host: host-c1
   root: /tmp/factory-taco-journey.IfXmXu/live
   session: 01a13e1c-8ed3-762b-aca5-7c00871cc4af
   task_key: TACO-82
-  probe:
+  probe: 
     - python3
     - "@factory/integrations/omp/terminal.py"
     - probe
     - "--run-dir"
     - /tmp/factory-taco-journey.IfXmXu/coordinator-live3
   continuity: OMP 原生交互 /loop，由安装版 terminal.py 仅承载 PTY 并发送一次初始输入；不设循环次数或结束时间。coordinator_ready 在原生成功完成两轮且 TACO-82 当前服务 SHA 有两轮不同时间 service_scans 前保持 blocked。固定模型 magpie/group/auto-gpt-6-1-sol；无外部调度器。
-integrations:
-  linear:
+integrations: 
+  linear: 
     team: 1f9f0c7f-c3e9-450d-b940-ef15a5cca85e
     project: 3e7ae872-195e-4c3a-83b8-fef25381725e
-    states:
+    states: 
       queued: Todo
       running: In Progress
       handoff: In Review
       done: In Review
-  github:
+  github: 
     repo: Arcadia822/taco
     base: main
-  omp:
-    targets:
+  omp: 
+    targets: 
       - id: taco-worker
         transport: local
         root: /tmp/factory-taco-journey.IfXmXu/worker
