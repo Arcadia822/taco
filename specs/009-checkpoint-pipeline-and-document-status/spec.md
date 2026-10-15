@@ -120,11 +120,11 @@ Taco 新增一项**状态记录能力**：一个 Taco 可以声明若干 Checkpo
 
 ## 4. 排列规则
 
-节点顺序、`after` 顺序和文档顺序都没有语义，所以展示不依赖书写顺序。语义相同的定义，渲染结果一定相同：
+节点顺序和 `after` 顺序不影响拓扑展示；侧栏文档顺序遵循声明顺序：
 
 - DAG 按拓扑层级自上而下排列，同层节点按 `id` 排序。
-- 节点内的文档先列必需文档、后列 optional 文档，每组内部按 `path` 排序。
-- 排序一律按字符串的 UTF-16 码元字典序（JS 默认 `sort()`）。
+- 侧栏节点内的文档先列必需文档、后列 optional 文档，每组内部保留 `nodes[].documents` 的声明顺序，包括不存在的文档占位行（TACO-84）。
+- 拓扑与派生状态规则不变；本次仅取消侧栏文档的 `path` 字典序比较。
 
 ## 5. 派生状态
 
@@ -263,7 +263,7 @@ Taco 实时协作（relay）：
    - `frontier` 为 `[design, tests]`。
 3. 已冻结的 `journey.md` 被修改后，状态仍为 `freeze`，界面没有任何提示。Taco 不做内容校验。
 4. `design` 中 optional 文档一直为 `todo`、`plan.md` 为 `freeze` 时，`design` 的聚合状态为 `freeze`。
-5. 调整示例中 `nodes` 的顺序、`after` 的顺序、文档顺序，或者补写、省略 `optional: false`，渲染结果与派生结果都保持不变。
+5. 调整示例中 `nodes` 的顺序、`after` 的顺序，或者补写、省略 `optional: false`，拓扑与派生结果保持不变。调整文档声明顺序时，侧栏仍先列必需文档，再列 optional 文档，各组保留声明顺序。
 6. 同一个 `path` 出现在两个 Checkpoint 中，或在同一个 Checkpoint 内重复：校验失败并给出警告，保存后 `checkpoints` 原值保留。`after` 成环时同样处理。
 7. 示例中 `test-cases.md` 不存在：
    - 无论导航处于哪种模式，占位行都出现在 `tests` 的 Checkpoint 分组中；
@@ -281,3 +281,10 @@ Taco 实时协作（relay）：
 12. 带 `checkpoints` 的 Taco 执行 `publish --dry-run` 时不报"未声明字段"。发布后，Host 页面只读展示 Checkpoint 菜单项和视图，派生结果与本地一致。
 13. `skills/taco/templates/` 与 `extensions/taco/templates/` 逐字节一致。
 14. `template` 作为底层可选配置保留，界面 Checkpoints 页头仅显示本地化页面标题（Checkpoints／检查点），不提供模板名称编辑控件。通过 Checkpoint 分组新增文件时，创建 dialog 默认选中该 Checkpoint category，也可选择已有普通 category 或未分组，`nodes[].documents` 保持不变，Handoff 只报告新文件。目录里若同时存在 `optional` 与入口属性，两个图标并排且只在悬停、聚焦或选中时显示。
+
+## TACO-84 体积与依赖预算
+
+- prepare：仅删除导航比较器的路径比较；预计 Complete/Lite 纯 shell 各减少 0–128 字节；skill 总量预计变化 -1,024 至 +1,024 字节（含说明和生成模板）；扩展、Host、CLI 发布载体随生成内容同步，无新依赖或联网行为。
+- 改前同口径基线：Complete 2,740,554 字节，Lite 191,340 字节，`skills/taco/` 全部文件字节和 19,652,706；保留于 `tmp/TACO-84-size-baseline.json`。文档数据增长单独计算，不计纯 shell 阈值。
+- develop 实测（`npm run build`）：Complete 2,740,534（-20）字节，Lite 191,321（-19）字节，skill 19,652,759（+53）字节；均在估算范围内。纯 shell 无增大，skill 净增来自新增顺序说明抵消 shell/模板缩小；扩展与 Host/demo/CLI 载体由同一次构建同步，文档数据无新增，依赖与联网行为不变。
+

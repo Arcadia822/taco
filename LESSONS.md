@@ -584,3 +584,29 @@ With the pinned Playwright, closing a context while `context.newPage()` is in fl
 - Race non-interruptible setup operations against explicit cancellation (`setupOperation`/`cancelSetup`) instead of assuming disposal settles every Playwright call. Bound native launch by the remaining case budget and HTTP probes with `AbortSignal` timeouts.
 - Keep signal handlers installed until cleanup and summary writing finish. If the first signal arrives during a summary write, refresh its interruption fields and rewrite it before setting exit 143 and removing handlers. Keep one cleanup path and ignore repeat signals during it.
 - Never truncate a machine payload for an assertion. The Host receipt failure came from feeding a `tail(stdout, 8000)` log projection into `JSON.parse`, which discarded the head of the CLI's JSON; parse the full stdout and bound only the human log projection.
+
+---
+
+### LESSON-020: Fresh Worker Checkout Tooling Assumptions
+
+- **ID**: `LESSON-020`
+- **Category**: `tooling`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: Resolve package names from manifests and commit identity before delivery
+
+#### Symptom
+
+TACO-84 Host preview failed with `No workspaces found` for an inferred package name; commit failed because the fresh worker had no Git author identity.
+
+#### Root Cause
+
+The Host manifest uses `taco-server`, not the inferred scoped name, and ephemeral workers need not inherit a Git author configuration.
+
+#### Evidence
+
+- 2026-10-15: `npm --prefix packages/host run dev -- --hostname 127.0.0.1 --port 4184` started successfully and returned HTTP 200. `gh api user` supplied the authenticated public identity for explicit per-command commit attribution.
+
+#### Prevention & Escalation
+
+- Use the manifest or package directory instead of inventing workspace names. Resolve public author identity before committing; never read credentials or modify global Git configuration.
