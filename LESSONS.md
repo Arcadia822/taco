@@ -37,6 +37,7 @@ Guided by the principle **Encode Lessons in Structure**:
 | [LESSON-017](#lesson-017-runtime-ddl-and-expiry-consumers-diverge)                             | Runtime DDL and Expiry Consumers Diverge                             |      1      |   **open**    | Real PostgreSQL bootstrap/upgrade and expired-route regression smoke                                           |
 | [LESSON-018](#lesson-018-temporary-postgresql-binaries-omit-dylib-aliases)                     | Temporary PostgreSQL Binaries Omit Dylib Aliases                     |      1      |   **open**    | Inspect otool dependencies and restore aliases only in disposable runtime                                      |
 | [LESSON-019](#lesson-019-verifiers-must-match-runtime-contracts-and-native-keyboards)          | Verifiers Must Match Runtime Contracts and Native Keyboards          |      3      | **escalated** | Full browser registry, native caret/selection invariants and real Next/CLI smoke in `.github/workflows/ci.yml` |
+| [LESSON-020](#lesson-020-worker-environment-can-omit-identity-and-cjk-fonts)                   | Worker Environment Can Omit Identity and CJK Fonts                   |      1      |   **open**    | Authenticated commit identity and explicit browser evidence boundaries                                         |
 
 ---
 
@@ -584,3 +585,30 @@ With the pinned Playwright, closing a context while `context.newPage()` is in fl
 - Race non-interruptible setup operations against explicit cancellation (`setupOperation`/`cancelSetup`) instead of assuming disposal settles every Playwright call. Bound native launch by the remaining case budget and HTTP probes with `AbortSignal` timeouts.
 - Keep signal handlers installed until cleanup and summary writing finish. If the first signal arrives during a summary write, refresh its interruption fields and rewrite it before setting exit 143 and removing handlers. Keep one cleanup path and ignore repeat signals during it.
 - Never truncate a machine payload for an assertion. The Host receipt failure came from feeding a `tail(stdout, 8000)` log projection into `JSON.parse`, which discarded the head of the CLI's JSON; parse the full stdout and bound only the human log projection.
+
+---
+
+### LESSON-020: Worker Environment Can Omit Identity and CJK Fonts
+
+- **ID**: `LESSON-020`
+- **Category**: `tooling`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: Authenticated commit identity and explicit browser evidence boundaries
+
+#### Symptom
+
+The TACO-86 worker's first commit failed because Git author identity was unset. Real Chromium rendered Chinese labels as missing-glyph boxes although the sidebar DOM contained the expected Chinese titles and correct node order.
+
+#### Root Cause
+
+The isolated worker had no configured Git identity and no installed Chinese font (`fc-list :lang=zh family file` returned no entries). Neither condition was a navigation regression.
+
+#### Evidence
+
+- 2026-10-16 - TACO-86: the first commit exited 128 with an unknown-author error. `gh api user` identified the authenticated account; command-local Git identity allowed commit and push without changing global or repository configuration. `artifacts/verify-taco/TACO-86-node-order/interactive-sidebar.png` retains the font limitation, while `sidebar-order.json` retains the actual Chinese labels, node sequence and required-before-optional document sequence.
+
+#### Prevention & Escalation
+
+- Resolve missing commit identity from the authenticated account and pass it only to the commit command; do not invent an author or alter shared configuration.
+- Inspect screenshots as well as DOM assertions. Report missing CJK glyph coverage as an environment boundary; do not claim Chinese typography was visually verified or add product font/network dependencies to mask a worker setup gap.
