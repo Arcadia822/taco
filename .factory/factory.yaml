@@ -21,7 +21,9 @@ change:
     base: main
 services: 
   - name: post-magpie-a3-review
-    logic: 仅处理接入项目中明确带有 factory-e2e:service-live-post-magpie-20261016-a3 批次标识且 subsystem 为 review-comments 的 Linear issue，修复审阅评论定位并交付经验证的真实 PR；不认领任何其他批次、导航任务或旧任务。
+    logic: 仅处理接入项目中明确带有 factory-e2e:service-live-post-magpie-20261016-a3 批次标识且 subsystem 为 review-comments 的 Linear issue，交付前必须独立验证自动链接和 HTML 标签场景下的评论源行号定位，保留协议与现有 HTML 文本投影行为；不认领任何其他批次、导航任务或旧任务。
+  - name: post-magpie-a3-navigation
+    logic: 仅处理接入项目中明确带有 factory-e2e:service-live-post-magpie-20261016-a3 批次标识且 subsystem 为 navigation-checkpoints 的 Linear issue，保留同一拓扑层内检查点节点的声明顺序并交付经验证的真实 PR；不改变拓扑依赖顺序、节点内文档排序或底层协议，不认领任何其他批次、审阅任务或旧任务。
 max_parallel: 1
 members: 
   - id: owner
