@@ -20,8 +20,8 @@ change:
     repo: Arcadia822/taco
     base: main
 services: 
-  - name: post-magpie-a2-review
-    logic: 仅处理接入项目中明确带有 factory-e2e:service-live-post-magpie-20261016-a2 批次标识且 subsystem 为 review-comments 的 Linear issue，修复审阅评论定位并交付经验证的真实 PR；不认领任何其他批次、导航任务或旧任务。
+  - name: post-magpie-a3-review
+    logic: 仅处理接入项目中明确带有 factory-e2e:service-live-post-magpie-20261016-a3 批次标识且 subsystem 为 review-comments 的 Linear issue，修复审阅评论定位并交付经验证的真实 PR；不认领任何其他批次、导航任务或旧任务。
 max_parallel: 1
 members: 
   - id: owner
