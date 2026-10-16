@@ -144,6 +144,7 @@ export const resolveAnchorRange = (text: string, anchor: TacoTextAnchor): Commen
 const THEMATIC_BREAK = /^ {0,3}(?:[-*_][ \t]*){3,}$/
 const BLOCK_QUOTE = /^ {0,3}>[ \t]?/
 const BLOCK_MARKER = /^(?:#{1,6}(?:[ \t]+|$)|(?:[-*+]|\d{1,9}[.)])(?:[ \t]+|$)|\[[ xX]\][ \t]+)/
+const AUTOLINK = /<(?<label>[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\x00-\x20<>]*|[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*)>/y
 const TAG = /<\/?[A-Za-z][^>\n]*>/y
 const LINK = /\[(?<label>[^\]\n]*)\]\([^()\n]*\)/y
 const IMAGE = /!\[[^\]\n]*\]\([^()\n]*\)/y
@@ -198,6 +199,10 @@ const normalizeForMatching = (source: string): { text: string; offsets: number[]
       LINK.lastIndex = index
       const link = LINK.exec(source)
       if (link) { keep(link.groups!.label, index + 1); index += link[0].length; continue }
+      // CommonMark autolinks look like tags, but their contents are visible text.
+      AUTOLINK.lastIndex = index
+      const autolink = AUTOLINK.exec(source)
+      if (autolink) { keep(autolink.groups!.label, index + 1); index += autolink[0].length; continue }
       TAG.lastIndex = index
       if (TAG.test(source)) { index = TAG.lastIndex; continue }
       DELIMITER.lastIndex = index
