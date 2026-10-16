@@ -162,18 +162,22 @@ describe('Checkpoint navigation', () => {
     expect(resolved.warnings).toEqual([])
   })
 
-  it('orders independent Checkpoints by id rather than input order', () => {
+  it('keeps root and downstream peers in declaration order without moving successors before dependencies', () => {
     const bundle = createBundle([])
     bundle.checkpoints = {
       version: 1,
       nodes: [
-        { id: 'zeta', title: 'Zeta', after: [], documents: [{ path: 'specs/sample/z.md' }] },
-        { id: 'alpha', title: 'Alpha', after: [], documents: [{ path: 'specs/sample/a.md' }] },
+        { id: 'child-z', title: 'First child', after: ['zeta'], documents: [{ path: 'specs/sample/child-z.md' }] },
+        { id: 'zeta', title: 'First root', after: [], documents: [{ path: 'specs/sample/z.md' }] },
+        { id: 'child-a', title: 'Second child', after: ['alpha'], documents: [{ path: 'specs/sample/child-a.md' }] },
+        { id: 'alpha', title: 'Second root', after: [], documents: [{ path: 'specs/sample/a.md' }] },
       ],
       documents: [],
     }
+    const original = structuredClone(bundle.checkpoints)
     expect(resolveDocumentNavigation(bundle).checkpointGroups.map((group) => group.checkpointId))
-      .toEqual(['alpha', 'zeta'])
+      .toEqual(['zeta', 'alpha', 'child-z', 'child-a'])
+    expect(bundle.checkpoints).toEqual(original)
   })
 
   it('keeps owned entries out of manifest groups while preserving the manifest and warning deterministically', () => {

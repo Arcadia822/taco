@@ -55,7 +55,10 @@ export function resolveDocumentNavigation(bundle: TacoBundle): ResolvedDocumentN
 
   if (state) {
     const nodesById = new Map(state.nodes.map((node) => [node.id, node]))
+    const declarationOrder = new Map(state.nodes.map((node, index) => [node.id, index]))
     for (const layer of checkpointLayout(state)) {
+      // Keep dependency layers intact; sidebar peers follow the author's declaration order.
+      layer.sort((a, b) => declarationOrder.get(a)! - declarationOrder.get(b)!)
       for (const id of layer) {
         const node = nodesById.get(id)!
         const documents = [...node.documents].sort((a, b) =>
