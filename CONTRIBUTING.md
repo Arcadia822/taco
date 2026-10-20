@@ -18,6 +18,12 @@ npm run dev
 
 Development mode embeds `specs/001-taco-bento-product/` as the default Taco.
 
+Run the unit tests:
+
+```bash
+npm test
+```
+
 ## Before opening a pull request
 
 A reviewable change should:
