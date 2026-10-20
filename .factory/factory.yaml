@@ -1,4 +1,3 @@
-# Factory IO 配置（version 2）。长期规则写在 .factory/standing-orders.md。
 version: 2
 name: taco
 bind:
@@ -6,7 +5,7 @@ bind:
   repository: github
   runtime: tern
   workflow:
-    - builtin
+  - builtin
 task:
   scope:
     team: 1f9f0c7f-c3e9-450d-b940-ef15a5cca85e
@@ -22,13 +21,14 @@ repository:
     base: main
 config_writer: delivery
 members:
-  - id: arcadia
-    kind: human
-    identities:
-      linear: arcadia
+- id: arcadia
+  kind: human
+  identities:
+    linear: arcadia
 services:
   delivery:
-    purpose: 处理 Taco 项目带 chore 标签的 Todo issue，按 builtin/develop workflow 交付带验证证据的 PR
+    purpose: 处理 Taco 项目带 chore 标签的 Todo issue，按 builtin/develop workflow 交付带验证证据的
+      PR
     intake:
       select:
         state:
@@ -41,8 +41,8 @@ services:
         by: agent
         state: In Progress
     workflows:
-      - ref: builtin/develop
-        when: 默认
+    - ref: builtin/develop
+      when: 默认
     run:
       wake: loop
       target: host-c1
@@ -51,16 +51,17 @@ services:
       roles: {}
     control_task: TACO-87
     conventions:
-      - PR 正文引用 Linear issue 键
-      - 合并后由宿主读回 Linear 状态并设置 Done
+    - PR 正文引用 Linear issue 键
+    - 合并后由宿主读回 Linear 状态并设置 Done
     permissions:
       forbid: []
 integrations:
   tern:
     targets:
-      - id: host-c1
-        host: root@100.123.118.1
-        root: /data/taco
-        tern_host: root@host-c1
+    - id: host-c1
+      host: root@100.123.118.1
+      root: /data/taco
+      tern_host: root@host-c1
+      tern_socket: /run/user/0/tern/daemon.sock
     install_roots:
       pstack: /root/.agents/skills
