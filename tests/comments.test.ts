@@ -19,6 +19,7 @@ import {
   lineRangeForOffsets,
   packCommentLane,
   resolveCommentPlacement,
+  resolveAnchorRange,
   type CommentLaneEntry,
 } from '../src/comment-position.ts'
 import type { TacoCommentThread } from '../src/model.ts'
@@ -233,6 +234,35 @@ describe('comment position and line calculations (TACO-6, TACO-7)', () => {
 
     // A quote that exists nowhere is still reported as lost rather than mapped onto a guess.
     expect(commentLineReference(markdown, createTextAnchor('spec.md', 'Unrelated words', 0, 15))).toBeNull()
+  })
+
+  it.each([
+    'https://api.example.com/a_b?q=x*y',
+    'dev+review@example.com',
+    'urn:isbn:9780140328721',
+    'custom+v1:resource',
+  ])('maps rendered autolink text to second-line UTF-16 source offsets: %s', (label) => {
+    const prefix = 'First line.\nSee \uD83D\uDE80 '
+    const markdown = `${prefix}<${label}> now.`
+    const rendered = `See \uD83D\uDE80 ${label} now.`
+    const anchor = createTextAnchor('spec.md', rendered, 0, rendered.length)
+    expect(commentLineReference(markdown, anchor)).toBe('2')
+    expect(resolveAnchorRange(markdown, anchor)).toEqual({ start: 'First line.\n'.length, end: markdown.length })
+
+    const throughLink = `See \uD83D\uDE80 ${label}`
+    expect(resolveAnchorRange(markdown, createTextAnchor('spec.md', throughLink, 0, throughLink.length)))
+      .toEqual({ start: 'First line.\n'.length, end: prefix.length + 1 + label.length })
+    const fromLink = `${label} now.`
+    expect(resolveAnchorRange(markdown, createTextAnchor('spec.md', fromLink, 0, fromLink.length)))
+      .toEqual({ start: prefix.length + 1, end: markdown.length })
+  })
+
+  it('strips real HTML tags while retaining their visible text and source offsets', () => {
+    const markdown = 'First line.\nSee <span class="label">the API</span> now.'
+    const rendered = 'See the API now.'
+    const anchor = createTextAnchor('spec.md', rendered, 0, rendered.length)
+    expect(commentLineReference(markdown, anchor)).toBe('2')
+    expect(resolveAnchorRange(markdown, anchor)).toEqual({ start: 'First line.\n'.length, end: markdown.length })
   })
 
   it('stacks comment cards down the lane and keeps them off their neighbours', () => {

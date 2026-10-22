@@ -36,7 +36,7 @@ Guided by the principle **Encode Lessons in Structure**:
 | [LESSON-016](#lesson-016-conditional-assertions-and-default-environments-create-hollow-greens) | Conditional Assertions and Default Environments Create Hollow Greens |      1      |   **open**    | `scripts/smoke-local-toolbox.mjs`, `packages/cli/test/write-safety.test.ts`                                    |
 | [LESSON-017](#lesson-017-runtime-ddl-and-expiry-consumers-diverge)                             | Runtime DDL and Expiry Consumers Diverge                             |      1      |   **open**    | Real PostgreSQL bootstrap/upgrade and expired-route regression smoke                                           |
 | [LESSON-018](#lesson-018-temporary-postgresql-binaries-omit-dylib-aliases)                     | Temporary PostgreSQL Binaries Omit Dylib Aliases                     |      1      |   **open**    | Inspect otool dependencies and restore aliases only in disposable runtime                                      |
-| [LESSON-019](#lesson-019-verifiers-must-match-runtime-contracts-and-native-keyboards)          | Verifiers Must Match Runtime Contracts and Native Keyboards          |      3      | **escalated** | Full browser registry, native caret/selection invariants and real Next/CLI smoke in `.github/workflows/ci.yml` |
+| [LESSON-019](#lesson-019-verifiers-must-match-runtime-contracts-and-native-keyboards)          | Verifiers Must Match Runtime Contracts and Native Keyboards          |      4      | **escalated** | Full browser registry, native caret/selection invariants and real Next/CLI smoke in `.github/workflows/ci.yml` |
 
 ---
 
@@ -552,7 +552,7 @@ The archive includes versioned dylib files but omits shorter alias names referen
 
 - **ID**: `LESSON-019`
 - **Category**: `tooling`
-- **Occurrences**: 3
+- **Occurrences**: 4
 - **Status**: `escalated`
 - **Guard**: Full browser registry, native caret/selection invariants and real Next/CLI smoke in `.github/workflows/ci.yml`
 
@@ -574,6 +574,7 @@ With the pinned Playwright, closing a context while `context.newPage()` is in fl
 - 2026-10-14 — TACO-81 second integrated pass: the retained lifecycle probe shows the orphan. `artifacts/verify-taco/lifecycle-87991ba5/probes.json` fails with `deadline-500: Unclosed setup: Setup settling timed out after 3000ms` even though trace, context, browser, server and port all report `closed`; after racing setup against its own cancellation, `artifacts/verify-taco/lifecycle-ed5e833e/probes.json` stays `ok:true` with every deadline scenario `ok:false`, all owned resources `closed` and trace retained when it had started. On the Host side, `artifacts/smoke-host/cleanup-signal-a164f9bc/cleanup-signal-proof.json` records a real SIGTERM with `summaryRetained: false` and `survivingOwnedGroups: []` — summary loss, not a demonstrated surviving process — while the corrected handler version `artifacts/smoke-host/cleanup-signal-b5161716/cleanup-signal-proof.json` records `summaryRetained: true`, exit code 143, `interrupted: SIGTERM` and every owned resource closed. The Host pass itself now reaches 9/9 (`artifacts/smoke-host/2026-10-14T07-33-29-074Z-4a57f3cc/summary.json`, 0 failed) once the receipt parsed the full stdout instead of a truncated tail.
 - 2026-10-14 — The third integrated pass added a final-paragraph invariant and exposed the remaining rich-caret defect: `artifacts/verify-taco/suite-2026-10-14T07-55-18.870Z-2c84753d/suite.json` records 41/51 with 10 failures. The rich-comment failure screenshot shows the token prefixing the first H1 while the final paragraph remains empty. The local toolbox's same invariant also failed before its first handoff. The full-suite CI gate now carries these selection and placement assertions; a syntactically valid helper or a matching token substring cannot establish a native input pass.
   The caret-state probe ruled out content rebuilding: before Enter, the DOM caret was already at the last paragraph but the editor still held `from=1 / docSize=121`. Native start/end moves plus bounded settling produced `from=120`, the new final token paragraph and its exact quote. A/B evidence under `artifacts/verify-taco/ab-1-*` records 4/4 failures without settling and 4/4 passes with it; `val4-*`, `val5-1` and `valsrc*` cover rich-editor and Lite-textarea surfaces. Native Select All + ArrowRight was rejected by its probe because editor AllSelection survived and typing replaced the entire document.
+- 2026-10-16 — TACO-85 ad-hoc smoke used an inferred `copy-review-button` selector and timed out after four real comment submissions. `artifacts/verify-taco/TACO-85/browser/result.json` retains the failure; `browser-fixed/result.json` passes native selection, Handoff source lines and Save/reopen after using the existing `copy-review-main` selector. The context-mode RPC also timed out at 30 seconds while the owned smoke continued; its persisted result, not the transport response, established completion. Read actual control construction first and inspect the owned result before retrying an unknown-outcome tool call.
 
 #### Prevention & Escalation
 

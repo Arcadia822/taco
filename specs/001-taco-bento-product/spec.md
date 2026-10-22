@@ -186,3 +186,30 @@ As a team using Spec Kit, I want the agent to automatically generate a reviewabl
 - Project-management boards, accounts, cloud workspaces, enterprise SSO, and organization directories.
 - Agent auto-execution or a code-repository replacement.
 - Parsing or rewriting relative CSS, JavaScript, images, and other dependencies of an HTML prototype; opening the canonical file leaves those references to the browser and filesystem.
+
+## TACO-85: CommonMark autolink comment positions
+
+Rendered selections spanning CommonMark URI autolinks (including HTTPS and URN) or email autolinks must retain their visible labels and UTF-16 source offsets. Only angle brackets are omitted from the projection; real HTML tags remain stripped while their text survives. Second-line selections must report line 2 rather than position lost. Comment data, rendering, dependencies and network behavior stay unchanged.
+
+### Size and dependency budget
+
+Baseline: main `9540e98d004685f1e5c2acdbddc150745467404b`, measured before editing on 2026-10-16. Pure shells use the generated skill shells with empty `#taco-document` and generic titles, not the document-filled distribution.
+
+| Artifact | Baseline bytes | Prepare estimate (delta) | Develop measured delta |
+| --- | ---: | ---: | ---: |
+| Complete skill shell | 2,740,554 | 0 to +1,024 | +172 (2,740,726; +0.0063%) |
+| Lite skill shell | 191,340 | 0 to +1,024 | +120 (191,460; +0.0627%) |
+| Entire `skills/taco/` (sum of file bytes) | 19,652,706 | 0 to +16,384 | +1,324 (19,654,030) |
+| `dist-single/Taco_Spec.taco.html` (shell + document) | 2,853,601 | 0 to +8,192 | +1,747 (2,855,348; first implementation build) |
+
+No new dependencies or network behavior. Generated extension/Host/template shell mirrors carry the same runtime fix; release archives are not built for this bug. Documentation data growth is measured separately from pure shell growth. Skill prose and website content do not change: this restores existing anchored-comment behavior without a new workflow or website-facing contract.
+
+Measured with `npm run check` / `npm run build`. All deltas are within estimate; compression makes the URI/email matcher smaller than its source. The first implementation build contains +1,575 bytes of document data independently of the +172-byte Complete shell delta; subsequent verification/measurement prose changes only the document component. Neither pure shell reaches the 1% or 32 KB disclosure threshold. No dependency/lockfile changes.
+
+### Verification
+
+- Factory-owned probe (outside this checkout): `bun /tmp/factory-taco-journey.IfXmXu/tests/e2e/acceptance/test_comment_anchor_autolink.mjs /tmp/factory-taco-journey.IfXmXu/worker` passes HTML, HTTPS, email, URN and second-line cases. It does not explicitly cover non-BMP text.
+- `npm test -- tests/comments.test.ts tests/validation.test.ts`: 34 tests pass, including UTF-16 boundaries around a surrogate-pair prefix in the new projection regressions.
+- `npm run check`: formatting, 19 lesson records, 793 tests across 67 files and all shell builds pass. `npm run test:browser` mounts the built product successfully.
+- Real Chromium smoke: native paragraph selection, author dialog, four submitted comments (HTTPS/email/URN/HTML), Handoff line references 3/5/7/9, downloaded Save and independent reopen all pass. Evidence: `artifacts/verify-taco/TACO-85/browser-fixed/`; all owned resources close. Headless screenshots are internal evidence, not user-visible opening; native file picker uses the documented download fallback. The earlier ad-hoc run selected a nonexistent Handoff CSS class; corrected to the actual `copy-review-main` control without changing product assertions.
+
