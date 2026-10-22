@@ -185,6 +185,8 @@ export async function focusAtDocumentEnd(page) {
       position: { x: Math.max(box.width - 2, 1), y: Math.max(box.height / 2, 1) },
     })
     await page.keyboard.press(documentStartKey())
+    // Let the editor adopt the start selection before the next native move.
+    await settleSelection(page)
     await page.keyboard.press(documentEndKey())
     await settleSelection(page)
     const state = await caretAtEditorEnd(page, RICH_EDITOR)

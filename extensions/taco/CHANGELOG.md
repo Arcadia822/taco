@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- 修复侧栏 Checkpoint 文档顺序：必需文档优先，两组各自保留声明顺序，包括缺失文档占位行（TACO-84）。
+
 ## [0.18.1](https://github.com/Arcadia822/taco/compare/v0.18.0...v0.18.1) (2026-10-14)
 
 ### Chores & Maintenance
