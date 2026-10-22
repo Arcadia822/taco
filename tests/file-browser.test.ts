@@ -206,12 +206,12 @@ describe('FileBrowser', () => {
 
   it('prints a real line range for a comment captured from rendered text', async () => {
     const bundle = structuredClone(testBundle)
-    bundle.files[0].content = '# Title\n\nThe **spec** is ready for review.\n'
+    bundle.files[0].content = '# Title\n\nThe **spec**. (`code`):\n'
     const timestamp = '2026-09-14T00:00:00.000Z'
     bundle.comments = [{
       id: 'thread-rendered',
       status: 'open',
-      anchor: { path: bundle.files[0].path, position: { start: 9, end: 38 }, quote: { exact: 'The spec is ready for review.', prefix: '', suffix: '' } },
+      anchor: { path: bundle.files[0].path, position: { start: 9, end: 26 }, quote: { exact: 'The spec. (code):', prefix: '', suffix: '' } },
       messages: [{ id: 'message-rendered', author: 'Reviewer', body: 'Needs a citation', createdAt: timestamp }],
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -227,7 +227,7 @@ describe('FileBrowser', () => {
       // The quote came from the reading surface, which hides the emphasis markers; the reference still
       // points at the canonical source line instead of reporting a lost position.
       expect(prompt).toContain(`${bundle.files[0].path}:3`)
-      expect(prompt).toContain('The spec is ready for review.')
+      expect(prompt).toContain('The spec. (code):')
       expect(prompt).not.toContain('位置已失效')
     } finally {
       browser.destroy()

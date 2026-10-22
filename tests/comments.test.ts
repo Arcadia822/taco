@@ -18,6 +18,7 @@ import {
   lineNumberAt,
   lineRangeForOffsets,
   packCommentLane,
+  resolveAnchorRange,
   resolveCommentPlacement,
   type CommentLaneEntry,
 } from '../src/comment-position.ts'
@@ -233,6 +234,70 @@ describe('comment position and line calculations (TACO-6, TACO-7)', () => {
 
     // A quote that exists nowhere is still reported as lost rather than mapped onto a guess.
     expect(commentLineReference(markdown, createTextAnchor('spec.md', 'Unrelated words', 0, 15))).toBeNull()
+  })
+
+  it.each([
+    ['The **spec**.', 'The spec.'],
+    ['The **spec**, next', 'The spec, next'],
+    ['The **spec**)', 'The spec)'],
+    ['The **spec**:', 'The spec:'],
+    ['(**spec**)', '(spec)'],
+    ['(**spec**).', '(spec).'],
+    ['The `code`.', 'The code.'],
+    ['The `code`, next', 'The code, next'],
+    ['The `code`)', 'The code)'],
+    ['The `code`:', 'The code:'],
+    ['(`code`)', '(code)'],
+    ['(__spec__)', '(spec)'],
+    ['A *spec*!', 'A spec!'],
+    ['A **spec**\u3002', 'A spec\u3002'],
+    ['A **spec**+ next', 'A spec+ next'],
+    ['A **spec** file_name foo_bar_baz.', 'A spec file_name foo_bar_baz.'],
+    ['A **spec** foo__bar__baz.', 'A spec foo__bar__baz.'],
+    ['A **spec** foo____bar.', 'A spec foo____bar.'],
+    ['A **spec** a*b.', 'A spec a*b.'],
+    ['A **spec** a*\u00a3b.', 'A spec a*\u00a3b.'],
+    ['A **spec** 2 * 3.', 'A spec 2 * 3.'],
+    ['A **spec** \\*literal\\*.', 'A spec *literal*.'],
+    ['A `*literal*`:', 'A *literal*:'],
+    ['A ``a`b``:', 'A a`b:'],
+    ['A ` code `:', 'A code:'],
+    ['A **spec** `unclosed.', 'A spec `unclosed.'],
+    ['A **spec** ``unequal`.', 'A spec ``unequal`.'],
+  ])('maps rendered punctuation to exact source offsets: %s', (source, rendered) => {
+    const markdown = `Header\n\n${source}\n`
+    const anchor = createTextAnchor('spec.md', rendered, 0, rendered.length)
+    expect(resolveAnchorRange(markdown, anchor)).toEqual({ start: 8, end: 8 + source.length })
+    expect(commentLineReference(markdown, anchor)).toBe('3')
+    expect(commentLineReference(`Inserted\n${markdown}`, anchor)).toBe('4')
+  })
+
+  it('maps multiline code spans and their source line boundaries', () => {
+    const source = 'A `foo\nbar` end'
+    const rendered = 'A foo bar end'
+    const anchor = createTextAnchor('spec.md', rendered, 0, rendered.length)
+    expect(resolveAnchorRange(source, anchor)).toEqual({ start: 0, end: source.length })
+    expect(commentLineReference(source, anchor)).toBe('1–2')
+    expect(commentLineReference(source, createTextAnchor('spec.md', rendered, 0, 5))).toBe('1')
+  })
+
+  it('does not pair code delimiters across separate paragraphs', () => {
+    const source = '`orphan\n\nA **spec**.\n\n`'
+    const anchor = createTextAnchor('spec.md', 'A spec.', 0, 7)
+    expect(commentLineReference(source, anchor)).toBe('3')
+    expect(resolveAnchorRange(source, anchor)).toEqual({ start: 9, end: 20 })
+  })
+
+  it.each([
+    ['A **spec** file_name.', 'A spec filename.'],
+    ['A **spec** foo__bar__baz.', 'A spec foobarbaz.'],
+    ['A **spec** 2 * 3.', 'A spec 2  3.'],
+    ['A `*literal*`:', 'A literal:'],
+    ['A **spec** `unclosed.', 'A spec unclosed.'],
+  ])('does not invent a match by deleting literal punctuation: %s', (source, missing) => {
+    const anchor = createTextAnchor('spec.md', missing, 0, missing.length)
+    expect(resolveAnchorRange(source, anchor)).toBeNull()
+    expect(commentLineReference(source, anchor)).toBeNull()
   })
 
   it('stacks comment cards down the lane and keeps them off their neighbours', () => {

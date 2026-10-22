@@ -148,13 +148,64 @@ const TAG = /<\/?[A-Za-z][^>\n]*>/y
 const LINK = /\[(?<label>[^\]\n]*)\]\([^()\n]*\)/y
 const IMAGE = /!\[[^\]\n]*\]\([^()\n]*\)/y
 const ESCAPE = /\\(?<char>.)/y
-const DELIMITER = /(?:\*{1,3}|_{1,3}|~~|`+)/y
+const PUNCTUATION = /[\p{P}\p{S}]/u
+const isSpace = (char: string | undefined): boolean => char === undefined || /\s/u.test(char)
+const isPunctuation = (char: string | undefined): boolean => char !== undefined && PUNCTUATION.test(char)
 
-const isSpace = (char: string | undefined): boolean => char === undefined || /\s/.test(char)
-// Approximates CommonMark flanking so only real emphasis delimiters are stripped: `file_name` and
-// the `*` in `2 * 3` stay in the projection, while both delimiters of `**spec**` go.
-const isDelimiterSyntax = (source: string, start: number, end: number): boolean =>
-  (isSpace(source[start - 1]) && !isSpace(source[end])) || (!isSpace(source[start - 1]) && isSpace(source[end]))
+// Pair eligible runs before stripping: flanking alone would erase literal a*b.
+const inlineSyntax = (source: string): { hidden: Set<number>; code: Map<number, { start: number; end: number; after: number }> } => {
+  const hidden = new Set<number>()
+  const code = new Map<number, { start: number; end: number; after: number }>()
+  const openers: { start: number; end: number; marker: string; close: boolean }[] = []
+  const runs = /\\[^\n]|\n[ \t]*\n|`+|\*+|_+|~~/g
+  for (let run = runs.exec(source); run; run = runs.exec(source)) {
+    const start = run.index
+    const end = runs.lastIndex
+    const marker = run[0][0]
+    if (marker === '\\') continue
+    if (marker === '\n') { openers.length = 0; continue }
+    if (marker === '`') {
+      const ticks = /`+/g
+      ticks.lastIndex = end
+      const boundary = /\n[ \t]*\n/g
+      boundary.lastIndex = end
+      const limit = boundary.exec(source)?.index ?? source.length
+      let closing = ticks.exec(source)
+      while (closing && closing.index < limit && closing[0].length !== run[0].length) closing = ticks.exec(source)
+      if (closing && closing.index < limit) {
+        const content = source.slice(end, closing.index).replace(/\n/g, ' ')
+        const trim = content.startsWith(' ') && content.endsWith(' ') && /[^ ]/.test(content)
+        code.set(start, { start: end + (trim ? 1 : 0), end: closing.index - (trim ? 1 : 0), after: ticks.lastIndex })
+        runs.lastIndex = ticks.lastIndex
+      }
+      continue
+    }
+    const before = source[start - 1]
+    const after = source[end]
+    const left = !isSpace(after) && (!isPunctuation(after) || isSpace(before) || isPunctuation(before))
+    const right = !isSpace(before) && (!isPunctuation(before) || isSpace(after) || isPunctuation(after))
+    const canOpen = left && (marker !== '_' || !right || isPunctuation(before))
+    const canClose = right && (marker !== '_' || !left || isPunctuation(after))
+    let paired = false
+    if (canClose) {
+      for (let index = openers.length - 1; index >= 0; index -= 1) {
+        const opener = openers[index]
+        const width = end - start
+        if (opener.marker !== marker || opener.end - opener.start !== width) continue
+        if (marker !== '~' && (left || opener.close) && width % 3 !== 0 && (width * 2) % 3 === 0) continue
+        for (let offset = 0; offset < width; offset += 1) {
+          hidden.add(opener.start + offset)
+          hidden.add(start + offset)
+        }
+        openers.splice(index)
+        paired = true
+        break
+      }
+    }
+    if (canOpen && !paired) openers.push({ start, end, marker, close: canClose })
+  }
+  return { hidden, code }
+}
 
 const stripBlockSyntax = (source: string, start: number): number => {
   let index = start
@@ -176,6 +227,7 @@ const stripBlockSyntax = (source: string, start: number): number => {
  * missing reference for a wrong one.
  */
 const normalizeForMatching = (source: string): { text: string; offsets: number[] } => {
+  const syntax = inlineSyntax(source)
   const kept: string[] = []
   const offsets: number[] = []
   const keep = (value: string, from: number): void => {
@@ -186,10 +238,21 @@ const normalizeForMatching = (source: string): { text: string; offsets: number[]
   }
   let lineStart = 0
   while (lineStart <= source.length) {
-    const breakAt = source.indexOf('\n', lineStart)
-    const lineEnd = breakAt === -1 ? source.length : breakAt
+    let breakAt = source.indexOf('\n', lineStart)
+    let lineEnd = breakAt === -1 ? source.length : breakAt
     let index = THEMATIC_BREAK.test(source.slice(lineStart, lineEnd)) ? lineEnd : stripBlockSyntax(source, lineStart)
     while (index < lineEnd) {
+      const span = syntax.code.get(index)
+      if (span) {
+        for (let offset = span.start; offset < span.end; offset += 1) keep(source[offset] === '\n' ? ' ' : source[offset], offset)
+        index = span.after
+        if (index > lineEnd) {
+          breakAt = source.indexOf('\n', index)
+          lineEnd = breakAt === -1 ? source.length : breakAt
+        }
+        continue
+      }
+      if (syntax.hidden.has(index)) { index += 1; continue }
       ESCAPE.lastIndex = index
       const escaped = ESCAPE.exec(source)
       if (escaped) { keep(escaped.groups!.char, index + 1); index += escaped[0].length; continue }
@@ -200,9 +263,7 @@ const normalizeForMatching = (source: string): { text: string; offsets: number[]
       if (link) { keep(link.groups!.label, index + 1); index += link[0].length; continue }
       TAG.lastIndex = index
       if (TAG.test(source)) { index = TAG.lastIndex; continue }
-      DELIMITER.lastIndex = index
-      const delimiter = DELIMITER.exec(source)
-      if (delimiter && isDelimiterSyntax(source, index, index + delimiter[0].length)) { index += delimiter[0].length; continue }
+      // Literal delimiter runs remain untouched; only paired markup is hidden above.
       keep(source[index], index)
       index += 1
     }

@@ -37,6 +37,7 @@ Guided by the principle **Encode Lessons in Structure**:
 | [LESSON-017](#lesson-017-runtime-ddl-and-expiry-consumers-diverge)                             | Runtime DDL and Expiry Consumers Diverge                             |      1      |   **open**    | Real PostgreSQL bootstrap/upgrade and expired-route regression smoke                                           |
 | [LESSON-018](#lesson-018-temporary-postgresql-binaries-omit-dylib-aliases)                     | Temporary PostgreSQL Binaries Omit Dylib Aliases                     |      1      |   **open**    | Inspect otool dependencies and restore aliases only in disposable runtime                                      |
 | [LESSON-019](#lesson-019-verifiers-must-match-runtime-contracts-and-native-keyboards)          | Verifiers Must Match Runtime Contracts and Native Keyboards          |      3      | **escalated** | Full browser registry, native caret/selection invariants and real Next/CLI smoke in `.github/workflows/ci.yml` |
+| [LESSON-020](#lesson-020-browser-smoke-prerequisites-must-be-real)                             | Browser Smoke Prerequisites Must Be Real                             |      1      |   **open**    | `verify-taco` doctor and retained result manifests                                                             |
 
 ---
 
@@ -584,3 +585,31 @@ With the pinned Playwright, closing a context while `context.newPage()` is in fl
 - Race non-interruptible setup operations against explicit cancellation (`setupOperation`/`cancelSetup`) instead of assuming disposal settles every Playwright call. Bound native launch by the remaining case budget and HTTP probes with `AbortSignal` timeouts.
 - Keep signal handlers installed until cleanup and summary writing finish. If the first signal arrives during a summary write, refresh its interruption fields and rewrite it before setting exit 143 and removing handlers. Keep one cleanup path and ignore repeat signals during it.
 - Never truncate a machine payload for an assertion. The Host receipt failure came from feeding a `tail(stdout, 8000)` log projection into `JSON.parse`, which discarded the head of the CLI's JSON; parse the full stdout and bound only the human log projection.
+
+---
+
+### LESSON-020: Browser Smoke Prerequisites Must Be Real
+
+- **ID**: `LESSON-020`
+- **Category**: `verification-environment`
+- **Occurrences**: 1
+- **Status**: `open`
+- **Guard**: `verify-taco` doctor and retained result manifests
+
+#### Symptom
+
+TACO-83 browser verification initially could not launch the pinned Chromium executable. After installing it, an ad-hoc bundle with an empty root timed out before doctor. The explicitly requested external acceptance script was also absent and its exact command returned `MODULE_NOT_FOUND`.
+
+#### Root Cause
+
+Installed Playwright packages do not imply installed browser binaries. The disposable bundle did not follow the existing fixture's nonempty root/path contract. The acceptance script was not included in the supplied checkout or accessible external checkouts.
+
+#### Evidence
+
+- 2026-10-15: `artifacts/verify-taco/TACO-83-punctuation/result.json` records the missing browser; `TACO-83-punctuation-installed/result.json` records setup timeout; `TACO-83-punctuation-root/result.json` records the corrected run passing with doctor and all owned resources closed. The TACO-83 delivery record retains the acceptance blocker.
+
+#### Prevention & Escalation
+
+- Install the pinned browser with `npx playwright install chromium` when its executable is absent; do not change dependencies to bypass setup.
+- Assemble synthetic data following the existing bundle fixture and require doctor before actions.
+- Never replace a missing supplied acceptance test with a fabricated substitute or report a Draft PR ready before required verification is available.
